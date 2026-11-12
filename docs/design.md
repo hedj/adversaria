@@ -544,7 +544,7 @@ Lists are `'.'/2` structures, and three tags are spare. `supports(X, item42)` ta
 | DONE | to the client | no more answers, failure, or an error term |
 | ATOM\_IS | to the client | the atom's number |
 
-Answers come only when NEXT asks for them, so the server backtracks lazily and no buffer on either side grows without bound. The prototype sends these messages over a pipe between its client and SWI-Prolog, with an encoder and decoder in Prolog of an estimated 100–200 lines.
+Answers come only when NEXT asks for them, so the server backtracks lazily and no buffer on either side grows without bound. The prototype sends these messages over a websocket between its browser client and SWI-Prolog, since a browser cannot open a pipe, with an encoder and decoder in Prolog of an estimated 100–200 lines.
 
 ## Decisions
 
@@ -552,6 +552,7 @@ Answers come only when NEXT asks for them, so the server backtracks lazily and n
 | --- | --- |
 | License the project under GPL-3.0 | the author's decision (12 November 2026); Clex is GPL-3.0 and APE LGPL-3.0, so both can ship with it |
 | Numbers in hashed records are JSON numbers, serialised by RFC 8785 in full, not decimal strings | the author's decision (12 November 2026), declining the plan's proposal; the format stays plain JSON, and the server and the checker must both implement RFC 8785's number rules, under test |
+| The query protocol's messages travel over a websocket, not a pipe | the author's decision (12 November 2026); the client runs in a browser, which cannot open a pipe, and SWI-Prolog's `library(http/websocket)` serves it |
 | Stage A starts from Wikidata subset D, the pocket base | the author's decision (12 November 2026); small enough to build and load quickly while the suggestions are tested |
 | Name the project Adversaria, with the prototype in a repository of its own | the author's decision; “memex” is taken |
 | Measure the falsifiability of formal claims: compatible, independent, refutable, characteristic number, needed premises, comparative strength, immunisation; relative to a declared observation vocabulary | the author's decision; Popper's measures, carried from Lean to Prolog through s(CASP)'s abduction |

@@ -82,7 +82,7 @@ A fault in my first run, found and fixed: without `-s1` and with standard input 
 
 ### Disagreement between the plan and the design
 
-The design (§ Query protocol, last paragraph) says the prototype sends the protocol's messages "over a pipe between its client and SWI-Prolog". The plan (milestone 2) says "over a websocket", and asks for SWI-Prolog's websocket library. A browser client cannot open a pipe, so the plan's choice looks right. The design wins under the plan's own rule; this waits for the author.
+The design (§ Query protocol, last paragraph) says the prototype sends the protocol's messages "over a pipe between its client and SWI-Prolog". The plan (milestone 2) says "over a websocket", and asks for SWI-Prolog's websocket library. A browser client cannot open a pipe, so the plan's choice looks right. Resolved by the author on 12 November 2026: a websocket. `docs/design.md` now says so.
 
 ### Decisions by the author (12 November 2026)
 
