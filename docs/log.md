@@ -137,14 +137,52 @@ Checked:
 * Numbers match all 24 finite vectors of RFC 8785 Appendix B, and match Node on 1,000,000 random doubles (one run, `JCS_SAMPLES=1000000`, 31 s); the suite runs 10,000.
 * Six deliberate breaks each made tests fail: tie rule removed; keys sorted by code point; one control character left unescaped; floats written as bare numbers; the sign of -0.0 dropped; the canonical check on reading removed.
 
-### Sizes (counted, after the move to Rust)
+## Milestone 1: the journal (12 November 2026, done, with two gaps below)
 
-| Language | Lines | Files |
+Built:
+
+* `crates/format`: records (entry, seal, key, headers), each checking itself, and the chain check across `journal.jsonl` (sequence, parents, `prev` hashes, purges). SHA-256 only; no signature code. New dependency: `sha2`.
+* `crates/memex`: the journal writer (append; branch from any earlier entry; purge, as a purge entry then the target's body set to null through a temporary file and a rename) and replay.
+* `crates/sealer`: a separate program. `sealer init` makes a key (secret in a file of mode 600; public half in `keys.jsonl`); `sealer run` polls `journal.jsonl` and seals each complete new entry with the date, the key's fingerprint and an Ed25519 signature over the entry's hash. It checks the journal and the existing seals before it signs, refuses a key file others can read, and leaves a line without its newline for the next round. New dependencies: `ed25519-dalek` (signing), `getrandom` (key generation).
+* `crates/check`: the reference checker, a library and a program (`check <dir>`: exit 0, 1 naming file and line, or 2 for usage). It checks `keys.jsonl`, then `journal.jsonl`, then `seals.jsonl`, then `blobs/`, each line before the next, so the first error names the first wrong line.
+* `docs/design.md` § The journal format now states version 1 exactly. Two changes from the exported design: a seal's entry hash is named `entry_hash` (the design named two fields `hash`), and an entry's hash leaves out `body`, for which `body_hash` stands (the design said the body is "replaced by" its hash, while also keeping `body_hash`).
+
+Acceptance checks (all in `make test`; output from this session):
+
+* 10,000 generated entries (with branches, every kind but purge, 20 purges, Unicode text, tagged floats, one blob) check: "10,000 entries: written and sealed in 9.5 s, checked in 2.3 s" (unoptimised build of our crates).
+* Every byte of every line of `keys.jsonl`, `journal.jsonl` and `seals.jsonl` of a 12-entry journal was changed in turn (XOR 1): "10306 single-byte changes, each refused at its own line". This covers every field of every record kind. A byte that breaks UTF-8, and a changed blob, are each named too.
+* A purged entry still verifies, sealed before the purge, with the purge entry sealed after.
+* Replay twice gives the same store. This is weak: until milestone 2 defines facts, the store is the list of entries.
+
+Further tests, added because the acceptance checks alone did not catch some faults:
+
+* A seal with a forged signature but a recomputed hash and re-chained successors is refused: "the signature does not verify". A journal rewritten consistently from entry 2 on, every hash recomputed, is refused by the seals: "entry_hash is not the hash of entry 2". Without these two, removing the signature check made no test fail.
+* An unsealed entry is named. Without this test, switching off that rule made no test fail; found by breaking the code on purpose.
+* `tests/memex_holds_no_key.sh`: the memex's dependency tree holds no signing or randomness crate, and no line of `crates/memex/src` or `prolog/` names the seals file or a key (comments skipped). It fails when `ed25519-dalek` is added to the memex, or when a memex source names `seals.jsonl`. Its first version failed on correct code (a doc comment, and the word "secret" as test data); fixed. Limit: it cannot see a path built at run time.
+* The sealer program, run as a separate process with a 5 ms poll while the writer appended 200 entries, sealed all 200, and the result checks.
+
+Deliberate breaks, each made a test fail: signature check off; `entry_hash` comparison off; unsealed-entry rule off; `prev` comparison off; purge rule ("body still here") off; own-hash comparison off; canonical-form check off; key-file permission check off.
+
+Gaps, not done:
+
+* **Unicode NFC.** The format says strings are in NFC. Nothing checks or produces NFC yet. It needs a normalisation table (a dependency such as `unicode-normalization`), and a decision: should the writer normalise text, or refuse text that is not NFC?
+* **Dates are not checked for order.** A seal's date comes from the system clock, which can go backwards; the checker does not compare dates.
+
+Time: the plan estimated 1–2 weeks with Claude; this took one session. It is not comparable to the estimate's assumption of a person reviewing each step.
+
+### Sizes (counted, after milestone 1)
+
+| Part | Lines | Of which tests |
 | --- | --- | --- |
-| Rust | 876 (381 code, 495 tests) | 3 |
-| Prolog | 56 | 2 (the spikes) |
-| Make | 21 | 1 |
-| Shell | 21 | 1 |
-| Nix | 53 | 1 |
+| `crates/format` | 1,696 | 769 |
+| `crates/memex` | 276 | 75 |
+| `crates/sealer` | 384 | 124 |
+| `crates/check` | 234 | 57 |
+| `crates/acceptance` | 390 | 389 |
+| Rust in all | 2,980 | 1,414 |
+| Prolog (spikes) | 56 | 56 |
+| Shell (tests) | 41 | 41 |
 
-Tests: 23 Rust unit tests; 2 spikes (tabling in `make test`, s(CASP) optional).
+The checker itself is 177 lines (library and program), and it uses `crates/format`'s record and chain checks (544 lines of code) and canonical JSON (201). The design's estimate of 100–150 lines was for Python, before the format was fixed in detail.
+
+Tests: 56 Rust tests, the tabling spike and the no-key script in `make test`; the s(CASP) spike is optional.
