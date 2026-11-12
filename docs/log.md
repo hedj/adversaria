@@ -2,9 +2,16 @@
 
 Each entry says what was built, what was measured, and what failed or was skipped.
 
-## Milestone 0: toolchain and spikes (12 November 2026, done)
+The plan these results answer to is docs/plan.md; how the code and the
+documents are arranged, and why, is docs/structure.md.
 
-### Tool versions (measured)
+## 1. Stage A: the record
+
+### Milestone 0: toolchain and spikes (12 November 2026, done)
+
+#### Tools and the environment
+
+##### Tool versions (measured)
 
 | Tool | Needed | Found | How |
 | --- | --- | --- | --- |
@@ -20,7 +27,32 @@ Each entry says what was built, what was measured, and what failed or was skippe
 
 The session runs in a cloud container that is rebuilt from scratch. SWI-Prolog is not in its base image, so each new session must install it again until the environment's setup script does so.
 
-### Spike: incremental tabling (measured, passed)
+##### The Nix environment (measured, 12 November 2026)
+
+`flake.nix` gives a dev shell with every tool the plan names, pinned by `flake.lock`: nixpkgs from the `nixos-26.05` channel (revision `ac588ef1c914`), and s(CASP) at tag `V1.1.4` (commit `51ae396`), exported as `SCASP_HOME`. nixpkgs comes from `channels.nixos.org`, not GitHub, because this session's network refused GitHub's API and tarball hosts (HTTP 403).
+
+Inside `nix develop -i` (no tools from outside Nix):
+
+| Tool | Version |
+| --- | --- |
+| SWI-Prolog | 9.2.9 (websocket library loads) |
+| Python | 3.13.17 |
+| Node.js / npm | 22.23.4 / 10.9.9 |
+| Pandoc | 3.7.0.2 |
+| Git | 2.54.0 |
+| GNU Make | 4.4.1 |
+
+`make test` exits 0 (spike and 22 tests); `make spike-scasp` exits 0. `nix flake check` passes on x86_64-linux; the other three systems are declared but not checked.
+
+Costs and faults met:
+
+* SWI-Prolog's closure is 1.3 GiB, mostly Java and GTK, which we do not use. nixpkgs offers `withJava` and other switches, but a changed build is not in the binary cache, so it would compile from source. Left as is.
+* A first version fetched s(CASP) with `fetchgit` inside the build sandbox; it failed on this session's TLS proxy (self-signed certificate in chain). As a flake input, Nix fetches it outside the sandbox, as it does nixpkgs.
+* s(CASP)'s own Makefile ran during the build and needed `swipl`; the build step is skipped, since only the source is copied.
+
+#### The spikes
+
+##### Spike: incremental tabling (measured, passed)
 
 Test: `tests/spikes/incremental_tabling.pl`, run by `make test`. It tables four predicates over incremental dynamic facts, counts each evaluation of a tabled body, changes one fact at a time, and checks both the answers and the counts.
 
@@ -56,7 +88,7 @@ Checks of the test itself (break it on purpose):
 
 A fault in the first draft of the test, found and fixed: `flag/3` keys a compound term by its name and arity only, so `r_evals(k1)` and `r_evals(k2)` shared one counter. The keys are now atoms.
 
-### Spike: s(CASP) and issue #13 (measured, reproduced)
+##### Spike: s(CASP) and issue #13 (measured, reproduced)
 
 Test: `tests/spikes/scasp_forall.pl`, run by `make spike-scasp SCASP=<checkout>`. It is not part of `make test`, because s(CASP) is optional before stage B. The program is the case from `docs/translator.md`: `bad :- p(X, Y), q(X, Y).` with the facts `p(a,x)`, `p(b,y)` and `q(a,x)`. `bad` holds, so `?- not bad.` must have no model.
 
@@ -80,43 +112,22 @@ The check fails (exit 1) when `q(a, x)` is removed, because `sasp` then finds a 
 
 A fault in my first run, found and fixed: without `-s1` and with standard input open, s(CASP) printed its first answer and waited for input, so `all` and `all_c` looked like a 60-second hang.
 
-### Disagreement between the plan and the design
+#### Decisions
+
+##### Disagreement between the plan and the design
 
 The design (§ Query protocol, last paragraph) says the prototype sends the protocol's messages "over a pipe between its client and SWI-Prolog". The plan (milestone 2) says "over a websocket", and asks for SWI-Prolog's websocket library. A browser client cannot open a pipe, so the plan's choice looks right. Resolved by the author on 12 November 2026: a websocket. `docs/design.md` now says so.
 
-### Decisions by the author (12 November 2026)
+##### Decisions by the author (12 November 2026)
 
 1. **Licence:** GPL-3.0. It allows APE and Clex to ship with the project.
 2. **Numbers in hashed records:** JSON numbers, with RFC 8785's serialisation in full; the plan's proposal of decimal strings is not taken. Milestone 1 must implement RFC 8785's number rules in the server and in the checker, and test them.
 3. **Wikidata subset:** D, the pocket base (about 100K items × 20 facts, about 63 MB; an estimate).
 4. **s(CASP):** installed from source, with permission; spike run above.
 
-### The Nix environment (measured, 12 November 2026)
+### Change of plans (12 November 2026)
 
-`flake.nix` gives a dev shell with every tool the plan names, pinned by `flake.lock`: nixpkgs from the `nixos-26.05` channel (revision `ac588ef1c914`), and s(CASP) at tag `V1.1.4` (commit `51ae396`), exported as `SCASP_HOME`. nixpkgs comes from `channels.nixos.org`, not GitHub, because this session's network refused GitHub's API and tarball hosts (HTTP 403).
-
-Inside `nix develop -i` (no tools from outside Nix):
-
-| Tool | Version |
-| --- | --- |
-| SWI-Prolog | 9.2.9 (websocket library loads) |
-| Python | 3.13.17 |
-| Node.js / npm | 22.23.4 / 10.9.9 |
-| Pandoc | 3.7.0.2 |
-| Git | 2.54.0 |
-| GNU Make | 4.4.1 |
-
-`make test` exits 0 (spike and 22 tests); `make spike-scasp` exits 0. `nix flake check` passes on x86_64-linux; the other three systems are declared but not checked.
-
-Costs and faults met:
-
-* SWI-Prolog's closure is 1.3 GiB, mostly Java and GTK, which we do not use. nixpkgs offers `withJava` and other switches, but a changed build is not in the binary cache, so it would compile from source. Left as is.
-* A first version fetched s(CASP) with `fetchgit` inside the build sandbox; it failed on this session's TLS proxy (self-signed certificate in chain). As a flake input, Nix fetches it outside the sandbox, as it does nixpkgs.
-* s(CASP)'s own Makefile ran during the build and needed `swipl`; the build step is skipped, since only the source is copied.
-
-## Change of plans (12 November 2026)
-
-The author changed the prototype's form. Recorded in `docs/design.md` (§ The PC prototype, § Query protocol, § Quasimodes, not modes, § Decisions) and `docs/plan.md`.
+The author changed the prototype's form. Recorded in `docs/design.md` § Decisions, whose rows name the sections changed, and `docs/plan.md`.
 
 * **A terminal program in Rust**, drawn with ratatui on crossterm. No web interface. This replaces the browser client, and the websocket chosen earlier the same day; the query protocol goes back to a pipe, now to SWI-Prolog as a child process.
 * **SWI-Prolog stays** the reasoning engine: facts, rules, constraints, incremental tabling, s(CASP) and APE.
@@ -125,7 +136,9 @@ The author changed the prototype's form. Recorded in `docs/design.md` (§ The PC
 
 The design's estimate for the PC prototype was made for a browser client; it is marked as not yet revised.
 
-## Milestone 1, first part: canonical JSON and terms, in Rust (12 November 2026)
+### Milestone 1: canonical JSON, the journal and NFC
+
+#### Milestone 1, first part: canonical JSON and terms, in Rust (12 November 2026)
 
 `crates/format` replaces `tools/jcs.py` and `tools/terms.py`, which are removed. It holds the RFC 8785 serialiser and the term encoding, with floats tagged as `{"float": text}`. One dependency, `serde_json` (with `float_roundtrip`), to parse journal lines; `serde` only in tests.
 
@@ -137,7 +150,7 @@ Checked:
 * Numbers match all 24 finite vectors of RFC 8785 Appendix B, and match Node on 1,000,000 random doubles (one run, `JCS_SAMPLES=1000000`, 31 s); the suite runs 10,000.
 * Six deliberate breaks each made tests fail: tie rule removed; keys sorted by code point; one control character left unescaped; floats written as bare numbers; the sign of -0.0 dropped; the canonical check on reading removed.
 
-## Milestone 1: the journal (12 November 2026, done, with two gaps below)
+#### Milestone 1: the journal (12 November 2026, done, with two gaps below)
 
 Built:
 
@@ -170,7 +183,7 @@ Gaps, not done:
 
 Time: the plan estimated 1–2 weeks with Claude; this took one session. It is not comparable to the estimate's assumption of a person reviewing each step.
 
-## Unicode NFC (12 November 2026)
+#### Unicode NFC (12 November 2026)
 
 The author chose that the writer normalises text. Now the memex normalises every string and object key of an entry's body to NFC before hashing and writing it, and refuses an object whose keys become equal once normalised. Every record parser refuses a line with a string or key not in NFC, so the checker catches text written otherwise. New dependency: `unicode-normalization` 0.1.26 (Unicode 18.0), in `crates/format`.
 
@@ -182,7 +195,9 @@ Checked:
 * Four deliberate breaks each made a test fail: the parser's NFC check off; the writer's normalisation removed; normalisation returning text unchanged; colliding keys merged silently.
 * `make test` exits 0, here and in `nix develop -i`.
 
-## Milestone 2: store, terms and the query protocol (12 November 2026, done)
+### Milestone 2: store, terms and the query protocol
+
+#### Milestone 2: store, terms and the query protocol (12 November 2026, done)
 
 Built:
 
@@ -220,7 +235,7 @@ Not done, or weak:
 * A malformed header stops the server, and the client reports that it stopped; nothing restarts the server yet. *Settled the same day*: the author ruled that both ends die (see below).
 * Rust holds integers in 64 bits, so a wider integer from Prolog is refused, not carried.
 
-## Dying on a garbled header (12 November 2026)
+#### Dying on a garbled header (12 November 2026)
 
 The author ruled: die on a garbled message header. Before, the server printed an error and ended with status 0, as if all were well; a header cut short after its first byte was taken for a clean end of input.
 
@@ -234,7 +249,9 @@ Checked: three new tests (the server's exit status and message for five kinds of
 
 Two faults met on the way: a fake server written as `initialization((Goal1, Goal2), main)` did not run its goal, while the same goal as a named `main` did; I did not find why. And the first fake test waited out its 60-second timeout before failing, because nothing arrived.
 
-## Milestone 3: the outline and the quasimodes (12 November 2026, done, with limits below)
+## 2. Stage A: the notebook
+
+### Milestone 3: the outline and the quasimodes (12 November 2026, done, with limits below)
 
 Built, in `crates/memex`:
 
@@ -285,7 +302,7 @@ Limits:
 * Images (the graphics protocol) are checked for at start but not yet used.
 * Time: the plan estimated 2–3 weeks; this took part of one session, without the author's review of the interface's feel, which the estimate counted.
 
-## Milestone 4: claims, constraints and worlds (12 November 2026, done, with limits below)
+### Milestone 4: claims, constraints and worlds (12 November 2026, done, with limits below)
 
 Built:
 
@@ -293,7 +310,7 @@ Built:
 * `crates/memex/src/engine.rs`: one SWI-Prolog process per world shown, its facts synced by difference, so only changed facts invalidate tables. Terms the user types are read by Prolog's own reader.
 * `crates/memex/src/reason.rs`: solutions, readings of a supposition, restatement through a generic frame and `label` facts, derived text ("a year", "two years"), the text timeline.
 * In the interface:
-  * the commands `fact`, `claim`, `constraint`, `derive`, `adopt` (F3), `unadopt` (F4), `interrogate` (F2), `close` and `commit`;
+  * nine commands for facts, claims and worlds (listed in docs/guide.md, § 2.4), three of them on F2, F3 and F4;
   * marks under items, and the constraint panel;
   * the "do you mean?" step after Suppose, then revision;
   * two worlds side by side, and the fading hint.
@@ -338,7 +355,9 @@ Limits:
 * The memex cannot show seal dates in provenance: the no-key rule forbids its sources to name the seals file. The rule should allow reading it, by a check that the memex opens it read-only. Not done.
 * Every engine is a separate SWI-Prolog process, about 100 ms to start (estimate, not measured).
 
-## Milestone 5: Wikidata and suggestions without a model (12 November 2026, done, with limits below)
+### Milestones 5 and 6: sources
+
+#### Milestone 5: Wikidata and suggestions without a model (12 November 2026, done, with limits below)
 
 Built:
 
@@ -384,7 +403,7 @@ Limits:
 * The reference test uses synthetic works: Wikidata has no scholarly article about Buran.
 * A long list still recurses when dropped (Rust's default drop), and the other term walkers still recurse. Only the decoder walks lists in a loop.
 
-## Milestone 6: documents and results in and out (12 November 2026, done, with limits below)
+#### Milestone 6: documents and results in and out (12 November 2026, done, with limits below)
 
 Built:
 
@@ -432,7 +451,7 @@ Limits:
 * The quote check compares plain text through Pandoc, so formatting differences do not count; the source check reads titles and retractions, not abstracts, so it never rules a quote `quoted` from the source itself.
 * Results take values with standard uncertainties only; the other kinds in § Uncertainty wait for stage B.
 
-## Milestone 7: measurement (12 November 2026, the report built; the month of use is the author's)
+### Milestone 7: measurement (12 November 2026, the report built; the month of use is the author's)
 
 Built:
 
@@ -464,7 +483,11 @@ Deliberate breaks, each made a test fail: corrections counted in any world; ever
 * Subset D is not built (see milestone 5). The month can start with the import of a small subset, or none.
 * The kinds of action are this report's own classification, written in `measures.rs`; the design names them (searching, following links, transforming, writing, deciding) but does not define them.
 
-## Manual and key configuration (12 November 2026)
+## 3. After stage A
+
+### Manuals and settings
+
+#### Manual and key configuration (12 November 2026)
 
 The author asked where the user manual was. There was none. Now:
 
@@ -472,6 +495,8 @@ The author asked where the user manual was. There was none. Now:
 * **Tutorial** (`docs/tutorial.md`): the design's Buran story as a first session. `crates/memex/tests/tutorial.rs` performs it and checks each screen text it quotes, and that each command and text it uses appears in the tutorial.
 * **Guide** (`docs/guide.md`). `crates/memex/tests/guide.rs` checks that it has a row for every command and no others, lists exactly the key names the configuration knows, and gives examples the configuration accepts.
 * **README.md** points to these.
+
+##### Faults found
 
 Faults found and fixed on the way:
 
@@ -481,11 +506,13 @@ Faults found and fixed on the way:
 * An empty key list left a quasimode unreachable; it is now refused.
 * Two help texts were stale (suppose, import).
 
+##### Checked
+
 Checked: `make test` passes here (SWI-Prolog 9.0.4) and in `nix develop -i` (SWI-Prolog 9.2.9): 143 Rust tests, 18 Prolog tests (12 and 6 sub-tests), 14 pseudo-terminal checks. The pseudo-terminal script now also runs the binary with a configuration that makes F12 Leap forward, unbinds F10 and binds Insert to quit, and with a wrong file (exit status 2, nothing written). Each new test was broken on purpose once and failed.
 
 Not checked: the tutorial's `make run` and `check` steps, and every key in a real terminal. The quasimode defaults are still provisional; the configuration is how to change them after trying them.
 
-## The mouse (12 November 2026)
+#### The mouse (12 November 2026)
 
 The memex had no mouse support, though the plan asks for adopt and retract "with one click" (milestone 4) and the design for suggestions adopted by a click. The milestone 4 entry above called that milestone done without noting the gap.
 
@@ -497,7 +524,11 @@ Checked: `make test` passes (147 Rust tests, 18 Prolog tests, 21 pseudo-terminal
 
 Not done: the wheel, dragging, right clicks, clicks in the worlds and revision views, and diagrams (not built). Not checked: any real terminal, or whether text selection with Shift works while the memex has the mouse.
 
-## Input that could act (12 November 2026)
+#### Nix without experimental features (12 November 2026)
+
+`nix-shell` now gives the development shell with no experimental Nix features: `shell.nix` reads the pins from `flake.lock` and fetches them with `builtins.fetchTarball` and `builtins.fetchGit`; the shell is defined once, in `nix/devshell.nix`, which `flake.nix` also uses. Checked with experimental features switched off: `shell.nix` gives the same derivation as the flake, and `make test` passes inside it. Not checked: a machine whose Nix has never had flakes enabled, and macOS. Then the author ran `nix-shell` with no nixpkgs on `NIX_PATH` and got an error from `(import <nixpkgs> {}).bashInteractive`: `nix-shell` looks up an interactive bash there, outside `shell.nix`, and fell back to the system's bash. `./dev-shell` resolves the pinned nixpkgs first and passes it with `-I`; checked with experimental features off and `NIX_PATH` unset: no error, bash from the pinned nixpkgs, and `make test` passes.
+
+### Input that could act (12 November 2026)
 
 The author pointed out that imports (Pandoc, Wikidata, Crossref, results files) and the pipe to SWI-Prolog could carry injection or unexpected terms. I audited each by trying it. Found and fixed, each with a test that failed first (`crates/memex/tests/hostile.rs` unless named):
 
@@ -515,17 +546,15 @@ Also noticed, not fixed: a fact nested more than about 60 deep is refused with "
 
 Checked: `make test` passes (161 Rust tests, 19 Prolog tests, 21 pseudo-terminal checks). Each fix was broken on purpose once and its test failed. Open items are listed in docs/design.md, § Input that could act.
 
-## Nix without experimental features (12 November 2026)
+### Computing and drawing
 
-`nix-shell` now gives the development shell with no experimental Nix features: `shell.nix` reads the pins from `flake.lock` and fetches them with `builtins.fetchTarball` and `builtins.fetchGit`; the shell is defined once, in `nix/devshell.nix`, which `flake.nix` also uses. Checked with experimental features switched off: `shell.nix` gives the same derivation as the flake, and `make test` passes inside it. Not checked: a machine whose Nix has never had flakes enabled, and macOS. Then the author ran `nix-shell` with no nixpkgs on `NIX_PATH` and got an error from `(import <nixpkgs> {}).bashInteractive`: `nix-shell` looks up an interactive bash there, outside `shell.nix`, and fell back to the system's bash. `./dev-shell` resolves the pinned nixpkgs first and passes it with `-I`; checked with experimental features off and `NIX_PATH` unset: no error, bash from the pinned nixpkgs, and `make test` passes.
-
-## Boxes that compute (12 November 2026)
+#### Boxes that compute (12 November 2026)
 
 The author asked whether a user could build a spreadsheet from what exists: boxes with values, declared relationships, and updates as values change. A trial budget (items with `cell/2` facts, derived text, two constraints) showed it could, with three faults: changing a value took `retract` with an entry number the screen does not show beside the fact, and the new fact attached to whatever item the cursor was on; and a supposition set aside every belief in a violation with it, so supposing food is 900 removed income and rent too, and `commit` made that real. Fixed: a supposition now sets aside only what it directly contradicts (a violation with it and one other belief), naming the rest; and `set` states a fact and retracts what it directly contradicts, on the replaced fact's item. Nothing spreadsheet-specific was added: a value replaces another only because the user's constraint "one value per cell" says so. The tutorial has a part 2 that builds the budget, checked by its test.
 
 Limits: the boxes are an outline, not a grid; only integers can be supposed; one `undo` reverses only the fact part of a `set`; marks list each violation under every item it involves, which is noisy for a rule over three boxes; the constraint panel shows a stray leading colon (": income, 2000 …"), not yet investigated.
 
-## Views (12 November 2026)
+#### Views (12 November 2026)
 
 The author asked for graphs, charts, spreadsheets, flowcharts and timelines built from simple elements bound to Prolog queries, after reading about the grammar of graphics, D3 and Observable. Built: `rule`; `layer MARK where GOAL` with ten marks; drawing as a plot, a grid or a layered graph; views drawn under their items, live, loud on violations, clickable, and drawn in both worlds of a supposition; the outline offered as facts. docs/design.md, § Views, records the sources and what each idea became.
 
@@ -540,7 +569,7 @@ Faults found on the way, each fixed with a test that failed first:
 
 Checked: `make test` passes (187 Rust tests and the tutorial's three parts, 19 Prolog tests, 21 pseudo-terminal checks). A gallery test builds each kind through the memex's commands. Not checked: any of it in a real terminal; views wider than the screen are cut, not scrolled.
 
-## Stage A: where it stands (12 November 2026)
+## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
 
