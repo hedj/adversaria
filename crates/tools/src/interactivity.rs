@@ -249,7 +249,8 @@ pub struct Defs {
     pub consts: BTreeSet<String>,
     /// Module names (files and inline modules), to tell a project path.
     pub modules: BTreeSet<String>,
-    pub variants: BTreeMap<String, String>,
+    /// Each variant name, with the enums that have a variant so named.
+    pub variants: BTreeMap<String, BTreeSet<String>>,
 }
 
 struct DefCollector<'a>(&'a mut Defs);
@@ -283,7 +284,9 @@ impl<'ast> Visit<'ast> for DefCollector<'_> {
         for v in &i.variants {
             self.0
                 .variants
-                .insert(v.ident.to_string(), i.ident.to_string());
+                .entry(v.ident.to_string())
+                .or_default()
+                .insert(i.ident.to_string());
             if let syn::Fields::Named(f) = &v.fields {
                 for f in &f.named {
                     if let Some(id) = &f.ident {
@@ -337,11 +340,11 @@ impl Refs<'_> {
             });
             // A variant only as Enum::Variant (a bare None or Ok is std's),
             // and as a variant even where a type has the same name.
-            let variant = self
-                .defs
-                .variants
-                .get(s)
-                .filter(|e| qual == Some(e.as_str()) || qual == Some("Self"));
+            let variant = self.defs.variants.get(s).and_then(|es| {
+                es.iter()
+                    .find(|e| qual == Some(e.as_str()))
+                    .or_else(|| (qual == Some("Self")).then(|| es.iter().next()).flatten())
+            });
             if let Some(e) = variant {
                 self.out.insert(format!("type {e}"));
             } else if self.defs.types.contains(s) {
@@ -877,6 +880,7 @@ mod tests {
         // or Vec::new as the project's new.
         let src = r#"
             enum Scale { Line, None, S }
+            enum Other { S }
             struct S;
             impl S { fn new() -> S { S } }
             fn f() -> Option<u8> { let v: Vec<u8> = Vec::new(); let _ = S::new(); None }
