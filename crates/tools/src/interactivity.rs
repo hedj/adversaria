@@ -754,7 +754,7 @@ pub fn measure_markdown(docs: &[(String, String)]) -> Vec<Unit> {
                     } else {
                         let t: String = after_t
                             .chars()
-                            .take_while(|c| !matches!(c, ')' | ',' | ';' | ':' | '.' | '|'))
+                            .take_while(|c| !matches!(c, '(' | ')' | ',' | ';' | ':' | '.' | '|'))
                             .collect();
                         t.split(" and ")
                             .next()
