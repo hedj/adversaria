@@ -344,9 +344,14 @@ reading: `Do you mean: Suppose that the date of Buran's flight is 1989.`
 Enter accepts; Tab shows the next reading; Esc cancels. If there is no
 reading, releasing starts a named world with nothing supposed.
 
-In the supposed world, the beliefs that would break a constraint together
-with the supposition are set aside, in that world only: the supposition
-wins. The two worlds are shown row for row: derived text, timelines and
+In the supposed world, each belief the supposition directly contradicts
+is set aside, in that world only: the supposition wins. A belief is
+directly contradicted when it and the supposition, and nothing else, break
+a constraint (two dates for one event; two values for one cell). A
+violation that rests on the supposition and two or more other beliefs is
+left in place, and the message names it ("left for you: 1 violation of
+…"): any of those beliefs could be given up, and which one is your
+choice. The two worlds are shown row for row: derived text, timelines and
 constraints, with what changed.
 
 `close` returns to the actual world and keeps the supposition in the

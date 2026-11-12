@@ -1274,25 +1274,19 @@ impl App {
     }
 
     /// Sprout a world in which `fact` holds; then set aside, in that world
-    /// only, each belief that breaks a constraint together with it (the
-    /// supposition is entrenched over the beliefs it contradicts).
+    /// only, each belief it directly contradicts (the supposition is
+    /// entrenched over them). See `direct_conflicts` for what "directly"
+    /// means; a violation it leaves is shown, for the user to resolve.
     fn suppose(&mut self, name: &str, fact: &Term) -> Result<(), String> {
         let f = terms::encode(fact).map_err(|e| e.0)?;
         let s = self.write_here("suppose", json!({"name": name, "facts": [f]}))?;
         let mut set_aside = Vec::new();
+        let mut left = Vec::new();
         for _ in 0..5 {
             self.evaluate()?;
             let eval = self.eval[0].as_ref().ok_or("no evaluation")?;
-            let mut targets: Vec<u64> = Vec::new();
-            for c in &eval.constraints {
-                for v in &c.violations {
-                    if v.prov.iter().any(|p| p.seq() == s.seq) {
-                        targets.extend(v.prov.iter().map(Prov::seq).filter(|q| *q != s.seq));
-                    }
-                }
-            }
-            targets.sort();
-            targets.dedup();
+            let (mut targets, l) = direct_conflicts(&eval.constraints, s.seq);
+            left = l;
             targets.retain(|t| self.retractable(*t).is_ok());
             if targets.is_empty() {
                 break;
@@ -1304,11 +1298,15 @@ impl App {
         }
         self.evaluate()?;
         let places: Vec<String> = set_aside.iter().map(|t| self.fact_place(*t)).collect();
-        self.message = if places.is_empty() {
-            "supposed; nothing set aside".into()
+        let mut m = if places.is_empty() {
+            "supposed; nothing set aside".to_string()
         } else {
             format!("supposed; set aside in this world: {}", places.join(", "))
         };
+        if !left.is_empty() {
+            m.push_str(&format!("; left for you: {}", left.join(", ")));
+        }
+        self.message = m;
         Ok(())
     }
 
@@ -2899,6 +2897,45 @@ pub fn encode_doi(doi: &str) -> String {
             _ => format!("%{b:02X}"),
         })
         .collect()
+}
+
+/// The beliefs a new fact (entry `new`) directly contradicts, and the
+/// violations it is part of that have no single repair. A violation that
+/// rests on the new fact and exactly one other belief is a direct
+/// contradiction: giving up that belief is the only way to keep the new
+/// fact and the constraint. A violation resting on two or more other
+/// beliefs could be repaired by giving up any of them; which one is the
+/// user's choice, so it is left, counted by constraint, as "1 violation
+/// of NAME".
+fn direct_conflicts(constraints: &[reason::ConstraintEval], new: u64) -> (Vec<u64>, Vec<String>) {
+    let mut direct = Vec::new();
+    let mut left = Vec::new();
+    for c in constraints {
+        let mut n = 0;
+        for v in &c.violations {
+            if !v.prov.iter().any(|p| p.seq() == new) {
+                continue;
+            }
+            let mut others: Vec<u64> = v.prov.iter().map(Prov::seq).filter(|q| *q != new).collect();
+            others.sort();
+            others.dedup();
+            match others.as_slice() {
+                [one] => direct.push(*one),
+                [] => {}
+                _ => n += 1,
+            }
+        }
+        if n > 0 {
+            left.push(format!(
+                "{n} violation{} of {}",
+                if n == 1 { "" } else { "s" },
+                c.name
+            ));
+        }
+    }
+    direct.sort();
+    direct.dedup();
+    (direct, left)
 }
 
 /// Facts only constraint, derive and accept may write: definitions the
