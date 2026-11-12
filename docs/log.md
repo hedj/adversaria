@@ -285,17 +285,71 @@ Limits:
 * Images (the graphics protocol) are checked for at start but not yet used.
 * Time: the plan estimated 2–3 weeks; this took part of one session, without the author's review of the interface's feel, which the estimate counted.
 
-### Sizes (counted, after milestone 3)
+## Milestone 4: claims, constraints and worlds (12 November 2026, done, with limits below)
+
+Built:
+
+* `prolog/dataflow.pl`: the dataflow graph. A node is defined by a `node_def` fact in the journal; `node/2` computes it, tabled incrementally and shared; each evaluation is counted. A constraint's body is matched against beliefs and claims, so each solution says whether it is a violation (beliefs only) or a disagreement between sources (a claim in it). `plant_check/3` tries a constraint against a planted violation.
+* `crates/memex/src/engine.rs`: one SWI-Prolog process per world shown, its facts synced by difference, so only changed facts invalidate tables. Terms the user types are read by Prolog's own reader.
+* `crates/memex/src/reason.rs`: solutions, readings of a supposition, restatement through a generic frame and `label` facts, derived text ("a year", "two years"), the text timeline.
+* In the interface:
+  * the commands `fact`, `claim`, `constraint`, `derive`, `adopt` (F3), `unadopt` (F4), `interrogate` (F2), `close` and `commit`;
+  * marks under items, and the constraint panel;
+  * the "do you mean?" step after Suppose, then revision;
+  * two worlds side by side, and the fading hint.
+
+Acceptance checks (all in `make test`):
+
+* **Scene 2 as written**, the restatement aside:
+  * The talk's claim against the source's date is reported as "1 disagreement between sources", with no violation.
+  * Both items are marked, naming each other ("1988 here, 1989 in 2.1"), and the marks are dimmed.
+  * The right pane shows "CONSTRAINT · ONE DATE PER EVENT", the rule one literal per line, "disagreements between sources · recomputed at journal 42", "buran_flight: 1988 (1.1) · 1989 (2.1)", and "depends on these facts" with the derived sentence and the timeline.
+  * The fading hint shows.
+* **Scene 3 as written**, the restatement by APE aside:
+  * Suppose "the flight was in 1989" offers "Do you mean: Suppose that the date of Buran's flight is 1989."; Enter opens the second world.
+  * Side by side: "a year" against "two years", the timeline's 1988 against 1989, "0 violations, 1 disagreement" against "0 violations · 1.1 retracted here".
+  * The actual world's facts are unchanged; the supposition is a branch off the actual head. `close` returns to the actual world and keeps the branch.
+* **Recomputation touches only the nodes that depend on a change**, counted per node as in milestone 0's spike. After one new date fact for a third event:
+  * "one date per event" +1 and the timeline +1, which read every date;
+  * the sentence +0, which reads only the dates of Buran's flight and Energia's launch;
+  * "one capital per country" +0.
+* Also:
+  * Adopting the claim (F3) turns the disagreement into a violation, shown loudly; retracting the adoption (F4) turns it back.
+  * Interrogation (F2) answers who else claims it, who claims the contrary, its source and entry, the source's record, and "adopting it would raise 1 violation of one date per event".
+  * A constraint that cannot fire (`D \= D`) is refused and nothing is written.
+  * A replay gives the same outline, view, supposition, reasoning and screen.
+
+Faults found and fixed:
+
+* **Tabling cached nothing in the server**: every query re-evaluated every node, even with nothing changed. Each query runs in its own engine, and SWI-Prolog's tables were private to it. Declaring them `shared` fixed it. A test then showed a capital fact still re-evaluates the capital constraint, and finds its violation, and undoing it does too: the tables are shared and still invalidated.
+* My first expectation for the recomputation test was wrong. I expected the derived sentence to be re-evaluated by any new date, but it reads two specific dates, and SWI-Prolog tracks call variants. The test now expects 0 for it.
+* The rule was split at every comma, including inside `date(E, D1)`; now only at top-level commas.
+* Long lines in the right pane were cut off; the panels now wrap.
+
+Deliberate breaks, each made a test fail: private tables; no revision after a supposition; violations and disagreements swapped; the planted check skipped; claims ignored by constraints; adoption writing no facts.
+
+`make test` exits 0 here (SWI-Prolog 9.0.4) and in `nix develop -i` (9.2.9).
+
+Limits:
+
+* Without APE, Suppose understands only "change one number of a known fact". The restatement uses a generic frame, not a verb-frame lexicon.
+* Revision sets aside every belief in a violation with the supposition; it does not look for a minimal set, as the translator document notes s(CASP) also does not.
+* The timeline is text, not an image; the graphics protocol is still unused.
+* The memex cannot show seal dates in provenance: the no-key rule forbids its sources to name the seals file. The rule should allow reading it, by a check that the memex opens it read-only. Not done.
+* Every engine is a separate SWI-Prolog process, about 100 ms to start (estimate, not measured).
+
+### Sizes (counted, after milestone 4)
 
 | Part | Lines | Of which tests |
 | --- | --- | --- |
-| `crates/memex` (with its tests) | 4,124 | 1,041 |
+| `crates/memex` (with its tests) | 6,222 | 1,551 |
 | `crates/format` | 1,827 | 860 |
 | `crates/protocol` | 587 | 203 |
 | `crates/sealer` | 384 | 124 |
 | `crates/check` | 234 | 57 |
 | `crates/acceptance` | 835 | 834 |
-| `prolog/` and its tests | 608 | 141 |
+| `prolog/` (server, protocol, dataflow) | 573 | 0 |
+| `prolog/tests/` | 141 | 141 |
 | Tests in Python and shell | 189 | 189 |
 
-Tests: 103 Rust tests, 18 Prolog tests, the pseudo-terminal script (7 checks), the tabling spike and the no-key script, in `make test`.
+Tests: 113 Rust tests, 18 Prolog tests, the pseudo-terminal script (7 checks), the tabling spike and the no-key script, in `make test`.
