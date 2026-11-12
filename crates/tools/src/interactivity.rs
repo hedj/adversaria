@@ -37,6 +37,11 @@
 //!   term is defined where it is a heading, the first backticked cell of a
 //!   table row, or a bold lead-in (`**term**` at the start of a line).
 //!   Concepts named in plain words are not detected: an undercount.
+//!   Terms are defined only in the documents that define vocabulary (not
+//!   the log or the plan, records whose tables are data).
+//!   Terms defined together, in a section that defines at most four, are
+//!   one chunk (learned together, and small enough to hold); the report
+//!   also gives the count with each term apart.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -219,6 +224,9 @@ pub struct Unit {
     /// For a section: referents defined later in the same document, which
     /// a reader meets before their definition (reading order not acyclic).
     pub forward: usize,
+    /// For a section: the load counting each term apart, without chunks
+    /// (see measure_markdown), reported beside the load.
+    pub strict: Option<usize>,
 }
 
 impl Unit {
@@ -485,6 +493,7 @@ impl FnCollector<'_> {
             ambiguous,
             children: 0,
             forward: 0,
+            strict: None,
         });
     }
 }
@@ -648,6 +657,7 @@ fn module_unit(name: &str, f: &syn::File, crates: &[String]) -> Unit {
         ambiguous: BTreeSet::new(),
         children: m.children,
         forward: 0,
+        strict: None,
     }
 }
 
@@ -703,7 +713,14 @@ pub fn measure_markdown(docs: &[(String, String)]) -> Vec<Unit> {
             .collect()
     };
     let mut defined: BTreeMap<String, usize> = BTreeMap::new();
-    for (i, s) in secs.iter().enumerate() {
+    // Records (the log, the plan) use terms; they do not define them: a
+    // table of sizes or timings is data, not a glossary.
+    let defines_terms = |f: &str| !f.ends_with("docs/log.md") && !f.ends_with("docs/plan.md");
+    for (i, s) in secs
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| defines_terms(&s.file))
+    {
         for t in ticked(&s.title) {
             defined.entry(t).or_insert(i);
         }
@@ -724,17 +741,30 @@ pub fn measure_markdown(docs: &[(String, String)]) -> Vec<Unit> {
             }
         }
     }
+    // How many terms each section defines.
+    let mut defines = vec![0usize; secs.len()];
+    for d in defined.values() {
+        defines[*d] += 1;
+    }
     secs.iter()
         .enumerate()
         .map(|(i, s)| {
             let mut r = BTreeSet::new();
+            let mut strict = BTreeSet::new();
             let mut forward = BTreeSet::new();
             for l in &s.body {
                 for t in ticked(l) {
                     if let Some(&d) = defined.get(&t)
                         && d != i
                     {
-                        r.insert(format!("term {t} ({})", secs[d].title));
+                        // Terms defined together in a section of at most four
+                        // are learned together: one chunk. Else each counts.
+                        if defines[d] <= 4 {
+                            r.insert(format!("chunk {}", secs[d].title));
+                        } else {
+                            r.insert(format!("term {t} ({})", secs[d].title));
+                        }
+                        strict.insert(format!("term {t}"));
                         if d > i && secs[d].file == s.file {
                             forward.insert(t.clone());
                         }
@@ -777,6 +807,7 @@ pub fn measure_markdown(docs: &[(String, String)]) -> Vec<Unit> {
                             forward.insert(format!("§ {target}"));
                         }
                         r.insert(format!("§ {target}"));
+                        strict.insert(format!("§ {target}"));
                     }
                     rest = after;
                 }
@@ -785,6 +816,7 @@ pub fn measure_markdown(docs: &[(String, String)]) -> Vec<Unit> {
                         let d = d.trim_end_matches(['`', '.', ',', ':']);
                         if d.ends_with(".md") && !s.file.ends_with(d) {
                             r.insert(format!("doc {d}"));
+                            strict.insert(format!("doc {d}"));
                         }
                     }
                 }
@@ -796,6 +828,7 @@ pub fn measure_markdown(docs: &[(String, String)]) -> Vec<Unit> {
                 ambiguous: BTreeSet::new(),
                 children: s.children,
                 forward: forward.len(),
+                strict: Some(strict.len()),
             }
         })
         .collect()
@@ -820,6 +853,7 @@ pub fn parse_xref(out: &str) -> Vec<Unit> {
                 ambiguous: BTreeSet::new(),
                 children: 0,
                 forward: 0,
+                strict: None,
             })
         })
         .collect()
@@ -834,6 +868,15 @@ pub fn summary(units: &[Unit], limit: usize) -> String {
     let over = units.iter().filter(|u| u.load() > limit).count();
     let wide = units.iter().filter(|u| u.children > limit).count();
     let fwd = units.iter().filter(|u| u.forward > 0).count();
+    let strict = units
+        .iter()
+        .filter(|u| u.strict.is_some_and(|k| k > limit))
+        .count();
+    let strict = if units.iter().any(|u| u.strict.is_some()) {
+        format!("; {strict} over {limit} counting each term apart")
+    } else {
+        String::new()
+    };
     let max = units.iter().map(Unit::load).max().unwrap_or(0);
     let over_up = units.iter().filter(|u| u.upper() > limit).count();
     let mut loads: Vec<usize> = units.iter().map(Unit::load).collect();
@@ -846,7 +889,7 @@ pub fn summary(units: &[Unit], limit: usize) -> String {
         String::new()
     };
     format!(
-        "{n} units; {over} over {limit} ({}%){upper}; median {median}; largest {max}; {wide} with more than {limit} children{}",
+        "{n} units; {over} over {limit} ({}%){upper}{strict}; median {median}; largest {max}; {wide} with more than {limit} children{}",
         pct(over),
         if fwd > 0 {
             format!("; {fwd} with forward references")
@@ -895,6 +938,19 @@ mod tests {
     }
 
     #[test]
+    fn terms_from_a_small_section_are_one_chunk_and_from_a_large_one_each_counts() {
+        // Catches a chunk made of more than four terms, or the strict count
+        // lost.
+        let small = "# S\n\n| `a` |\n| `b` |\n\n# U\n\nuses `a` and `b`\n";
+        let u = measure_markdown(&[("x.md".into(), small.into())]);
+        assert_eq!(u[1].load(), 1, "{:?}", u[1].referents);
+        assert_eq!(u[1].strict, Some(2));
+        let big = "# S\n\n| `a` |\n| `b` |\n| `c` |\n| `d` |\n| `e` |\n\n# U\n\nuses `a` and `b`\n";
+        let u = measure_markdown(&[("x.md".into(), big.into())]);
+        assert_eq!(u[1].load(), 2, "{:?}", u[1].referents);
+    }
+
+    #[test]
     fn std_names_are_not_the_projects() {
         // Catches std's None counted as a project variant of the same name,
         // or Vec::new as the project's new.
@@ -930,10 +986,7 @@ mod tests {
         assert!(a.referents.is_empty(), "{:?}", a.referents);
         let b = &u[1];
         let r: Vec<&str> = b.referents.iter().map(String::as_str).collect();
-        assert_eq!(
-            r,
-            ["doc other.md", "term alpha (A)", "term beta (B1)", "§ 3"]
-        );
+        assert_eq!(r, ["chunk A", "chunk B1", "doc other.md", "§ 3"]);
         assert_eq!(b.children, 1);
         assert_eq!(b.forward, 1, "beta is defined later, in B1");
         assert_eq!(a.forward, 0);
