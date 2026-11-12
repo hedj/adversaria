@@ -384,11 +384,59 @@ Limits:
 * The reference test uses synthetic works: Wikidata has no scholarly article about Buran.
 * A long list still recurses when dropped (Rust's default drop), and the other term walkers still recurse. Only the decoder walks lists in a loop.
 
-### Sizes (counted, after milestone 5)
+## Milestone 6: documents and results in and out (12 November 2026, done, with limits below)
+
+Built:
+
+* `crates/memex/src/docs.rs`: Pandoc's JSON tree to outline blocks and back, losses counted by kind, longest-common-subsequence alignment, and the quote check's text.
+* In the interface:
+  * `import document <file>`, and a revised file opening a world with a table of changes;
+  * `export <file> [item]`, with `source-entries` in the document's metadata;
+  * `import results <file>`, and the "input changed since" mark;
+  * `check quote` and `check source`.
+* `helpers/python/memex_results.py`, which an analysis calls to write its results file.
+* The dev shell gains `curl`. The source check and the `wikidata` tool need it, and its absence was found when `make test` failed in `nix develop -i`.
+
+Acceptance checks (all in `make test`):
+
+* **Markdown round trip.** A document with two headings, emphasis, a link, a citation, inline and display mathematics, nested and ordered lists, a quote, code, a table, a footnote and an image:
+  * the import reports "losses: footnote 1, image 1", and keeps them in the import entry;
+  * the citation becomes a `cites` fact, and the display formula stays LaTeX (`\int_0^1 x \, dx = \frac{1}{2}`);
+  * the export, read back, has the same 16 blocks (style, depth, text), with no further loss.
+* **Word round trip.** Markdown to `.docx` by Pandoc, imported, exported to `.docx` by the memex, imported again: the same blocks.
+  * Against the Markdown original: the same styles and depths, the same headings, the same citation (recovered from text, since Word carries it as text), and the formula still LaTeX.
+  * Losses: "footnote 1". The image never reached the Word file, because Pandoc could not find `chart.png`.
+* **A changed input file marks its results.** The Python helper writes `results.json` with `data.csv`'s hash; the import makes "mean_delay = 1.55 ± 0.05 s" with a `measured(1.55, 0.05, "s")` claim. After `data.csv` is edited, the item shows "⚑ input changed since: data.csv".
+* Also:
+  * a revised document opens a world listing "changed 1.1", "deleted 1.2" and "added"; retracting the deletion and committing keeps the rest;
+  * the quote check rules `quoted`, then `misquoted` after the text is edited;
+  * the source check, against a local server standing in for Crossref, rules `found` (title alike but for case and hyphens), `misattributed`, `retracted`, `not_found`, and, with the server stopped, `unavailable`.
+
+Checked against the real Crossref (two requests, generic user agent): 10.1038/nature12373 has `title` and no retraction; the retracted Wakefield 1998 paper lists `{"type": "retraction"}` in `updated-by`, the field the check reads.
+
+Faults found and fixed:
+
+* Every Markdown heading counted as a loss, because Pandoc always gives headings an identifier. Now only an identifier other than the one Pandoc would make from the text counts, or classes and attributes. The rule for that identifier is approximated from memory of Pandoc's documentation.
+* Text left with a trailing space where an image was removed differed after the round trip; block text is now trimmed (code aside).
+* My source-check test expected a typographic apostrophe (’ against ') to be ignored; the design's rule ignores only spaces, hyphens and case, so the test was wrong.
+* `curl` was missing from the dev shell (above).
+
+Deliberate breaks, each made a test fail: citation keys not recovered from text; footnotes not counted as losses; the stale check reading no hashes; case not ignored; retractions undetected; a revision written without its world.
+
+`make test` exits 0 here (Pandoc 3.1.3) and in `nix develop -i` (Pandoc 3.7.0.2).
+
+Limits:
+
+* Lost kinds are counted, not kept. A table's caption and cell structure beyond " | ", footnotes and images are not carried. Images do not go to `blobs/` yet.
+* Re-import does not see moves: a block that moved is a deletion and an addition. A deleted item whose children survive is not deleted.
+* The quote check compares plain text through Pandoc, so formatting differences do not count; the source check reads titles and retractions, not abstracts, so it never rules a quote `quoted` from the source itself.
+* Results take values with standard uncertainties only; the other kinds in § Uncertainty wait for stage B.
+
+### Sizes (counted, after milestone 6)
 
 | Part | Lines | Of which tests |
 | --- | --- | --- |
-| `crates/memex` (with its tests) | 7,058 | 1,922 |
+| `crates/memex` (with its tests) | 8,709 | 2,397 |
 | `crates/format` | 1,827 | 860 |
 | `crates/protocol` | 639 | 236 |
 | `crates/tools` | 364 | 52 |
@@ -397,6 +445,7 @@ Limits:
 | `crates/acceptance` | 835 | 834 |
 | `prolog/` (server, protocol, dataflow) | 737 | 0 |
 | `prolog/tests/` | 141 | 141 |
+| `helpers/python/memex_results.py` | 74 | 0 |
 | Tests in Python and shell | 189 | 189 |
 
-Tests: 121 Rust tests, 18 Prolog tests, the pseudo-terminal script (7 checks), the tabling spike and the no-key script, in `make test`.
+Tests: 129 Rust tests, 18 Prolog tests, the pseudo-terminal script (7 checks), the tabling spike and the no-key script, in `make test`.
