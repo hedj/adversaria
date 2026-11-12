@@ -114,6 +114,55 @@ own_predicate(G) :- functor(G, N, A), server_predicate(N/A), !.
 own_predicate(G) :- predicate_property(user:G, file(_)), !.
 own_predicate(G) :- predicate_property(user:G, imported_from(_)).
 
+%!  check_rule(+Head, +Body) is det.
+%   For the memex, before it keeps a rule Head :- Body: the body may only
+%   call what a definition may (vet/1); the head is not a built-in or one
+%   of this server's predicates; every variable of the head is bound by the
+%   body (else the rule would answer with unbound values); and the rule is
+%   not recursive, directly or through other rules, as rules are proved by
+%   plain recursion, which would not end.
+check_rule(Head, Body) :-
+    vet(Body),
+    (   callable(Head), \+ builtin(Head), \+ own_predicate(Head)
+    ->  true
+    ;   functor(Head, N, A), not_allowed(N/A)
+    ),
+    term_variables(Head, HVs), term_variables(Body, BVs),
+    (   member(V, HVs), \+ ( member(W, BVs), W == V )
+    ->  throw(error(domain_error(head_variable_bound_by_body, V), _))
+    ;   true
+    ),
+    functor(Head, N, A),
+    (   reaches(Body, N/A, [])
+    ->  throw(error(permission_error(define, recursive_rule, N/A), _))
+    ;   true
+    ).
+
+%   Body calls N/A, itself or through the rules of what it calls.
+reaches(Body, PI, Seen) :-
+    body_literal(Body, L),
+    callable(L),
+    functor(L, LN, LA),
+    (   LN/LA == PI
+    ->  true
+    ;   \+ memberchk(LN/LA, Seen),
+        functor(H, LN, LA),
+        fact_ref(_, rule_def(_, H, B), _),
+        reaches(B, PI, [LN/LA|Seen])
+    ),
+    !.
+
+body_literal(B, _) :- var(B), !, fail.
+body_literal((A, B), L) :- !, ( body_literal(A, L) ; body_literal(B, L) ).
+body_literal((A ; B), L) :- !, ( body_literal(A, L) ; body_literal(B, L) ).
+body_literal((A -> B), L) :- !, ( body_literal(A, L) ; body_literal(B, L) ).
+body_literal((A *-> B), L) :- !, ( body_literal(A, L) ; body_literal(B, L) ).
+body_literal(\+ A, L) :- !, body_literal(A, L).
+body_literal(findall(_, G, _), L) :- !, body_literal(G, L).
+body_literal(findall(_, G, _, _), L) :- !, body_literal(G, L).
+body_literal(forall(C, A), L) :- !, ( body_literal(C, L) ; body_literal(A, L) ).
+body_literal(L, L).
+
 %!  check_definition(+Body) is det.
 %   For the memex, before it keeps a constraint or derived value: vet/1,
 %   so a refused definition never enters the journal.

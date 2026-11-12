@@ -249,6 +249,7 @@ the item under the cursor.
 | `quit` | `quit` | writes what is pending and leaves |
 | `redo` | `redo` | redoes what undo undid, along the current branch |
 | `retract` | `retract ENTRY` | reverses one earlier entry, by its number, keeping later work; lists what depends on it first |
+| `rule` | `rule HEAD :- BODY.` | defines a predicate from others, usable wherever a goal is: in `derive`, `constraint`, `layer` and other rules. Refused if recursive, if a head variable is not bound by the body, or if the body calls what a definition may not |
 | `set` | `set FACT` | states FACT and retracts the beliefs it directly contradicts (each that breaks a constraint with it and nothing else); the fact goes on the item that held the one it replaces, else on the target. A violation it leaves is named, not resolved |
 | `suppose` | `suppose NAME` | starts a named world with nothing supposed in it (the Suppose quasimode is the usual way, § 8) |
 | `switch` | `switch` | moves focus to the other pane |
@@ -308,6 +309,21 @@ derive The flight came {N:years} after Energia's first launch. where date(buran_
 
 `derive timeline where date(E, Y)` draws a timeline of the solutions, using
 labels where there are any.
+
+**Rules.** A computation used in several places can be written once, as
+a rule, and then used like a fact:
+
+```
+rule spent(S) :- cell(rent, R), cell(food, F), S is R + F.
+derive Spent: {S} where spent(S)
+constraint within income: false :- spent(S), cell(income, I), S > I.
+```
+
+A rule may not be recursive, directly or through other rules (the
+reasoner proves rules by plain recursion, which would not end); every
+variable in its head must be bound by its body; and its body may call
+only what a definition may (below). A violation that rests on a rule
+names the rule's entry.
 
 **What a definition may call.** A constraint, a derived goal and an
 adopted rule may only read facts, compare and compute. Besides your facts,

@@ -206,6 +206,43 @@ impl Engine {
         }
     }
 
+    /// Whether a rule may be kept (prolog/dataflow.pl, check_rule/2). Err
+    /// says why not, in words.
+    pub fn check_rule(&mut self, head: &Term, body: &Term) -> Result<(), String> {
+        match self
+            .p
+            .all(&c("check_rule", vec![head.clone(), body.clone()]), 1)
+        {
+            Ok(_) => Ok(()),
+            Err(Error::Prolog(Term::Compound(e, a))) if e == "error" => {
+                let show = crate::reason::show;
+                Err(match &a[0] {
+                    Term::Compound(k, x) if k == "permission_error" && x.len() == 3 => {
+                        match (&x[1], &x[2]) {
+                            (Term::Atom(w), what) if w == "recursive_rule" => {
+                                format!(
+                                    "{} is recursive, directly or through other rules; rules may not be",
+                                    show(what)
+                                )
+                            }
+                            (_, Term::Compound(s, na)) if s == "/" && na.len() == 2 => format!(
+                                "{}/{} is not allowed: a rule may only read facts, compare and compute",
+                                show(&na[0]),
+                                show(&na[1])
+                            ),
+                            (_, what) => format!("{} is not allowed", show(what)),
+                        }
+                    }
+                    Term::Compound(k, x) if k == "domain_error" && x.len() == 2 => {
+                        "a variable of the head is not bound by the body".to_string()
+                    }
+                    other => show(other),
+                })
+            }
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
     /// Check a file of Wikidata facts as the loader reads it, keeping
     /// nothing: Err names the first term that is not one.
     pub fn check_wikidata(&mut self, file: &std::path::Path) -> Result<(), Error> {

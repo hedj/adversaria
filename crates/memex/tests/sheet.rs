@@ -204,3 +204,48 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
     shows(&again, "Left over: 300 [derived]");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_rule_is_written_once_and_used_everywhere() {
+    // `rule` defines a predicate from others. Catches a rule not seen by
+    // derived text or constraints, a recursive rule accepted (it would loop
+    // the reasoner), a rule whose head has a variable its body never binds,
+    // and a rule body that calls what definitions may not.
+    let dir = temp("rule");
+    let mut app = budget(&dir);
+    let m = command(
+        &mut app,
+        "rule spent(S) :- cell(rent, R), cell(food, F), S is R + F.",
+    );
+    assert!(m.contains("rule spent/1 kept"), "{m}");
+    tap(&mut app, Key::Enter);
+    typ(&mut app, "spent");
+    command(&mut app, "derive Spent: {S} where spent(S)");
+    shows(&app, "Spent: 1600 [derived]");
+    command(
+        &mut app,
+        "constraint within income: false :- spent(S), cell(income, I), S > I.",
+    );
+    command(&mut app, "set cell(food, 900)");
+    shows(&app, "Spent: 2100 [derived]");
+    shows(&app, "within income, violation");
+    for (line, why) in [
+        ("rule above(X, Y) :- above(X, Z), above(Z, Y).", "recursive"),
+        ("rule loop1(X) :- loop2(X).", ""),
+        ("rule loop2(X) :- loop1(X).", "recursive"),
+        ("rule free(X, Y) :- cell(X, _).", "Y"),
+        ("rule bad(X) :- cell(X, _), shell(ls).", "not allowed"),
+        ("rule rule_def(a, b, c) :- true.", "reserved"),
+    ] {
+        app.handle(Event::down(Key::Quasi(Quasi::Command)));
+        typ(&mut app, line);
+        app.handle(Event::up(Key::Quasi(Quasi::Command)));
+        let m = app.message.clone();
+        if why.is_empty() {
+            assert!(m.contains("kept"), "{line}: {m}");
+        } else {
+            assert!(m.contains("not kept") && m.contains(why), "{line}: {m}");
+        }
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}

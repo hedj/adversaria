@@ -465,6 +465,11 @@ pub const COMMANDS: &[Command] = &[
         help: "redo what undo undid, along the current branch",
     },
     Command {
+        name: "rule",
+        slots: &[("that", Slot::Text)],
+        help: "define a predicate from others: Head :- Body. Usable in derive, constraint, layer and other rules",
+    },
+    Command {
         name: "set",
         slots: &[("that", Slot::Text)],
         help: "state a fact and retract the beliefs it directly contradicts under a constraint; the fact goes where the replaced one was",
@@ -2383,6 +2388,7 @@ impl App {
                 | "pane"
                 | "retract"
                 | "set"
+                | "rule"
                 | "suppose"
                 | "new"
                 | "constraint"
@@ -2701,6 +2707,62 @@ impl App {
                     body["source"] = json!(src);
                 }
                 self.write_here("edit", body)?;
+            }
+            "rule" => {
+                let text = words.join(" ");
+                let (t, names) = self
+                    .engine(0)?
+                    .parse(text.trim().trim_end_matches('.'))
+                    .map_err(|e| format!("not a Prolog rule: {e}"))?;
+                let (head, body) = match &t {
+                    Term::Compound(n, a) if n == ":-" && a.len() == 2 => {
+                        (a[0].clone(), a[1].clone())
+                    }
+                    _ => return Err("rule (that) Head :- Body.".into()),
+                };
+                let pi = functor_of(&head);
+                if reserved(&head)
+                    || matches!(&head, Term::Compound(f, _) | Term::Atom(f) if f == "rule_def" || f == "node_def" || f == "claims")
+                {
+                    return Err(format!("rule not kept: {pi} is reserved"));
+                }
+                // Every head variable must be bound by the body; name those
+                // that are not. `names` are in order of first appearance.
+                let in_body = variables(&body);
+                let free: Vec<String> = variables(&head)
+                    .into_iter()
+                    .filter(|v| !in_body.contains(v))
+                    .map(|v| {
+                        names
+                            .get(v as usize)
+                            .cloned()
+                            .unwrap_or_else(|| format!("_{v}"))
+                    })
+                    .collect();
+                if !free.is_empty() {
+                    return Err(format!(
+                        "rule not kept: {} in the head {} not bound by the body",
+                        free.join(", "),
+                        if free.len() == 1 { "is" } else { "are" }
+                    ));
+                }
+                // The check reads the world's rules: bring the engine up to
+                // date first, in case it has not been evaluated since.
+                let facts = crate::store::facts(self.journal.entries(), self.tip)?;
+                self.engine(0)?.sync(&facts).map_err(|e| e.to_string())?;
+                self.engine(0)?
+                    .check_rule(&head, &body)
+                    .map_err(|w| format!("rule not kept: {w}"))?;
+                let seq = self.journal.entries().len() as u64 + 1;
+                let def =
+                    Term::Compound("rule_def".into(), vec![Term::Int(seq as i64), head, body]);
+                let f = terms::encode(&def).map_err(|e| e.0)?;
+                let mut b = json!({"op": "facts", "rule": text.trim(), "facts": [f]});
+                if target != TOP {
+                    b["item"] = json!(target);
+                }
+                self.write_here("edit", b)?;
+                self.message = format!("rule {pi} kept");
             }
             "set" => {
                 let text = words.join(" ");
