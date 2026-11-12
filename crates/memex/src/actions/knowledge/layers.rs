@@ -12,7 +12,7 @@ impl App {
         let (mark_text, goal_text) = split_where(&words.join(" "));
         let (mark, goal) = self.parse_layer(&mark_text, &goal_text)?;
         self.keep_layer(target, (&mark_text, &goal_text), mark, goal)?;
-        self.message = format!("layer kept: {mark_text}");
+        self.screen.message = format!("layer kept: {mark_text}");
         Ok(())
     }
 

@@ -23,7 +23,7 @@ impl App {
         if self.claims_of(target).is_empty() {
             return Err("the target states no claim".into());
         }
-        self.view.show_claim(target);
+        self.screen.view.show_claim(target);
         self.write_view("interrogate", json!({}));
         Ok(())
     }
@@ -34,7 +34,7 @@ impl App {
         let claims = self.claims_of(target);
         check_adoptable(&claims)?;
         self.write_adoptions(target, claims)?;
-        self.message = "adopted: a belief now, with its source kept".into();
+        self.screen.message = "adopted: a belief now, with its source kept".into();
         Ok(())
     }
 
@@ -59,7 +59,7 @@ impl App {
             .last_adoption(target)
             .ok_or("the target has no adoption to retract")?;
         self.write_here("retract", json!({"target": last}))?;
-        self.message = format!("adoption {last} retracted");
+        self.screen.message = format!("adoption {last} retracted");
         Ok(())
     }
 
@@ -70,7 +70,7 @@ impl App {
     }
 
     fn adoption_of(&self, item: u64) -> Option<u64> {
-        self.path(self.tip)
+        self.path(self.record.tip)
             .iter()
             .rev()
             .find(|e| adopts(e, item))
@@ -82,14 +82,14 @@ impl App {
     pub(crate) fn cmd_accept(&mut self, words: &[&str], _: u64) -> Result<(), String> {
         let s = self.suggestion(words, "accept")?;
         self.accept(&s)?;
-        self.message = format!("adopted: {}", s.describe());
+        self.screen.message = format!("adopted: {}", s.describe());
         Ok(())
     }
 
     pub(crate) fn cmd_dismiss(&mut self, words: &[&str], _: u64) -> Result<(), String> {
         let s = self.suggestion(words, "dismiss")?;
         self.dismiss_suggestion(&s);
-        self.message = format!("dismissed: {}", s.describe());
+        self.screen.message = format!("dismissed: {}", s.describe());
         Ok(())
     }
 

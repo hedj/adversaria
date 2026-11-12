@@ -29,9 +29,9 @@ fn command(app: &mut App, line: &str) {
     typ(app, line);
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
     assert!(
-        !app.message.starts_with("no command") && !app.message.starts_with("not a"),
+        !app.screen.message.starts_with("no command") && !app.screen.message.starts_with("not a"),
         "{line}: {}",
-        app.message
+        app.screen.message
     );
 }
 
@@ -44,7 +44,11 @@ fn leap(app: &mut App, pattern: &str) {
     app.handle(Event::down(Key::Quasi(Quasi::LeapForward)));
     typ(app, pattern);
     app.handle(Event::up(Key::Quasi(Quasi::LeapForward)));
-    assert!(app.message.is_empty(), "leap {pattern}: {}", app.message);
+    assert!(
+        app.screen.message.is_empty(),
+        "leap {pattern}: {}",
+        app.screen.message
+    );
     app.evaluate().unwrap(); // as the terminal loop does when the journal moves
 }
 
@@ -130,9 +134,9 @@ fn scene(dir: &Path) -> App {
         "constraint one date per event: false :- date(E, D1), date(E, D2), D1 \\= D2.",
     );
     assert!(
-        app.message.contains("fires on a planted violation"),
+        app.screen.message.contains("fires on a planted violation"),
         "{}",
-        app.message
+        app.screen.message
     );
     app.flush();
     app.evaluate().unwrap();
@@ -235,13 +239,13 @@ fn interrogation_answers_its_five_questions() {
     s.assert("adopting it would raise 1 violation of one date per event");
     s.assert("F3 adopts · F4 retracts an adoption");
     // The hint follows the configuration, not the default keys.
-    app.bindings =
+    app.screen.input.bindings =
         memex::config::Config::parse("[keys]\nF3 = \"\"\nInsert = \"adopt\"\nF4 = \"\"\n")
             .unwrap()
             .bindings;
     let s2 = screen(&app);
     s2.assert("Insert adopts · command unadopt retracts an adoption");
-    app.bindings = memex::config::Config::default().bindings;
+    app.screen.input.bindings = memex::config::Config::default().bindings;
     assert_eq!(
         app.journal()
             .entries()
@@ -267,20 +271,20 @@ fn scene_three_as_written() {
     // world is untouched. Then close the supposition.
     let dir = temp("scene3");
     let mut app = scene(&dir);
-    let actual_head = app.tip;
+    let actual_head = app.record.tip;
     let actual_facts = memex::store::facts(app.journal().entries(), actual_head).unwrap();
     app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
     typ(&mut app, "the flight was in 1989");
     app.handle(Event::up(Key::Quasi(Quasi::Suppose)));
-    assert!(matches!(app.mode, Mode::ConfirmSuppose { .. }));
+    assert!(matches!(app.screen.input.mode, Mode::ConfirmSuppose { .. }));
     let s = screen(&app);
     s.assert("SUPPOSE  the flight was in 1989");
     s.assert("Do you mean: Suppose that the date of Buran's flight is 1989.  ⏎ yes · Esc no");
     tap(&mut app, Key::Enter);
     assert!(
-        app.message.contains("set aside in this world: 1.1"),
+        app.screen.message.contains("set aside in this world: 1.1"),
         "{}",
-        app.message
+        app.screen.message
     );
     let s = screen(&app);
     s.assert("worlds actual | suppose: the flight was in 1989");
@@ -309,13 +313,13 @@ fn scene_three_as_written() {
     // Close it: back to the actual world, the branch kept.
     command(&mut app, "close");
     app.evaluate().unwrap();
-    assert!(app.supposition.is_none());
-    assert_eq!(app.world, "actual");
+    assert!(app.record.branch.supposition.is_none());
+    assert_eq!(app.record.branch.world, "actual");
     let s = screen(&app);
     s.assert("1 disagreement between sources");
     s.assert("The flight came a year after Energia's first launch.");
     assert_eq!(
-        memex::store::facts(app.journal().entries(), app.tip).unwrap(),
+        memex::store::facts(app.journal().entries(), app.record.tip).unwrap(),
         actual_facts
     );
     assert!(
@@ -338,7 +342,11 @@ fn a_constraint_that_cannot_fire_is_not_kept() {
         "constraint broken: false :- date(E, D), date(E, D), D \\= D.",
     );
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
-    assert!(app.message.contains("did not fire"), "{}", app.message);
+    assert!(
+        app.screen.message.contains("did not fire"),
+        "{}",
+        app.screen.message
+    );
     assert_eq!(app.journal().entries().len(), n, "nothing written");
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -363,10 +371,10 @@ fn a_constraint_on_negative_or_zero_values_can_be_kept() {
         typ(&mut app, line);
         app.handle(Event::up(Key::Quasi(Quasi::Command)));
         assert_eq!(
-            app.message.contains("kept: it fires"),
+            app.screen.message.contains("kept: it fires"),
             kept,
             "{line}: {}",
-            app.message
+            app.screen.message
         );
     }
     std::fs::remove_dir_all(&dir).unwrap();
@@ -391,18 +399,19 @@ fn recomputation_touches_only_dependent_nodes() {
     app.flush();
     app.evaluate().unwrap();
     let constraints: Vec<(u64, String)> = app
+        .record
         .outline
         .constraints
         .iter()
         .map(|(s, c)| (*s, c.name.clone()))
         .collect();
-    let derived: Vec<u64> = app.outline.derived.keys().copied().collect();
+    let derived: Vec<u64> = app.record.outline.derived.keys().copied().collect();
     let nodes: Vec<(u64, String)> = constraints
         .into_iter()
         .chain(derived.iter().map(|d| {
             (
                 *d,
-                app.outline.derived[d]
+                app.record.outline.derived[d]
                     .template
                     .chars()
                     .take(16)
@@ -457,13 +466,21 @@ fn replay_reproduces_claims_constraints_and_worlds() {
     app.evaluate().unwrap();
     let mut r = App::open(&dir).unwrap();
     r.evaluate().unwrap();
-    assert_eq!(r.outline, app.outline);
-    assert_eq!(r.view, app.view);
+    assert_eq!(r.record.outline, app.record.outline);
+    assert_eq!(r.screen.view, app.screen.view);
     assert_eq!(
-        (r.tip, &r.world, &r.supposition),
-        (app.tip, &app.world, &app.supposition)
+        (
+            r.record.tip,
+            &r.record.branch.world,
+            &r.record.branch.supposition
+        ),
+        (
+            app.record.tip,
+            &app.record.branch.world,
+            &app.record.branch.supposition
+        )
     );
-    assert_eq!(r.eval, app.eval);
+    assert_eq!(r.reasoner.eval, app.reasoner.eval);
     let n = screen(&app).lines.len() - 1;
     assert_eq!(screen(&r).lines[..n], screen(&app).lines[..n]);
     std::fs::remove_dir_all(&dir).unwrap();
@@ -529,7 +546,7 @@ fn an_item_with_no_claim_cannot_be_adopted() {
     let before = app.journal().entries().len();
     command(&mut app, "adopt");
     assert_eq!(
-        (app.message.as_str(), app.journal().entries().len()),
+        (app.screen.message.as_str(), app.journal().entries().len()),
         ("the target states no claim to adopt", before)
     );
     std::fs::remove_dir_all(&dir).unwrap();
@@ -546,7 +563,9 @@ fn a_retracted_constraint_is_not_read() {
     let seq = app.journal().entries().last().unwrap().seq;
     let count = |app: &mut App| {
         app.evaluate().unwrap();
-        app.eval[0].as_ref().map_or(0, |e| e.constraints.len())
+        app.reasoner.eval[0]
+            .as_ref()
+            .map_or(0, |e| e.constraints.len())
     };
     let before = count(&mut app);
     command(&mut app, &format!("retract {seq}"));

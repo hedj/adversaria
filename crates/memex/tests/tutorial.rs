@@ -46,9 +46,10 @@ impl T {
     fn command(&mut self, line: &str) {
         self.hold(Quasi::Command, line);
         assert!(
-            !self.app.message.starts_with("no command") && !self.app.message.starts_with("not a"),
+            !self.app.screen.message.starts_with("no command")
+                && !self.app.screen.message.starts_with("not a"),
             "{line}: {}",
-            self.app.message
+            self.app.screen.message
         );
     }
     fn key(&mut self, k: Key) {
@@ -92,16 +93,16 @@ impl T {
     fn says(&self, text: &str) {
         in_tutorial(text);
         assert!(
-            self.app.message.contains(text),
+            self.app.screen.message.contains(text),
             "message {:?} lacks {text:?}",
-            self.app.message
+            self.app.screen.message
         );
     }
     fn look(&self, at: &str) {
         if self.dump {
             println!(
                 "---- {at} (message: {:?})\n{}",
-                self.app.message,
+                self.app.screen.message,
                 self.screen().join("\n")
             );
         }
@@ -168,7 +169,13 @@ fn the_tutorial_works_as_written() {
     // Step 6: Leap, from the end of the outline, wrapping to the top.
     t.hold(Quasi::LeapForward, "buran");
     t.look("leap");
-    assert!(t.app.outline.text(t.app.cursor()).starts_with("Buran"));
+    assert!(
+        t.app
+            .record
+            .outline
+            .text(t.app.cursor())
+            .starts_with("Buran")
+    );
     t.shows("CONSTRAINT · ONE DATE PER EVENT");
 
     // Step 7: interrogate, adopt, unadopt.
@@ -190,7 +197,10 @@ fn the_tutorial_works_as_written() {
 
     // Step 8: suppose.
     t.hold(Quasi::Suppose, "the flight was in 1989");
-    assert!(matches!(t.app.mode, Mode::ConfirmSuppose { .. }));
+    assert!(matches!(
+        t.app.screen.input.mode,
+        Mode::ConfirmSuppose { .. }
+    ));
     t.look("suppose?");
     t.shows("Do you mean: Suppose that the date of Buran's flight is 1989.  ⏎ yes · Esc no");
     t.key(Key::Enter);
@@ -201,7 +211,7 @@ fn the_tutorial_works_as_written() {
     t.command("close");
     t.look("closed");
     t.says("it stays in the journal");
-    assert_eq!(t.app.world, "actual");
+    assert_eq!(t.app.record.branch.world, "actual");
     t.shows("The flight came a year after Energia's first launch.");
 
     // Part C, then part D, in the same session.
@@ -210,7 +220,7 @@ fn the_tutorial_works_as_written() {
 
     // Step 16: leave. The journal, opened again, replays to the same budget.
     t.key(Key::F(10));
-    assert!(t.app.quit);
+    assert!(t.app.session.quit);
     t.app.flush();
     let mut app = App::open(&dir).unwrap();
     app.set_durable(false);
@@ -354,9 +364,10 @@ fn part_three(t: &mut T) {
 }
 
 fn find(app: &App, text: &str) -> u64 {
-    app.outline
+    app.record
+        .outline
         .in_order()
         .into_iter()
-        .find(|i| app.outline.text(*i) == text)
+        .find(|i| app.record.outline.text(*i) == text)
         .unwrap_or_else(|| panic!("no item {text:?}"))
 }

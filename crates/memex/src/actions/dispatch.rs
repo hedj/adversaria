@@ -288,7 +288,7 @@ pub const COMMANDS: &[Command] = &[
 
 impl App {
     pub(crate) fn cmd_help(&mut self, _: &[&str], _: u64) -> Result<(), String> {
-        self.message = COMMANDS
+        self.screen.message = COMMANDS
             .iter()
             .map(|c| c.name)
             .collect::<Vec<_>>()
@@ -297,14 +297,14 @@ impl App {
     }
 
     pub(crate) fn cmd_quit(&mut self, _: &[&str], _: u64) -> Result<(), String> {
-        self.quit = true;
+        self.session.quit = true;
         Ok(())
     }
 
     pub(crate) fn run_simple(&mut self, name: &str) {
-        self.mode = Mode::Normal;
+        self.screen.input.mode = Mode::Normal;
         let m = self.run_command(name);
-        self.mode = m;
+        self.screen.input.mode = m;
     }
 
     /// Run a command line, as typed in the Command quasimode.
@@ -319,7 +319,7 @@ impl App {
     /// Run a command; if it fails, its error becomes the message.
     fn command_or_message(&mut self, line: &str) -> Mode {
         self.command(line).unwrap_or_else(|m| {
-            self.message = m;
+            self.screen.message = m;
             Mode::Normal
         })
     }
@@ -352,16 +352,16 @@ impl App {
     /// The mode a command set, if any, taken out; scope returns to the
     /// statement unless a question is open.
     fn next_mode(&mut self) -> Mode {
-        if self.mode == Mode::Normal {
+        if self.screen.input.mode == Mode::Normal {
             self.statement_scope();
         }
-        std::mem::replace(&mut self.mode, Mode::Normal)
+        std::mem::replace(&mut self.screen.input.mode, Mode::Normal)
     }
 
     fn statement_scope(&mut self) {
-        if self.view.scope != ScopeLevel::Statement {
-            self.view.scope = ScopeLevel::Statement;
-            self.view_dirty = true;
+        if self.screen.view.scope != ScopeLevel::Statement {
+            self.screen.view.scope = ScopeLevel::Statement;
+            self.screen.dirty = true;
         }
     }
 
@@ -370,7 +370,7 @@ impl App {
     /// An item named by its outline number ("3.2"), its name, "#seq", or the
     /// start of its text if only one item's text starts so.
     pub fn resolve(&self, addr: &str) -> Option<u64> {
-        self.outline.addressed(addr.trim())
+        self.record.outline.addressed(addr.trim())
     }
 
     /// The one item that words address.

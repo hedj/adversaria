@@ -322,51 +322,95 @@ pub(crate) struct PendingText {
     text: Vec<char>,
 }
 
+/// The memex's state, in four parts: the record, the reasoner, the screen
+/// and the session.
 pub struct App {
+    pub record: Record,
+    pub reasoner: Reasoner,
+    pub screen: Screen,
+    pub session: Session,
+}
+
+/// The journal, and where the current state is in it.
+pub struct Record {
     pub(crate) journal: Journal,
     pub outline: Outline,
-    pub view: View,
-    pub mode: Mode,
     /// The entry the current state is at.
     pub tip: u64,
+    pub branch: Branch,
+}
+
+/// The branch the state is on.
+pub struct Branch {
     /// Entries undone and not redone, most recent last.
     pub redo: Vec<u64>,
     /// The name of the current world: "actual", or the last Suppose.
     pub world: String,
-    pub message: String,
-    pub workspace: String,
-    pub(crate) pending_text: Option<PendingText>,
-    pub(crate) view_dirty: bool,
-    pub(crate) last_leap: Option<(String, bool)>,
-    pub quit: bool,
     pub supposition: Option<Supposition>,
-    /// Reasoning: the current world's engine, the actual world's while a
-    /// supposition is open, and one for previews.
+}
+
+/// Reasoning over the worlds shown, and what it found.
+pub struct Reasoner {
+    /// The current world's engine, the actual world's while a supposition
+    /// is open, and one for previews.
     pub(crate) engines: [Option<Engine>; 3],
     /// What reasoning found: [0] the current world, [1] the actual world
     /// while a supposition is open.
     pub eval: [Option<WorldEval>; 2],
-    /// Interrogation's preview of adopting a claim: violations it would raise.
-    pub preview: Option<String>,
-    /// Suggestions for the current world, best evidence first, less those
-    /// dismissed.
-    pub suggestions: Vec<Suggestion>,
+    pub suggestions: Suggestions,
+    pub found: Found,
+}
+
+/// Suggestions for the current world, and what the user did with them.
+pub struct Suggestions {
+    /// Best evidence first, less those dismissed.
+    pub list: Vec<Suggestion>,
     /// Keys of dismissed suggestions, from the journal.
     pub dismissed: BTreeSet<String>,
     /// While the suggestion pane has focus, its order is kept: a suggestion
     /// never moves under the pointer. Not journaled, like a held key.
     pub(crate) frozen: Option<Vec<String>>,
-    /// Where the source check asks Crossref: its works API, unless a test
-    /// points it elsewhere.
-    pub(crate) crossref: String,
+    /// Suggestions recorded as offered (shown in the pane), by identity.
+    pub offered: BTreeSet<String>,
+}
+
+/// What else evaluation found.
+pub struct Found {
+    /// Interrogation's preview of adopting a claim: violations it would raise.
+    pub preview: Option<String>,
     /// Results whose input files changed since: item -> those files.
     pub stale: BTreeMap<u64, Vec<String>>,
     /// The last violations and disagreements recorded in the journal.
     pub(crate) observed: Option<(Vec<String>, Vec<String>)>,
-    /// Suggestions recorded as offered (shown in the pane), by identity.
-    pub offered: BTreeSet<String>,
+}
+
+/// What is shown, and the input in progress.
+pub struct Screen {
+    pub view: View,
+    /// The view has changed and is not yet written.
+    pub(crate) dirty: bool,
+    pub message: String,
+    pub input: Input,
+}
+
+/// Keyboard input in progress.
+pub struct Input {
+    pub mode: Mode,
+    /// Text typed into an item but not yet written.
+    pub(crate) pending: Option<PendingText>,
+    pub(crate) last_leap: Option<(String, bool)>,
     /// Keys bound to command lines, from the configuration.
     pub bindings: Vec<(Key, String)>,
+}
+
+/// This running session: its name, where sources are checked, and whether
+/// it is to end.
+pub struct Session {
+    pub workspace: String,
+    /// Where the source check asks Crossref: its works API, unless a test
+    /// points it elsewhere.
+    pub(crate) crossref: String,
+    pub quit: bool,
 }
 
 const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
@@ -381,37 +425,53 @@ impl App {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
         let mut app = App {
-            journal,
-            outline: Outline::default(),
-            view: View::default(),
-            mode: Mode::Normal,
-            tip: 0,
-            redo: vec![],
-            world: "actual".into(),
-            message: String::new(),
-            workspace,
-            pending_text: None,
-            bindings: crate::config::Config::default().bindings,
-            view_dirty: false,
-            last_leap: None,
-            quit: false,
-            supposition: None,
-            engines: [None, None, None],
-            eval: [None, None],
-            preview: None,
-            suggestions: vec![],
-            dismissed: BTreeSet::new(),
-            frozen: None,
-            crossref: "https://api.crossref.org/works/".into(),
-            stale: BTreeMap::new(),
-            observed: None,
-            offered: BTreeSet::new(),
+            record: Record {
+                journal,
+                outline: Outline::default(),
+                tip: 0,
+                branch: Branch {
+                    redo: vec![],
+                    world: "actual".into(),
+                    supposition: None,
+                },
+            },
+            reasoner: Reasoner {
+                engines: [None, None, None],
+                eval: [None, None],
+                suggestions: Suggestions {
+                    list: vec![],
+                    dismissed: BTreeSet::new(),
+                    frozen: None,
+                    offered: BTreeSet::new(),
+                },
+                found: Found {
+                    preview: None,
+                    stale: BTreeMap::new(),
+                    observed: None,
+                },
+            },
+            screen: Screen {
+                view: View::default(),
+                dirty: false,
+                message: String::new(),
+                input: Input {
+                    mode: Mode::Normal,
+                    pending: None,
+                    last_leap: None,
+                    bindings: crate::config::Config::default().bindings,
+                },
+            },
+            session: Session {
+                workspace,
+                crossref: "https://api.crossref.org/works/".into(),
+                quit: false,
+            },
         };
-        if app.journal.entries().is_empty() {
-            let e = app.journal.append("edit", json!({"op": "init"}))?;
+        if app.record.journal.entries().is_empty() {
+            let e = app.record.journal.append("edit", json!({"op": "init"}))?;
             app.apply(&e);
         } else {
-            let entries: Vec<Entry> = app.journal.entries().to_vec();
+            let entries: Vec<Entry> = app.record.journal.entries().to_vec();
             for e in &entries {
                 app.apply(e);
             }
@@ -420,20 +480,23 @@ impl App {
     }
 
     pub fn journal(&self) -> &Journal {
-        &self.journal
+        &self.record.journal
     }
 
     /// Point the source check at another Crossref-like service (for tests).
     pub fn set_crossref(&mut self, base: &str) {
-        self.crossref = base.to_string();
+        self.session.crossref = base.to_string();
     }
 
     pub fn set_durable(&mut self, d: bool) {
-        self.journal.durable = d;
+        self.record.journal.durable = d;
     }
 
     pub(crate) fn entry(&self, seq: u64) -> Option<&Entry> {
-        self.journal.entries().get((seq as usize).wrapping_sub(1))
+        self.record
+            .journal
+            .entries()
+            .get((seq as usize).wrapping_sub(1))
     }
 
     // ------------------------------------------------------------------
@@ -443,33 +506,33 @@ impl App {
         // The order before the change is needed only if an item may vanish.
         let may_remove = match e.kind.as_str() {
             "view" => false,
-            k if CONTENT.contains(&k) && e.parent == Some(self.tip) => {
+            k if CONTENT.contains(&k) && e.parent == Some(self.record.tip) => {
                 e.body.as_ref().is_some_and(|b| b["op"] == "delete")
             }
             _ => true,
         };
         let before = if may_remove {
-            self.outline.in_order()
+            self.record.outline.in_order()
         } else {
             vec![]
         };
         match e.kind.as_str() {
             "view" => {
-                let jump = e.parent != Some(self.tip);
+                let jump = e.parent != Some(self.record.tip);
                 if let Some(b) = &e.body {
-                    self.view.restore(b);
+                    self.screen.view.restore(b);
                     if b["op"] == "leap" {
-                        self.last_leap = b["pattern"]
+                        self.screen.input.last_leap = b["pattern"]
                             .as_str()
                             .map(|p| (p.to_string(), b["forward"] != false));
                     }
                     if b["op"] == "world" {
-                        self.supposition = None;
+                        self.record.branch.supposition = None;
                     }
                     if b["op"] == "dismiss"
                         && let Some(k) = b["key"].as_str()
                     {
-                        self.dismissed.insert(k.to_string());
+                        self.reasoner.suggestions.dismissed.insert(k.to_string());
                     }
                     if b["op"] == "observed" {
                         let keys = |k: &str| {
@@ -481,10 +544,11 @@ impl App {
                                 })
                                 .unwrap_or_default()
                         };
-                        self.observed = Some((keys("violations"), keys("disagreements")));
+                        self.reasoner.found.observed =
+                            Some((keys("violations"), keys("disagreements")));
                     }
                     if b["op"] == "offer" {
-                        self.offered.extend(
+                        self.reasoner.suggestions.offered.extend(
                             b["keys"]
                                 .as_array()
                                 .into_iter()
@@ -493,46 +557,49 @@ impl App {
                         );
                     }
                 }
-                self.tip = e.seq;
+                self.record.tip = e.seq;
                 if jump {
                     self.rebuild();
                 }
             }
             "undo" => {
                 if let Some(t) = e.body.as_ref().and_then(|b| b["undoes"].as_u64()) {
-                    self.redo.push(t);
+                    self.record.branch.redo.push(t);
                 }
-                self.tip = e.seq;
+                self.record.tip = e.seq;
                 self.rebuild();
             }
             "redo" => {
-                self.redo.pop();
-                self.tip = e.seq;
+                self.record.branch.redo.pop();
+                self.record.tip = e.seq;
                 self.rebuild();
             }
             _ => {
-                let incremental = e.parent == Some(self.tip) && CONTENT.contains(&e.kind.as_str());
-                self.tip = e.seq;
+                let incremental =
+                    e.parent == Some(self.record.tip) && CONTENT.contains(&e.kind.as_str());
+                self.record.tip = e.seq;
                 if incremental {
                     if let Some(b) = &e.body {
-                        self.outline.apply(e.seq, &e.kind, b);
+                        self.record.outline.apply(e.seq, &e.kind, b);
                     }
                 } else {
                     self.rebuild();
                 }
                 if e.kind != "purge" {
-                    self.redo.clear();
+                    self.record.branch.redo.clear();
                 }
                 if e.kind == "suppose"
                     && let Some(b) = &e.body
                 {
                     let actual = e.parent.unwrap_or(1);
                     let name = b["name"].as_str().unwrap_or("supposed").to_string();
-                    self.supposition = Some(Supposition { name, actual });
+                    self.record.branch.supposition = Some(Supposition { name, actual });
                 }
             }
         }
-        self.world = self
+        self.record.branch.world = self
+            .record
+            .branch
             .supposition
             .as_ref()
             .map_or("actual".into(), |s| s.name.clone());
@@ -583,18 +650,18 @@ impl App {
     }
 
     fn rebuild(&mut self) {
-        let (o, _, _) = self.replay(self.tip, None);
-        self.outline = o;
+        let (o, _, _) = self.replay(self.record.tip, None);
+        self.record.outline = o;
     }
 
     /// How many entries the journal has.
     pub(crate) fn entry_count(&self) -> usize {
-        self.journal.entries().len()
+        self.record.journal.entries().len()
     }
 
     /// The facts stated in the world whose head is an entry.
     pub(crate) fn facts_at(&self, head: u64) -> Result<Vec<(u64, Term)>, String> {
-        crate::store::facts(self.journal.entries(), head)
+        crate::store::facts(self.record.journal.entries(), head)
     }
 
     /// The outline of another world, by its head.
@@ -606,8 +673,8 @@ impl App {
     /// nearest surviving item before it, else the first.
     fn repair_cursors(&mut self, before: &[u64]) {
         for i in 0..2 {
-            let c = self.view.panes[i].cursor;
-            if c != TOP && self.outline.items.contains_key(&c) {
+            let c = self.screen.view.panes[i].cursor;
+            if c != TOP && self.record.outline.items.contains_key(&c) {
                 continue;
             }
             if before.is_empty() && c != TOP {
@@ -617,17 +684,18 @@ impl App {
             let fallback = before[..at]
                 .iter()
                 .rev()
-                .find(|x| self.outline.items.contains_key(x))
+                .find(|x| self.record.outline.items.contains_key(x))
                 .copied();
-            self.view.panes[i].cursor = fallback
-                .or_else(|| self.outline.in_order().first().copied())
+            self.screen.view.panes[i].cursor = fallback
+                .or_else(|| self.record.outline.in_order().first().copied())
                 .unwrap_or(TOP);
         }
-        self.view
+        self.screen
+            .view
             .folded
-            .retain(|f| self.outline.items.contains_key(f));
-        let n = self.outline.text(self.cursor()).chars().count();
-        self.view.pos = self.view.pos.min(n);
+            .retain(|f| self.record.outline.items.contains_key(f));
+        let n = self.record.outline.text(self.cursor()).chars().count();
+        self.screen.view.pos = self.screen.view.pos.min(n);
     }
 
     // ------------------------------------------------------------------
@@ -640,6 +708,7 @@ impl App {
         body: Value,
     ) -> Result<Entry, String> {
         let e = self
+            .record
             .journal
             .append_after(parent, kind, body)
             .map_err(|e| e.to_string())?;
@@ -648,42 +717,42 @@ impl App {
     }
 
     pub(crate) fn write_here(&mut self, kind: &str, body: Value) -> Result<Entry, String> {
-        self.write(Some(self.tip), kind, body)
+        self.write(Some(self.record.tip), kind, body)
     }
 
     /// Write whatever is pending: typed text, then cursor moves.
     pub fn flush(&mut self) {
         self.flush_text();
-        if self.view_dirty {
-            self.view_dirty = false;
-            let body = self.view.to_json("move", json!({}));
+        if self.screen.dirty {
+            self.screen.dirty = false;
+            let body = self.screen.view.to_json("move", json!({}));
             if let Err(m) = self.write_here("view", body) {
-                self.message = m;
+                self.screen.message = m;
             }
         }
     }
 
     pub(crate) fn write_view(&mut self, op: &str, extra: Value) {
         self.flush_text();
-        self.view_dirty = false;
-        let body = self.view.to_json(op, extra);
+        self.screen.dirty = false;
+        let body = self.screen.view.to_json(op, extra);
         if let Err(m) = self.write_here("view", body) {
-            self.message = m;
+            self.screen.message = m;
         }
     }
 
     pub(crate) fn flush_text(&mut self) {
-        if let Some(p) = self.pending_text.take()
+        if let Some(p) = self.screen.input.pending.take()
             && let Err(m) = self.write_text(p.item, &p.text)
         {
-            self.message = m;
+            self.screen.message = m;
         }
     }
 
     /// Write an item's new text: unchanged characters at the start and end
     /// keep their spans; the middle is added by this entry.
     pub(crate) fn write_text(&mut self, item: u64, new: &[char]) -> Result<(), String> {
-        let old: Vec<char> = self.outline.text(item).chars().collect();
+        let old: Vec<char> = self.record.outline.text(item).chars().collect();
         if old == new {
             return Ok(());
         }
@@ -697,7 +766,7 @@ impl App {
             .take_while(|(a, b)| a == b)
             .count();
         let added: String = new[pre..new.len() - suf].iter().collect();
-        let mut spans = self.outline.slice(item, 0, pre);
+        let mut spans = self.record.outline.slice(item, 0, pre);
         if !added.is_empty() {
             spans.push(Span {
                 seq: 0,
@@ -705,7 +774,7 @@ impl App {
                 len: added.chars().count(),
             });
         }
-        spans.extend(self.outline.slice(item, old.len() - suf, old.len()));
+        spans.extend(self.record.outline.slice(item, old.len() - suf, old.len()));
         self.write_here(
             "edit",
             json!({"op": "text", "item": item, "add": added, "spans": span_json(&spans)}),
@@ -717,35 +786,49 @@ impl App {
     // What is shown.
 
     pub fn cursor(&self) -> u64 {
-        self.view.panes[self.view.focus].cursor
+        self.screen.view.panes[self.screen.view.focus].cursor
     }
 
     pub(crate) fn set_cursor(&mut self, id: u64) {
-        let f = self.view.focus;
-        self.view.panes[f].cursor = id;
-        self.view.pos = self.text_of(id).len();
+        let f = self.screen.view.focus;
+        self.screen.view.panes[f].cursor = id;
+        self.screen.view.pos = self.text_of(id).len();
     }
 
     /// The text of an item as shown: pending typing included.
     pub fn text_of(&self, id: u64) -> Vec<char> {
-        match &self.pending_text {
+        match &self.screen.input.pending {
             Some(p) if p.item == id => p.text.clone(),
-            _ => self.outline.text(id).chars().collect(),
+            _ => self.record.outline.text(id).chars().collect(),
         }
     }
 
     pub fn pending(&self) -> bool {
-        self.pending_text.is_some() || self.view_dirty
+        self.screen.input.pending.is_some() || self.screen.dirty
     }
 
     /// The items shown in an outline pane, in order, with their depth.
     pub fn visible(&self) -> Vec<(u64, usize)> {
         let mut out = Vec::new();
-        let mut stack: Vec<(u64, usize)> = self.outline.top.iter().rev().map(|i| (*i, 0)).collect();
+        let mut stack: Vec<(u64, usize)> = self
+            .record
+            .outline
+            .top
+            .iter()
+            .rev()
+            .map(|i| (*i, 0))
+            .collect();
         while let Some((id, d)) = stack.pop() {
             out.push((id, d));
-            if !self.view.folded.contains(&id) {
-                stack.extend(self.outline.children(id).iter().rev().map(|c| (*c, d + 1)));
+            if !self.screen.view.folded.contains(&id) {
+                stack.extend(
+                    self.record
+                        .outline
+                        .children(id)
+                        .iter()
+                        .rev()
+                        .map(|c| (*c, d + 1)),
+                );
             }
         }
         out
@@ -758,7 +841,7 @@ impl App {
             return vec![];
         }
         let p = pattern.to_lowercase();
-        let order = self.outline.in_order();
+        let order = self.record.outline.in_order();
         let at = order
             .iter()
             .position(|x| *x == self.cursor())
@@ -777,7 +860,7 @@ impl App {
         }
         rotated
             .into_iter()
-            .filter(|id| self.outline.text(*id).to_lowercase().contains(&p))
+            .filter(|id| self.record.outline.text(*id).to_lowercase().contains(&p))
             .collect()
     }
 
@@ -788,7 +871,7 @@ impl App {
             .leap_matches(pattern, forward)
             .iter()
             .map(|id| {
-                let t = self.outline.text(*id).to_lowercase();
+                let t = self.record.outline.text(*id).to_lowercase();
                 let i = t.find(&p).unwrap();
                 t[i + p.len()..]
                     .chars()
@@ -809,10 +892,10 @@ impl App {
     }
 
     pub(crate) fn unfold_to(&mut self, id: u64) {
-        let mut at = self.outline.parent(id);
+        let mut at = self.record.outline.parent(id);
         while let Some(p) = at {
-            self.view.folded.remove(&p);
-            at = self.outline.parent(p);
+            self.screen.view.folded.remove(&p);
+            at = self.record.outline.parent(p);
         }
     }
 
@@ -820,8 +903,8 @@ impl App {
     // Keys.
 
     pub fn handle(&mut self, ev: Event) {
-        let mode = std::mem::replace(&mut self.mode, Mode::Normal);
-        self.mode = match mode {
+        let mode = std::mem::replace(&mut self.screen.input.mode, Mode::Normal);
+        self.screen.input.mode = match mode {
             Mode::Normal => self.normal(ev),
             Mode::Quasi(a) => self.quasi(a, ev),
             Mode::ConfirmRetract { target, dependents } => self.confirm(target, dependents, ev),
@@ -836,26 +919,26 @@ impl App {
     /// view change like an arrow key; a command is run as a bound key runs
     /// it, keeping any confirmation it asks for.
     pub fn click(&mut self, c: &Click) {
-        if self.mode != Mode::Normal {
+        if self.screen.input.mode != Mode::Normal {
             return;
         }
         match c {
             Click::Item { pane, id } => {
-                if !self.outline.items.contains_key(id) || *pane > 1 {
+                if !self.record.outline.items.contains_key(id) || *pane > 1 {
                     return;
                 }
                 self.flush_text();
-                self.message.clear();
-                if self.view.focus != *pane {
-                    self.view.focus = *pane;
+                self.screen.message.clear();
+                if self.screen.view.focus != *pane {
+                    self.screen.view.focus = *pane;
                     self.write_view("pane", json!({}));
                 }
                 self.set_cursor(*id);
-                self.view_dirty = true;
+                self.screen.dirty = true;
             }
             Click::Command(line) => {
                 self.flush();
-                self.message.clear();
+                self.screen.message.clear();
                 self.run_simple(line);
             }
         }
@@ -863,7 +946,13 @@ impl App {
 
     /// How to run a command by key: its bound key, else by name.
     pub fn key_for(&self, command: &str) -> String {
-        match self.bindings.iter().find(|(_, c)| c == command) {
+        match self
+            .screen
+            .input
+            .bindings
+            .iter()
+            .find(|(_, c)| c == command)
+        {
             Some((k, _)) => crate::config::key_name(*k),
             None => format!("command {command}"),
         }
@@ -876,7 +965,7 @@ impl App {
         if let Key::Quasi(q) = ev.key {
             self.flush();
             if q == Quasi::Scope {
-                self.view.scope = ScopeLevel::Word;
+                self.screen.view.scope = ScopeLevel::Word;
             }
             return Mode::Quasi(Active {
                 q,
@@ -887,6 +976,8 @@ impl App {
             });
         }
         if let Some(line) = self
+            .screen
+            .input
             .bindings
             .iter()
             .find(|(k, _)| *k == ev.key)
@@ -904,14 +995,15 @@ impl App {
             }
             self.run_simple(&line);
             // Keep what the command asked for, such as a confirmation.
-            return std::mem::replace(&mut self.mode, Mode::Normal);
+            return std::mem::replace(&mut self.screen.input.mode, Mode::Normal);
         }
-        let f = self.view.focus;
-        if self.view.panes[f].kind == PaneKind::Links {
-            self.message = format!("this pane shows links; {} to edit", self.key_for("switch"));
+        let f = self.screen.view.focus;
+        if self.screen.view.panes[f].kind == PaneKind::Links {
+            self.screen.message =
+                format!("this pane shows links; {} to edit", self.key_for("switch"));
             return Mode::Normal;
         }
-        self.message.clear();
+        self.screen.message.clear();
         match ev.key {
             Key::Char(c) => self.type_char(c),
             Key::Backspace => self.erase(true),
@@ -919,7 +1011,7 @@ impl App {
             Key::Enter => {
                 self.flush();
                 if let Err(m) = self.new_item_after(self.cursor()) {
-                    self.message = m;
+                    self.screen.message = m;
                 }
             }
             Key::Tab => self.run_simple("indent"),
@@ -935,18 +1027,18 @@ impl App {
                 };
                 if let Some((id, _)) = rows.get(j) {
                     self.set_cursor(*id);
-                    self.view_dirty = true;
+                    self.screen.dirty = true;
                 }
             }
             Key::Left | Key::Right | Key::Home | Key::End => {
                 let n = self.text_of(self.cursor()).len();
-                self.view.pos = match ev.key {
-                    Key::Left => self.view.pos.saturating_sub(1),
-                    Key::Right => (self.view.pos + 1).min(n),
+                self.screen.view.pos = match ev.key {
+                    Key::Left => self.screen.view.pos.saturating_sub(1),
+                    Key::Right => (self.screen.view.pos + 1).min(n),
                     Key::Home => 0,
                     _ => n,
                 };
-                self.view_dirty = true;
+                self.screen.dirty = true;
             }
             _ => {}
         }
@@ -957,16 +1049,16 @@ impl App {
         if self.cursor() == TOP
             && let Err(m) = self.new_item_after(TOP)
         {
-            self.message = m;
+            self.screen.message = m;
             return;
         }
         let item = self.cursor();
         let mut text = self.text_of(item);
-        let pos = self.view.pos.min(text.len());
+        let pos = self.screen.view.pos.min(text.len());
         text.insert(pos, c);
-        self.pending_text = Some(PendingText { item, text });
-        self.view.pos = pos + 1;
-        self.view_dirty = true;
+        self.screen.input.pending = Some(PendingText { item, text });
+        self.screen.view.pos = pos + 1;
+        self.screen.dirty = true;
     }
 
     fn erase(&mut self, before: bool) {
@@ -975,24 +1067,24 @@ impl App {
             return;
         }
         let mut text = self.text_of(item);
-        let pos = self.view.pos.min(text.len());
+        let pos = self.screen.view.pos.min(text.len());
         if before && pos > 0 {
             text.remove(pos - 1);
-            self.view.pos = pos - 1;
+            self.screen.view.pos = pos - 1;
         } else if !before && pos < text.len() {
             text.remove(pos);
         } else {
             return;
         }
-        self.pending_text = Some(PendingText { item, text });
-        self.view_dirty = true;
+        self.screen.input.pending = Some(PendingText { item, text });
+        self.screen.dirty = true;
     }
 
     pub(crate) fn new_item_after(&mut self, id: u64) -> Result<(), String> {
         let (under, after) = if id == TOP {
             (TOP, None)
         } else {
-            (self.outline.parent(id).unwrap_or(TOP), Some(id))
+            (self.record.outline.parent(id).unwrap_or(TOP), Some(id))
         };
         let e = self.write_here(
             "edit",
@@ -1031,7 +1123,7 @@ impl App {
                 a.listing = !a.listing
             }
             Key::Char(' ') if a.q == Quasi::Scope => {
-                self.view.scope = match self.view.scope {
+                self.screen.view.scope = match self.screen.view.scope {
                     ScopeLevel::Word => ScopeLevel::Statement,
                     _ => ScopeLevel::Branch,
                 };
@@ -1042,7 +1134,7 @@ impl App {
                 // latched quasimode without acting.
                 let erased = a.input.pop().is_some();
                 if !erased && a.latched {
-                    self.message.clear();
+                    self.screen.message.clear();
                     return Mode::Normal;
                 }
             }
@@ -1065,7 +1157,7 @@ impl App {
             Quasi::LeapForward | Quasi::LeapBack => {
                 let forward = a.q == Quasi::LeapForward;
                 let pattern = if a.input.is_empty() {
-                    match &self.last_leap {
+                    match &self.screen.input.last_leap {
                         Some((p, _)) => p.clone(),
                         None => return Mode::Normal,
                     }
@@ -1077,11 +1169,11 @@ impl App {
                     Some(id) => {
                         self.unfold_to(id);
                         self.set_cursor(id);
-                        self.message.clear();
+                        self.screen.message.clear();
                     }
-                    None => self.message = format!("no item holds “{pattern}”"),
+                    None => self.screen.message = format!("no item holds “{pattern}”"),
                 }
-                self.last_leap = Some((pattern.clone(), forward));
+                self.screen.input.last_leap = Some((pattern.clone(), forward));
                 self.write_view(
                     "leap",
                     json!({"pattern": pattern, "forward": forward, "found": found}),
@@ -1093,12 +1185,12 @@ impl App {
                 if text.is_empty() {
                     return Mode::Normal;
                 }
-                let facts = self.facts_at(self.tip).unwrap_or_default();
+                let facts = self.facts_at(self.record.tip).unwrap_or_default();
                 let readings = reason::readings(&facts, &text);
                 if readings.is_empty() {
                     // No reading: a named world, with nothing supposed in it.
                     if let Err(m) = self.write_here("suppose", json!({"name": text})) {
-                        self.message = m;
+                        self.screen.message = m;
                     }
                 } else {
                     return Mode::ConfirmSuppose {
@@ -1120,13 +1212,15 @@ impl App {
         match ev.key {
             Key::Enter => {
                 match self.write_here("retract", json!({"target": target})) {
-                    Ok(e) => self.message = format!("entry {target} retracted by entry {}", e.seq),
-                    Err(m) => self.message = m,
+                    Ok(e) => {
+                        self.screen.message = format!("entry {target} retracted by entry {}", e.seq)
+                    }
+                    Err(m) => self.screen.message = m,
                 }
                 Mode::Normal
             }
             Key::Escape => {
-                self.message = format!("entry {target} kept");
+                self.screen.message = format!("entry {target} kept");
                 Mode::Normal
             }
             _ => Mode::ConfirmRetract { target, dependents },
@@ -1141,7 +1235,7 @@ impl App {
             Key::Enter => {
                 let fact = readings[at].clone();
                 if let Err(m) = self.suppose(&text, &fact) {
-                    self.message = m;
+                    self.screen.message = m;
                 }
                 Mode::Normal
             }
@@ -1150,7 +1244,7 @@ impl App {
                 Mode::ConfirmSuppose { text, readings, at }
             }
             Key::Escape => {
-                self.message = "nothing supposed".into();
+                self.screen.message = "nothing supposed".into();
                 Mode::Normal
             }
             _ => Mode::ConfirmSuppose { text, readings, at },
@@ -1168,7 +1262,7 @@ impl App {
         let mut left = Vec::new();
         for _ in 0..5 {
             self.evaluate()?;
-            let eval = self.eval[0].as_ref().ok_or("no evaluation")?;
+            let eval = self.reasoner.eval[0].as_ref().ok_or("no evaluation")?;
             let (mut targets, l) = direct_conflicts(&eval.constraints, s.seq);
             left = l;
             targets.retain(|t| self.retractable(*t).is_ok());
@@ -1190,7 +1284,7 @@ impl App {
         if !left.is_empty() {
             m.push_str(&format!("; left for you: {}", left.join(", ")));
         }
-        self.message = m;
+        self.screen.message = m;
         Ok(())
     }
 
@@ -1199,11 +1293,12 @@ impl App {
     /// it added in the preview engine; retract them; then state the fact on
     /// the item that held the first of them, or on `target` if none.
     pub(crate) fn set_fact(&mut self, fact: &Term, target: u64) -> Result<(), String> {
-        let mut facts = self.facts_at(self.tip)?;
-        facts.extend(crate::world::outline_facts(&self.outline));
-        let next = self.journal.entries().len() as u64 + 1;
+        let mut facts = self.facts_at(self.record.tip)?;
+        facts.extend(crate::world::outline_facts(&self.record.outline));
+        let next = self.record.journal.entries().len() as u64 + 1;
         facts.push((next, fact.clone()));
         let constraints: Vec<(u64, String, String)> = self
+            .record
             .outline
             .constraints
             .iter()
@@ -1228,7 +1323,7 @@ impl App {
         replaced.retain(|t| self.retractable(*t).is_ok());
         let item = replaced
             .iter()
-            .find_map(|t| self.outline.fact_item.get(t).copied())
+            .find_map(|t| self.record.outline.fact_item.get(t).copied())
             .unwrap_or(target);
         if item == TOP {
             return Err("there is no item to put the fact on".into());
@@ -1240,21 +1335,29 @@ impl App {
         let f = terms::encode(fact).map_err(|e| e.0)?;
         self.write_here("edit", json!({"op": "facts", "item": item, "facts": [f]}))?;
         let mut m = if places.is_empty() {
-            format!("set at {}; nothing replaced", self.outline.number(item))
+            format!(
+                "set at {}; nothing replaced",
+                self.record.outline.number(item)
+            )
         } else {
             format!("set; replaced the fact at {}", places.join(", "))
         };
         if !left.is_empty() {
             m.push_str(&format!("; left for you: {}", left.join(", ")));
         }
-        self.message = m;
+        self.screen.message = m;
         Ok(())
     }
 
     /// Where a fact entry's fact is stated, in the actual world: its item's
     /// number, or "entry n".
     pub fn fact_place(&self, seq: u64) -> String {
-        let head = self.supposition.as_ref().map_or(self.tip, |s| s.actual);
+        let head = self
+            .record
+            .branch
+            .supposition
+            .as_ref()
+            .map_or(self.record.tip, |s| s.actual);
         let o = self.outline_at(head);
         match o.fact_item.get(&seq) {
             Some(i) => o.number(*i),
@@ -1263,7 +1366,7 @@ impl App {
     }
 
     pub(crate) fn engine(&mut self, k: usize) -> Result<&mut Engine, String> {
-        crate::world::started(&mut self.engines[k])
+        crate::world::started(&mut self.reasoner.engines[k])
     }
 
     /// The engine of the current world, for tests that count evaluations.
@@ -1276,7 +1379,9 @@ impl App {
     /// shown for the first time. A query and its answer are journal entries
     /// (§ The journal, rule 6), so the measures report can count them.
     pub(crate) fn record_observations(&mut self) {
-        let Some(e) = &self.eval[0] else { return };
+        let Some(e) = &self.reasoner.eval[0] else {
+            return;
+        };
         let key = |c: &ConstraintEval, s: &reason::Solution| {
             let mut f: Vec<String> = s.facts.iter().map(reason::show).collect();
             f.sort();
@@ -1295,19 +1400,20 @@ impl App {
         v.sort();
         d.sort();
         let now = (v, d);
-        let changed = match &self.observed {
+        let changed = match &self.reasoner.found.observed {
             Some(o) => *o != now,
             None => !now.0.is_empty() || !now.1.is_empty(),
         };
         if changed {
-            let world = self.world.clone();
+            let world = self.record.branch.world.clone();
             self.write_view(
                 "observed",
                 json!({"violations": now.0, "disagreements": now.1, "world": world}),
             );
-            self.observed = Some(now);
+            self.reasoner.found.observed = Some(now);
         }
         if self
+            .screen
             .view
             .panes
             .iter()
@@ -1317,11 +1423,11 @@ impl App {
                 .shown_suggestions()
                 .iter()
                 .map(|s| s.identity())
-                .filter(|k| !self.offered.contains(k))
+                .filter(|k| !self.reasoner.suggestions.offered.contains(k))
                 .collect();
             if !new.is_empty() {
                 self.write_view("offer", json!({"keys": new}));
-                self.offered.extend(new);
+                self.reasoner.suggestions.offered.extend(new);
             }
         }
     }
@@ -1329,8 +1435,8 @@ impl App {
     /// What adopting an item's claims would raise, computed in a spare
     /// engine: a preview of adopting it, as a world.
     pub(crate) fn preview_adoption(&mut self, item: u64) -> Result<String, String> {
-        let mut facts = self.facts_at(self.tip)?;
-        let next = self.journal.entries().len() as u64 + 1;
+        let mut facts = self.facts_at(self.record.tip)?;
+        let next = self.record.journal.entries().len() as u64 + 1;
         let claims: Vec<Term> = self
             .claims_of(item)
             .into_iter()
@@ -1341,6 +1447,7 @@ impl App {
         }
         facts.extend(claims.into_iter().map(|p| (next, p)));
         let constraints: Vec<(u64, String)> = self
+            .record
             .outline
             .constraints
             .iter()
@@ -1390,7 +1497,11 @@ impl App {
                 (b["source"] == "Wikidata").then(|| {
                     (
                         e.seq,
-                        self.journal.dir().join(format::record::BLOBS).join(blob),
+                        self.record
+                            .journal
+                            .dir()
+                            .join(format::record::BLOBS)
+                            .join(blob),
                     )
                 })
             })
@@ -1400,14 +1511,20 @@ impl App {
     /// focus, those already shown keep their places and new ones go last.
     pub fn shown_suggestions(&self) -> Vec<&Suggestion> {
         let mut out: Vec<&Suggestion> = Vec::new();
-        if let Some(order) = &self.frozen {
+        if let Some(order) = &self.reasoner.suggestions.frozen {
             for k in order {
-                if let Some(s) = self.suggestions.iter().find(|s| &s.identity() == k) {
+                if let Some(s) = self
+                    .reasoner
+                    .suggestions
+                    .list
+                    .iter()
+                    .find(|s| &s.identity() == k)
+                {
                     out.push(s);
                 }
             }
         }
-        for s in &self.suggestions {
+        for s in &self.reasoner.suggestions.list {
             if !out.iter().any(|o| o.identity() == s.identity()) {
                 out.push(s);
             }
@@ -1418,8 +1535,9 @@ impl App {
 
     /// Keep the suggestion pane's order while it has focus.
     pub(crate) fn update_frozen(&mut self) {
-        let focused = self.view.panes[self.view.focus].kind == PaneKind::Suggestions;
-        self.frozen = match (focused, self.frozen.take()) {
+        let focused = self.screen.view.panes[self.screen.view.focus].kind == PaneKind::Suggestions;
+        self.reasoner.suggestions.frozen = match (focused, self.reasoner.suggestions.frozen.take())
+        {
             (true, Some(f)) => Some(f),
             (true, None) => Some(
                 self.shown_suggestions()
@@ -1433,11 +1551,11 @@ impl App {
 
     /// The items whose facts are about an entity: facts with it first.
     fn items_about(&self, entity: &Term) -> Vec<u64> {
-        let facts = self.facts_at(self.tip).unwrap_or_default();
+        let facts = self.facts_at(self.record.tip).unwrap_or_default();
         let mut out: Vec<u64> = facts
             .iter()
             .filter(|(_, f)| matches!(f, Term::Compound(_, a) if a.first() == Some(entity)))
-            .filter_map(|(s, _)| self.outline.fact_item.get(s).copied())
+            .filter_map(|(s, _)| self.record.outline.fact_item.get(s).copied())
             .collect();
         out.dedup();
         out
@@ -1449,7 +1567,7 @@ impl App {
     pub(crate) fn accept(&mut self, s: &Suggestion) -> Result<(), String> {
         let mark = json!({"kind": reason::show(&s.kind), "evidence": s.evidence, "score": s.score});
         let enc = |t: &Term| terms::encode(t).map_err(|e| e.0);
-        let seq = self.journal.entries().len() as u64 + 1;
+        let seq = self.record.journal.entries().len() as u64 + 1;
         let c = |f: &str, args: Vec<Term>| Term::Compound(f.into(), args);
         match (s.kind_name(), &s.kind) {
             ("constraint", Term::Compound(_, a)) if a.len() == 3 => {
@@ -1513,7 +1631,7 @@ impl App {
     /// Copy a file into blobs/, named by its SHA-256; return the hash.
     pub(crate) fn store_blob(&self, bytes: &[u8]) -> Result<String, String> {
         let hash = format::record::sha256_hex(bytes);
-        let blobs = self.journal.dir().join(format::record::BLOBS);
+        let blobs = self.record.journal.dir().join(format::record::BLOBS);
         std::fs::create_dir_all(&blobs).map_err(|e| e.to_string())?;
         let dest = blobs.join(&hash);
         if !dest.exists() {
@@ -1525,10 +1643,10 @@ impl App {
     /// The depth of an item in the outline: a top-level item is 0.
     fn depth_of(&self, id: u64) -> usize {
         let mut d = 0;
-        let mut at = self.outline.parent(id);
+        let mut at = self.record.outline.parent(id);
         while let Some(p) = at.filter(|p| *p != TOP) {
             d += 1;
-            at = self.outline.parent(p);
+            at = self.record.outline.parent(p);
         }
         d
     }
@@ -1579,7 +1697,7 @@ impl App {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
         let earlier: Vec<u64> = self
-            .path(self.tip)
+            .path(self.record.tip)
             .iter()
             .filter(|e| {
                 e.kind == "import"
@@ -1598,7 +1716,7 @@ impl App {
             json!({"blob": hash, "format": "document", "file": name, "source": name, "losses": losses,
                    "prov": {"prov:wasDerivedFrom": name, "prov:wasGeneratedBy": "pandoc"}}),
         )?;
-        let mut last_at: Vec<Option<u64>> = vec![self.outline.top.last().copied()];
+        let mut last_at: Vec<Option<u64>> = vec![self.record.outline.top.last().copied()];
         let mut parents: Vec<u64> = vec![TOP];
         for b in &blocks {
             let d = b.depth.min(parents.len() - 1);
@@ -1613,7 +1731,7 @@ impl App {
             parents.push(id);
             last_at.push(None);
         }
-        self.message = format!(
+        self.screen.message = format!(
             "imported {name}: {} items; losses: {}",
             blocks.len(),
             if lost.is_empty() {
@@ -1637,11 +1755,12 @@ impl App {
         losses: &crate::docs::Losses,
     ) -> Result<(), String> {
         let old: Vec<u64> = self
+            .record
             .outline
             .in_order()
             .into_iter()
             .filter(|i| {
-                self.outline.items[i]
+                self.record.outline.items[i]
                     .origin
                     .is_some_and(|o| earlier.contains(&o))
             })
@@ -1650,7 +1769,12 @@ impl App {
         let key = |style: &str, text: &str| (style.to_string(), text.to_string());
         let old_keys: Vec<(String, String)> = old
             .iter()
-            .map(|i| key(&self.outline.items[i].style, &self.outline.text(*i)))
+            .map(|i| {
+                key(
+                    &self.record.outline.items[i].style,
+                    &self.record.outline.text(*i),
+                )
+            })
             .collect();
         let new_keys: Vec<(String, String)> =
             blocks.iter().map(|b| key(&b.style, &b.text)).collect();
@@ -1706,7 +1830,8 @@ impl App {
                 .filter(|j| blocks[*j].depth == d)
                 .find_map(|j| id_of[j]);
             let parent = if d == 0 || base > 0 && parent == TOP {
-                self.outline
+                self.record
+                    .outline
                     .parent(old.first().copied().unwrap_or(TOP))
                     .unwrap_or(TOP)
             } else {
@@ -1716,20 +1841,20 @@ impl App {
         }
         let kept: HashSet<u64> = id_of.iter().flatten().copied().collect();
         for o in deletes {
-            if !self.outline.items.contains_key(&o) {
+            if !self.record.outline.items.contains_key(&o) {
                 continue;
             }
-            let mut stack = self.outline.children(o).to_vec();
+            let mut stack = self.record.outline.children(o).to_vec();
             let mut keeps_something = false;
             while let Some(x) = stack.pop() {
                 keeps_something |= kept.contains(&x);
-                stack.extend(self.outline.children(x));
+                stack.extend(self.record.outline.children(x));
             }
             if !keeps_something {
                 self.write_here("edit", json!({"op": "delete", "item": o}))?;
             }
         }
-        self.message = format!(
+        self.screen.message = format!(
             "revision of {name}: the changes are in a supposed world; retract any with retract N, then commit or close"
         );
         Ok(())
@@ -1738,10 +1863,10 @@ impl App {
     /// The changes of a document revision, from the supposition on: (entry
     /// seq, what it does, retracted).
     pub fn revision_changes(&self) -> Vec<(u64, String, bool)> {
-        let Some(s) = &self.supposition else {
+        let Some(s) = &self.record.branch.supposition else {
             return vec![];
         };
-        let path = self.path(self.tip);
+        let path = self.path(self.record.tip);
         let retracted: HashSet<u64> = path
             .iter()
             .filter(|e| e.kind == "retract")
@@ -1775,7 +1900,7 @@ impl App {
     pub(crate) fn export(&mut self, file: &str, section: Option<u64>) -> Result<(), String> {
         let roots: Vec<u64> = match section {
             Some(s) => vec![s],
-            None => self.outline.top.clone(),
+            None => self.record.outline.top.clone(),
         };
         let mut blocks = Vec::new();
         let mut seqs = std::collections::BTreeSet::new();
@@ -1783,7 +1908,7 @@ impl App {
             let base = self.depth_of(r);
             let mut stack = vec![r];
             while let Some(id) = stack.pop() {
-                let item = &self.outline.items[&id];
+                let item = &self.record.outline.items[&id];
                 let style = if item.style.is_empty() {
                     if item.children.is_empty() {
                         "para"
@@ -1793,7 +1918,7 @@ impl App {
                 } else {
                     item.style.as_str()
                 };
-                let text = self.outline.text(id);
+                let text = self.record.outline.text(id);
                 blocks.push(crate::docs::Block {
                     depth: self.depth_of(id) - base,
                     style: style.into(),
@@ -1822,7 +1947,7 @@ impl App {
             "export",
             json!({"file": name, "items": blocks.len(), "sources": hashes.len()}),
         );
-        self.message = format!(
+        self.screen.message = format!(
             "exported {} items to {name}, citing {} source entries",
             blocks.len(),
             hashes.len()
@@ -1858,7 +1983,7 @@ impl App {
             text: format!("Results of {source}"),
             cites: vec![],
         };
-        let top = self.write_block(&head, TOP, self.outline.top.last().copied(), imp.seq)?;
+        let top = self.write_block(&head, TOP, self.record.outline.top.last().copied(), imp.seq)?;
         let mut after = None;
         for r in v["results"].as_array().cloned().unwrap_or_default() {
             let name = r["name"].as_str().ok_or("a result needs a name")?;
@@ -1896,7 +2021,7 @@ impl App {
             );
             self.write_here("edit", json!({"op": "facts", "item": id, "source": source, "facts": [terms::encode(&fact).map_err(|e| e.0)?]}))?;
         }
-        self.message = format!("imported the results of {source}");
+        self.screen.message = format!("imported the results of {source}");
         Ok(())
     }
 
@@ -1904,7 +2029,7 @@ impl App {
     /// the files that no longer match their recorded hashes.
     pub fn stale_results(&self) -> BTreeMap<u64, Vec<String>> {
         let mut out = BTreeMap::new();
-        for e in self.path(self.tip) {
+        for e in self.path(self.record.tip) {
             let Some(b) = e
                 .body
                 .as_ref()
@@ -1930,7 +2055,7 @@ impl App {
                 }
             }
             if !changed.is_empty() {
-                for (id, item) in &self.outline.items {
+                for (id, item) in &self.record.outline.items {
                     if item.origin == Some(e.seq) {
                         out.insert(*id, changed.clone());
                     }
@@ -1944,6 +2069,7 @@ impl App {
     /// was imported from? Spaces, hyphens and case are ignored.
     pub(crate) fn check_quote(&mut self, item: u64) -> Result<String, String> {
         let origin = self
+            .record
             .outline
             .items
             .get(&item)
@@ -1955,12 +2081,13 @@ impl App {
         let fmt = crate::docs::format_of(std::path::Path::new(file))
             .ok_or("the import is not a document")?;
         let blob = self
+            .record
             .journal
             .dir()
             .join(format::record::BLOBS)
             .join(b["blob"].as_str().unwrap_or(""));
         let source = crate::docs::plain_text(&blob, fmt)?;
-        let span = crate::docs::markdown_to_plain(&self.outline.text(item))?;
+        let span = crate::docs::markdown_to_plain(&self.record.outline.text(item))?;
         let ruling = if crate::docs::normal(&source).contains(&crate::docs::normal(&span)) {
             "quoted"
         } else {
@@ -1974,10 +2101,10 @@ impl App {
     /// copy that came with the claim, and rule: found, misattributed (the
     /// title differs from the one claimed), not_found, unavailable, retracted.
     pub(crate) fn check_source(&mut self, item: u64) -> Result<String, String> {
-        let facts = self.facts_at(self.tip)?;
+        let facts = self.facts_at(self.record.tip)?;
         let mine: Vec<&Term> = facts
             .iter()
-            .filter(|(s, _)| self.outline.fact_item.get(s) == Some(&item))
+            .filter(|(s, _)| self.record.outline.fact_item.get(s) == Some(&item))
             .map(|(_, f)| f)
             .collect();
         let field = |name: &str| {
@@ -1990,7 +2117,7 @@ impl App {
             })
         };
         let doi = field("doi").ok_or("the target states no doi(Entity, \"10.…\") fact")?;
-        let url = format!("{}{}", self.crossref, encode_doi(&doi));
+        let url = format!("{}{}", self.session.crossref, encode_doi(&doi));
         let out = std::process::Command::new("curl")
             .args([
                 // No URL patterns ([1-9], {a,b}): one request, for this DOI.
@@ -2073,10 +2200,10 @@ impl App {
 
     /// An item's claims: (entry seq, source, claimed fact).
     pub fn claims_of(&self, item: u64) -> Vec<(u64, String, Term)> {
-        let facts = self.facts_at(self.tip).unwrap_or_default();
+        let facts = self.facts_at(self.record.tip).unwrap_or_default();
         facts
             .into_iter()
-            .filter(|(s, _)| self.outline.fact_item.get(s) == Some(&item))
+            .filter(|(s, _)| self.record.outline.fact_item.get(s) == Some(&item))
             .filter_map(|(s, f)| match f {
                 Term::Compound(n, a) if n == "claims" && a.len() == 2 => {
                     let src = match &a[0] {
@@ -2109,7 +2236,7 @@ impl App {
     /// Check that an entry can be retracted; return the entries that depend
     /// on it: those that would no longer apply without it.
     pub fn retractable(&self, t: u64) -> Result<Vec<u64>, String> {
-        let path = self.path(self.tip);
+        let path = self.path(self.record.tip);
         let e = path
             .iter()
             .find(|e| e.seq == t)
@@ -2123,8 +2250,8 @@ impl App {
         if already {
             return Err(format!("entry {t} is already retracted"));
         }
-        let (_, _, with) = self.replay(self.tip, None);
-        let (_, _, without) = self.replay(self.tip, Some(t));
+        let (_, _, with) = self.replay(self.record.tip, None);
+        let (_, _, without) = self.replay(self.record.tip, Some(t));
         Ok(without
             .into_iter()
             .filter(|s| !with.contains(s) && *s != t)

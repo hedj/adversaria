@@ -30,7 +30,7 @@ fn command(app: &mut App, line: &str) -> String {
     typ(app, line);
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
     let _ = app.evaluate();
-    app.message.clone()
+    app.screen.message.clone()
 }
 
 fn open(dir: &Path) -> App {
@@ -41,10 +41,11 @@ fn open(dir: &Path) -> App {
 
 /// Every item's text, joined.
 fn all_text(app: &App) -> String {
-    app.outline
+    app.record
+        .outline
         .in_order()
         .into_iter()
-        .map(|id| app.outline.text(id))
+        .map(|id| app.record.outline.text(id))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -75,7 +76,7 @@ fn an_imported_document_cannot_include_local_files() {
     assert!(
         text.contains("Before."),
         "the document itself was imported: {text:?}\n{}",
-        app.message
+        app.screen.message
     );
     assert!(
         !text.contains(SECRET),

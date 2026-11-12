@@ -198,7 +198,7 @@ pub fn run(dir: &Path, config: Config) -> Result<(), String> {
         return Err(why);
     }
     let mut app = App::open(dir).map_err(|e| e.to_string())?;
-    app.bindings = config.bindings.clone();
+    app.screen.input.bindings = config.bindings.clone();
     let mut out = io::stdout();
     let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
         | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
@@ -217,14 +217,14 @@ pub fn run(dir: &Path, config: Config) -> Result<(), String> {
     let result = (|| -> io::Result<()> {
         let mut evaluated_at = None;
         let mut hits = ui::Hits::default();
-        while !app.quit {
+        while !app.session.quit {
             // Reason again when the journal has moved: constraints and
             // derived values are computed from it, never stored in it.
-            if evaluated_at != Some((app.tip, app.journal().entries().len())) {
+            if evaluated_at != Some((app.record.tip, app.journal().entries().len())) {
                 if let Err(e) = app.evaluate() {
-                    app.message = e;
+                    app.screen.message = e;
                 }
-                evaluated_at = Some((app.tip, app.journal().entries().len()));
+                evaluated_at = Some((app.record.tip, app.journal().entries().len()));
             }
             term.draw(|f| hits = ui::draw_hits(f, &app))?;
             if event::poll(Duration::from_secs(1))? {

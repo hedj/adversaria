@@ -123,7 +123,7 @@ fn scene_one_as_written() {
     let dir = temp("scene1");
     let mut app = essay(&dir);
     assert_eq!(
-        app.outline.text(app.cursor()),
+        app.record.outline.text(app.cursor()),
         "Buran flew once, unmanned, on 15 November 1988."
     );
     let before = app.journal().entries().len();
@@ -149,8 +149,8 @@ fn scene_one_as_written() {
     );
 
     release(&mut app, Quasi::LeapForward);
-    assert_eq!(app.outline.text(app.cursor()), "DRAKON");
-    assert_eq!(app.mode, Mode::Normal);
+    assert_eq!(app.record.outline.text(app.cursor()), "DRAKON");
+    assert_eq!(app.screen.input.mode, Mode::Normal);
     let after = app.journal().entries();
     assert_eq!(after.len(), before + 1, "one entry, for the Leap");
     let leap = after.last().unwrap();
@@ -190,7 +190,7 @@ fn leap_recognition_listing_latching_and_repeat() {
     let mut app = essay(&dir);
     hold(&mut app, Quasi::LeapForward, "sour");
     tap(&mut app, Key::Escape);
-    match &app.mode {
+    match &app.screen.input.mode {
         Mode::Quasi(a) => assert_eq!(
             a.input, "source",
             "recognition completes to the shared word"
@@ -198,18 +198,18 @@ fn leap_recognition_listing_latching_and_repeat() {
         m => panic!("{m:?}"),
     }
     release(&mut app, Quasi::LeapForward);
-    assert_eq!(app.outline.text(app.cursor()), "Sources");
+    assert_eq!(app.record.outline.text(app.cursor()), "Sources");
     // A tap latches; typing then Enter goes.
     tap(&mut app, Key::Quasi(Quasi::LeapBack));
-    assert!(matches!(&app.mode, Mode::Quasi(a) if a.latched));
+    assert!(matches!(&app.screen.input.mode, Mode::Quasi(a) if a.latched));
     typ(&mut app, "energia");
     tap(&mut app, Key::Enter);
-    assert!(app.outline.text(app.cursor()).starts_with("Energia"));
+    assert!(app.record.outline.text(app.cursor()).starts_with("Energia"));
     // Leap again repeats the last pattern: a tap to latch, a tap to go.
     tap(&mut app, Key::Quasi(Quasi::LeapForward));
     tap(&mut app, Key::Quasi(Quasi::LeapForward));
     assert!(
-        app.outline.text(app.cursor()).starts_with("Energia"),
+        app.record.outline.text(app.cursor()).starts_with("Energia"),
         "the only match is where we are"
     );
     // ? lists every match.
@@ -241,7 +241,7 @@ fn command_guide_words_recognition_and_help() {
     assert_eq!(app.guided("move 3"), "move (after) 3");
     hold(&mut app, Quasi::Command, "li");
     tap(&mut app, Key::Escape);
-    match &app.mode {
+    match &app.screen.input.mode {
         Mode::Quasi(a) => assert_eq!(a.input, "link "),
         m => panic!("{m:?}"),
     }
@@ -250,14 +250,14 @@ fn command_guide_words_recognition_and_help() {
     assert!(shows(&s, "link (from) … (to) … (as) …"), "{}", s.join("\n"));
     release(&mut app, Quasi::Command);
     assert!(
-        !app.message.is_empty(),
+        !app.screen.message.is_empty(),
         "an incomplete link says what it needs"
     );
     // An unknown command writes nothing.
     let n = app.journal().entries().len();
     command(&mut app, "frobnicate");
     assert_eq!(app.journal().entries().len(), n);
-    assert!(app.message.contains("no command"));
+    assert!(app.screen.message.contains("no command"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -273,20 +273,23 @@ fn undo_redo_and_branches() {
     app.flush();
     let second = app.cursor();
     command(&mut app, "undo"); // the text of "second"
-    assert_eq!(app.outline.text(second), "");
+    assert_eq!(app.record.outline.text(second), "");
     command(&mut app, "undo"); // the creation of "second"
-    assert!(!app.outline.items.contains_key(&second));
+    assert!(!app.record.outline.items.contains_key(&second));
     command(&mut app, "redo");
     command(&mut app, "redo");
-    assert_eq!(app.outline.text(second), "second");
+    assert_eq!(app.record.outline.text(second), "second");
     command(&mut app, "redo");
-    assert!(app.message.contains("nothing to redo"));
+    assert!(app.screen.message.contains("nothing to redo"));
     command(&mut app, "undo");
     command(&mut app, "undo");
-    let undo_seq = app.tip;
+    let undo_seq = app.record.tip;
     item(&mut app, "another");
     app.flush();
-    assert!(app.redo.is_empty(), "an edit after undo clears redo");
+    assert!(
+        app.record.branch.redo.is_empty(),
+        "an edit after undo clears redo"
+    );
     let e = app
         .journal()
         .entries()
@@ -319,7 +322,7 @@ fn retraction_lists_dependents_then_keeps_later_work() {
     typ(&mut app, "a claim");
     item(&mut app, "independent work");
     app.flush();
-    let claim = app.outline.by_number("1").unwrap();
+    let claim = app.record.outline.by_number("1").unwrap();
     command(&mut app, "link 1 2 as supports");
     hold(&mut app, Quasi::LeapBack, "claim");
     release(&mut app, Quasi::LeapBack);
@@ -327,7 +330,7 @@ fn retraction_lists_dependents_then_keeps_later_work() {
     app.flush();
     let n = app.journal().entries().len();
     command(&mut app, &format!("retract {claim}"));
-    let deps = match &app.mode {
+    let deps = match &app.screen.input.mode {
         Mode::ConfirmRetract { dependents, .. } => dependents.clone(),
         m => panic!("{m:?}"),
     };
@@ -344,18 +347,23 @@ fn retraction_lists_dependents_then_keeps_later_work() {
         "nothing written before confirming"
     );
     tap(&mut app, Key::Escape);
-    assert!(app.outline.items.contains_key(&claim), "Escape keeps it");
+    assert!(
+        app.record.outline.items.contains_key(&claim),
+        "Escape keeps it"
+    );
     command(&mut app, &format!("retract {claim}"));
     tap(&mut app, Key::Enter);
-    assert!(!app.outline.items.contains_key(&claim));
+    assert!(!app.record.outline.items.contains_key(&claim));
     assert_eq!(
-        app.outline.text(app.outline.by_number("1").unwrap()),
+        app.record
+            .outline
+            .text(app.record.outline.by_number("1").unwrap()),
         "independent work"
     );
     command(&mut app, &format!("retract {claim}"));
-    assert!(app.message.contains("already retracted"));
+    assert!(app.screen.message.contains("already retracted"));
     command(&mut app, "undo"); // undoing the retraction brings the claim back
-    assert_eq!(app.outline.text(claim), "a claim (revised)");
+    assert_eq!(app.record.outline.text(claim), "a claim (revised)");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -405,12 +413,20 @@ fn replay_reproduces_the_screen() {
     let n = live.len() - 1; // the last line holds messages
     assert_eq!(live[..n], again[..n]);
     assert_eq!(
-        (replayed.tip, &replayed.redo, &replayed.world),
-        (app.tip, &app.redo, &app.world)
+        (
+            replayed.record.tip,
+            &replayed.record.branch.redo,
+            &replayed.record.branch.world
+        ),
+        (
+            app.record.tip,
+            &app.record.branch.redo,
+            &app.record.branch.world
+        )
     );
-    assert_eq!(replayed.view, app.view);
-    assert_eq!(replayed.outline, app.outline);
-    assert_eq!(app.world, "the flight was in 1989");
+    assert_eq!(replayed.screen.view, app.screen.view);
+    assert_eq!(replayed.record.outline, app.record.outline);
+    assert_eq!(app.record.branch.world, "the flight was in 1989");
     // Every kind the session used is in the journal.
     let kinds: std::collections::BTreeSet<&str> = app
         .journal()
@@ -460,7 +476,7 @@ fn keystroke_to_visible_change_on_ten_thousand_items() {
     let mut app = App::open(&dir).unwrap();
     let opened = t0.elapsed();
     app.set_durable(false);
-    assert_eq!(app.outline.items.len(), 10_000);
+    assert_eq!(app.record.outline.items.len(), 10_000);
     let mut term = Terminal::new(TestBackend::new(160, 50)).unwrap();
     let mut worst = Duration::ZERO;
     let mut total = Duration::ZERO;
@@ -491,7 +507,7 @@ fn keystroke_to_visible_change_on_ten_thousand_items() {
         "10,000 items: replayed in {opened:?}; {n} keystrokes, mean {mean:?}, worst {worst:?} (handle + draw, 160x50)"
     );
     assert!(
-        app.outline.text(app.cursor()).is_empty(),
+        app.record.outline.text(app.cursor()).is_empty(),
         "Enter made a new item"
     );
     assert!(
@@ -539,11 +555,21 @@ fn replay_matches_after_every_action() {
         step(&mut app);
         app.flush();
         let r = App::open(&dir).unwrap();
-        assert_eq!(r.view, app.view, "view differs after step {i}");
-        assert_eq!(r.outline, app.outline, "outline differs after step {i}");
         assert_eq!(
-            (r.tip, &r.redo, &r.world),
-            (app.tip, &app.redo, &app.world),
+            r.screen.view, app.screen.view,
+            "view differs after step {i}"
+        );
+        assert_eq!(
+            r.record.outline, app.record.outline,
+            "outline differs after step {i}"
+        );
+        assert_eq!(
+            (r.record.tip, &r.record.branch.redo, &r.record.branch.world),
+            (
+                app.record.tip,
+                &app.record.branch.redo,
+                &app.record.branch.world
+            ),
             "after step {i}"
         );
     }
@@ -577,7 +603,7 @@ fn backspace_erases_then_leaves_a_latched_quasimode() {
     // Tap Command to latch it, type two letters.
     tap(&mut app, Key::Quasi(Quasi::Command));
     typ(&mut app, "he");
-    let input = |app: &App| match &app.mode {
+    let input = |app: &App| match &app.screen.input.mode {
         Mode::Quasi(a) => Some(a.input.clone()),
         _ => None,
     };
@@ -587,7 +613,10 @@ fn backspace_erases_then_leaves_a_latched_quasimode() {
     tap(&mut app, Key::Backspace);
     assert_eq!(input(&app).as_deref(), Some(""), "still latched, now empty");
     tap(&mut app, Key::Backspace);
-    assert!(matches!(app.mode, Mode::Normal), "left the quasimode");
+    assert!(
+        matches!(app.screen.input.mode, Mode::Normal),
+        "left the quasimode"
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -600,7 +629,7 @@ fn a_question_mark_inside_quotes_is_text() {
     app.set_durable(false);
     tap(&mut app, Key::Quasi(Quasi::Command));
     typ(&mut app, "fact q(\"Is it late?\", 'why?') ?");
-    let (input, listing) = match &app.mode {
+    let (input, listing) = match &app.screen.input.mode {
         Mode::Quasi(a) => (a.input.clone(), a.listing),
         m => panic!("{m:?}"),
     };
@@ -620,7 +649,7 @@ fn a_command_on_an_item_needs_one() {
     let before = app.journal().entries().len();
     command(&mut app, "fold");
     assert_eq!(
-        (app.message.as_str(), app.journal().entries().len()),
+        (app.screen.message.as_str(), app.journal().entries().len()),
         ("there is no item to act on", before)
     );
     std::fs::remove_dir_all(&dir).unwrap();

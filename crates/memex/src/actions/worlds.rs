@@ -8,14 +8,14 @@ impl App {
     pub(crate) fn cmd_undo(&mut self, _: &[&str], _: u64) -> Result<(), String> {
         let t = self.undoable().ok_or("nothing to undo on this branch")?;
         self.write(self.parent_of(t), "undo", json!({"undoes": t}))?;
-        self.message = format!("undid entry {t}");
+        self.screen.message = format!("undid entry {t}");
         Ok(())
     }
 
     /// The entry undo would undo: the last on this branch that changed
     /// content, unless it is the journal's first.
     fn undoable(&self) -> Option<u64> {
-        self.content_tip(self.tip).filter(|t| *t > 1)
+        self.content_tip(self.record.tip).filter(|t| *t > 1)
     }
 
     fn parent_of(&self, seq: u64) -> Option<u64> {
@@ -23,11 +23,11 @@ impl App {
     }
 
     pub(crate) fn cmd_redo(&mut self, _: &[&str], _: u64) -> Result<(), String> {
-        let Some(&t) = self.redo.last() else {
+        let Some(&t) = self.record.branch.redo.last() else {
             return Err("nothing to redo".into());
         };
         self.write(Some(t), "redo", json!({"redoes": t}))?;
-        self.message = format!("redid entry {t}");
+        self.screen.message = format!("redid entry {t}");
         Ok(())
     }
 
@@ -40,8 +40,8 @@ impl App {
     }
 
     fn ask_retract(&mut self, target: u64, dependents: Vec<u64>) {
-        self.message.clear();
-        self.mode = Mode::ConfirmRetract { target, dependents };
+        self.screen.message.clear();
+        self.screen.input.mode = Mode::ConfirmRetract { target, dependents };
     }
 
     pub(crate) fn cmd_suppose(&mut self, words: &[&str], _: u64) -> Result<(), String> {
@@ -58,21 +58,23 @@ impl App {
     pub(crate) fn cmd_close(&mut self, _: &[&str], _: u64) -> Result<(), String> {
         let (name, actual) = self.supposed()?;
         self.leave_world(actual, "close")?;
-        self.message = format!("closed “{name}”; it stays in the journal");
+        self.screen.message = format!("closed “{name}”; it stays in the journal");
         Ok(())
     }
 
     /// Make the supposed world the actual one.
     pub(crate) fn cmd_commit(&mut self, _: &[&str], _: u64) -> Result<(), String> {
         let (name, _) = self.supposed()?;
-        self.leave_world(self.tip, "commit")?;
-        self.message = format!("“{name}” is now the actual world");
+        self.leave_world(self.record.tip, "commit")?;
+        self.screen.message = format!("“{name}” is now the actual world");
         Ok(())
     }
 
     /// The open supposition's name, and the actual world's head it left.
     fn supposed(&self) -> Result<(String, u64), String> {
-        self.supposition
+        self.record
+            .branch
+            .supposition
             .as_ref()
             .map(|s| (s.name.clone(), s.actual))
             .ok_or("no supposition is open".into())
@@ -88,11 +90,11 @@ impl App {
     }
 
     fn stop_interrogating(&mut self) {
-        self.view.interrogate = None;
+        self.screen.view.interrogate = None;
     }
 
     fn world_body(&self, op: &str) -> Value {
-        self.view.to_json("world", json!({op: true}))
+        self.screen.view.to_json("world", json!({op: true}))
     }
 }
 
