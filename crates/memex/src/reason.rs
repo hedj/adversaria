@@ -2,6 +2,8 @@
 //! violations and disagreements, readings of a supposition, restatement in
 //! English, and derived text (docs/design.md § Claims and beliefs, § Dataflow).
 
+use crate::engine::Engine;
+use crate::outline::Constraint;
 use format::terms::Term;
 use std::collections::BTreeMap;
 
@@ -32,25 +34,56 @@ pub struct Solution {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConstraintEval {
     pub seq: u64,
-    pub name: String,
-    pub rule: String,
+    /// Its name and rule, as the outline keeps them.
+    pub constraint: Constraint,
     /// Resting on beliefs alone: broken facts.
     pub violations: Vec<Solution>,
     /// Resting on a claim: sources that disagree.
     pub disagreements: Vec<Solution>,
 }
 
+impl ConstraintEval {
+    /// Read a constraint's node from an engine the world is loaded in.
+    pub fn read(engine: &mut Engine, seq: u64, c: &Constraint) -> Result<Self, String> {
+        let v = engine.node(seq).map_err(|e| e.to_string())?;
+        let (violations, disagreements) = split_solutions(&v);
+        Ok(Self {
+            seq,
+            constraint: c.clone(),
+            violations,
+            disagreements,
+        })
+    }
+}
+
+/// A constraint node's solutions: those resting on beliefs alone
+/// (violations), and those resting on a claim (disagreements).
+pub fn split_solutions(v: &Term) -> (Vec<Solution>, Vec<Solution>) {
+    solutions(v).into_iter().partition(rests_on_beliefs)
+}
+
+fn rests_on_beliefs(s: &Solution) -> bool {
+    s.prov.iter().all(|p| matches!(p, Prov::Belief(_)))
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct WorldEval {
     pub facts: Vec<(u64, Term)>,
     pub constraints: Vec<ConstraintEval>,
+    /// What the other nodes found: derived text and layers.
+    pub nodes: Nodes,
+    /// The journal's length when this was computed.
+    pub at: usize,
+}
+
+/// What derived items and layers found.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Nodes {
     /// Each derived item's answers.
     pub derived: BTreeMap<u64, Term>,
     /// Each layer's marks, by the layer's seq: the mark, and the seqs of
     /// the facts it rests on.
     pub layers: BTreeMap<u64, Vec<(Term, Vec<u64>)>>,
-    /// The journal's length when this was computed.
-    pub at: usize,
 }
 
 impl WorldEval {

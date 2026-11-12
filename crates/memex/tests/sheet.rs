@@ -296,7 +296,7 @@ fn a_violation_through_a_rule_rests_on_the_facts_under_it() {
     let c = eval
         .constraints
         .iter()
-        .find(|c| c.name == "within income")
+        .find(|c| c.constraint.name == "within income")
         .unwrap();
     assert_eq!(c.violations.len(), 1);
     let seqs: Vec<u64> = c.violations[0].prov.iter().map(|p| p.seq()).collect();

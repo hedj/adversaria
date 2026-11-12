@@ -77,7 +77,7 @@ fn marks(app: &App, item: u64) -> Vec<String> {
     let eval = app.eval[0].as_ref().unwrap();
     app.outline.views[&item]
         .iter()
-        .flat_map(|l| eval.layers.get(&l.seq).cloned().unwrap_or_default())
+        .flat_map(|l| eval.nodes.layers.get(&l.seq).cloned().unwrap_or_default())
         .map(|(m, _)| memex::reason::show(&m))
         .collect()
 }
@@ -111,7 +111,7 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
     // Each mark rests on the fact it shows.
     let eval = app.eval[0].as_ref().unwrap();
     let layer = app.outline.views[&chart][0].seq;
-    for (mark, prov) in &eval.layers[&layer] {
+    for (mark, prov) in &eval.nodes.layers[&layer] {
         assert_eq!(prov.len(), 1, "{mark:?}");
         let fact = &eval.facts.iter().find(|(s, _)| *s == prov[0]).unwrap().1;
         let Term::Compound(_, a) = mark else { panic!() };
@@ -150,7 +150,11 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
     assert_eq!(marks(&app, spent), ["text(x(1), y(1), text(2100))"]);
     let eval = app.eval[0].as_ref().unwrap();
     let l = app.outline.views[&spent][0].seq;
-    assert_eq!(eval.layers[&l][0].1.len(), 2, "rent and food, not the rule");
+    assert_eq!(
+        eval.nodes.layers[&l][0].1.len(),
+        2,
+        "rent and food, not the rule"
+    );
     // Retracting a layer removes it.
     run(&mut app, &format!("retract {l}"));
     tap(&mut app, Key::Enter);

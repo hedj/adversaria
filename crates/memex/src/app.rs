@@ -17,7 +17,7 @@
 use crate::actions::dispatch::{complete_command, in_quotes};
 use crate::engine::Engine;
 use crate::journal::{Error as JournalError, Journal};
-use crate::outline::{Outline, Span, TOP, span_json};
+use crate::outline::{Constraint, Outline, Span, TOP, span_json};
 use crate::reason::{self, ConstraintEval, Prov, Suggestion, WorldEval, solutions};
 use format::record::Entry;
 use format::terms::{self, Term};
@@ -585,6 +585,11 @@ impl App {
     fn rebuild(&mut self) {
         let (o, _, _) = self.replay(self.tip, None);
         self.outline = o;
+    }
+
+    /// How many entries the journal has.
+    pub(crate) fn entry_count(&self) -> usize {
+        self.journal.entries().len()
     }
 
     /// The facts stated in the world whose head is an entry.
@@ -1195,7 +1200,7 @@ impl App {
     /// the item that held the first of them, or on `target` if none.
     pub(crate) fn set_fact(&mut self, fact: &Term, target: u64) -> Result<(), String> {
         let mut facts = self.facts_at(self.tip)?;
-        facts.extend(outline_facts(&self.outline));
+        facts.extend(crate::world::outline_facts(&self.outline));
         let next = self.journal.entries().len() as u64 + 1;
         facts.push((next, fact.clone()));
         let constraints: Vec<(u64, String, String)> = self
@@ -1214,8 +1219,7 @@ impl App {
                 .partition(|s| s.prov.iter().all(|p| matches!(p, Prov::Belief(_))));
             evals.push(reason::ConstraintEval {
                 seq,
-                name,
-                rule,
+                constraint: Constraint { name, rule },
                 violations,
                 disagreements,
             });
@@ -1259,11 +1263,7 @@ impl App {
     }
 
     pub(crate) fn engine(&mut self, k: usize) -> Result<&mut Engine, String> {
-        if self.engines[k].is_none() {
-            self.engines[k] =
-                Some(Engine::start().map_err(|e| format!("cannot start Prolog: {e}"))?);
-        }
-        Ok(self.engines[k].as_mut().unwrap())
+        crate::world::started(&mut self.engines[k])
     }
 
     /// The engine of the current world, for tests that count evaluations.
@@ -1271,96 +1271,16 @@ impl App {
         self.engine(0)
     }
 
-    /// Reason over the worlds shown: sync each world's facts into its engine,
-    /// and read its constraints and derived values. Nothing here changes the
-    /// journal; it is computed from it.
-    pub fn evaluate(&mut self) -> Result<(), String> {
-        let heads: Vec<u64> = match &self.supposition {
-            Some(s) => vec![self.tip, s.actual],
-            None => vec![self.tip],
-        };
-        self.eval = [None, None];
-        for (k, head) in heads.into_iter().enumerate() {
-            let facts = self.facts_at(head)?;
-            let outline = if k == 0 {
-                self.outline.clone()
-            } else {
-                self.outline_at(head)
-            };
-            let mut eval = WorldEval {
-                facts: facts.clone(),
-                at: self.journal.entries().len(),
-                ..Default::default()
-            };
-            if facts.is_empty() {
-                self.eval[k] = Some(eval);
-                continue;
-            }
-            let import = self.import_on(head);
-            let mut with_outline = facts.clone();
-            with_outline.extend(outline_facts(&outline));
-            let engine = self.engine(k)?;
-            engine.sync(&with_outline).map_err(|e| e.to_string())?;
-            engine
-                .wikidata(import.as_ref().map(|(s, f)| (*s, f.as_path())))
-                .map_err(|e| e.to_string())?;
-            for (seq, c) in &outline.constraints {
-                if !facts.iter().any(|(s, _)| s == seq) {
-                    continue; // retracted in this world
-                }
-                let v = engine.node(*seq).map_err(|e| e.to_string())?;
-                let (violations, disagreements) = solutions(&v)
-                    .into_iter()
-                    .partition(|s| s.prov.iter().all(|p| matches!(p, Prov::Belief(_))));
-                eval.constraints.push(ConstraintEval {
-                    seq: *seq,
-                    name: c.name.clone(),
-                    rule: c.rule.clone(),
-                    violations,
-                    disagreements,
-                });
-            }
-            for item in outline.derived.keys() {
-                if let Ok(v) = engine.node(*item) {
-                    eval.derived.insert(*item, v);
-                }
-            }
-            for layer in outline.views.values().flatten() {
-                if let Ok(v) = engine.node(layer.seq) {
-                    eval.layers.insert(layer.seq, reason::marks(&v));
-                }
-            }
-            self.eval[k] = Some(eval);
-        }
-        self.suggestions = match &self.engines[0] {
-            Some(_) if self.eval[0].as_ref().is_some_and(|e| !e.facts.is_empty()) => {
-                let all = self.engine(0)?.suggestions().map_err(|e| e.to_string())?;
-                all.into_iter()
-                    .filter(|s| !self.dismissed.contains(&s.key()))
-                    .collect()
-            }
-            _ => vec![],
-        };
-        self.update_frozen();
-        self.stale = self.stale_results();
-        self.record_observations();
-        self.preview = None;
-        if let Some(item) = self.view.interrogate {
-            self.preview = Some(self.preview_adoption(item)?);
-        }
-        Ok(())
-    }
-
     /// Record in the journal what reasoning showed, when it changes: the
     /// current world's violations and disagreements, and the suggestions
     /// shown for the first time. A query and its answer are journal entries
     /// (§ The journal, rule 6), so the measures report can count them.
-    fn record_observations(&mut self) {
+    pub(crate) fn record_observations(&mut self) {
         let Some(e) = &self.eval[0] else { return };
         let key = |c: &ConstraintEval, s: &reason::Solution| {
             let mut f: Vec<String> = s.facts.iter().map(reason::show).collect();
             f.sort();
-            format!("{}: {}", c.name, f.join(" · "))
+            format!("{}: {}", c.constraint.name, f.join(" · "))
         };
         let mut v: Vec<String> = e
             .constraints
@@ -1408,7 +1328,7 @@ impl App {
 
     /// What adopting an item's claims would raise, computed in a spare
     /// engine: a preview of adopting it, as a world.
-    fn preview_adoption(&mut self, item: u64) -> Result<String, String> {
+    pub(crate) fn preview_adoption(&mut self, item: u64) -> Result<String, String> {
         let mut facts = self.facts_at(self.tip)?;
         let next = self.journal.entries().len() as u64 + 1;
         let claims: Vec<Term> = self
@@ -1454,7 +1374,7 @@ impl App {
 
     /// The Wikidata import in a world: the last import entry on its path,
     /// not retracted, and the file its blob is in.
-    fn import_on(&self, head: u64) -> Option<(u64, std::path::PathBuf)> {
+    pub(crate) fn import_on(&self, head: u64) -> Option<(u64, std::path::PathBuf)> {
         let path = self.path(head);
         let retracted: HashSet<u64> = path
             .iter()
@@ -2225,28 +2145,6 @@ pub fn encode_doi(doi: &str) -> String {
         .collect()
 }
 
-/// The outline as facts, for goals: item_text(Item, Text) and
-/// item_under(Item, Parent), each resting on the entry that created the
-/// item (its number). Computed from the outline, not stated by the user,
-/// so they go to the reasoner but not into the world's stated facts.
-pub fn outline_facts(o: &Outline) -> Vec<(u64, Term)> {
-    let mut out = Vec::new();
-    for id in o.in_order() {
-        let i = Term::Int(id as i64);
-        out.push((
-            id,
-            Term::Compound("item_text".into(), vec![i.clone(), Term::Str(o.text(id))]),
-        ));
-        if let Some(p) = o.parent(id).filter(|p| *p != TOP) {
-            out.push((
-                id,
-                Term::Compound("item_under".into(), vec![i, Term::Int(p as i64)]),
-            ));
-        }
-    }
-    out
-}
-
 /// The beliefs a new fact (entry `new`) directly contradicts, and the
 /// violations it is part of that have no single repair. A violation that
 /// rests on the new fact and exactly one other belief is a direct
@@ -2277,7 +2175,7 @@ fn direct_conflicts(constraints: &[reason::ConstraintEval], new: u64) -> (Vec<u6
             left.push(format!(
                 "{n} violation{} of {}",
                 if n == 1 { "" } else { "s" },
-                c.name
+                c.constraint.name
             ));
         }
     }

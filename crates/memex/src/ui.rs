@@ -146,7 +146,7 @@ fn view_panel(app: &App, id: u64, layers: &[crate::outline::Layer]) -> Vec<Line<
     for l in layers {
         let n = app.eval[0]
             .as_ref()
-            .and_then(|e| e.layers.get(&l.seq))
+            .and_then(|e| e.nodes.layers.get(&l.seq))
             .map_or(0, |m| m.len());
         lines.push(Line::raw(format!("layer {} where {}", l.mark, l.goal)));
         lines.push(Line::styled(
@@ -210,7 +210,7 @@ fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
         )];
     }
     if let (Some(d), Some(e)) = (app.outline.derived.get(&id), app.eval[0].as_ref())
-        && let Some(v) = e.derived.get(&id)
+        && let Some(v) = e.nodes.derived.get(&id)
     {
         out = vec![
             Span::raw(reason::fill(&d.template, &d.names, v, &e.facts)),
@@ -412,7 +412,7 @@ pub fn view_figure(app: &App, k: usize, item: u64, width: usize, height: usize) 
         .map(|e| {
             layers
                 .iter()
-                .flat_map(|l| e.layers.get(&l.seq).cloned().unwrap_or_default())
+                .flat_map(|l| e.nodes.layers.get(&l.seq).cloned().unwrap_or_default())
                 .map(|(mark, prov)| view::Input {
                     loud: prov.iter().any(|s| bad.contains(s)),
                     mark,
@@ -798,7 +798,7 @@ pub fn item_marks(e: &WorldEval, outline: &Outline, item: u64) -> Vec<(bool, Str
                         violation,
                         format!(
                             "{}, {kind}: {a} here, {b} in {}",
-                            c.name,
+                            c.constraint.name,
                             where_from(outline, p)
                         ),
                     ));
@@ -879,11 +879,11 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
             continue;
         }
         lines.push(Line::styled(
-            format!("CONSTRAINT · {}", c.name.to_uppercase()),
+            format!("CONSTRAINT · {}", c.constraint.name.to_uppercase()),
             dim(),
         ));
         lines.push(Line::raw(""));
-        for l in rule_lines(&c.rule) {
+        for l in rule_lines(&c.constraint.rule) {
             lines.push(Line::raw(format!("  {l}")));
         }
         lines.push(Line::raw(""));
@@ -951,7 +951,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
         if !deps.is_empty() {
             lines.push(Line::styled("depends on these facts", dim()));
             for d in deps {
-                let text = match (app.outline.derived.get(&d), e.derived.get(&d)) {
+                let text = match (app.outline.derived.get(&d), e.nodes.derived.get(&d)) {
                     (Some(t), Some(v)) => reason::fill(&t.template, &t.names, v, &e.facts),
                     _ => app.outline.text(d),
                 };
@@ -1018,7 +1018,7 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
                             "  {}: {} ({})",
                             where_from(&app.outline, o),
                             reason::restate(&e.facts, inner(f)),
-                            c.name
+                            c.constraint.name
                         ));
                     }
                 }
@@ -1117,7 +1117,7 @@ fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
     let text = |o: &Outline, e: Option<&WorldEval>, i: u64| -> String {
         match (
             o.derived.get(&i),
-            e.and_then(|e| e.derived.get(&i).map(|v| (e, v))),
+            e.and_then(|e| e.nodes.derived.get(&i).map(|v| (e, v))),
         ) {
             (Some(d), Some((e, v))) => reason::fill(&d.template, &d.names, v, &e.facts),
             _ => o.text(i),
@@ -1163,7 +1163,7 @@ fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
             for c in &e.constraints {
                 let mut t = format!(
                     "Constraint {}: {} violation{}",
-                    c.name,
+                    c.constraint.name,
                     c.violations.len(),
                     if c.violations.len() == 1 { "" } else { "s" }
                 );
