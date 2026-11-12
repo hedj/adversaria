@@ -487,3 +487,33 @@ fn the_text_cursor_sits_on_its_item_below_mark_lines() {
     assert!(row.contains("Talk notes"), "the cursor is on {row:?}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// Which command the last world-ending view entry records: "close" or
+/// "commit".
+fn ended_by(app: &App) -> &'static str {
+    let e = app
+        .journal()
+        .entries()
+        .iter()
+        .rev()
+        .find(|e| e.kind == "view" && e.body.as_ref().is_some_and(|b| b["op"] == "world"))
+        .expect("a world-ending view entry");
+    let b = e.body.as_ref().unwrap();
+    ["close", "commit"]
+        .into_iter()
+        .find(|k| b[*k] == true)
+        .unwrap_or("neither")
+}
+
+#[test]
+fn ending_a_world_records_whether_it_was_closed_or_committed() {
+    let dir = temp("ended-by");
+    let mut app = App::open(&dir).unwrap();
+    command(&mut app, "suppose first");
+    command(&mut app, "close");
+    let closed = ended_by(&app);
+    command(&mut app, "suppose second");
+    command(&mut app, "commit");
+    assert_eq!((closed, ended_by(&app)), ("close", "commit"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
