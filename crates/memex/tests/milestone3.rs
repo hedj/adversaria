@@ -611,3 +611,17 @@ fn a_question_mark_inside_quotes_is_text() {
     assert!(listing, "outside them, ? still lists");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_command_on_an_item_needs_one() {
+    // Catches a command that acts on the target run with no item at all.
+    let dir = temp("no-target");
+    let mut app = App::open(&dir).unwrap();
+    let before = app.journal().entries().len();
+    command(&mut app, "fold");
+    assert_eq!(
+        (app.message.as_str(), app.journal().entries().len()),
+        ("there is no item to act on", before)
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
