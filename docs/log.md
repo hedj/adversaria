@@ -432,20 +432,61 @@ Limits:
 * The quote check compares plain text through Pandoc, so formatting differences do not count; the source check reads titles and retractions, not abstracts, so it never rules a quote `quoted` from the source itself.
 * Results take values with standard uncertainties only; the other kinds in § Uncertainty wait for stage B.
 
-### Sizes (counted, after milestone 6)
+## Milestone 7: measurement (12 November 2026, the report built; the month of use is the author's)
+
+Built:
+
+* The memex records what reasoning shows. A `view` entry, op `observed`, holds the current world's violations and disagreements whenever they change; op `offer` holds the suggestions shown in the pane for the first time. Without these, offered suggestions and violations could not be counted from the journal alone.
+* `crates/tools/src/measures.rs` and the `measures` program. It checks the journal first, then reports actions by kind, the clerical share, suggestions (offered, adopted, dismissed, adopted then retracted), constraint violations (seen, corrected) and disagreements. Every entry is counted once: an action, an observation, or unclassified. `make measures JOURNAL=…` runs it.
+
+Acceptance checks (in `make test`):
+
+* **Counts match a hand count on a small journal.** A session of 22 entries, printed and read by hand, its kinds and ops written into the test literally:
+  * writing 9 (entries 2, 4, 6, 7, 8, 13–16); navigating 4 (3, 5, 17, 22); searching 1 (10); deciding 4 (11, 19, 20, 21);
+  * observations 3 (9, 12, 18), and entry 1, the memex's own, unclassified;
+  * 2 suggestions offered, 1 adopted, 1 dismissed, 1 adopted then retracted;
+  * 1 violation seen and corrected; 0 disagreements;
+  * the clerical share "5 of 18, 27.8%".
+  
+  The report gives exactly these.
+* **Runs on any valid journal.** An empty journal gives zeros. 10,000 entries of every kind with arbitrary bodies are each counted once: actions + observations + unclassified = 10,000. The program reports on a valid journal (exit 0), and refuses one changed by one byte (exit 1).
+* A unit test: a violation that disappears only in a supposed world is not counted as corrected.
+
+Faults found and fixed: my first invariant assumed entry 1 is always the memex's own first entry, but in a generated journal it is any kind. Now the report counts unclassified entries openly, and the invariant includes them.
+
+Deliberate breaks, each made a test fail: corrections counted in any world; every retraction counted as an adoption retracted; Leap counted as navigating; dismissals not counted; observations not recorded.
+
+`make test` exits 0 here and in `nix develop -i`.
+
+**Not done: the month of use.** The plan's second item is the author using the memex for real work for a month, with the report run weekly and logged here. That is the author's to do; nothing in this log is a measurement of real use. Things to know before it starts:
+
+* The memex has never run in a real terminal; only a script has played kitty. The quasimode keys are provisional.
+* Subset D is not built (see milestone 5). The month can start with the import of a small subset, or none.
+* The kinds of action are this report's own classification, written in `measures.rs`; the design names them (searching, following links, transforming, writing, deciding) but does not define them.
+
+## Stage A: where it stands (12 November 2026)
+
+Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
+
+1. Do constraints find real errors in the user's notes?
+2. Does the user adopt suggestions, and keep them?
+3. Does the share of clerical actions fall?
+4. Is the dated, chained record used and trusted?
+
+### Sizes (counted, after milestone 7)
 
 | Part | Lines | Of which tests |
 | --- | --- | --- |
-| `crates/memex` (with its tests) | 8,709 | 2,397 |
+| `crates/memex` (with its tests) | 8,792 | 2,397 |
 | `crates/format` | 1,827 | 860 |
 | `crates/protocol` | 639 | 236 |
-| `crates/tools` | 364 | 52 |
+| `crates/tools` | 641 | 100 |
 | `crates/sealer` | 384 | 124 |
 | `crates/check` | 234 | 57 |
-| `crates/acceptance` | 835 | 834 |
+| `crates/acceptance` | 1,147 | 1,146 |
 | `prolog/` (server, protocol, dataflow) | 737 | 0 |
 | `prolog/tests/` | 141 | 141 |
 | `helpers/python/memex_results.py` | 74 | 0 |
 | Tests in Python and shell | 189 | 189 |
 
-Tests: 129 Rust tests, 18 Prolog tests, the pseudo-terminal script (7 checks), the tabling spike and the no-key script, in `make test`.
+Tests: 132 Rust tests, 18 Prolog tests, the pseudo-terminal script (7 checks), the tabling spike and the no-key script, in `make test`.
