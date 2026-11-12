@@ -581,6 +581,11 @@ impl App {
         self.outline = o;
     }
 
+    /// The facts stated in the world whose head is an entry.
+    pub(crate) fn facts_at(&self, head: u64) -> Result<Vec<(u64, Term)>, String> {
+        crate::store::facts(self.journal.entries(), head)
+    }
+
     /// The outline of another world, by its head.
     pub fn outline_at(&self, head: u64) -> Outline {
         self.replay(head, None).0
@@ -1077,8 +1082,7 @@ impl App {
                 if text.is_empty() {
                     return Mode::Normal;
                 }
-                let facts =
-                    crate::store::facts(self.journal.entries(), self.tip).unwrap_or_default();
+                let facts = self.facts_at(self.tip).unwrap_or_default();
                 let readings = reason::readings(&facts, &text);
                 if readings.is_empty() {
                     // No reading: a named world, with nothing supposed in it.
@@ -1184,7 +1188,7 @@ impl App {
     /// it added in the preview engine; retract them; then state the fact on
     /// the item that held the first of them, or on `target` if none.
     fn set_fact(&mut self, fact: &Term, target: u64) -> Result<(), String> {
-        let mut facts = crate::store::facts(self.journal.entries(), self.tip)?;
+        let mut facts = self.facts_at(self.tip)?;
         facts.extend(outline_facts(&self.outline));
         let next = self.journal.entries().len() as u64 + 1;
         facts.push((next, fact.clone()));
@@ -1271,7 +1275,7 @@ impl App {
         };
         self.eval = [None, None];
         for (k, head) in heads.into_iter().enumerate() {
-            let facts = crate::store::facts(self.journal.entries(), head)?;
+            let facts = self.facts_at(head)?;
             let outline = if k == 0 {
                 self.outline.clone()
             } else {
@@ -1399,7 +1403,7 @@ impl App {
     /// What adopting an item's claims would raise, computed in a spare
     /// engine: a preview of adopting it, as a world.
     fn preview_adoption(&mut self, item: u64) -> Result<String, String> {
-        let mut facts = crate::store::facts(self.journal.entries(), self.tip)?;
+        let mut facts = self.facts_at(self.tip)?;
         let next = self.journal.entries().len() as u64 + 1;
         let claims: Vec<Term> = self
             .claims_of(item)
@@ -1503,7 +1507,7 @@ impl App {
 
     /// The items whose facts are about an entity: facts with it first.
     fn items_about(&self, entity: &Term) -> Vec<u64> {
-        let facts = crate::store::facts(self.journal.entries(), self.tip).unwrap_or_default();
+        let facts = self.facts_at(self.tip).unwrap_or_default();
         let mut out: Vec<u64> = facts
             .iter()
             .filter(|(_, f)| matches!(f, Term::Compound(_, a) if a.first() == Some(entity)))
@@ -2044,7 +2048,7 @@ impl App {
     /// copy that came with the claim, and rule: found, misattributed (the
     /// title differs from the one claimed), not_found, unavailable, retracted.
     fn check_source(&mut self, item: u64) -> Result<String, String> {
-        let facts = crate::store::facts(self.journal.entries(), self.tip)?;
+        let facts = self.facts_at(self.tip)?;
         let mine: Vec<&Term> = facts
             .iter()
             .filter(|(s, _)| self.outline.fact_item.get(s) == Some(&item))
@@ -2143,7 +2147,7 @@ impl App {
 
     /// An item's claims: (entry seq, source, claimed fact).
     pub fn claims_of(&self, item: u64) -> Vec<(u64, String, Term)> {
-        let facts = crate::store::facts(self.journal.entries(), self.tip).unwrap_or_default();
+        let facts = self.facts_at(self.tip).unwrap_or_default();
         facts
             .into_iter()
             .filter(|(s, _)| self.outline.fact_item.get(s) == Some(&item))
@@ -2297,7 +2301,7 @@ impl App {
         }
         // The check reads the world's rules: bring the engine up to
         // date first, in case it has not been evaluated since.
-        let facts = crate::store::facts(self.journal.entries(), self.tip)?;
+        let facts = self.facts_at(self.tip)?;
         self.engine(0)?.sync(&facts).map_err(|e| e.to_string())?;
         self.engine(0)?
             .check_rule(&head, &body)
