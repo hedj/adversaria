@@ -630,8 +630,10 @@ seals still check, because `keys.jsonl` holds the public half; `sealer init`
 with a new key file adds a new key for new seals. (Read from the code; this
 recovery has not been tested.)
 
-**Purge** is the one way to remove content: it replaces an entry's body
-with its hash, so the chain still checks but the content is gone. It is a
+##### Purging
+
+Purge is the one way to remove content: it replaces an entry's body with
+its hash, so the chain still checks but the content is gone. It is a
 library call in this prototype (`Journal::purge`), with no command.
 
 #### Tools
