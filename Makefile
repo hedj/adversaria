@@ -10,7 +10,9 @@ test-spikes:
 	swipl -q -g main -t halt tests/spikes/incremental_tabling.pl
 
 # Optional: s(CASP) is not needed before stage B. Pass the path to a
-# checkout of github.com/SWI-Prolog/sCASP at tag V1.1.4.
+# checkout of github.com/SWI-Prolog/sCASP at tag V1.1.4; the Nix dev shell
+# (nix develop) sets SCASP_HOME to one.
+SCASP ?= $(SCASP_HOME)
 spike-scasp:
 	@test -n "$(SCASP)" || { echo "usage: make spike-scasp SCASP=<checkout>"; exit 2; }
 	tests/spikes/scasp_forall.sh "$(SCASP)"

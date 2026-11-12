@@ -91,6 +91,29 @@ The design (§ Query protocol, last paragraph) says the prototype sends the prot
 3. **Wikidata subset:** D, the pocket base (about 100K items × 20 facts, about 63 MB; an estimate).
 4. **s(CASP):** installed from source, with permission; spike run above.
 
+### The Nix environment (measured, 12 November 2026)
+
+`flake.nix` gives a dev shell with every tool the plan names, pinned by `flake.lock`: nixpkgs from the `nixos-26.05` channel (revision `ac588ef1c914`), and s(CASP) at tag `V1.1.4` (commit `51ae396`), exported as `SCASP_HOME`. nixpkgs comes from `channels.nixos.org`, not GitHub, because this session's network refused GitHub's API and tarball hosts (HTTP 403).
+
+Inside `nix develop -i` (no tools from outside Nix):
+
+| Tool | Version |
+| --- | --- |
+| SWI-Prolog | 9.2.9 (websocket library loads) |
+| Python | 3.13.17 |
+| Node.js / npm | 22.23.4 / 10.9.9 |
+| Pandoc | 3.7.0.2 |
+| Git | 2.54.0 |
+| GNU Make | 4.4.1 |
+
+`make test` exits 0 (spike and 22 tests); `make spike-scasp` exits 0. `nix flake check` passes on x86_64-linux; the other three systems are declared but not checked.
+
+Costs and faults met:
+
+* SWI-Prolog's closure is 1.3 GiB, mostly Java and GTK, which we do not use. nixpkgs offers `withJava` and other switches, but a changed build is not in the binary cache, so it would compile from source. Left as is.
+* A first version fetched s(CASP) with `fetchgit` inside the build sandbox; it failed on this session's TLS proxy (self-signed certificate in chain). As a flake input, Nix fetches it outside the sandbox, as it does nixpkgs.
+* s(CASP)'s own Makefile ran during the build and needed `swipl`; the build step is skipped, since only the source is copied.
+
 ### Sizes (counted)
 
 | Language | Lines | Files |

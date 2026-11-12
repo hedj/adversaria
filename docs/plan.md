@@ -43,7 +43,7 @@ Ask; do not choose silently.
 
 ## Environment
 
-The session needs, and milestone 0 checks: SWI-Prolog 9 or later (with `library(http/websocket)` and incremental tabling); Python 3.11 or later; Node.js 20 or later with npm; Pandoc 3; Git. Optional: s(CASP) (from source; its pack server has failed before), APE with Clex. Network access may be limited by the session's environment; if Wikidata, Crossref or package registries are blocked, report which host was blocked and stop that task.
+`nix develop` (see `flake.nix`) provides all of these, pinned by `flake.lock`, with s(CASP) 1.1.4 at `$SCASP_HOME`. The session needs, and milestone 0 checks: SWI-Prolog 9 or later (with `library(http/websocket)` and incremental tabling); Python 3.11 or later; Node.js 20 or later with npm; Pandoc 3; Git. Optional: s(CASP) (from source; its pack server has failed before), APE with Clex. Network access may be limited by the session's environment; if Wikidata, Crossref or package registries are blocked, report which host was blocked and stop that task.
 
 ## Layout
 
