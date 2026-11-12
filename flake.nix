@@ -36,9 +36,12 @@
       devShells = forAll (pkgs: {
         default = pkgs.mkShell {
           packages = [
-            pkgs.swi-prolog   # 9 or later; library(http/websocket), incremental tabling
-            pkgs.python3      # 3.11 or later
-            pkgs.nodejs_22    # 20 or later, with npm
+            pkgs.cargo        # the Rust workspace
+            pkgs.rustc
+            pkgs.clippy       # make test runs lints as errors
+            pkgs.rustfmt
+            pkgs.swi-prolog   # 9 or later, with incremental tabling
+            pkgs.nodejs_22    # only the tests' oracle for RFC 8785 numbers
             pkgs.pandoc       # 3
             pkgs.git
             pkgs.gnumake

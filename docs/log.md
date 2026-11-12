@@ -125,12 +125,26 @@ The author changed the prototype's form. Recorded in `docs/design.md` (§ The PC
 
 The design's estimate for the PC prototype was made for a browser client; it is marked as not yet revised.
 
-### Sizes (counted)
+## Milestone 1, first part: canonical JSON and terms, in Rust (12 November 2026)
+
+`crates/format` replaces `tools/jcs.py` and `tools/terms.py`, which are removed. It holds the RFC 8785 serialiser and the term encoding, with floats tagged as `{"float": text}`. One dependency, `serde_json` (with `float_roundtrip`), to parse journal lines; `serde` only in tests.
+
+A fault found in the port, by the test against Node: Rust's shortest float formatting breaks ties differently from ECMAScript. For an exact value such as 1424953923781206.25, both …206.2 and …206.3 are shortest and equally near; ECMAScript takes the even digit (Number::toString, step 5) and Rust took …206.3. 5 of the first 10,000 random doubles were such ties. The fix finds a tie from the exact decimal expansion and takes the even candidate when it reads back to the same double.
+
+Checked:
+
+* `make test` exits 0 inside `nix develop -i` (Rust 1.95.0): the tabling spike, 23 Rust tests, `cargo clippy -D warnings` and `cargo fmt --check`.
+* Numbers match all 24 finite vectors of RFC 8785 Appendix B, and match Node on 1,000,000 random doubles (one run, `JCS_SAMPLES=1000000`, 31 s); the suite runs 10,000.
+* Six deliberate breaks each made tests fail: tie rule removed; keys sorted by code point; one control character left unescaped; floats written as bare numbers; the sign of -0.0 dropped; the canonical check on reading removed.
+
+### Sizes (counted, after the move to Rust)
 
 | Language | Lines | Files |
 | --- | --- | --- |
+| Rust | 876 (381 code, 495 tests) | 3 |
 | Prolog | 56 | 2 (the spikes) |
-| Make | 13 | 1 |
+| Make | 21 | 1 |
 | Shell | 21 | 1 |
+| Nix | 53 | 1 |
 
-Tests: 2 spikes: incremental tabling (10 checks, in `make test`) and s(CASP) (2 checks, optional).
+Tests: 23 Rust unit tests; 2 spikes (tabling in `make test`, s(CASP) optional).
