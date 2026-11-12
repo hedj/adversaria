@@ -11,6 +11,8 @@
 //! * `wd_constraint(Property, Kind)`: from the property's P2302 statements;
 //!   Kind is single_value, distinct_values, or the constraint's item.
 
+pub mod measures;
+
 use serde_json::Value;
 use std::process::Command;
 

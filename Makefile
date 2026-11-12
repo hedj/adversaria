@@ -1,5 +1,5 @@
 # One command runs every test (docs/plan.md § Layout).
-.PHONY: test test-spikes test-prolog test-rust test-pty spike-scasp run
+.PHONY: test test-spikes test-prolog test-rust test-pty spike-scasp run measures
 
 test: test-spikes test-prolog test-rust test-pty
 
@@ -40,3 +40,8 @@ SCASP ?= $(SCASP_HOME)
 spike-scasp:
 	@test -n "$(SCASP)" || { echo "usage: make spike-scasp SCASP=<checkout>"; exit 2; }
 	tests/spikes/scasp_forall.sh "$(SCASP)"
+
+# The measures report (milestone 7), from the journal alone. Run it weekly
+# during the month of use, and log the output in docs/log.md.
+measures:
+	cargo run -q --release -p tools --bin measures -- "$(JOURNAL)"

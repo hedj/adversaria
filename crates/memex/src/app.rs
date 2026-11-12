@@ -280,6 +280,10 @@ pub struct App {
     crossref: String,
     /// Results whose input files changed since: item -> those files.
     pub stale: BTreeMap<u64, Vec<String>>,
+    /// The last violations and disagreements recorded in the journal.
+    observed: Option<(Vec<String>, Vec<String>)>,
+    /// Suggestions recorded as offered (shown in the pane), by identity.
+    pub offered: BTreeSet<String>,
 }
 
 const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
@@ -506,6 +510,8 @@ impl App {
             frozen: None,
             crossref: "https://api.crossref.org/works/".into(),
             stale: BTreeMap::new(),
+            observed: None,
+            offered: BTreeSet::new(),
         };
         if app.journal.entries().is_empty() {
             let e = app.journal.append("edit", json!({"op": "init"}))?;
@@ -570,6 +576,27 @@ impl App {
                         && let Some(k) = b["key"].as_str()
                     {
                         self.dismissed.insert(k.to_string());
+                    }
+                    if b["op"] == "observed" {
+                        let keys = |k: &str| {
+                            b[k].as_array()
+                                .map(|a| {
+                                    a.iter()
+                                        .filter_map(|x| x.as_str().map(String::from))
+                                        .collect()
+                                })
+                                .unwrap_or_default()
+                        };
+                        self.observed = Some((keys("violations"), keys("disagreements")));
+                    }
+                    if b["op"] == "offer" {
+                        self.offered.extend(
+                            b["keys"]
+                                .as_array()
+                                .into_iter()
+                                .flatten()
+                                .filter_map(|x| x.as_str().map(String::from)),
+                        );
                     }
                 }
                 self.tip = e.seq;
@@ -1300,11 +1327,67 @@ impl App {
         };
         self.update_frozen();
         self.stale = self.stale_results();
+        self.record_observations();
         self.preview = None;
         if let Some(item) = self.view.interrogate {
             self.preview = Some(self.preview_adoption(item)?);
         }
         Ok(())
+    }
+
+    /// Record in the journal what reasoning showed, when it changes: the
+    /// current world's violations and disagreements, and the suggestions
+    /// shown for the first time. A query and its answer are journal entries
+    /// (§ The journal, rule 6), so the measures report can count them.
+    fn record_observations(&mut self) {
+        let Some(e) = &self.eval[0] else { return };
+        let key = |c: &ConstraintEval, s: &reason::Solution| {
+            let mut f: Vec<String> = s.facts.iter().map(reason::show).collect();
+            f.sort();
+            format!("{}: {}", c.name, f.join(" · "))
+        };
+        let mut v: Vec<String> = e
+            .constraints
+            .iter()
+            .flat_map(|c| c.violations.iter().map(move |s| key(c, s)))
+            .collect();
+        let mut d: Vec<String> = e
+            .constraints
+            .iter()
+            .flat_map(|c| c.disagreements.iter().map(move |s| key(c, s)))
+            .collect();
+        v.sort();
+        d.sort();
+        let now = (v, d);
+        let changed = match &self.observed {
+            Some(o) => *o != now,
+            None => !now.0.is_empty() || !now.1.is_empty(),
+        };
+        if changed {
+            let world = self.world.clone();
+            self.write_view(
+                "observed",
+                json!({"violations": now.0, "disagreements": now.1, "world": world}),
+            );
+            self.observed = Some(now);
+        }
+        if self
+            .view
+            .panes
+            .iter()
+            .any(|p| p.kind == PaneKind::Suggestions)
+        {
+            let new: Vec<String> = self
+                .shown_suggestions()
+                .iter()
+                .map(|s| s.identity())
+                .filter(|k| !self.offered.contains(k))
+                .collect();
+            if !new.is_empty() {
+                self.write_view("offer", json!({"keys": new}));
+                self.offered.extend(new);
+            }
+        }
     }
 
     /// What adopting an item's claims would raise, computed in a spare
