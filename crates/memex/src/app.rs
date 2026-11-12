@@ -2530,6 +2530,9 @@ impl App {
                     }
                 };
                 let bytes = std::fs::read(&file).map_err(|e| format!("{file}: {e}"))?;
+                self.engine(0)?
+                    .check_wikidata(std::path::Path::new(&file))
+                    .map_err(|e| format!("{file} is not a Wikidata subset: {e}"))?;
                 let hash = format::record::sha256_hex(&bytes);
                 let blobs = self.journal.dir().join(format::record::BLOBS);
                 std::fs::create_dir_all(&blobs).map_err(|e| e.to_string())?;

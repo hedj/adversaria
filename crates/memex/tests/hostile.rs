@@ -209,3 +209,52 @@ fn a_doi_is_one_request_for_that_doi() {
     assert!(m.contains("not_found"), "{m}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_wikidata_file_holds_only_ground_facts_of_its_three_shapes() {
+    // The loader reads with read_term and keeps wd/3, wd_label/2 and
+    // wd_constraint/2. Catches a file accepted with a fact that is not data
+    // the tool writes: a variable (wd_label(X, "…") names every entity), a
+    // directive, a clause, or a value nested deep enough to crash a reader.
+    let dir = temp("wd");
+    let deep = format!(
+        "wd('Q1', 'P1', {}x{}).\n",
+        "f(".repeat(5000),
+        ")".repeat(5000)
+    );
+    let cases = [
+        ("variable", "wd_label(X, \"anything\").\n".to_string()),
+        ("directive", ":- initialization(halt).\n".to_string()),
+        ("clause", "wd('Q1', 'P1', x) :- true.\n".to_string()),
+        ("compound value", "wd('Q1', 'P1', f(x)).\n".to_string()),
+        (
+            "label not a string",
+            "wd_label('Q1', 'Buran').\n".to_string(),
+        ),
+        ("deep", deep),
+    ];
+    let mut app = open(&dir);
+    typ(&mut app, "Buran.");
+    app.flush();
+    command(&mut app, "fact date(buran_flight, 1988)");
+    for (what, text) in cases {
+        let f = dir.join(format!("{}.pl", what.replace(' ', "_")));
+        std::fs::write(&f, format!("wd('Q2', 'P31', 'Q5').\n{text}")).unwrap();
+        let before = app.journal().entries().len();
+        let m = command(&mut app, &format!("import wikidata {}", f.display()));
+        assert!(m.contains("not a Wikidata subset"), "{what}: {m}");
+        assert!(
+            !app.journal().entries()[before..]
+                .iter()
+                .any(|e| e.kind == "import"),
+            "{what}: the import was written"
+        );
+    }
+    // A good file still imports, and the world still evaluates.
+    let good = dir.join("good.pl");
+    std::fs::write(&good, "wd('Q2', 'P31', 'Q5').\nwd('Q2', 'P619', date(1988, 11, 15)).\nwd('Q2', 'P1', 3).\nwd('Q2', 'P2', 2.5).\nwd('Q2', 'P3', \"text\").\nwd_label('Q2', \"Buran\").\nwd_constraint('P619', single_value).\n").unwrap();
+    let m = command(&mut app, &format!("import wikidata {}", good.display()));
+    assert!(m.starts_with("imported wikidata"), "{m}");
+    app.evaluate().unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+}

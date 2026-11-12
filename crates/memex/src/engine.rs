@@ -174,6 +174,20 @@ impl Engine {
         Ok(())
     }
 
+    /// Check a file of Wikidata facts as the loader reads it, keeping
+    /// nothing: Err names the first term that is not one.
+    pub fn check_wikidata(&mut self, file: &std::path::Path) -> Result<(), Error> {
+        self.p
+            .all(
+                &c(
+                    "check_wikidata",
+                    vec![Term::Str(file.to_string_lossy().into_owned())],
+                ),
+                1,
+            )
+            .map(|_| ())
+    }
+
     /// Suggestions without a model, best evidence first.
     pub fn suggestions(&mut self) -> Result<Vec<crate::reason::Suggestion>, Error> {
         let a = self.p.all(&c("suggestions", vec![Term::Var(0)]), 2)?;

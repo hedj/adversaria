@@ -113,21 +113,45 @@ planted_holds(G, Fs) :- memberchk(G, Fs).
 
 load_wikidata(File, Seq) :-
     unload_wikidata,
-    setup_call_cleanup(open(File, read, In, [encoding(utf8)]),
-                       load_terms(In),
-                       close(In)),
+    read_wikidata(File, assertz),
     assertz(wd_import(Seq, File)).
 
-load_terms(In) :-
+%!  check_wikidata(+File) is det.
+%   Read File as load_wikidata/2 would, keeping nothing; throw on the first
+%   term that is not a Wikidata fact. The memex calls it before it writes
+%   an import, so a file it could not load never enters the journal.
+check_wikidata(File) :-
+    read_wikidata(File, [_]>>true).
+
+read_wikidata(File, Keep) :-
+    setup_call_cleanup(open(File, read, In, [encoding(utf8)]),
+                       read_terms(In, Keep),
+                       close(In)).
+
+read_terms(In, Keep) :-
     read_term(In, T, []),
     (   T == end_of_file
     ->  true
-    ;   (   memberchk(T, [wd(_,_,_), wd_label(_,_), wd_constraint(_,_)])
-        ->  assertz(T)
-        ;   throw(error(domain_error(wikidata_fact, T), _))
+    ;   (   wikidata_fact(T)
+        ->  call(Keep, T)
+        ;   numbervars(T, 0, _),
+            format(string(S), "~W", [T, [max_depth(6), numbervars(true), quoted(true)]]),
+            throw(error(domain_error(wikidata_fact, S), _))
         ),
-        load_terms(In)
+        read_terms(In, Keep)
     ).
+
+%   The facts the wikidata tool writes, and only those: ground, with an
+%   item or property atom, and a value that is an atom, a number, a string
+%   or date(Y, M, D) of integers.
+wikidata_fact(wd(Q, P, V)) :- atom(Q), atom(P), wikidata_value(V).
+wikidata_fact(wd_label(E, L)) :- atom(E), string(L).
+wikidata_fact(wd_constraint(P, K)) :- atom(P), atom(K).
+
+wikidata_value(V) :- atom(V), !.
+wikidata_value(V) :- number(V), !.
+wikidata_value(V) :- string(V), !.
+wikidata_value(date(Y, M, D)) :- integer(Y), integer(M), integer(D).
 
 unload_wikidata :-
     retractall(wd(_,_,_)), retractall(wd_label(_,_)),
