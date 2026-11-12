@@ -115,6 +115,7 @@ The journal must outlive the memex, so its format is open, plain and documented,
 | A seal record | `seq` and `entry_hash`, the sequence number and hash of the entry it seals (seal n seals entry n); `date` in ISO 8601 UTC to the second, as `2026-11-12T09:30:00Z`; `author`, the fingerprint of the author's key; `sig`, the author's Ed25519 signature (RFC 8032) over the 32 bytes of the entry's hash, in hexadecimal; `prev`, the hash of the previous seal record, null for the first; and its own `hash`. (Version 1 names the entry's hash `entry_hash`, since the record's own hash is `hash`.) |
 | The hash | SHA-256, in lowercase hexadecimal, of the canonical JSON (RFC 8785) of the record without its `hash` field and, for an entry, without its `body`: the entry's `body_hash` stands for the body, so a purged body leaves every hash checkable. Fields a reader does not know are kept and covered by the hash. Every line is itself the canonical JSON of its record, so changing any byte of a line breaks its form or its hash |
 | A key record | `alg`, `"ed25519"`; `key`, the 32-byte public key in hexadecimal; `fingerprint`, the SHA-256 of those 32 bytes; and its own `hash` |
+| Facts | a body may carry `"facts": [term, ...]`, facts the entry adds; a retract entry's body is `{"target": seq}`, naming an earlier entry on the same branch whose facts it removes. A world's store is the facts of the entries on the path from its head back to the root, in order, less those retracted on that path; a purged entry's facts are gone. A retraction of a retraction is refused: adopt the facts again instead |
 | A purge | first a purge entry, whose body is `{"reason": text, "target": seq}`, naming an earlier entry that is not a purge; then that entry's `body` becomes null. A body is null exactly when one purge entry names it |
 | The private key | one line, the 32-byte Ed25519 secret in hexadecimal, in a file readable by its owner only (mode 600), which only the sealer reads |
 | Checking | a reference checker, a small Rust program, is published with the format; it verifies both chains, every signature against `keys.jsonl`, and every blob's name, and needs nothing from the memex |
@@ -545,11 +546,29 @@ Lists are `'.'/2` structures, and three tags are spare. `supports(X, item42)` ta
 | CANCEL | to the server | nothing; the server drops the query's choice points |
 | ASSERT, RETRACT | to the server | the fact, and its journal sequence number |
 | ATOM | to the server | a name, as a BLOB |
-| ANSWER | to the client | one term, with one argument for each VAR of the query |
-| DONE | to the client | no more answers, failure, or an error term |
-| ATOM\_IS | to the client | the atom's number |
+| ANSWER | to the client | one term for each VAR of the query, in the order of their numbers |
+| DONE | to the client | a status: 0 no more answers (none at all is failure) or done, 1 error and the error term, 2 cancelled |
+| ATOM\_IS | to the client | the atom's number, as an ATOM cell, and its name, as a BLOB; sent in reply to ATOM, and before any message that uses an atom the client has not been told |
 
 Answers come only when NEXT asks for them, so the server backtracks lazily and no buffer on either side grows without bound. The prototype sends these messages over a pipe between the Rust program and SWI-Prolog, its child process, with an encoder and decoder in Prolog of an estimated 100–200 lines and one in Rust.
+
+### The protocol as built (version 1, 12 November 2026)
+
+Milestone 2 fixed what the text above left open. `prolog/protocol.pl` and `crates/protocol` implement it.
+
+| Point | Rule |
+| --- | --- |
+| Words | 32 bits, big-endian. The header is type (top 8 bits), reserved (8 bits, zero), and the number of words after the header (16 bits), so the request number is always present and a message holds at most 65,534 cells |
+| Message types | QUERY 1, NEXT 2, CANCEL 3, ASSERT 4, RETRACT 5, ATOM 6, ANSWER 7, DONE 8, ATOM\_IS 9 |
+| Tags | VAR 0, INT 1, ATOM 2, STRUCT 3, BLOB 4; 5 to 7 spare |
+| INT | two's complement in 29 bits: −2^28 to 2^28 − 1; anything wider is a BLOB |
+| BLOB | the length counts a first byte that names the content: `s` a string in UTF-8, `i` an integer as decimal text, `f` a float as the shortest decimal text that reads back exactly. Padding bytes are zero |
+| Atoms | 0 is `[]` and 1 is `.`, fixed; the server numbers the rest per connection. A STRUCT's functor must be below 2^21. SWI-Prolog's list cell `'[|]'/2` crosses as `.`/2; its distinct atom `'[]'`, its compound `'.'/2` and a STRUCT `[|]`/2 have no lossless form and are refused |
+| Variables | numbered within each message by first appearance, from 0; a decoder refuses numbers that skip |
+| Requests | the client numbers them; replies carry the number. Each query runs in a SWI-Prolog engine, which computes an answer only when NEXT asks; CANCEL destroys the engine |
+| Errors | a well-framed but wrong request gets DONE 1 with the error, and the server carries on; an error term it cannot encode goes back as its printed text. A malformed header means the stream is out of step, so the server stops |
+| Output | the server sends the protocol on its standard output; goals that print, to the current output or to `user_output`, go to standard error instead |
+| Rust's limits | Rust holds integers in 64 bits, and refuses wider ones from Prolog |
 
 ## Decisions
 
@@ -559,6 +578,8 @@ Answers come only when NEXT asks for them, so the server backtracks lazily and n
 | Numbers in hashed records are JSON numbers, serialised by RFC 8785 in full, not decimal strings | the author's decision (12 November 2026), declining the plan's proposal; the format stays plain JSON, and the server and the checker must both implement RFC 8785's number rules, under test |
 | In journal terms, a float is written `{"float": text}` with one canonical text | the author's decision (12 November 2026); RFC 8785 writes 1.0 and 1 alike, so without a tag a float would come back from the journal as an integer |
 | The memex normalises text to Unicode NFC before writing it, and refuses an object whose keys become equal once normalised | the author's decision (12 November 2026); the format requires NFC, and normalising spares the user an error for text that looks the same |
+| Query protocol version 1: big-endian words, tags and message types numbered, BLOBs typed by their first byte, ATOM\_IS naming atoms, answers as one term per variable, DONE with a status; queries as SWI-Prolog engines | made precise when milestone 2 was built (12 November 2026); the design left these open, and ATOM\_IS could not name an atom the server introduced |
+| Journal bodies carry facts as `"facts"`; a retract names its target; a world's store is its path's facts less those retracted | made precise when milestone 2 was built (12 November 2026), so that facts replay from the journal |
 | Format version 1 is fixed in detail: seals name the entry's hash `entry_hash`; an entry's hash leaves out its body, which `body_hash` stands for; one root per journal; purge bodies, key records and the key file as § The journal format states | made precise when milestone 1 was built (12 November 2026); the design named two fields of a seal `hash`, and left the rest open |
 | The prototype is a terminal program in Rust (ratatui on crossterm) with SWI-Prolog as a child process, joined by the query protocol over a pipe; no web interface | the author's decision (12 November 2026), replacing the browser client and the websocket chosen earlier that day; SWI-Prolog keeps the reasoning, since the milestone 0 spikes showed its incremental tabling does the dataflow engine's work |
 | All of the project's own code outside Prolog is Rust, the reference checker included | the author's decision (12 November 2026); one language. The cost, noted when it was chosen: the checker no longer comes from an independent implementation of the format |

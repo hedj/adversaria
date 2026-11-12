@@ -1,7 +1,7 @@
 # One command runs every test (docs/plan.md § Layout).
-.PHONY: test test-spikes test-rust spike-scasp
+.PHONY: test test-spikes test-prolog test-rust spike-scasp
 
-test: test-spikes test-rust
+test: test-spikes test-prolog test-rust
 
 # Unit tests, lints as errors, and formatting.
 test-rust:
@@ -12,6 +12,10 @@ test-rust:
 
 test-spikes:
 	swipl -q -g main -t halt tests/spikes/incremental_tabling.pl
+
+# The Prolog end of the query protocol.
+test-prolog:
+	swipl -g run_tests -t halt prolog/tests/test_protocol.pl
 
 # Optional: s(CASP) is not needed before stage B. Pass the path to a
 # checkout of github.com/SWI-Prolog/sCASP at tag V1.1.4; the Nix dev shell

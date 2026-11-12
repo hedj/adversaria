@@ -2,4 +2,6 @@
 //! the SWI-Prolog child process come in later milestones.
 
 pub mod journal;
+pub mod prolog;
 pub mod replay;
+pub mod store;
