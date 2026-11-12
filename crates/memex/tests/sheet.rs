@@ -142,3 +142,65 @@ fn a_supposition_sets_aside_only_what_it_directly_contradicts() {
     shows(&app, "1 constraint violation");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn set_replaces_what_a_new_value_directly_contradicts() {
+    // `set` states a fact and retracts the beliefs it directly contradicts,
+    // in the actual world, and puts the new fact on the item that held the
+    // one it replaces. Catches a set that leaves the old value (two values,
+    // a violation), removes income and rent, or attaches the new value to
+    // whatever item the cursor happens to be on.
+    let dir = temp("set");
+    let mut app = budget(&dir);
+    // The cursor is on the last item ("Left over"), not on Food.
+    assert!(app.outline.text(app.cursor()).starts_with("left"));
+    let m = command(&mut app, "set cell(food, 900)");
+    assert!(m.contains("replaced the fact at 1.3"), "{m}");
+    assert!(
+        m.contains("left for you: 1 violation of spending within income"),
+        "{m}"
+    );
+    shows(&app, "Food: 900 [derived]");
+    shows(&app, "Income: 2000 [derived]");
+    shows(&app, "Left over: -100 [derived]");
+    shows(&app, "1 constraint violation");
+    let new = app
+        .journal()
+        .entries()
+        .iter()
+        .rev()
+        .find(|e| e.kind == "edit")
+        .unwrap()
+        .seq;
+    let food = app.outline.fact_item[&new];
+    assert_eq!(
+        app.outline.text(food),
+        "food",
+        "the new value is on the Food box"
+    );
+    // Back within income: the violation goes, nothing else changes.
+    let m = command(&mut app, "set cell(food, 500)");
+    assert!(
+        m.contains("replaced the fact at 1.3") && !m.contains("left for you"),
+        "{m}"
+    );
+    shows(&app, "Left over: 300 [derived]");
+    let s = screen(&app);
+    assert!(
+        !s.iter().any(|l| l.contains("constraint violation")),
+        "{}",
+        s.join("\n")
+    );
+    // A fact nothing contradicts is simply added, on the cursor's item.
+    let m = command(&mut app, "set cell(savings, 300)");
+    assert!(m.contains("nothing replaced"), "{m}");
+    // The journal replays to the same values.
+    let tip = app.tip;
+    drop(app);
+    let mut again = App::open(&dir).unwrap();
+    again.evaluate().unwrap();
+    assert_eq!(again.tip, tip);
+    shows(&again, "Food: 500 [derived]");
+    shows(&again, "Left over: 300 [derived]");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

@@ -249,6 +249,7 @@ the item under the cursor.
 | `quit` | `quit` | writes what is pending and leaves |
 | `redo` | `redo` | redoes what undo undid, along the current branch |
 | `retract` | `retract ENTRY` | reverses one earlier entry, by its number, keeping later work; lists what depends on it first |
+| `set` | `set FACT` | states FACT and retracts the beliefs it directly contradicts (each that breaks a constraint with it and nothing else); the fact goes on the item that held the one it replaces, else on the target. A violation it leaves is named, not resolved |
 | `suppose` | `suppose NAME` | starts a named world with nothing supposed in it (the Suppose quasimode is the usual way, § 8) |
 | `switch` | `switch` | moves focus to the other pane |
 | `transclude` | `transclude from ADDRESS` | makes a new item after the target that shows ADDRESS's text in place |
@@ -642,5 +643,8 @@ This is a prototype, built for a one-month trial. Known limits:
 - Integers larger than 2^53 − 1 are refused in the journal.
 - Only the Wikidata subset tool exists; the full subset is not built.
 - Scope affects only `delete`.
+- `set` writes each retraction and the new fact as separate journal
+  entries, so one `undo` reverses only the new fact; reversing a whole
+  `set` takes one `undo` per entry, or `set` again with the old value.
 
 docs/log.md records every result and fault found so far.

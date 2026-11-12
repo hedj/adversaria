@@ -465,6 +465,11 @@ pub const COMMANDS: &[Command] = &[
         help: "redo what undo undid, along the current branch",
     },
     Command {
+        name: "set",
+        slots: &[("that", Slot::Text)],
+        help: "state a fact and retract the beliefs it directly contradicts under a constraint; the fact goes where the replaced one was",
+    },
+    Command {
         name: "retract",
         slots: &[("entry", Slot::Word)],
         help: "reverse one earlier entry, keeping later work; lists what depends on it first",
@@ -1302,6 +1307,63 @@ impl App {
             "supposed; nothing set aside".to_string()
         } else {
             format!("supposed; set aside in this world: {}", places.join(", "))
+        };
+        if !left.is_empty() {
+            m.push_str(&format!("; left for you: {}", left.join(", ")));
+        }
+        self.message = m;
+        Ok(())
+    }
+
+    /// `set`: find, before writing anything, the beliefs the fact directly
+    /// contradicts (see `direct_conflicts`), by evaluating the world with
+    /// it added in the preview engine; retract them; then state the fact on
+    /// the item that held the first of them, or on `target` if none.
+    fn set_fact(&mut self, fact: &Term, target: u64) -> Result<(), String> {
+        let mut facts = crate::store::facts(self.journal.entries(), self.tip)?;
+        let next = self.journal.entries().len() as u64 + 1;
+        facts.push((next, fact.clone()));
+        let constraints: Vec<(u64, String, String)> = self
+            .outline
+            .constraints
+            .iter()
+            .map(|(s, c)| (*s, c.name.clone(), c.rule.clone()))
+            .collect();
+        let engine = self.engine(2)?;
+        engine.sync(&facts).map_err(|e| e.to_string())?;
+        let mut evals = Vec::new();
+        for (seq, name, rule) in constraints {
+            let Ok(v) = engine.node(seq) else { continue };
+            let (violations, disagreements): (Vec<_>, Vec<_>) = solutions(&v)
+                .into_iter()
+                .partition(|s| s.prov.iter().all(|p| matches!(p, Prov::Belief(_))));
+            evals.push(reason::ConstraintEval {
+                seq,
+                name,
+                rule,
+                violations,
+                disagreements,
+            });
+        }
+        let (mut replaced, left) = direct_conflicts(&evals, next);
+        replaced.retain(|t| self.retractable(*t).is_ok());
+        let item = replaced
+            .iter()
+            .find_map(|t| self.outline.fact_item.get(t).copied())
+            .unwrap_or(target);
+        if item == TOP {
+            return Err("there is no item to put the fact on".into());
+        }
+        let places: Vec<String> = replaced.iter().map(|t| self.fact_place(*t)).collect();
+        for t in &replaced {
+            self.write_here("retract", json!({"target": t}))?;
+        }
+        let f = terms::encode(fact).map_err(|e| e.0)?;
+        self.write_here("edit", json!({"op": "facts", "item": item, "facts": [f]}))?;
+        let mut m = if places.is_empty() {
+            format!("set at {}; nothing replaced", self.outline.number(item))
+        } else {
+            format!("set; replaced the fact at {}", places.join(", "))
         };
         if !left.is_empty() {
             m.push_str(&format!("; left for you: {}", left.join(", ")));
@@ -2320,6 +2382,7 @@ impl App {
                 | "switch"
                 | "pane"
                 | "retract"
+                | "set"
                 | "suppose"
                 | "new"
                 | "constraint"
@@ -2638,6 +2701,23 @@ impl App {
                     body["source"] = json!(src);
                 }
                 self.write_here("edit", body)?;
+            }
+            "set" => {
+                let text = words.join(" ");
+                let (t, _) = self
+                    .engine(0)?
+                    .parse(text.trim_end_matches('.'))
+                    .map_err(|e| format!("not a Prolog fact: {e}"))?;
+                if !matches!(t, Term::Atom(_) | Term::Compound(..)) || !variables(&t).is_empty() {
+                    return Err("a fact is an atom or a compound term, with no variables".into());
+                }
+                if reserved(&t) {
+                    return Err(format!(
+                        "{} is reserved: definitions are made by constraint, derive and accept",
+                        functor_of(&t)
+                    ));
+                }
+                self.set_fact(&t, target)?;
             }
             "constraint" => {
                 let text = words.join(" ");
