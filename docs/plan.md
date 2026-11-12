@@ -24,7 +24,8 @@ Build what answers these. Everything else waits for stage B (listed at the end).
 
 From `docs/design.md` § Decisions and the sections named:
 
-* The PC prototype: a browser client and a SWI-Prolog server, split at the query protocol (§ The PC prototype, § Query protocol). The PC prototype is the version for others.
+* The PC prototype: a terminal program in Rust (ratatui on crossterm), with SWI-Prolog as a child process, split at the query protocol over a pipe; no web interface (§ The PC prototype, § Query protocol). The PC prototype is the version for others. (Changed by the author on 12 November 2026, from a browser client.)
+* All the project's own code outside Prolog is Rust, the reference checker included. The memex requires a terminal with kitty's keyboard protocol (key releases) and graphics protocol (images).
 * The journal: append-only, hash-chained, dated and signed by the sealer, a separate process that alone holds the key and writes the seals; open format (§ The journal format).
 * Imported content is a claim, never a fact; adopting and interrogating take one click or key (§ Claims and beliefs).
 * Retract, don't rewind; undo is a tree; a world is a branch (§ The journal).
@@ -43,16 +44,20 @@ Ask; do not choose silently.
 
 ## Environment
 
-`nix develop` (see `flake.nix`) provides all of these, pinned by `flake.lock`, with s(CASP) 1.1.4 at `$SCASP_HOME`. The session needs, and milestone 0 checks: SWI-Prolog 9 or later (with `library(http/websocket)` and incremental tabling); Python 3.11 or later; Node.js 20 or later with npm; Pandoc 3; Git. Optional: s(CASP) (from source; its pack server has failed before), APE with Clex. Network access may be limited by the session's environment; if Wikidata, Crossref or package registries are blocked, report which host was blocked and stop that task.
+`nix develop` (see `flake.nix`) provides all of these, pinned by `flake.lock`, with s(CASP) 1.1.4 at `$SCASP_HOME`. The session needs: Rust (stable, with Cargo); SWI-Prolog 9 or later, with incremental tabling; Pandoc 3; Git; Node.js, only as the tests' oracle for RFC 8785 numbers (ECMAScript defines them). To use the memex: a terminal with kitty's keyboard and graphics protocols. Optional: s(CASP) (from source; its pack server has failed before), APE with Clex. Network access may be limited by the session's environment; if Wikidata, Crossref or package registries are blocked, report which host was blocked and stop that task.
 
 ## Layout
 
 ```
-server/        SWI-Prolog: store, journal writer, dataflow, constraints, protocol, websocket
-client/        TypeScript, no framework: outline, panes, quasimodes
-sealer/        Python: the sealer (dates and signatures)
-tools/         Python: reference checker, importers, measures report, Wikidata subset builder
-tests/         one directory per part; every test says what fault it catches
+Cargo.toml     the Rust workspace
+crates/format/ Rust library: canonical JSON, terms, journal records and hashes
+crates/memex/  Rust program: terminal interface, store, journal writer, Prolog child process
+crates/sealer/ Rust program: the sealer (dates and signatures)
+crates/check/  Rust program: the reference checker
+crates/tools/  Rust programs: importers, measures report, Wikidata subset builder
+prolog/        SWI-Prolog: facts, rules, constraints, dataflow, the protocol's other end
+tests/         spikes and end-to-end tests; unit tests live beside the Rust code
+              every test says what fault it catches
 docs/          design.md, translator.md, plan.md, and a log of measured results
 ```
 
@@ -77,11 +82,11 @@ Acceptance: `docs/log.md` holds the versions and both spike results with their o
 
 Read: § The journal, § The journal format, § Signed entries and exchanging journals (signing only).
 
-1. Server: append entries to `journal.jsonl` with `seq`, `parent`, `prev`, `kind`, `body`, `body_hash`, `hash`, hashed as § The journal format says.
-2. Sealer: a separate process that watches `journal.jsonl`, and for each new entry appends a seal record to `seals.jsonl` with the date from the system clock, the author's key fingerprint and an Ed25519 signature. The server never writes `seals.jsonl` and never holds a key; a test enforces this (no code path in `server/` writes `seals.jsonl` or reads the private key). The user's private key lives in a file only the sealer reads.
+1. The memex (Rust): append entries to `journal.jsonl` with `seq`, `parent`, `prev`, `kind`, `body`, `body_hash`, `hash`, hashed as § The journal format says.
+2. Sealer: a separate process that watches `journal.jsonl`, and for each new entry appends a seal record to `seals.jsonl` with the date from the system clock, the author's key fingerprint and an Ed25519 signature. The memex never writes `seals.jsonl` and never holds a key; a test enforces this (no code path in `crates/memex/` or `prolog/` writes `seals.jsonl` or reads the private key). The user's private key lives in a file only the sealer reads.
 3. `keys.jsonl` holds the public key.
 4. Purge: replace one entry's `body` with null, keep `body_hash`, write a purge entry.
-5. Reference checker (`tools/check.py`, about 100–150 lines): verifies both chains, every signature and every blob's name, and needs nothing else.
+5. Reference checker (`crates/check/`): verifies both chains, every signature and every blob's name, and needs nothing else.
 
 Acceptance:
 
@@ -94,7 +99,7 @@ Acceptance:
 Read: § Query protocol, § The journal format (terms).
 
 1. Terms in JSON as the format defines them; facts as replayed from the journal.
-2. The query protocol's tagged cells: an encoder and decoder in Prolog and in TypeScript; messages QUERY, NEXT, CANCEL, ASSERT, RETRACT, ATOM, ANSWER, DONE, ATOM_IS, over a websocket.
+2. The query protocol's tagged cells: an encoder and decoder in Prolog and in Rust; messages QUERY, NEXT, CANCEL, ASSERT, RETRACT, ATOM, ANSWER, DONE, ATOM_IS, over a pipe to SWI-Prolog as a child process.
 3. Answers only on NEXT; CANCEL drops the query.
 
 Acceptance:
@@ -110,11 +115,13 @@ Read: § A user story (scenes 1 and 4), § The outline model, § Quasimodes, not
 2. Leap (forward and back) with recognition on Escape and guide words; Command with noise words and `?` help; Scope; Suppose (milestone 4 gives it meaning). Each quasimode can be held or latched; a command palette offers every command by name.
 3. Undo and redo along the current branch; retraction of any earlier entry, listing what depends on it before confirming.
 4. Two panes side by side.
+5. At start, ask the terminal whether it supports kitty's keyboard and graphics protocols; if not, refuse to start and name what is missing.
 
 Acceptance:
 
 * The user story's scene 1 works as written.
 * Keystroke to visible change within 0.1 s for an outline of 10,000 items, measured and logged (§ Response time).
+* In a terminal that lacks either protocol, the memex refuses to start and says which one is missing.
 * Every edit, undo and retraction is a journal entry, and replay reproduces the screen state.
 
 ### Milestone 4: claims, constraints and worlds (about 2–3 weeks)
@@ -151,7 +158,7 @@ Read: § Documents in and out, § Importing results, § Uncertainty (measured va
 
 1. Import and export through Pandoc's JSON tree, mapped onto the outline as § Documents in and out says; export records the hashes of its source entries.
 2. Re-importing a revised document opens a world, and a table lists each change to adopt or retract.
-3. Results import from an exchange file with W3C PROV provenance; values as `measured(Value, StandardUncertainty, Unit)`; a small Python helper writes the file.
+3. Results import from an exchange file with W3C PROV provenance; values as `measured(Value, StandardUncertainty, Unit)`; a small Python helper writes the file (Python because the user's analyses call it; it is not the project's own code).
 4. The quote check and the source check (DOI through Crossref).
 
 Acceptance:

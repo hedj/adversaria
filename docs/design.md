@@ -10,7 +10,7 @@ The memex is a cognitive augment for its one user, in the sense of Bush's memex 
 
 This is a working document, kept alongside the design conversation. Figures are estimates unless marked as measured; history is recalled from memory unless a source is linked.
 
-The design does not depend on a platform. Its prototype runs on a PC: a browser client and a SWI-Prolog server, split at the query protocol, and a separate sealer process that dates and signs journal entries (see The PC prototype). Hardware that might run the memex is out of scope here.
+The design does not depend on a platform. Its prototype runs on a PC: a terminal program written in Rust, SWI-Prolog as its reasoning engine in a child process, split at the query protocol, and a separate sealer process that dates and signs journal entries (see The PC prototype). Hardware that might run the memex is out of scope here.
 
 ## A user story
 
@@ -114,7 +114,7 @@ The journal must outlive the memex, so its format is open, plain and documented,
 | Kinds that carry more | adopt carries the suggestion and its evidence (support, exceptions, violations); retract names the entry it reverses; import carries its provenance as W3C PROV-JSON and refers to its files in `blobs/` by hash |
 | A seal record | `seq` and `hash` of the entry; `date` in ISO 8601 UTC to the second; `author`, the fingerprint of the author's key; `sig`, the author's Ed25519 signature (RFC 8032) over the entry's hash; `prev`, the hash of the previous seal record; and its own `hash` |
 | The hash | SHA-256, in lowercase hexadecimal, of the record without its `hash` field and with its `body` replaced by the SHA-256 of the body, serialised by the JSON Canonicalization Scheme (RFC 8785). The entry keeps that `body_hash`, so a purged body leaves every hash checkable, and a purge entry names what it removed and why |
-| Checking | a reference checker of an estimated 100–150 lines of Python is published with the format; it verifies both chains, every signature against `keys.jsonl`, and every blob's name, and needs nothing from the memex |
+| Checking | a reference checker, a small Rust program, is published with the format; it verifies both chains, every signature against `keys.jsonl`, and every blob's name, and needs nothing from the memex |
 
 Text costs space: a JSON entry takes several times the bytes of its tagged cells (an estimate). The format's version number allows later kinds and fields; a reader ignores fields it does not know.
 
@@ -435,7 +435,7 @@ Raskin's further rules, adopted:
 Limits:
 
 - Holding Leap while typing "has been criticized as uncomfortable" (Wikipedia, Archy); the held keys should fall under the thumbs, as on the Canon Cat's two large Leap keys.
-- Quasimodes need key-down and key-up events. Browsers report both, but the operating system and the browser take some keys.
+- Quasimodes need key-down and key-up events. Most terminals send only key presses; the kitty keyboard protocol adds releases, so the memex requires a terminal that supports it, and refuses to start in one that does not. The operating system and the terminal still take some keys.
 - The zooming interface of THE and Archy is not adopted; Archy's prototype "did not include code for zooming".
 
 Conventional shortcuts sit beside the quasimodes, for laptops without thumb keys and for accessibility: each quasimode can be latched by tapping its key instead of holding it, and a command palette offers every command by name with recognition. Holding remains the fast path; nothing needs it.
@@ -491,17 +491,19 @@ Sources: [NLS (Wikipedia)](<https://en.wikipedia.org/wiki/NLS_(computer_system)>
 
 ## The PC prototype
 
-The prototype is a browser client and a SWI-Prolog server, split at one interface, the query protocol below, which is fixed first. It puts the memex in use early: journal, outline, quasimodes, dataflow, s(CASP). The client and the server can each be replaced on its own. The prototype is also the version for others: a PC is what other people and their organisations can run.
+The prototype is a terminal program in Rust and SWI-Prolog, split at one interface, the query protocol below, which is fixed first. Rust holds the interface, the store, the journal writer and the format's tools; SWI-Prolog, run as a child process, holds the facts, rules, constraints and the dataflow engine (incremental tabling), and runs s(CASP) and APE. There is no web interface. It puts the memex in use early: journal, outline, quasimodes, dataflow, s(CASP). Each side can be replaced on its own.
+
+The interface is drawn with ratatui on crossterm. It needs a terminal that supports two of kitty's protocols: the keyboard protocol, for key releases (see Quasimodes, not modes), and the graphics protocol, to show images in place: figures and files from `blobs/`, charts and laid-out diagrams, drawn as images and placed in the cell grid. Which terminals support both is to be checked against their documentation, not assumed. The prototype is also the version for others: a PC is what other people and their organisations can run.
 
 ### Estimate for the PC prototype
 
-These are estimates by judgement, not measurements. They assume a browser client talking to SWI-Prolog over the query protocol, APE and s(CASP) as they are, no trained model, and one experienced developer; the second column has Claude writing the code while the author directs and reviews.
+These are estimates by judgement, not measurements. They were made for a browser client and are not yet revised for the terminal program in Rust; they assume a client talking to SWI-Prolog over the query protocol, APE and s(CASP) as they are, no trained model, and one experienced developer; the second column has Claude writing the code while the author directs and reviews.
 
 | Part | Weeks, by hand | Weeks, with Claude | Why |
 | --- | --- | --- | --- |
 | Query protocol, journal, panes, count of actions | 6–10 | 1–2 | well specified and routine |
 | Outline editor: items, transclusion, links | 3–5 | 1–2 | editing behaviour needs many rounds of trial |
-| Quasimodes: Leap, Command with noise words, recognition, ?, Scope, Suppose | 2–3 | 1–2 | their feel is judged by hand; browsers report key releases, but the system takes some keys |
+| Quasimodes: Leap, Command with noise words, recognition, ?, Scope, Suppose | 2–3 | 1–2 | their feel is judged by hand; the kitty keyboard protocol reports key releases, but the system takes some keys |
 | Dataflow, constraints and worlds on SWI's incremental tabling | 4–8 | 2–4 | the most uncertain part: incremental tabling is unchecked, and s(CASP) is not tabled |
 | Diagrams: layered layout, DRAKON flowcharts, argument maps, matrices, charts, pins | 4–8 | 2–3 | layout code compresses; DRAKON's routing and the look need review |
 | “Do you mean?” through APE's restatement and Clex | 1–2 | 0.5–1 | APE already runs |
@@ -544,7 +546,7 @@ Lists are `'.'/2` structures, and three tags are spare. `supports(X, item42)` ta
 | DONE | to the client | no more answers, failure, or an error term |
 | ATOM\_IS | to the client | the atom's number |
 
-Answers come only when NEXT asks for them, so the server backtracks lazily and no buffer on either side grows without bound. The prototype sends these messages over a websocket between its browser client and SWI-Prolog, since a browser cannot open a pipe, with an encoder and decoder in Prolog of an estimated 100–200 lines.
+Answers come only when NEXT asks for them, so the server backtracks lazily and no buffer on either side grows without bound. The prototype sends these messages over a pipe between the Rust program and SWI-Prolog, its child process, with an encoder and decoder in Prolog of an estimated 100–200 lines and one in Rust.
 
 ## Decisions
 
@@ -553,7 +555,9 @@ Answers come only when NEXT asks for them, so the server backtracks lazily and n
 | License the project under GPL-3.0 | the author's decision (12 November 2026); Clex is GPL-3.0 and APE LGPL-3.0, so both can ship with it |
 | Numbers in hashed records are JSON numbers, serialised by RFC 8785 in full, not decimal strings | the author's decision (12 November 2026), declining the plan's proposal; the format stays plain JSON, and the server and the checker must both implement RFC 8785's number rules, under test |
 | In journal terms, a float is written `{"float": text}` with one canonical text | the author's decision (12 November 2026); RFC 8785 writes 1.0 and 1 alike, so without a tag a float would come back from the journal as an integer |
-| The query protocol's messages travel over a websocket, not a pipe | the author's decision (12 November 2026); the client runs in a browser, which cannot open a pipe, and SWI-Prolog's `library(http/websocket)` serves it |
+| The prototype is a terminal program in Rust (ratatui on crossterm) with SWI-Prolog as a child process, joined by the query protocol over a pipe; no web interface | the author's decision (12 November 2026), replacing the browser client and the websocket chosen earlier that day; SWI-Prolog keeps the reasoning, since the milestone 0 spikes showed its incremental tabling does the dataflow engine's work |
+| All of the project's own code outside Prolog is Rust, the reference checker included | the author's decision (12 November 2026); one language. The cost, noted when it was chosen: the checker no longer comes from an independent implementation of the format |
+| The memex requires a terminal with kitty's keyboard and graphics protocols | the author's decision (12 November 2026); key releases give true quasimodes, and the graphics protocol shows figures, charts and diagrams in place. It excludes terminals that lack either |
 | Stage A starts from Wikidata subset D, the pocket base | the author's decision (12 November 2026); small enough to build and load quickly while the suggestions are tested |
 | Name the project Adversaria, with the prototype in a repository of its own | the author's decision; “memex” is taken |
 | Measure the falsifiability of formal claims: compatible, independent, refutable, characteristic number, needed premises, comparative strength, immunisation; relative to a declared observation vocabulary | the author's decision; Popper's measures, carried from Lean to Prolog through s(CASP)'s abduction |
@@ -578,7 +582,7 @@ Answers come only when NEXT asks for them, so the server backtracks lazily and n
 | First-rate support for diagrams, with keyboard and mouse; no pen | the author's decision; pens are awkward for language input, and a diagram as a view over items and links reuses the journal, queries and dataflow |
 | Count the user's actions by kind from the journal; run constraints as dataflow nodes whose values are their violations | the author's decision, after Licklider's "Man-Computer Symbiosis" (1960): measure where the work goes, and let the machine expose flaws during formulation |
 | Adopt the query protocol: terms as 32-bit tagged cells in prefix order, answers on demand, a reserved field in the header | the author's decision; one decoding loop on each side instead of a term reader and writer |
-| Build the memex as a PC prototype: a browser client and a SWI-Prolog server, split at the query protocol | the author's decision; the memex is in use early, and each half can be replaced on its own |
+| Build the memex as a PC prototype, split at the query protocol | the author's decision; the memex is in use early, and each half can be replaced on its own. Its form, first a browser client, is now a terminal program in Rust (above) |
 | Adopt J5: workspaces as items in the journal | a layout is just another view of the store, so the journal keeps it with no Save |
 | No modes: quasimodes (Leap, Scope, Command, Suppose) choose the target, then a command acts on it | a held key cannot be forgotten, so mode errors cannot occur; after Raskin |
 | Add TOPS-20's recognition on Escape, guide words, and help on "?" to the outline model's aids | they teach commands and argument order in place; guide words name the slots of the verb frames |
@@ -597,6 +601,6 @@ Answers come only when NEXT asks for them, so the server backtracks lazily and n
 - [ ] How fast does the journal grow in real use, and how are span lists compacted?
 - [ ] Does SWI-Prolog's incremental tabling work as recalled, and how do s(CASP)'s untabled queries join the dataflow graph?
 - [ ] At what granularity are dependencies recorded (fact, predicate, item), and what does recording cost?
-- [ ] Which keys of a standard keyboard fall under the thumbs for Leap, Scope, Command and Suppose, and which of them do the operating system and the browser take?
+- [ ] Which keys of a standard keyboard fall under the thumbs for Leap, Scope, Command and Suppose, and which of them do the operating system and the terminal take?
 - [ ] How large a diagram must layout handle within 0.1 s?
 - [ ] Which timestamping service, and how often?

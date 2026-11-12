@@ -114,6 +114,17 @@ Costs and faults met:
 * A first version fetched s(CASP) with `fetchgit` inside the build sandbox; it failed on this session's TLS proxy (self-signed certificate in chain). As a flake input, Nix fetches it outside the sandbox, as it does nixpkgs.
 * s(CASP)'s own Makefile ran during the build and needed `swipl`; the build step is skipped, since only the source is copied.
 
+## Change of plans (12 November 2026)
+
+The author changed the prototype's form. Recorded in `docs/design.md` (§ The PC prototype, § Query protocol, § Quasimodes, not modes, § Decisions) and `docs/plan.md`.
+
+* **A terminal program in Rust**, drawn with ratatui on crossterm. No web interface. This replaces the browser client, and the websocket chosen earlier the same day; the query protocol goes back to a pipe, now to SWI-Prolog as a child process.
+* **SWI-Prolog stays** the reasoning engine: facts, rules, constraints, incremental tabling, s(CASP) and APE.
+* **All the project's own code outside Prolog is Rust**, the reference checker included. The Python modules `tools/jcs.py` and `tools/terms.py` are to be ported and removed. A cost, stated when the choice was offered: the checker is no longer an independent implementation of the format.
+* **A terminal with kitty's keyboard and graphics protocols is required.** Checked in crossterm 0.29's source: on Unix, key-release events arrive only when `KeyboardEnhancementFlags::REPORT_EVENT_TYPES` is pushed, which needs the kitty keyboard protocol; on Windows they always arrive. Which terminals support both protocols is recalled, not checked (kitty and Ghostty; WezTerm with gaps; foot has the keyboard protocol but uses sixel for images), and must be checked before milestone 3.
+
+The design's estimate for the PC prototype was made for a browser client; it is marked as not yet revised.
+
 ### Sizes (counted)
 
 | Language | Lines | Files |
