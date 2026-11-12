@@ -22,8 +22,11 @@ pub const BLOBS: &str = "blobs";
 pub const VERSION: u64 = 1;
 
 /// The kinds of entry in format version 1.
-pub const KINDS: [&str; 10] = [
+/// `view` (a change to what is shown: cursor, folds, panes, a Leap) was added
+/// to version 1 before any journal was kept, for milestone 3.
+pub const KINDS: [&str; 11] = [
     "edit", "link", "adopt", "retract", "suppose", "name", "import", "purge", "undo", "redo",
+    "view",
 ];
 
 /// The header line of each file: `{"format":"memex-journal","version":1}`.
