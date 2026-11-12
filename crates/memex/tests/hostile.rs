@@ -162,3 +162,50 @@ fn an_exported_word_file_embeds_no_local_file() {
     assert!(has(b"word/document.xml"), "it is a Word file");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// A fake Crossref: answers 404 to every request; returns the paths asked.
+fn fake_crossref() -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+    use std::io::{BufRead, BufReader, Write};
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}/works/", l.local_addr().unwrap());
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let s2 = seen.clone();
+    std::thread::spawn(move || {
+        for c in l.incoming().flatten() {
+            let mut r = BufReader::new(c.try_clone().unwrap());
+            let mut line = String::new();
+            let _ = r.read_line(&mut line);
+            s2.lock()
+                .unwrap()
+                .push(line.split(' ').nth(1).unwrap_or("").to_string());
+            let mut c = c;
+            let _ = c.write_all(
+                b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
+        }
+    });
+    (base, seen)
+}
+
+#[test]
+fn a_doi_is_one_request_for_that_doi() {
+    // curl reads [1-5] and {a,b} in a URL as patterns and makes one request
+    // per expansion; [1-1000000] would be a million requests to Crossref.
+    // Real DOIs contain brackets too. Catches a DOI passed to curl unescaped.
+    let dir = temp("doi");
+    let (base, seen) = fake_crossref();
+    let mut app = open(&dir);
+    app.set_crossref(&base);
+    typ(&mut app, "A paper.");
+    app.flush();
+    command(&mut app, "fact doi(p, \"10.1002/x[1-5]{a,b} y\")");
+    let m = command(&mut app, "check source");
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(
+        seen,
+        vec!["/works/10.1002/x%5B1-5%5D%7Ba%2Cb%7D%20y".to_string()],
+        "{seen:?}"
+    );
+    assert!(m.contains("not_found"), "{m}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

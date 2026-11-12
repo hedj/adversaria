@@ -2119,9 +2119,16 @@ impl App {
             })
         };
         let doi = field("doi").ok_or("the target states no doi(Entity, \"10.…\") fact")?;
-        let url = format!("{}{doi}", self.crossref);
+        let url = format!("{}{}", self.crossref, encode_doi(&doi));
         let out = std::process::Command::new("curl")
             .args([
+                // No URL patterns ([1-9], {a,b}): one request, for this DOI.
+                "--globoff",
+                // Only the web, and no more than Crossref's records need.
+                "--proto",
+                "=http,https",
+                "--max-filesize",
+                "10000000",
                 "-sS",
                 "--max-time",
                 "30",
@@ -2849,6 +2856,19 @@ impl App {
             .filter(|s| !with.contains(s) && *s != t)
             .collect())
     }
+}
+
+/// A DOI as a URL path: every byte but letters, digits, "-._~" and "/"
+/// percent-encoded, as Crossref's API asks (RFC 3986's unreserved set).
+pub fn encode_doi(doi: &str) -> String {
+    doi.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }
 
 fn find_command(w: &str) -> Option<&'static str> {
