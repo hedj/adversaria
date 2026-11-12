@@ -182,19 +182,57 @@ Checked:
 * Four deliberate breaks each made a test fail: the parser's NFC check off; the writer's normalisation removed; normalisation returning text unchanged; colliding keys merged silently.
 * `make test` exits 0, here and in `nix develop -i`.
 
-### Sizes (counted, after milestone 1)
+## Milestone 2: store, terms and the query protocol (12 November 2026, done)
+
+Built:
+
+* `prolog/protocol.pl`: the protocol's Prolog end. Framing, the atom table, and terms to cells and back.
+* `prolog/server.pl`: the server, run by the memex as `swipl -q prolog/server.pl`. Each query is a SWI-Prolog engine, so it computes an answer only when NEXT asks. ASSERT and RETRACT record each fact with the journal entry it came from; a fact's predicate is declared dynamic and incremental, ready for milestone 4's tabling.
+* `crates/protocol`: the Rust end of the codec, with no dependencies beyond `crates/format`'s terms.
+* `crates/memex/src/prolog.rs`: the client. It starts SWI-Prolog as a child process and reads its replies on a thread, so a caller can wait with a timeout.
+* `crates/memex/src/store.rs`: the store. A world is the path from a head entry back to the root; its facts are the entries' `"facts"`, less those a `retract` names. `load` asserts them into Prolog in order.
+* `docs/design.md` § Query protocol now has a subsection with every point the design left open (byte order, numbering, typed BLOBs, ATOM\_IS with names, DONE's status, error handling), and § The journal format has the `facts` and `retract` bodies.
+
+Acceptance checks (all in `make test`; output from this session):
+
+* Round trip, both directions, both languages:
+  * Rust only: 10,000 generated terms (atoms, integers small and large, floats, strings, variables, lists, nested compounds) encode and decode to themselves.
+  * Prolog only: 10,000 generated terms, the same.
+  * Rust to Prolog to Rust: "10,000 Rust -> Prolog -> Rust round trips in 2.08 s". Prolog decodes each term, unifies a variable with it, and encodes the answer back.
+  * Prolog to Rust to Prolog: "10,000 Prolog -> Rust -> Prolog round trips in 20.7 s". Prolog generates each term from a seed, Rust decodes and re-encodes it, and Prolog checks it is the term it made. (Slower because each round trip is two queries, and Prolog reseeds and regenerates.)
+* Answers only on NEXT. A query with 1,000 answers sends no message within 300 ms of QUERY, and Prolog has computed none (a flag the goal bumps per answer reads 0). NEXT 1, 10 and 989 each bring exactly that many ANSWERs, nothing more within 300 ms, and the flag reads 1, 11 and 1,000. The next NEXT brings DONE with status 0 and no answer.
+* CANCEL: acknowledged with DONE 2; a NEXT after it gets an error.
+
+Faults found by the tests and fixed:
+
+* SWI-Prolog's list cell is `'[|]'/2`. A Rust term `'[|]'(a, b)` came back as the list `[a|b]`, which is a different term; SWI-Prolog has no separate form for the original. Found by the Rust to Prolog to Rust test at term 220. Such a STRUCT is now refused with `list_cell_clash`.
+* The Prolog generator wrote `-(2^100)` and `2^200` as unevaluated expressions, so no large integer was ever sent. Now it evaluates them, and stays within 64 bits for the tests that cross to Rust. A Prolog-only test covers integers beyond 64 bits, and a cross test shows Rust refusing 2^100: "does not fit 64 bits".
+* The DONE status was first written as a raw word 0, which decodes as VAR 0, not the integer 0. Caught in review before the first run; it is now an INT cell.
+* In SWI-Prolog 7 and later, `[]` is not an atom, and `'.'(a, b)` in source is dict notation. Both broke the first Prolog tests; handled.
+
+Deliberate breaks, each made a test fail: INT range off by one, in Prolog and in Rust; answers computed eagerly (`findall` before the engine); one answer too many per NEXT; the `[|]`/2 refusal removed; the dense-variable check removed (Rust); standard output not redirected. The last was not caught at first: the noise test printed only to the current output, which a separate line already redirects. The test now also prints to `user_output` by name, and fails without the redirect.
+
+`make test` exits 0 on SWI-Prolog 9.0.4 (this container) and 9.2.9 (`nix develop -i`).
+
+Not done, or weak:
+
+* The server runs every goal it is sent, with the user's full rights. The only client is the memex itself, so this is by design, but it is a fact to know.
+* A malformed header stops the server, and the client reports that it stopped; nothing restarts the server yet.
+* Rust holds integers in 64 bits, so a wider integer from Prolog is refused, not carried.
+
+### Sizes (counted, after milestone 2)
 
 | Part | Lines | Of which tests |
 | --- | --- | --- |
-| `crates/format` | 1,696 | 769 |
-| `crates/memex` | 276 | 75 |
+| `crates/format` | 1,827 | 860 |
+| `crates/memex` | 809 | 223 |
+| `crates/protocol` | 587 | 203 |
 | `crates/sealer` | 384 | 124 |
 | `crates/check` | 234 | 57 |
-| `crates/acceptance` | 390 | 389 |
-| Rust in all | 2,980 | 1,414 |
-| Prolog (spikes) | 56 | 56 |
-| Shell (tests) | 41 | 41 |
+| `crates/acceptance` | 835 | 834 |
+| `prolog/` (server and protocol) | 467 | 0 |
+| `prolog/tests/` | 141 | 141 |
+| Prolog spikes | 56 | 56 |
+| Shell tests | 41 | 41 |
 
-The checker itself is 177 lines (library and program), and it uses `crates/format`'s record and chain checks (544 lines of code) and canonical JSON (201). The design's estimate of 100–150 lines was for Python, before the format was fixed in detail.
-
-Tests: 56 Rust tests, the tabling spike and the no-key script in `make test`; the s(CASP) spike is optional.
+Tests: 84 Rust tests and 18 Prolog tests, with the tabling spike and the no-key script, in `make test`; the s(CASP) spike is optional.
