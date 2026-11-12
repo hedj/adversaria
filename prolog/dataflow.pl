@@ -227,17 +227,24 @@ safe_builtin_(sort, 4).   safe_builtin_(keysort, 2). safe_builtin_(memberchk, 2)
 
 %!  plant_check(+Vars, +Body, -Result) is det.
 %   Try a constraint against a planted violation (docs/design.md § Testing
-%   claims, last row): give its variables distinct integers, in every order
-%   until the built-ins hold, plant the other literals as facts, and run the
-%   constraint over them. Result is fires(Planted) or broken(Why).
+%   claims, last row): give its variables distinct integers (1..N, then
+%   -N..-1, 0..N-1, -(N-1)..0 and -1, 1, -2, 2, ...), in every order
+%   until the built-ins hold, plant the other literals as facts, and run
+%   the constraint over them. Result is fires(Planted) or broken(Why).
 plant_check(Vars, Body, Result) :-
     copy_term(Vars-Body, _-B),
     term_variables(B, Vs),
     length(Vs, N),
     (   N > 7
     ->  Result = broken(too_many_variables(N))
-    ;   numlist(1, N, Ns),
-        (   permutation(Ns, P),
+    ;   M is N - 1, Lo is -N, Hi is -1, Lo1 is -M,
+        numlist(1, N, Pos), numlist(Lo, Hi, Neg), numlist(0, M, Zero), numlist(Lo1, 0, NegZero),
+        findall(V, (between(1, N, K), V is (K + 1) // 2 * (-1) ** K), Alt),
+        % Distinct values from 1 up first; then negative ones, ranges
+        % holding zero, and alternating signs (-1, 1, -2, 2, ...), for
+        % bodies such as L < 0, X =< 0, or A < 0, B > 0.
+        (   member(Ns, [Pos, Neg, Zero, NegZero, Alt]),
+            permutation(Ns, P),
             copy_term(Vs-B, P-Ground),
             literals(Ground, Facts, Builtins),
             maplist(planted_call, Builtins),

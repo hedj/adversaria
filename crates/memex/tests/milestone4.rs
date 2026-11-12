@@ -344,6 +344,35 @@ fn a_constraint_that_cannot_fire_is_not_kept() {
 }
 
 #[test]
+fn a_constraint_on_negative_or_zero_values_can_be_kept() {
+    // The planted check gave variables only 1, 2, ..., so a constraint
+    // such as "no balance below zero" could never fire on them and was
+    // refused. Catches that, and a constraint that cannot fire kept.
+    let dir = temp("planted-sign");
+    let mut app = scene(&dir);
+    for (line, kept) in [
+        ("constraint overdrawn: false :- balance(B), B < 0.", true),
+        ("constraint empty: false :- stock(S), S =< 0.", true),
+        (
+            "constraint both: false :- low(A), high(B), A < 0, B > 0.",
+            true,
+        ),
+        ("constraint never: false :- n(X), X < 0, X > 0.", false),
+    ] {
+        app.handle(Event::down(Key::Quasi(Quasi::Command)));
+        typ(&mut app, line);
+        app.handle(Event::up(Key::Quasi(Quasi::Command)));
+        assert_eq!(
+            app.message.contains("kept: it fires"),
+            kept,
+            "{line}: {}",
+            app.message
+        );
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn recomputation_touches_only_dependent_nodes() {
     // Plan: "Recomputation after a change touches only the nodes that depend
     // on it (show the count, from milestone 0's spike method)." Each node
