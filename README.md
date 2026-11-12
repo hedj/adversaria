@@ -1,39 +1,82 @@
 # Adversaria
 
-A notebook that records everything, checks claims, and compares
-alternatives. It runs on your own computer, in a terminal. It keeps a
-permanent, dated, signed record of notes, sources and decisions. Everything
-imported is a claim to test, not a fact. Alternatives sit side by side as
-worlds.
+Adversaria is a notebook that runs in a terminal on your own computer.
+Notes are kept as an outline. Every change is written to an append-only
+journal, and a separate program signs and dates the journal's entries.
+Facts in the notes are Prolog terms. Material from outside (documents,
+Wikidata, analysis results) is recorded as claims with their sources,
+separate from what you have adopted as your own beliefs. Constraints
+written in Prolog mark facts and claims that conflict. A supposition opens
+a second set of facts beside the current one, so the two can be compared.
 
-This repository holds a prototype, built for a one-month experiment: do
-constraints find real errors, do people adopt suggestions and keep them,
-and does clerical work fall?
+This repository holds a prototype, written in Rust with SWI-Prolog. It
+was built to test three questions over a month of use: whether
+constraints find errors in real notes, whether suggestions are adopted
+and kept, and whether clerical work decreases. It has not yet been run in
+a real terminal, only in tests that simulate one (see docs/log.md).
 
-## Start
+## Requirements
 
-You need Nix, and a terminal with the kitty keyboard and graphics
-protocols (kitty, WezTerm or Ghostty).
+- A terminal that supports the kitty keyboard protocol and the kitty
+  graphics protocol, such as kitty, WezTerm or Ghostty. The memex checks
+  for both at start-up and exits with a message if either is missing.
+- Nix with flakes enabled, which provides everything else. Without Nix you
+  need Rust (cargo), SWI-Prolog (`swipl`), Pandoc and curl, and Python 3
+  to run the tests.
+
+## Getting started
+
+Clone the repository and enter the development shell:
+
+```bash
+git clone https://github.com/hedj/adversaria.git
+```
+
+```bash
+cd adversaria
+```
 
 ```bash
 nix develop
 ```
 
+If flakes are not enabled in your Nix configuration, use
+`nix --extra-experimental-features 'nix-command flakes' develop` instead.
+
+Start the sealer and the memex:
+
 ```bash
 make run
 ```
 
-## Read
+On first use this creates a journal directory at `~/adversaria-journal`
+and a signing key at `~/.adversaria.key`. To use other locations:
 
-- docs/tutorial.md: a first session, about twenty minutes.
-- docs/guide.md: the user guide, including how to change the keys.
-- docs/config.example.toml: the default key configuration.
-- docs/design.md: what the system is for and why it is built this way.
+```bash
+make run JOURNAL=$HOME/notes KEY=$HOME/.notes.key
+```
+
+In the memex:
+
+- Type to write an item. Enter starts a new item; Tab indents it.
+- Hold Left Ctrl, type a command such as `help`, and release Left Ctrl to
+  run it.
+- Press F10 to quit.
+
+docs/tutorial.md takes you through a first session step by step.
+
+## Documentation
+
+- docs/tutorial.md: a first session.
+- docs/guide.md: the user guide, covering every command, the files kept,
+  the tools, and how to change keys and enable the mouse.
+- docs/config.example.toml: the default configuration.
+- docs/design.md: the design and the decisions behind it.
 - docs/plan.md: the implementation plan.
-- docs/log.md: what has been built, tested and found, milestone by
-  milestone, and what has not been tested.
+- docs/log.md: what has been built and tested, faults found, and known
+  limits.
 
-## Test
+## Tests
 
 ```bash
 make test
@@ -41,4 +84,4 @@ make test
 
 ## Licence
 
-GPL-3.0; see LICENSE.
+GPL-3.0. See LICENSE.
