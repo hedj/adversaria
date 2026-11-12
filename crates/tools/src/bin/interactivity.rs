@@ -152,4 +152,21 @@ fn main() {
             );
         }
     }
+    report_sections(&sections);
+}
+
+/// The Markdown sections that refer forward, or that are over the limit
+/// only when each term defined together counts apart.
+fn report_sections(sections: &[Unit]) {
+    println!();
+    println!("== Markdown sections: refer forward, or over {LIMIT} counting each term apart");
+    for u in sections {
+        let strict = u.strict.unwrap_or(0);
+        if u.forward > 0 || strict > LIMIT {
+            println!(
+                "  forward {}  strict {:>2}  {}  {}",
+                u.forward, strict, u.file, u.name
+            );
+        }
+    }
 }
