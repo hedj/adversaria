@@ -8,6 +8,7 @@ test-rust:
 	cargo test -q
 	cargo clippy -q --all-targets -- -D warnings
 	cargo fmt --check
+	tests/memex_holds_no_key.sh
 
 test-spikes:
 	swipl -q -g main -t halt tests/spikes/incremental_tabling.pl
