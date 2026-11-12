@@ -534,3 +534,23 @@ fn an_item_with_no_claim_cannot_be_adopted() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_retracted_constraint_is_not_read() {
+    // Catches a world reading every constraint in its outline, including
+    // one whose definition is retracted in it.
+    let dir = temp("retracted-constraint");
+    let mut app = App::open(&dir).unwrap();
+    item(&mut app, "rules");
+    command(&mut app, "constraint same: false :- p(X), q(X).");
+    let seq = app.journal().entries().last().unwrap().seq;
+    let count = |app: &mut App| {
+        app.evaluate().unwrap();
+        app.eval[0].as_ref().map_or(0, |e| e.constraints.len())
+    };
+    let before = count(&mut app);
+    command(&mut app, &format!("retract {seq}"));
+    tap(&mut app, Key::Enter);
+    assert_eq!((before, count(&mut app)), (1, 0));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
