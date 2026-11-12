@@ -606,10 +606,6 @@ pub const COMMANDS: &[Command] = &[
     },
 ];
 
-fn lower(s: &str) -> String {
-    s.to_lowercase()
-}
-
 impl App {
     /// Open a journal directory, writing its first entry if it is new, and
     /// replay it.
@@ -981,7 +977,7 @@ impl App {
         if pattern.is_empty() {
             return vec![];
         }
-        let p = lower(pattern);
+        let p = pattern.to_lowercase();
         let order = self.outline.in_order();
         let at = order
             .iter()
@@ -1001,18 +997,18 @@ impl App {
         }
         rotated
             .into_iter()
-            .filter(|id| lower(&self.outline.text(*id)).contains(&p))
+            .filter(|id| self.outline.text(*id).to_lowercase().contains(&p))
             .collect()
     }
 
     /// Recognition: the longest continuation every match shares, up to a space.
     fn leap_complete(&self, pattern: &str, forward: bool) -> String {
-        let p = lower(pattern);
+        let p = pattern.to_lowercase();
         let conts: Vec<String> = self
             .leap_matches(pattern, forward)
             .iter()
             .map(|id| {
-                let t = lower(&self.outline.text(*id));
+                let t = self.outline.text(*id).to_lowercase();
                 let i = t.find(&p).unwrap();
                 t[i + p.len()..]
                     .chars()
@@ -2449,12 +2445,12 @@ impl App {
         {
             return Some(*id);
         }
-        let la = lower(a);
+        let la = a.to_lowercase();
         let hits: Vec<u64> = self
             .outline
             .in_order()
             .into_iter()
-            .filter(|id| lower(&self.outline.text(*id)).starts_with(&la))
+            .filter(|id| self.outline.text(*id).to_lowercase().starts_with(&la))
             .collect();
         (hits.len() == 1).then(|| hits[0])
     }
@@ -3187,8 +3183,8 @@ impl App {
         if words.is_empty() {
             return String::new();
         }
-        let Some(name) =
-            find_command(words[0]).filter(|n| *n == lower(words[0]) || input.ends_with(' '))
+        let Some(name) = find_command(words[0])
+            .filter(|n| *n == words[0].to_lowercase() || input.ends_with(' '))
         else {
             return input.to_string();
         };
@@ -3380,7 +3376,7 @@ fn in_quotes(input: &str) -> bool {
 }
 
 fn find_command(w: &str) -> Option<&'static str> {
-    let w = lower(w);
+    let w = w.to_lowercase();
     if let Some(c) = COMMANDS.iter().find(|c| c.name == w) {
         return Some(c.name);
     }
@@ -3411,7 +3407,7 @@ pub fn command_help(input: &str) -> Vec<String> {
         }
         None => COMMANDS
             .iter()
-            .filter(|c| c.name.starts_with(&lower(first)))
+            .filter(|c| c.name.starts_with(&first.to_lowercase()))
             .map(|c| format!("{} — {}", c.name, c.help))
             .collect(),
     }
