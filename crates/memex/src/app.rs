@@ -331,15 +331,9 @@ enum Slot {
     Text,
 }
 
-/// A command's handler: the arguments are the words after its name.
-type Handler = fn(&mut App, &Args) -> Result<Mode, String>;
-
-/// What a command is given: its name, the words after it, and the target.
-pub struct Args<'a> {
-    pub name: &'static str,
-    pub words: Vec<&'a str>,
-    pub target: u64,
-}
+/// A command's handler, given the words after the command's name and the
+/// target item. A command that asks a question sets `App::mode`.
+type Handler = fn(&mut App, &[&str], u64) -> Result<(), String>;
 
 pub struct Command {
     pub name: &'static str,
@@ -353,7 +347,7 @@ pub struct Command {
 pub const COMMANDS: &[Command] = &[
     Command {
         name: "accept",
-        run: App::cmd_accept_dismiss,
+        run: App::cmd_accept,
         target: false,
         slots: &[("suggestion", Slot::Word)],
         help: "adopt the nth suggestion shown, with its evidence",
@@ -367,7 +361,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "claim",
-        run: App::cmd_fact_claim,
+        run: App::cmd_claim,
         target: true,
         slots: &[("that", Slot::Text)],
         help: "the target states a claim: a Prolog fact, then from and its source",
@@ -381,14 +375,14 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "close",
-        run: App::cmd_close_commit,
+        run: App::cmd_close,
         target: false,
         slots: &[],
         help: "close the supposition and return to the actual world; it stays in the journal",
     },
     Command {
         name: "commit",
-        run: App::cmd_close_commit,
+        run: App::cmd_commit,
         target: false,
         slots: &[],
         help: "make the supposed world the actual one",
@@ -416,14 +410,14 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "fold",
-        run: App::cmd_fold_unfold,
+        run: App::cmd_fold,
         target: true,
         slots: &[],
         help: "hide the target's branch",
     },
     Command {
         name: "dismiss",
-        run: App::cmd_accept_dismiss,
+        run: App::cmd_dismiss,
         target: false,
         slots: &[("suggestion", Slot::Word)],
         help: "dismiss the nth suggestion shown; it returns only if its evidence changes",
@@ -444,7 +438,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "fact",
-        run: App::cmd_fact_claim,
+        run: App::cmd_fact,
         target: true,
         slots: &[("that", Slot::Text)],
         help: "the target states a belief: a Prolog fact",
@@ -605,7 +599,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "unfold",
-        run: App::cmd_fold_unfold,
+        run: App::cmd_unfold,
         target: true,
         slots: &[],
         help: "show the target's branch",
@@ -2495,53 +2489,43 @@ impl App {
         if cmd.target && target == TOP {
             return Err("there is no item to act on".into());
         }
-        let mode = (cmd.run)(
-            self,
-            &Args {
-                name,
-                words,
-                target,
-            },
-        )?;
-        if mode == Mode::Normal && self.view.scope != ScopeLevel::Statement {
+        (cmd.run)(self, &words, target)?;
+        if self.mode == Mode::Normal && self.view.scope != ScopeLevel::Statement {
             self.view.scope = ScopeLevel::Statement;
             self.view_dirty = true;
         }
-        Ok(mode)
+        Ok(std::mem::replace(&mut self.mode, Mode::Normal))
     }
 
-    fn cmd_help(&mut self, _: &Args) -> Result<Mode, String> {
+    fn cmd_help(&mut self, _: &[&str], _: u64) -> Result<(), String> {
         self.message = COMMANDS
             .iter()
             .map(|c| c.name)
             .collect::<Vec<_>>()
             .join(" · ");
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_quit(&mut self, _: &Args) -> Result<Mode, String> {
+    fn cmd_quit(&mut self, _: &[&str], _: u64) -> Result<(), String> {
         self.quit = true;
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_new(&mut self, a: &Args) -> Result<Mode, String> {
-        let target = a.target;
+    fn cmd_new(&mut self, _: &[&str], target: u64) -> Result<(), String> {
         self.new_item_after(target)?;
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_switch(&mut self, _: &Args) -> Result<Mode, String> {
+    fn cmd_switch(&mut self, _: &[&str], _: u64) -> Result<(), String> {
         self.view.focus = 1 - self.view.focus;
         if self.view.panes[self.view.focus].cursor == TOP {
             self.view.panes[self.view.focus].cursor = self.view.panes[1 - self.view.focus].cursor;
         }
         self.write_view("pane", json!({}));
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_pane(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
+    fn cmd_pane(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let other = 1 - self.view.focus;
         self.view.panes[other].kind = match words.first().copied() {
             Some("outline") => PaneKind::Outline,
@@ -2551,56 +2535,61 @@ impl App {
         };
         self.view.panes[other].cursor = target;
         self.write_view("pane", json!({}));
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_fold_unfold(&mut self, a: &Args) -> Result<Mode, String> {
-        let target = a.target;
-        let name = a.name;
+    fn cmd_fold(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+        self.fold_unfold("fold", words, target)
+    }
+
+    fn cmd_unfold(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+        self.fold_unfold("unfold", words, target)
+    }
+
+    fn fold_unfold(&mut self, name: &str, _: &[&str], target: u64) -> Result<(), String> {
         if name == "fold" {
             self.view.folded.insert(target);
         } else {
             self.view.folded.remove(&target);
         }
         self.write_view("fold", json!({}));
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_undo(&mut self, _: &Args) -> Result<Mode, String> {
+    fn cmd_undo(&mut self, _: &[&str], _: u64) -> Result<(), String> {
         let Some(t) = self.content_tip(self.tip).filter(|t| *t > 1) else {
             return Err("nothing to undo on this branch".into());
         };
         let parent = self.entry(t).and_then(|e| e.parent);
         self.write(parent, "undo", json!({"undoes": t}))?;
         self.message = format!("undid entry {t}");
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_redo(&mut self, _: &Args) -> Result<Mode, String> {
+    fn cmd_redo(&mut self, _: &[&str], _: u64) -> Result<(), String> {
         let Some(&t) = self.redo.last() else {
             return Err("nothing to redo".into());
         };
         self.write(Some(t), "redo", json!({"redoes": t}))?;
         self.message = format!("redid entry {t}");
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_retract(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
+    fn cmd_retract(&mut self, words: &[&str], _: u64) -> Result<(), String> {
         let t: u64 = words
             .first()
             .and_then(|w| w.trim_start_matches('#').parse().ok())
             .ok_or("retract (entry) seq")?;
         let dependents = self.retractable(t)?;
         self.message.clear();
-        Ok(Mode::ConfirmRetract {
+        self.mode = Mode::ConfirmRetract {
             target: t,
             dependents,
-        })
+        };
+        Ok(())
     }
 
-    fn cmd_delete(&mut self, a: &Args) -> Result<Mode, String> {
-        let target = a.target;
+    fn cmd_delete(&mut self, _: &[&str], target: u64) -> Result<(), String> {
         if self.view.scope == ScopeLevel::Word {
             let text = self.text_of(target);
             let (a, b) = word_at(&text, self.view.pos);
@@ -2612,11 +2601,10 @@ impl App {
         } else {
             self.write_here("edit", json!({"op": "delete", "item": target}))?;
         }
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_indent(&mut self, a: &Args) -> Result<Mode, String> {
-        let target = a.target;
+    fn cmd_indent(&mut self, _: &[&str], target: u64) -> Result<(), String> {
         let p = self.outline.parent(target).unwrap_or(TOP);
         let sibs = self.outline.children(p).to_vec();
         let i = sibs.iter().position(|x| *x == target).unwrap_or(0);
@@ -2632,11 +2620,10 @@ impl App {
         if self.view.folded.remove(&under) {
             self.view_dirty = true;
         }
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_outdent(&mut self, a: &Args) -> Result<Mode, String> {
-        let target = a.target;
+    fn cmd_outdent(&mut self, _: &[&str], target: u64) -> Result<(), String> {
         let p = self.outline.parent(target).unwrap_or(TOP);
         if p == TOP {
             return Err("a top-level item cannot be outdented".into());
@@ -2646,12 +2633,10 @@ impl App {
             "edit",
             json!({"op": "move", "item": target, "under": gp, "after": p}),
         )?;
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_move(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
+    fn cmd_move(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let to = self
             .addresses(words, 1)
             .ok_or("move (after) an item: a number, a name, or the start of its text")?[0];
@@ -2663,12 +2648,10 @@ impl App {
             "edit",
             json!({"op": "move", "item": target, "under": under, "after": to}),
         )?;
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_copy(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
+    fn cmd_copy(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let to = self.addresses(words, 1).ok_or("copy (after) an item")?[0];
         let text = self.outline.text(target);
         let n = text.chars().count();
@@ -2677,12 +2660,10 @@ impl App {
             "edit",
             json!({"op": "create", "under": under, "after": to, "add": text, "spans": [[0, 0, n]]}),
         )?;
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_transclude(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
+    fn cmd_transclude(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let from = self
             .addresses(words, 1)
             .ok_or("transclude (from) an item")?[0];
@@ -2691,15 +2672,13 @@ impl App {
         let e = self.write_here("edit", json!({"op": "create", "under": under, "after": target, "add": "", "spans": span_json(&spans)}))?;
         self.set_cursor(e.seq);
         self.write_view("move", json!({}));
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_link(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
+    fn cmd_link(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let (addr_words, kind) = match words.iter().position(|w| *w == "as") {
             Some(i) => (&words[..i], words.get(i + 1).copied().unwrap_or("link")),
-            None => (&words[..], "link"),
+            None => (words, "link"),
         };
         let ends = self
             .addresses(addr_words, 2)
@@ -2722,23 +2701,19 @@ impl App {
             self.outline.number(ends[0]),
             self.outline.number(ends[1])
         );
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_name(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
+    fn cmd_name(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let n = words.join(" ");
         if n.is_empty() {
             return Err("name (as) a word".into());
         }
         self.write_here("name", json!({"name": n, "item": target}))?;
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_follow(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
+    fn cmd_follow(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let k: usize = words.first().and_then(|w| w.parse().ok()).unwrap_or(1);
         let (out, into) = self.outline.links_of(target);
         let ends: Vec<u64> = out
@@ -2752,11 +2727,10 @@ impl App {
         self.unfold_to(to);
         self.set_cursor(to);
         self.write_view("follow", json!({"to": to}));
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_export(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
+    fn cmd_export(&mut self, words: &[&str], _: u64) -> Result<(), String> {
         let (file, section) = match words.split_last() {
             Some((last, rest)) if !rest.is_empty() && self.outline.by_number(last).is_some() => {
                 (rest.join(" "), self.outline.by_number(last))
@@ -2767,24 +2741,28 @@ impl App {
             return Err("export (to) a file, and an item number for one section".into());
         }
         self.export(&file, section)?;
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_check(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
+    fn cmd_check(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let ruling = match words.first().copied() {
             Some("quote") => self.check_quote(target)?,
             Some("source") => self.check_source(target)?,
             _ => return Err("check quote, or check source".into()),
         };
         self.message = format!("{} check: {ruling}", words[0]);
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_accept_dismiss(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let name = a.name;
+    fn cmd_accept(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+        self.accept_dismiss("accept", words, target)
+    }
+
+    fn cmd_dismiss(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+        self.accept_dismiss("dismiss", words, target)
+    }
+
+    fn accept_dismiss(&mut self, name: &str, words: &[&str], _: u64) -> Result<(), String> {
         let n: usize = words
             .first()
             .and_then(|w| w.parse().ok())
@@ -2801,13 +2779,18 @@ impl App {
             self.accept(&s)?;
             self.message = format!("adopted: {}", s.describe());
         }
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_fact_claim(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
-        let name = a.name;
+    fn cmd_fact(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+        self.fact_claim("fact", words, target)
+    }
+
+    fn cmd_claim(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+        self.fact_claim("claim", words, target)
+    }
+
+    fn fact_claim(&mut self, name: &str, words: &[&str], target: u64) -> Result<(), String> {
         let text = words.join(" ");
         let (fact_text, source) = match (name, text.rfind(" from ")) {
             ("claim", Some(i)) => (
@@ -2840,12 +2823,10 @@ impl App {
             body["source"] = json!(src);
         }
         self.write_here("edit", body)?;
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_rule(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
+    fn cmd_rule(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let text = words.join(" ");
         let (t, names) = self
             .engine(0)?
@@ -2897,12 +2878,10 @@ impl App {
         }
         self.write_here("edit", b)?;
         self.message = format!("rule {pi} kept");
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_set(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
+    fn cmd_set(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let text = words.join(" ");
         let (t, _) = self
             .engine(0)?
@@ -2918,11 +2897,10 @@ impl App {
             ));
         }
         self.set_fact(&t, target)?;
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_constraint(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
+    fn cmd_constraint(&mut self, words: &[&str], _: u64) -> Result<(), String> {
         let text = words.join(" ");
         let (cname, rule) = text
             .split_once(": ")
@@ -2974,12 +2952,10 @@ impl App {
             "constraint {} kept: it fires on a planted violation",
             cname.trim()
         );
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_layer(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
+    fn cmd_layer(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let text = words.join(" ");
         let (mark_text, goal_text) = match text.split_once(" where ") {
             Some((m, g)) => (
@@ -3033,12 +3009,10 @@ impl App {
         let f = terms::encode(&def).map_err(|e| e.0)?;
         self.write_here("edit", json!({"op": "layer", "item": target, "mark": mark_text, "goal": goal_text, "facts": [f]}))?;
         self.message = format!("layer kept: {}", mark_text);
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_derive(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        let target = a.target;
+    fn cmd_derive(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let text = words.join(" ");
         let (template, goal) = text
             .split_once(" where ")
@@ -3060,22 +3034,20 @@ impl App {
         );
         let f = terms::encode(&def).map_err(|e| e.0)?;
         self.write_here("edit", json!({"op": "derive", "item": target, "template": template.trim(), "names": names, "facts": [f]}))?;
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_interrogate(&mut self, a: &Args) -> Result<Mode, String> {
-        let target = a.target;
+    fn cmd_interrogate(&mut self, _: &[&str], target: u64) -> Result<(), String> {
         if self.claims_of(target).is_empty() {
             return Err("the target states no claim".into());
         }
         self.view.interrogate = Some(target);
         self.view.panes[1].kind = PaneKind::Links;
         self.write_view("interrogate", json!({}));
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_adopt(&mut self, a: &Args) -> Result<Mode, String> {
-        let target = a.target;
+    fn cmd_adopt(&mut self, _: &[&str], target: u64) -> Result<(), String> {
         let claims = self.claims_of(target);
         if claims.is_empty() {
             return Err("the target states no claim to adopt".into());
@@ -3094,11 +3066,10 @@ impl App {
             )?;
         }
         self.message = "adopted: a belief now, with its source kept".into();
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_unadopt(&mut self, a: &Args) -> Result<Mode, String> {
-        let target = a.target;
+    fn cmd_unadopt(&mut self, _: &[&str], target: u64) -> Result<(), String> {
         let last = self
             .path(self.tip)
             .iter()
@@ -3112,11 +3083,18 @@ impl App {
             .ok_or("the target has no adoption to retract")?;
         self.write_here("retract", json!({"target": last}))?;
         self.message = format!("adoption {last} retracted");
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_close_commit(&mut self, a: &Args) -> Result<Mode, String> {
-        let name = a.name;
+    fn cmd_close(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+        self.close_commit("close", words, target)
+    }
+
+    fn cmd_commit(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+        self.close_commit("commit", words, target)
+    }
+
+    fn close_commit(&mut self, name: &str, _: &[&str], _: u64) -> Result<(), String> {
         let s = self.supposition.clone().ok_or("no supposition is open")?;
         let parent = if name == "close" { s.actual } else { self.tip };
         self.view.interrogate = None;
@@ -3128,22 +3106,20 @@ impl App {
         } else {
             format!("“{}” is now the actual world", s.name)
         };
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_suppose(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
+    fn cmd_suppose(&mut self, words: &[&str], _: u64) -> Result<(), String> {
         let n = words.join(" ");
         if n.is_empty() {
             return Err("suppose (that) a name for the world".into());
         }
         self.write_here("suppose", json!({"name": n}))?;
-        Ok(Mode::Normal)
+        Ok(())
     }
 
-    fn cmd_import(&mut self, a: &Args) -> Result<Mode, String> {
-        let words = &a.words;
-        match a.words.first().copied() {
+    fn cmd_import(&mut self, words: &[&str], _: u64) -> Result<(), String> {
+        match words.first().copied() {
             Some("document") => {
                 let file = words[1..].join(" ");
                 self.import_document(&file)?;
@@ -3190,7 +3166,7 @@ impl App {
                 );
             }
         }
-        Ok(Mode::Normal)
+        Ok(())
     }
 
     fn is_in_branch(&self, id: u64, top: u64) -> bool {
