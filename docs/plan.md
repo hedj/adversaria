@@ -44,7 +44,7 @@ Ask; do not choose silently.
 
 ## Environment
 
-`nix-shell` (see `shell.nix`), or `nix develop` with flakes enabled (see `flake.nix`), provides all of these, pinned by `flake.lock`, with s(CASP) 1.1.4 at `$SCASP_HOME`. The session needs: Rust (stable, with Cargo); SWI-Prolog 9 or later, with incremental tabling; Pandoc 3; Git; Node.js, only as the tests' oracle for RFC 8785 numbers (ECMAScript defines them). To use the memex: a terminal with kitty's keyboard and graphics protocols. Optional: s(CASP) (from source; its pack server has failed before), APE with Clex. Network access may be limited by the session's environment; if Wikidata, Crossref or package registries are blocked, report which host was blocked and stop that task.
+`./dev-shell` (`nix-shell` with `shell.nix`), or `nix develop` with flakes enabled (see `flake.nix`), provides all of these, pinned by `flake.lock`, with s(CASP) 1.1.4 at `$SCASP_HOME`. The session needs: Rust (stable, with Cargo); SWI-Prolog 9 or later, with incremental tabling; Pandoc 3; Git; Node.js, only as the tests' oracle for RFC 8785 numbers (ECMAScript defines them). To use the memex: a terminal with kitty's keyboard and graphics protocols. Optional: s(CASP) (from source; its pack server has failed before), APE with Clex. Network access may be limited by the session's environment; if Wikidata, Crossref or package registries are blocked, report which host was blocked and stop that task.
 
 ## Layout
 

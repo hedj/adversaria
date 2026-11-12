@@ -37,12 +37,12 @@ cd adversaria
 ```
 
 ```bash
-nix-shell
+./dev-shell
 ```
 
-`nix-shell` needs no experimental Nix features. If you have flakes
-enabled, `nix develop` gives the same shell; both use the versions pinned
-in `flake.lock`.
+`./dev-shell` runs `nix-shell` and needs no experimental Nix features.
+If you have flakes enabled, `nix develop` gives the same shell. Both use
+the versions pinned in `flake.lock`.
 
 Start the sealer and the memex:
 

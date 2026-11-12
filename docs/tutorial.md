@@ -21,7 +21,7 @@ WezTerm or Ghostty. The memex refuses to start in any other, and says which
 protocol is missing. Then, from the repository:
 
 ```bash
-nix-shell
+./dev-shell
 ```
 
 ```bash

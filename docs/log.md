@@ -517,7 +517,7 @@ Checked: `make test` passes (161 Rust tests, 19 Prolog tests, 21 pseudo-terminal
 
 ## Nix without experimental features (12 November 2026)
 
-`nix-shell` now gives the development shell with no experimental Nix features: `shell.nix` reads the pins from `flake.lock` and fetches them with `builtins.fetchTarball` and `builtins.fetchGit`; the shell is defined once, in `nix/devshell.nix`, which `flake.nix` also uses. Checked with experimental features switched off: `shell.nix` gives the same derivation as the flake, and `make test` passes inside it. Not checked: a machine whose Nix has never had flakes enabled, and macOS.
+`nix-shell` now gives the development shell with no experimental Nix features: `shell.nix` reads the pins from `flake.lock` and fetches them with `builtins.fetchTarball` and `builtins.fetchGit`; the shell is defined once, in `nix/devshell.nix`, which `flake.nix` also uses. Checked with experimental features switched off: `shell.nix` gives the same derivation as the flake, and `make test` passes inside it. Not checked: a machine whose Nix has never had flakes enabled, and macOS. Then the author ran `nix-shell` with no nixpkgs on `NIX_PATH` and got an error from `(import <nixpkgs> {}).bashInteractive`: `nix-shell` looks up an interactive bash there, outside `shell.nix`, and fell back to the system's bash. `./dev-shell` resolves the pinned nixpkgs first and passes it with `-I`; checked with experimental features off and `NIX_PATH` unset: no error, bash from the pinned nixpkgs, and `make test` passes.
 
 ## Stage A: where it stands (12 November 2026)
 
