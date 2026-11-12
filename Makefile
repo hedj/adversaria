@@ -1,7 +1,23 @@
 # One command runs every test (docs/plan.md § Layout).
-.PHONY: test test-spikes test-prolog test-rust spike-scasp
+.PHONY: test test-spikes test-prolog test-rust test-pty spike-scasp run
 
-test: test-spikes test-prolog test-rust
+test: test-spikes test-prolog test-rust test-pty
+
+# The memex program in a pseudo-terminal, with a script playing the terminal.
+test-pty:
+	cargo build -q -p memex
+	python3 tests/memex_in_a_pty.py target/debug/memex
+
+# One command starts the system: the sealer in the background (making a key
+# on first use), then the memex in this terminal. Stops the sealer on exit.
+JOURNAL ?= $(HOME)/adversaria-journal
+KEY ?= $(HOME)/.adversaria.key
+run:
+	cargo build -q --release -p memex -p sealer
+	test -f "$(KEY)" || target/release/sealer init "$(JOURNAL)" "$(KEY)"
+	target/release/sealer run "$(JOURNAL)" "$(KEY)" > /dev/null & \
+	  pid=$$!; target/release/memex "$(JOURNAL)"; status=$$?; \
+	  sleep 1; kill $$pid; exit $$status
 
 # Unit tests, lints as errors, and formatting.
 test-rust:

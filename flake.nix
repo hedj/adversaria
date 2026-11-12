@@ -42,6 +42,7 @@
             pkgs.rustfmt
             pkgs.swi-prolog   # 9 or later, with incremental tabling
             pkgs.nodejs_22    # only the tests' oracle for RFC 8785 numbers
+            pkgs.python3      # only tests/memex_in_a_pty.py, which plays a terminal
             pkgs.pandoc       # 3
             pkgs.git
             pkgs.gnumake

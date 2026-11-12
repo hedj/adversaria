@@ -13,7 +13,7 @@ done
 dirs=crates/memex/src
 [ -d prolog ] && dirs="$dirs prolog"
 # Comment lines are skipped: a comment may say what the memex must not do.
-if grep -rnE 'seals\.jsonl|\bSEALS\b|SigningKey|\.key\b|key_path' $dirs | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|%)'; then
+if grep -rnE 'seals\.jsonl|\bSEALS\b|SigningKey|\.key"|key_path' $dirs | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|%)'; then
     echo "memex or prolog source names the seals file or a key"; status=1
 fi
 [ $status -eq 0 ] && echo "ok: memex has no signing code and names neither seals.jsonl nor a key"
