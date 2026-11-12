@@ -108,8 +108,7 @@ class Numbers(unittest.TestCase):
         """Records a property of RFC 8785: 1.0 and 1 serialise alike.
 
         A Prolog float 1.0 and integer 1 are different terms, so the journal
-        cannot tell them apart after a round trip. This is reported to the
-        author; the test fails if the property ever changes.
+        tags floats (tools/terms.py). The test fails if the property changes.
         """
         self.assertEqual(jcs.dumps(1.0), jcs.dumps(1))
         self.assertEqual(jcs.dumps(1.0), "1")
