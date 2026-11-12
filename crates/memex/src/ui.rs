@@ -59,19 +59,19 @@ pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
     draw_top(f, app, top);
     let [left, right] =
         Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).areas(body);
-    if app.record.branch.supposition.is_some() {
+    if app.supposition.is_some() {
         draw_worlds(f, app, body);
         draw_prompt(f, app, prompt, guide);
         return hits;
     }
     for (i, area) in [(0, left), (1, right)] {
-        match app.screen.view.panes[i].kind {
+        match app.view.panes[i].kind {
             PaneKind::Outline => draw_outline(f, app, i, area, &mut hits),
             PaneKind::Links => draw_links(f, app, area, &mut hits),
             PaneKind::Suggestions => draw_suggestions(f, app, area, &mut hits),
         }
     }
-    if let Mode::Quasi(a) = &app.screen.input.mode
+    if let Mode::Quasi(a) = &app.mode
         && matches!(a.q, Quasi::LeapForward | Quasi::LeapBack | Quasi::Command)
         && (a.listing || !a.input.is_empty())
     {
@@ -85,7 +85,7 @@ pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
 
 fn draw_top(f: &mut Frame, app: &App, area: Rect) {
     let n = app.journal().entries().len();
-    let world = match &app.record.branch.supposition {
+    let world = match &app.supposition {
         Some(s) => vec![
             Span::styled("worlds ", dim()),
             Span::styled("actual", bold()),
@@ -94,12 +94,12 @@ fn draw_top(f: &mut Frame, app: &App, area: Rect) {
         ],
         None => vec![
             Span::styled("world ", dim()),
-            Span::styled(app.record.branch.world.clone(), bold()),
+            Span::styled(app.world.clone(), bold()),
         ],
     };
     let mut parts = vec![
         Span::styled("room ", dim()),
-        Span::styled(app.session.workspace.clone(), bold()),
+        Span::styled(app.workspace.clone(), bold()),
         Span::raw("   "),
     ];
     parts.extend(world);
@@ -112,9 +112,9 @@ fn draw_top(f: &mut Frame, app: &App, area: Rect) {
     let mut left = left;
     left.spans.splice(0..1, parts);
     f.render_widget(Paragraph::new(left), area);
-    let right = match app.reasoner.eval[0].as_ref().map(status) {
+    let right = match app.eval[0].as_ref().map(status) {
         Some(s) if !s.is_empty() => s,
-        _ => format!("pane {} of 2", app.screen.view.focus + 1),
+        _ => format!("pane {} of 2", app.view.focus + 1),
     };
     let w = right.chars().count() as u16;
     if area.width > w {
@@ -144,7 +144,7 @@ fn view_panel(app: &App, id: u64, layers: &[crate::outline::Layer]) -> Vec<Line<
         Line::raw(""),
     ];
     for l in layers {
-        let n = app.reasoner.eval[0]
+        let n = app.eval[0]
             .as_ref()
             .and_then(|e| e.nodes.layers.get(&l.seq))
             .map_or(0, |m| m.len());
@@ -173,18 +173,18 @@ fn view_panel(app: &App, id: u64, layers: &[crate::outline::Layer]) -> Vec<Line<
 
 /// The citations of an item, shown dimmed after its text.
 fn cites(app: &App, id: u64) -> String {
-    let (out, _) = app.record.outline.links_of(id);
+    let (out, _) = app.outline.links_of(id);
     out.iter()
         .filter(|l| l.kind == "cites")
-        .map(|l| format!(" [{}]", app.record.outline.text(l.to)))
+        .map(|l| format!(" [{}]", app.outline.text(l.to)))
         .collect()
 }
 
 fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
     let pending = app.text_of(id);
-    let runs = app.record.outline.runs(id);
+    let runs = app.outline.runs(id);
     let mut out = Vec::new();
-    if pending.iter().collect::<String>() != app.record.outline.text(id) {
+    if pending.iter().collect::<String>() != app.outline.text(id) {
         out.push(Span::raw(pending.iter().collect::<String>()));
     } else {
         for r in runs {
@@ -196,30 +196,28 @@ fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
                     Style::default().add_modifier(Modifier::ITALIC | Modifier::UNDERLINED),
                 ));
                 out.push(Span::styled(
-                    format!("↖{}", app.record.outline.number(r.origin)),
+                    format!("↖{}", app.outline.number(r.origin)),
                     dim(),
                 ));
             }
         }
     }
-    if focused && app.screen.view.scope == ScopeLevel::Word {
+    if focused && app.view.scope == ScopeLevel::Word {
         // Scope: show the word as the target.
         out = vec![Span::styled(
             pending.iter().collect::<String>(),
             Style::default().add_modifier(Modifier::UNDERLINED),
         )];
     }
-    if let (Some(d), Some(e)) = (
-        app.record.outline.derived.get(&id),
-        app.reasoner.eval[0].as_ref(),
-    ) && let Some(v) = e.nodes.derived.get(&id)
+    if let (Some(d), Some(e)) = (app.outline.derived.get(&id), app.eval[0].as_ref())
+        && let Some(v) = e.nodes.derived.get(&id)
     {
         out = vec![
             Span::raw(reason::fill(&d.template, &d.names, v, &e.facts)),
             Span::styled(" [derived]", dim()),
         ];
     }
-    if let Some(src) = app.record.outline.source.get(&id) {
+    if let Some(src) = app.outline.source.get(&id) {
         out.push(Span::styled(format!(" [{src}]"), dim()));
     }
     let c = cites(app, id);
@@ -230,8 +228,8 @@ fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
 }
 
 fn title(app: &App) -> String {
-    match app.record.outline.names.get("title") {
-        Some(id) => format!("OUTLINE · {}", app.record.outline.text(*id).to_uppercase()),
+    match app.outline.names.get("title") {
+        Some(id) => format!("OUTLINE · {}", app.outline.text(*id).to_uppercase()),
         None => "OUTLINE".into(),
     }
 }
@@ -248,10 +246,9 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
         Layout::vertical([Constraint::Length(2), Constraint::Min(1)]).areas(inner);
     f.render_widget(Paragraph::new(Span::styled(title(app), dim())), head);
     let rows = app.visible();
-    let cursor = app.screen.view.panes[pane].cursor;
+    let cursor = app.view.panes[pane].cursor;
     let h = rows_area.height as usize;
-    let focused = app.screen.view.focus == pane
-        && matches!(app.screen.input.mode, Mode::Normal | Mode::Quasi(_));
+    let focused = app.view.focus == pane && matches!(app.mode, Mode::Normal | Mode::Quasi(_));
     // Every line of the outline, then the window onto them: items, their
     // marks and their views are lines of different heights, so the window
     // is chosen by line, keeping the cursor's line in view.
@@ -276,8 +273,8 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
             rows_area.width as usize,
             Click::Item { pane, id: *id },
         ));
-        let kids = app.record.outline.children(*id).len();
-        let folded = app.screen.view.folded.contains(id);
+        let kids = app.outline.children(*id).len();
+        let folded = app.view.folded.contains(id);
         let mark = match (kids, folded) {
             (0, _) => "•",
             (_, true) => "▶",
@@ -288,23 +285,23 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
             Span::styled(format!("{mark} "), dim()),
         ];
         if *depth == 0 {
-            spans.push(Span::raw(format!("{}. ", app.record.outline.number(*id))));
+            spans.push(Span::raw(format!("{}. ", app.outline.number(*id))));
         }
         let is_cursor = *id == cursor;
         spans.extend(item_spans(app, *id, is_cursor && focused));
         if folded {
             spans.push(Span::styled(
-                format!(" {}", app.record.outline.descendants(*id)),
+                format!(" {}", app.outline.descendants(*id)),
                 dim(),
             ));
         }
-        let marks = app.reasoner.eval[0]
+        let marks = app.eval[0]
             .as_ref()
-            .map(|e| item_marks(e, &app.record.outline, *id))
+            .map(|e| item_marks(e, &app.outline, *id))
             .unwrap_or_default();
         let mut line = Line::from(spans);
         if is_cursor {
-            line = line.style(if app.screen.view.scope == ScopeLevel::Branch && focused {
+            line = line.style(if app.view.scope == ScopeLevel::Branch && focused {
                 Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD)
             } else {
                 Style::default().add_modifier(Modifier::REVERSED)
@@ -312,8 +309,6 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
         }
         lines.push(line);
         let stale = app
-            .reasoner
-            .found
             .stale
             .get(id)
             .map(|files| (true, format!("input changed since: {}", files.join(", "))));
@@ -329,7 +324,7 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
             ));
         }
         // A view, drawn under its item.
-        if app.record.outline.views.contains_key(id) {
+        if app.outline.views.contains_key(id) {
             let indent = 2 * depth + 2;
             let width = (rows_area.width as usize).saturating_sub(indent + 1);
             let fig = view_figure(app, 0, *id, width, 12);
@@ -369,19 +364,19 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
         }
     }
     // The text cursor, in the focused outline pane.
-    if app.screen.view.focus == pane
-        && matches!(app.screen.input.mode, Mode::Normal)
+    if app.view.focus == pane
+        && matches!(app.mode, Mode::Normal)
         && cursor != TOP
         && let Some(r) = cursor_line
             .and_then(|l| l.checked_sub(offset))
             .filter(|r| *r < h)
     {
         let num = if cursor_depth == 0 {
-            app.record.outline.number(cursor).len() + 2
+            app.outline.number(cursor).len() + 2
         } else {
             0
         };
-        let x = rows_area.x as usize + 2 * cursor_depth + 2 + num + app.screen.view.pos;
+        let x = rows_area.x as usize + 2 * cursor_depth + 2 + num + app.view.pos;
         if x < (rows_area.x + rows_area.width) as usize {
             f.set_cursor_position(Position {
                 x: x as u16,
@@ -394,7 +389,7 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
 /// The facts in violations in world k, by seq: marks resting on them are
 /// drawn loudly.
 fn violated(app: &App, k: usize) -> std::collections::BTreeSet<u64> {
-    app.reasoner.eval[k]
+    app.eval[k]
         .as_ref()
         .map(|e| {
             e.constraints
@@ -408,11 +403,11 @@ fn violated(app: &App, k: usize) -> std::collections::BTreeSet<u64> {
 
 /// The view at an item, drawn as world k computes it.
 pub fn view_figure(app: &App, k: usize, item: u64, width: usize, height: usize) -> view::Figure {
-    let Some(layers) = app.record.outline.views.get(&item) else {
+    let Some(layers) = app.outline.views.get(&item) else {
         return view::Figure::default();
     };
     let bad = violated(app, k);
-    let inputs: Vec<view::Input> = app.reasoner.eval[k]
+    let inputs: Vec<view::Input> = app.eval[k]
         .as_ref()
         .map(|e| {
             layers
@@ -476,10 +471,10 @@ fn figure_lines(fig: &view::Figure, indent: usize) -> Vec<Line<'static>> {
 fn hit_item(app: &App, hit: &view::Hit) -> Option<u64> {
     hit.prov.iter().find_map(|s| {
         // A fact from the outline itself rests on the item's own entry.
-        if app.record.outline.items.contains_key(s) {
+        if app.outline.items.contains_key(s) {
             Some(*s)
         } else {
-            app.record.outline.fact_item.get(s).copied()
+            app.outline.fact_item.get(s).copied()
         }
     })
 }
@@ -499,8 +494,8 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
         width: area.width.saturating_sub(2),
         ..area
     };
-    let id = app.screen.view.panes[0].cursor;
-    if let Some(i) = app.screen.view.interrogate {
+    let id = app.view.panes[0].cursor;
+    if let Some(i) = app.view.interrogate {
         let p = Paragraph::new(interrogation(app, i)).wrap(Wrap { trim: false });
         let used = p.line_count(inner.width) as u16;
         f.render_widget(p, inner);
@@ -529,15 +524,15 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
         }
         return;
     }
-    if let Some(layers) = app.record.outline.views.get(&id) {
+    if let Some(layers) = app.outline.views.get(&id) {
         f.render_widget(
             Paragraph::new(view_panel(app, id, layers)).wrap(Wrap { trim: false }),
             inner,
         );
         return;
     }
-    if let Some(e) = app.reasoner.eval[0].as_ref()
-        && !item_marks(e, &app.record.outline, id).is_empty()
+    if let Some(e) = app.eval[0].as_ref()
+        && !item_marks(e, &app.outline, id).is_empty()
     {
         f.render_widget(
             Paragraph::new(constraint_panel(app, e, id)).wrap(Wrap { trim: false }),
@@ -550,16 +545,10 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
         Line::raw(""),
     ];
     if id != TOP {
-        lines.push(Line::raw(app.record.outline.text(id)));
+        lines.push(Line::raw(app.outline.text(id)));
         lines.push(Line::raw(""));
-        let (out, into) = app.record.outline.links_of(id);
-        let label = |l: u64| {
-            format!(
-                "  {}. {}",
-                app.record.outline.number(l),
-                app.record.outline.text(l)
-            )
-        };
+        let (out, into) = app.outline.links_of(id);
+        let label = |l: u64| format!("  {}. {}", app.outline.number(l), app.outline.text(l));
         let mut kinds: Vec<&str> = out.iter().map(|l| l.kind.as_str()).collect();
         kinds.dedup();
         let mut n = 0;
@@ -579,17 +568,13 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
                 lines.push(Line::raw(format!("{}  {n}", label(l.from))));
             }
         }
-        let tr = app.record.outline.transcluded_in(id);
+        let tr = app.outline.transcluded_in(id);
         if !tr.is_empty() {
             lines.push(Line::styled("transcluded in ←", dim()));
             for t in tr {
                 // The container shows where the text appears.
-                let path = match app.record.outline.parent(t).filter(|p| *p != TOP) {
-                    Some(p) => format!(
-                        "  {} › {}",
-                        app.record.outline.text(p),
-                        app.record.outline.text(t)
-                    ),
+                let path = match app.outline.parent(t).filter(|p| *p != TOP) {
+                    Some(p) => format!("  {} › {}", app.outline.text(p), app.outline.text(t)),
                     None => label(t),
                 };
                 lines.push(Line::raw(path));
@@ -611,21 +596,18 @@ fn draw_list(f: &mut Frame, app: &App, q: Quasi, input: &str, listing: bool, are
             for (k, id) in m.iter().take(shown).enumerate() {
                 let mut spans = Vec::new();
                 let mut chain = Vec::new();
-                let mut at = app.record.outline.parent(*id).filter(|p| *p != TOP);
+                let mut at = app.outline.parent(*id).filter(|p| *p != TOP);
                 while let Some(p) = at.filter(|p| *p != TOP) {
                     chain.push(p);
-                    at = app.record.outline.parent(p);
+                    at = app.outline.parent(p);
                 }
                 chain.reverse();
-                let num = app
-                    .record
-                    .outline
-                    .number(chain.first().copied().unwrap_or(*id));
+                let num = app.outline.number(chain.first().copied().unwrap_or(*id));
                 spans.push(Span::raw(format!("{num}. ")));
                 for p in chain {
-                    spans.push(Span::raw(format!("{} › ", app.record.outline.text(p))));
+                    spans.push(Span::raw(format!("{} › ", app.outline.text(p))));
                 }
-                let t = app.record.outline.text(*id);
+                let t = app.outline.text(*id);
                 let lt = t.to_lowercase();
                 match lt
                     .find(&input.to_lowercase())
@@ -663,7 +645,7 @@ fn draw_list(f: &mut Frame, app: &App, q: Quasi, input: &str, listing: bool, are
 }
 
 fn draw_prompt(f: &mut Frame, app: &App, prompt: Rect, guide: Rect) {
-    let (p, g): (Line, String) = match &app.screen.input.mode {
+    let (p, g): (Line, String) = match &app.mode {
         Mode::Quasi(a) => {
             let shown = match a.q {
                 Quasi::Command => app.guided(&a.input),
@@ -739,8 +721,7 @@ fn draw_prompt(f: &mut Frame, app: &App, prompt: Rect, guide: Rect) {
                 ),
                 Span::raw(format!(" {text}")),
             ]);
-            let facts =
-                crate::store::facts(app.journal().entries(), app.record.tip).unwrap_or_default();
+            let facts = crate::store::facts(app.journal().entries(), app.tip).unwrap_or_default();
             let r = reason::restate(&facts, &readings[*at]);
             let more = if readings.len() > 1 {
                 " · Tab next reading"
@@ -753,8 +734,8 @@ fn draw_prompt(f: &mut Frame, app: &App, prompt: Rect, guide: Rect) {
             )
         }
         Mode::Normal => match hint(app) {
-            Some((p, g)) if app.screen.message.is_empty() => (Line::raw(p), g),
-            _ => (Line::raw(""), app.screen.message.clone()),
+            Some((p, g)) if app.message.is_empty() => (Line::raw(p), g),
+            _ => (Line::raw(""), app.message.clone()),
         },
     };
     f.render_widget(Paragraph::new(p), prompt);
@@ -891,7 +872,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
             sols.iter().any(|s| {
                 s.prov
                     .iter()
-                    .any(|p| app.record.outline.fact_item.get(&p.seq()) == Some(&item))
+                    .any(|p| app.outline.fact_item.get(&p.seq()) == Some(&item))
             })
         };
         if !touches(&c.violations) && !touches(&c.disagreements) {
@@ -940,7 +921,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
                             f,
                             facts.iter().find(|(t, _)| t != s).map(|x| x.1).unwrap_or(f),
                         );
-                        format!("{d} ({})", where_from(&app.record.outline, &sol.prov[*s]))
+                        format!("{d} ({})", where_from(&app.outline, &sol.prov[*s]))
                     })
                     .collect();
                 lines.push(Line::styled(format!("{key}: {}", parts.join(" · ")), style));
@@ -954,7 +935,6 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
             predicates(&a[2], &mut reads);
         }
         let mut deps: Vec<u64> = app
-            .record
             .outline
             .derived
             .keys()
@@ -967,18 +947,18 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
             })
             .copied()
             .collect();
-        deps.sort_by_key(|d| app.record.outline.in_order().iter().position(|x| x == d));
+        deps.sort_by_key(|d| app.outline.in_order().iter().position(|x| x == d));
         if !deps.is_empty() {
             lines.push(Line::styled("depends on these facts", dim()));
             for d in deps {
-                let text = match (app.record.outline.derived.get(&d), e.nodes.derived.get(&d)) {
+                let text = match (app.outline.derived.get(&d), e.nodes.derived.get(&d)) {
                     (Some(t), Some(v)) => reason::fill(&t.template, &t.names, v, &e.facts),
-                    _ => app.record.outline.text(d),
+                    _ => app.outline.text(d),
                 };
                 let short: String = text.chars().take(40).collect();
                 lines.push(Line::raw(format!(
                     "  {} {short}{}",
-                    app.record.outline.number(d),
+                    app.outline.number(d),
                     if text.chars().count() > 40 {
                         " …"
                     } else {
@@ -993,13 +973,13 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
 
 /// The right pane when a claim is interrogated (one key, F2).
 fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
-    let Some(e) = app.reasoner.eval[0].as_ref() else {
+    let Some(e) = app.eval[0].as_ref() else {
         return vec![Line::raw("not yet evaluated")];
     };
     let mut lines = vec![
         Line::styled("INTERROGATE · WHAT IS CLAIMED HERE", dim()),
         Line::raw(""),
-        Line::raw(app.record.outline.text(item)),
+        Line::raw(app.outline.text(item)),
         Line::raw(""),
     ];
     for (seq, src, p) in app.claims_of(item) {
@@ -1015,13 +995,9 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
             .filter(|(s, f)| *s != seq && inner(f) == &p)
             .map(|(s, f)| match f {
                 Term::Compound(n, a) if n == "claims" => {
-                    format!(
-                        "  {} ({})",
-                        place(&app.record.outline, *s),
-                        reason::show(&a[0])
-                    )
+                    format!("  {} ({})", place(&app.outline, *s), reason::show(&a[0]))
                 }
-                _ => format!("  {} (a belief)", place(&app.record.outline, *s)),
+                _ => format!("  {} (a belief)", place(&app.outline, *s)),
             })
             .collect();
         if others.is_empty() {
@@ -1040,7 +1016,7 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
                         let f = &sol.facts[k];
                         contrary.push(format!(
                             "  {}: {} ({})",
-                            where_from(&app.record.outline, o),
+                            where_from(&app.outline, o),
                             reason::restate(&e.facts, inner(f)),
                             c.constraint.name
                         ));
@@ -1078,9 +1054,7 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
     lines.push(Line::styled("if adopted", dim()));
     lines.push(Line::raw(format!(
         "  {}",
-        app.reasoner
-            .found
-            .preview
+        app.preview
             .clone()
             .unwrap_or_else(|| "not yet computed".into())
     )));
@@ -1092,8 +1066,8 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
 /// Fading hint: while the cursor is on an item with marks, how to try the
 /// other reading; it stops once Suppose has been used four times.
 fn hint(app: &App) -> Option<(String, String)> {
-    let e = app.reasoner.eval[0].as_ref()?;
-    if item_marks(e, &app.record.outline, app.cursor()).is_empty() {
+    let e = app.eval[0].as_ref()?;
+    if item_marks(e, &app.outline, app.cursor()).is_empty() {
         return None;
     }
     let used = app
@@ -1112,9 +1086,7 @@ fn hint(app: &App) -> Option<(String, String)> {
 /// A supposition: the actual world and the supposed one side by side, row
 /// for row. Rows are the items that state facts or show derived values.
 fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
-    let Some(sup) = &app.record.branch.supposition else {
-        return;
-    };
+    let Some(sup) = &app.supposition else { return };
     if sup.name.starts_with("revision of ") {
         draw_revision(f, app, area);
         return;
@@ -1123,14 +1095,10 @@ fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area);
     let actual = app.outline_at(sup.actual);
     let worlds = [
+        (&actual, app.eval[1].as_ref(), "WORLD · ACTUAL".to_string()),
         (
-            &actual,
-            app.reasoner.eval[1].as_ref(),
-            "WORLD · ACTUAL".to_string(),
-        ),
-        (
-            &app.record.outline,
-            app.reasoner.eval[0].as_ref(),
+            &app.outline,
+            app.eval[0].as_ref(),
             format!("WORLD · SUPPOSE {}", sup.name.to_uppercase()),
         ),
     ];
@@ -1139,9 +1107,8 @@ fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
         .into_iter()
         .filter(|i| actual.fact_item.values().any(|x| x == i) || actual.derived.contains_key(i))
         .collect();
-    for i in app.record.outline.in_order() {
-        if (app.record.outline.fact_item.values().any(|x| *x == i)
-            || app.record.outline.derived.contains_key(&i))
+    for i in app.outline.in_order() {
+        if (app.outline.fact_item.values().any(|x| *x == i) || app.outline.derived.contains_key(&i))
             && !rows.contains(&i)
         {
             rows.push(i);
@@ -1225,7 +1192,7 @@ fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
         let views: Vec<u64> = o
             .in_order()
             .into_iter()
-            .filter(|i| app.record.outline.views.contains_key(i))
+            .filter(|i| app.outline.views.contains_key(i))
             .collect();
         for i in views {
             lines.push(Line::raw(""));
@@ -1282,11 +1249,7 @@ fn draw_suggestions(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
     let shown = app.shown_suggestions();
     let mut lines = vec![
         Line::styled(
-            format!(
-                "SUGGESTIONS · {} OF {}",
-                shown.len(),
-                app.reasoner.suggestions.list.len()
-            ),
+            format!("SUGGESTIONS · {} OF {}", shown.len(), app.suggestions.len()),
             dim(),
         ),
         Line::raw(""),
@@ -1320,9 +1283,7 @@ fn draw_suggestions(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
 /// A document revision's world: each change, one entry each, to keep or
 /// retract (retract N) before the world is committed or closed.
 fn draw_revision(f: &mut Frame, app: &App, area: Rect) {
-    let Some(sup) = &app.record.branch.supposition else {
-        return;
-    };
+    let Some(sup) = &app.supposition else { return };
     let mut lines = vec![
         Line::styled(format!("WORLD · {}", sup.name.to_uppercase()), dim()),
         Line::raw(""),

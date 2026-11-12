@@ -24,7 +24,7 @@ impl App {
     pub(crate) fn cmd_rule(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let text = words.join(" ");
         let pi = self.add_rule(text.trim(), target)?;
-        self.screen.message = format!("rule {pi} kept");
+        self.message = format!("rule {pi} kept");
         Ok(())
     }
 
@@ -57,7 +57,7 @@ impl App {
     }
 
     fn sync_engine(&mut self) -> Result<(), String> {
-        let facts = self.facts_at(self.record.tip)?;
+        let facts = self.facts_at(self.tip)?;
         self.engine(0)?.sync(&facts).map_err(|e| e.to_string())
     }
 
@@ -78,7 +78,7 @@ impl App {
         let body = self.parse_denial(rule)?;
         let vars = self.vet_constraint(&body)?;
         self.keep_constraint(name, rule, vars, body)?;
-        self.screen.message = format!("constraint {name} kept: it fires on a planted violation");
+        self.message = format!("constraint {name} kept: it fires on a planted violation");
         Ok(())
     }
 

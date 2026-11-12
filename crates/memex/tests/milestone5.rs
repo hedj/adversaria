@@ -43,9 +43,9 @@ fn command(app: &mut App, line: &str) {
             "no item"
         ]
         .iter()
-        .any(|p| app.screen.message.starts_with(p)),
+        .any(|p| app.message.starts_with(p)),
         "{line}: {}",
-        app.screen.message
+        app.message
     );
     app.evaluate().unwrap();
 }
@@ -183,8 +183,7 @@ fn wikidata_offers_its_own_constraint() {
         "constraint one launched per entity (Wikidata P619)",
     );
     assert!(
-        app.record
-            .outline
+        app.outline
             .constraints
             .values()
             .any(|c| c.name == "one launched per entity (Wikidata P619)")
@@ -264,9 +263,7 @@ fn no_suggested_reference_names_a_work_outside_the_store() {
     command(&mut app, "fact same_as(paper_b, 'QTEST2')");
     command(&mut app, &format!("import wikidata {}", subset.display()));
     let refs: Vec<String> = app
-        .reasoner
         .suggestions
-        .list
         .iter()
         .filter(|s| s.kind_name() == "reference")
         .map(|s| s.describe())
@@ -275,19 +272,19 @@ fn no_suggested_reference_names_a_work_outside_the_store() {
         refs,
         vec!["cite paper_a for the claims about buran_flight".to_string()]
     );
-    for s in &app.reasoner.suggestions.list {
+    for s in &app.suggestions {
         assert!(
             !s.describe().contains("QTEST3") && !s.evidence.contains("QTEST3"),
             "names a work outside the store: {s:?}"
         );
     }
     accept(&mut app, "cite paper_a");
-    let link = app.record.outline.links.last().unwrap();
+    let link = app.outline.links.last().unwrap();
     assert_eq!(
         (link.from, link.to, link.kind.as_str()),
         (
-            app.record.outline.by_number("1").unwrap(),
-            app.record.outline.by_number("2").unwrap(),
+            app.outline.by_number("1").unwrap(),
+            app.outline.by_number("2").unwrap(),
             "cites"
         )
     );
@@ -314,24 +311,18 @@ fn the_pane_keeps_its_rules() {
         }
     }
     assert!(
-        app.reasoner.suggestions.list.len() > 5,
+        app.suggestions.len() > 5,
         "{} suggestions",
-        app.reasoner.suggestions.list.len()
+        app.suggestions.len()
     );
     assert_eq!(app.shown_suggestions().len(), 5, "few in view");
     // Ranked by evidence: scores never rise down the list.
-    let scores: Vec<i64> = app
-        .reasoner
-        .suggestions
-        .list
-        .iter()
-        .map(|s| s.score)
-        .collect();
+    let scores: Vec<i64> = app.suggestions.iter().map(|s| s.score).collect();
     assert!(scores.windows(2).all(|w| w[0] >= w[1]), "{scores:?}");
     // It never takes the keyboard: typing goes to the outline.
     typ(&mut app, " here");
     app.flush();
-    assert_eq!(app.record.outline.text(app.cursor()), "Places here");
+    assert_eq!(app.outline.text(app.cursor()), "Places here");
     // Dismissed suggestions do not come back, and the dismissal is journaled.
     let first = described(&app)[0].clone();
     command(&mut app, "dismiss 1");
@@ -349,10 +340,7 @@ fn the_pane_keeps_its_rules() {
     // With the pane in focus, the order holds while new evidence arrives.
     command(&mut app, "pane suggestions");
     command(&mut app, "switch");
-    assert_eq!(
-        app.screen.view.panes[app.screen.view.focus].kind,
-        PaneKind::Suggestions
-    );
+    assert_eq!(app.view.panes[app.view.focus].kind, PaneKind::Suggestions);
     let before = described(&app);
     for (x, y) in [("d", "w"), ("e", "v"), ("f", "u")] {
         command(&mut app, &format!("fact p4({x}, {y})"));
@@ -372,16 +360,7 @@ fn the_pane_keeps_its_rules() {
     app.flush();
     let mut r = App::open(&dir).unwrap();
     r.evaluate().unwrap();
-    assert_eq!(
-        r.reasoner.suggestions.dismissed,
-        app.reasoner.suggestions.dismissed
-    );
-    assert!(
-        !r.reasoner
-            .suggestions
-            .list
-            .iter()
-            .any(|s| s.describe() == first)
-    );
+    assert_eq!(r.dismissed, app.dismissed);
+    assert!(!r.suggestions.iter().any(|s| s.describe() == first));
     std::fs::remove_dir_all(&dir).unwrap();
 }

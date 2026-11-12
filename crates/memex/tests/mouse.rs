@@ -35,9 +35,9 @@ fn command(app: &mut App, line: &str) {
     typ(app, line);
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
     assert!(
-        !app.screen.message.starts_with("no command") && !app.screen.message.starts_with("not a"),
+        !app.message.starts_with("no command") && !app.message.starts_with("not a"),
         "{line}: {}",
-        app.screen.message
+        app.message
     );
     app.evaluate().unwrap();
 }
@@ -128,15 +128,12 @@ fn a_click_on_an_item_moves_the_cursor_there() {
     let talk = app.cursor();
     let c = click_on(&mut app, "The programme");
     assert!(matches!(c, Click::Item { pane: 0, .. }));
-    assert_eq!(app.record.outline.text(app.cursor()), "The programme");
+    assert_eq!(app.outline.text(app.cursor()), "The programme");
     // The Buran item has a mark line under it; the next row is still Talk notes.
     click_on(&mut app, "Talk notes");
     assert_eq!(app.cursor(), talk);
     click_on(&mut app, "Buran flew");
-    assert_eq!(
-        app.record.outline.text(app.cursor()),
-        "Buran flew once, in 1988."
-    );
+    assert_eq!(app.outline.text(app.cursor()), "Buran flew once, in 1988.");
     // A click on the mark line itself acts on nothing.
     let (lines, hits) = draw(&app);
     let (x, y) = find(&lines, "⚑ one date per event");
@@ -145,7 +142,7 @@ fn a_click_on_an_item_moves_the_cursor_there() {
     typ(&mut app, " Once.");
     app.flush();
     assert_eq!(
-        app.record.outline.text(app.cursor()),
+        app.outline.text(app.cursor()),
         "Buran flew once, in 1988. Once."
     );
     // The click is a view change in the journal, so replay agrees.
@@ -201,7 +198,7 @@ fn a_click_on_a_suggestion_accepts_it() {
     command(&mut app, "fact label(buran_flight, \"Buran's flight\")");
     command(&mut app, &format!("import wikidata {FIXTURE}"));
     command(&mut app, "pane suggestions");
-    assert_eq!(app.screen.view.panes[1].kind, PaneKind::Suggestions);
+    assert_eq!(app.view.panes[1].kind, PaneKind::Suggestions);
     let shown: Vec<String> = app
         .shown_suggestions()
         .iter()
@@ -217,12 +214,8 @@ fn a_click_on_a_suggestion_accepts_it() {
         .expect("the evidence lines are part of suggestion 2");
     assert!(evidence_row > y);
     app.click(&hits.at(x, evidence_row).unwrap().clone());
-    assert!(
-        app.screen.message.starts_with("adopted: "),
-        "{}",
-        app.screen.message
-    );
-    assert_eq!(app.screen.message, format!("adopted: {}", shown[1]));
+    assert!(app.message.starts_with("adopted: "), "{}", app.message);
+    assert_eq!(app.message, format!("adopted: {}", shown[1]));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -240,15 +233,15 @@ fn a_click_does_nothing_while_a_quasimode_or_question_is_open() {
     assert_eq!(app.cursor(), before);
     // Released with nothing typed, Command latches; the click still does nothing.
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
-    assert!(matches!(app.screen.input.mode, Mode::Quasi(_)));
+    assert!(matches!(app.mode, Mode::Quasi(_)));
     app.click(&c);
     assert_eq!(app.cursor(), before);
     tap(&mut app, Key::Escape);
     tap(&mut app, Key::Enter);
-    assert!(matches!(app.screen.input.mode, Mode::Normal));
+    assert!(matches!(app.mode, Mode::Normal));
     app.click(&c);
     assert_eq!(
-        app.record.outline.text(app.cursor()),
+        app.outline.text(app.cursor()),
         "The programme",
         "and acts once it is closed"
     );

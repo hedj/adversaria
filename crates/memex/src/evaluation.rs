@@ -19,9 +19,9 @@ impl App {
     }
 
     fn evaluate_worlds(&mut self) -> Result<(), String> {
-        self.reasoner.eval = [None, None];
+        self.eval = [None, None];
         for (k, head) in self.shown_heads().into_iter().enumerate() {
-            self.reasoner.eval[k] = Some(self.evaluate_world(k, head)?);
+            self.eval[k] = Some(self.evaluate_world(k, head)?);
         }
         Ok(())
     }
@@ -29,16 +29,16 @@ impl App {
     /// The heads of the worlds shown: the current one, and the actual one
     /// while a supposition is open.
     fn shown_heads(&self) -> Vec<u64> {
-        match &self.record.branch.supposition {
-            Some(s) => vec![self.record.tip, s.actual],
-            None => vec![self.record.tip],
+        match &self.supposition {
+            Some(s) => vec![self.tip, s.actual],
+            None => vec![self.tip],
         }
     }
 
     /// The world at a head, evaluated in engine k.
     fn evaluate_world(&mut self, k: usize, head: u64) -> Result<WorldEval, String> {
         let world = self.world(k, head)?;
-        world.evaluate(&mut self.reasoner.engines[k])
+        world.evaluate(&mut self.engines[k])
     }
 
     fn world(&self, k: usize, head: u64) -> Result<World, String> {
@@ -58,7 +58,7 @@ impl App {
     /// The outline of the world at a head: the current one's is kept.
     fn world_outline(&self, k: usize, head: u64) -> Outline {
         if k == 0 {
-            self.record.outline.clone()
+            self.outline.clone()
         } else {
             self.outline_at(head)
         }
@@ -68,7 +68,7 @@ impl App {
 
     fn refresh_suggestions(&mut self) -> Result<(), String> {
         let all = self.engine_suggestions()?;
-        self.reasoner.suggestions.list = self.undismissed(all);
+        self.suggestions = self.undismissed(all);
         Ok(())
     }
 
@@ -81,15 +81,12 @@ impl App {
     }
 
     fn has_facts(&self) -> bool {
-        self.reasoner.engines[0].is_some()
-            && self.reasoner.eval[0]
-                .as_ref()
-                .is_some_and(|e| !e.facts.is_empty())
+        self.engines[0].is_some() && self.eval[0].as_ref().is_some_and(|e| !e.facts.is_empty())
     }
 
     fn undismissed(&self, all: Vec<Suggestion>) -> Vec<Suggestion> {
         all.into_iter()
-            .filter(|s| !self.reasoner.suggestions.dismissed.contains(&s.key()))
+            .filter(|s| !self.dismissed.contains(&s.key()))
             .collect()
     }
 
@@ -97,15 +94,15 @@ impl App {
 
     fn after_evaluation(&mut self) {
         self.update_frozen();
-        self.reasoner.found.stale = self.stale_results();
+        self.stale = self.stale_results();
         self.record_observations();
     }
 
     /// While a claim is interrogated, the preview of adopting it.
     fn refresh_preview(&mut self) -> Result<(), String> {
-        self.reasoner.found.preview = None;
-        if let Some(item) = self.screen.view.interrogate {
-            self.reasoner.found.preview = Some(self.preview_adoption(item)?);
+        self.preview = None;
+        if let Some(item) = self.view.interrogate {
+            self.preview = Some(self.preview_adoption(item)?);
         }
         Ok(())
     }

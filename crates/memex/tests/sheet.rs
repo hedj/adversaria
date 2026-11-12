@@ -30,7 +30,7 @@ fn command(app: &mut App, line: &str) -> String {
     typ(app, line);
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
     app.evaluate().unwrap();
-    let m = app.screen.message.clone();
+    let m = app.message.clone();
     assert!(
         !m.starts_with("no command") && !m.starts_with("not a") && !m.contains("not allowed"),
         "{line}: {m}"
@@ -43,13 +43,13 @@ fn suppose(app: &mut App, text: &str) -> String {
     typ(app, text);
     app.handle(Event::up(Key::Quasi(Quasi::Suppose)));
     assert!(
-        matches!(app.screen.input.mode, Mode::ConfirmSuppose { .. }),
+        matches!(app.mode, Mode::ConfirmSuppose { .. }),
         "no reading of {text:?}: {}",
-        app.screen.message
+        app.message
     );
     tap(app, Key::Enter);
     app.evaluate().unwrap();
-    app.screen.message.clone()
+    app.message.clone()
 }
 
 fn screen(app: &App) -> Vec<String> {
@@ -153,7 +153,7 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
     let dir = temp("set");
     let mut app = budget(&dir);
     // The cursor is on the last item ("Left over"), not on Food.
-    assert!(app.record.outline.text(app.cursor()).starts_with("left"));
+    assert!(app.outline.text(app.cursor()).starts_with("left"));
     let m = command(&mut app, "set cell(food, 900)");
     assert!(m.contains("replaced the fact at 1.3"), "{m}");
     assert!(
@@ -172,9 +172,9 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
         .find(|e| e.kind == "edit")
         .unwrap()
         .seq;
-    let food = app.record.outline.fact_item[&new];
+    let food = app.outline.fact_item[&new];
     assert_eq!(
-        app.record.outline.text(food),
+        app.outline.text(food),
         "food",
         "the new value is on the Food box"
     );
@@ -195,11 +195,11 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
     let m = command(&mut app, "set cell(savings, 300)");
     assert!(m.contains("nothing replaced"), "{m}");
     // The journal replays to the same values.
-    let tip = app.record.tip;
+    let tip = app.tip;
     drop(app);
     let mut again = App::open(&dir).unwrap();
     again.evaluate().unwrap();
-    assert_eq!(again.record.tip, tip);
+    assert_eq!(again.tip, tip);
     shows(&again, "Food: 500 [derived]");
     shows(&again, "Left over: 300 [derived]");
     std::fs::remove_dir_all(&dir).unwrap();
@@ -240,7 +240,7 @@ fn a_rule_is_written_once_and_used_everywhere() {
         app.handle(Event::down(Key::Quasi(Quasi::Command)));
         typ(&mut app, line);
         app.handle(Event::up(Key::Quasi(Quasi::Command)));
-        let m = app.screen.message.clone();
+        let m = app.message.clone();
         if why.is_empty() {
             assert!(m.contains("kept"), "{line}: {m}");
         } else {
@@ -292,7 +292,7 @@ fn a_violation_through_a_rule_rests_on_the_facts_under_it() {
         "constraint within income: false :- spent(S), cell(income, I), S > I.",
     );
     command(&mut app, "set cell(food, 900)");
-    let eval = app.reasoner.eval[0].as_ref().unwrap();
+    let eval = app.eval[0].as_ref().unwrap();
     let c = eval
         .constraints
         .iter()

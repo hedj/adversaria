@@ -21,7 +21,7 @@ impl App {
 
     /// Delete the word at the cursor, or the target's branch.
     pub(crate) fn cmd_delete(&mut self, _: &[&str], target: u64) -> Result<(), String> {
-        if self.screen.view.in_word() {
+        if self.view.in_word() {
             return self.delete_word(target);
         }
         self.write_here("edit", json!({"op": "delete", "item": target}))?;
@@ -36,19 +36,18 @@ impl App {
 
     /// An item's text without the word at the cursor, and where the word was.
     fn word_cut(&self, item: u64) -> (Vec<char>, usize) {
-        cut_word(self.text_of(item), self.screen.view.pos)
+        cut_word(self.text_of(item), self.view.pos)
     }
 
     fn set_pos(&mut self, pos: usize) {
-        self.screen.view.pos = pos;
-        self.screen.dirty = true;
+        self.view.pos = pos;
+        self.view_dirty = true;
     }
 
     // Moving items.
 
     pub(crate) fn cmd_indent(&mut self, _: &[&str], target: u64) -> Result<(), String> {
         let under = self
-            .record
             .outline
             .previous_sibling(target)
             .ok_or("the first item of a list cannot be indented")?;
@@ -59,18 +58,17 @@ impl App {
 
     pub(crate) fn cmd_outdent(&mut self, _: &[&str], target: u64) -> Result<(), String> {
         let p = self
-            .record
             .outline
             .parent_item(target)
             .ok_or("a top-level item cannot be outdented")?;
-        self.move_item(target, self.record.outline.parent_or_top(p), Some(p))
+        self.move_item(target, self.outline.parent_or_top(p), Some(p))
     }
 
     pub(crate) fn cmd_move(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let to = self
             .address(words)
             .ok_or("move (after) an item: a number, a name, or the start of its text")?;
-        if self.record.outline.within(to, target) {
+        if self.outline.within(to, target) {
             return Err("an item cannot move into its own branch".into());
         }
         self.move_after(target, to)
@@ -78,12 +76,12 @@ impl App {
 
     /// Move an item's branch to follow another item.
     fn move_after(&mut self, item: u64, to: u64) -> Result<(), String> {
-        self.move_item(item, self.record.outline.parent_or_top(to), Some(to))
+        self.move_item(item, self.outline.parent_or_top(to), Some(to))
     }
 
     /// Move an item's branch to the end of another item's children.
     fn move_to_end(&mut self, item: u64, under: u64) -> Result<(), String> {
-        self.move_item(item, under, self.record.outline.last_child(under))
+        self.move_item(item, under, self.outline.last_child(under))
     }
 
     fn move_item(&mut self, item: u64, under: u64, after: Option<u64>) -> Result<(), String> {
@@ -94,8 +92,8 @@ impl App {
 
     /// Show an item's children if they were folded away.
     fn open_branch(&mut self, id: u64) {
-        if self.screen.view.folded.remove(&id) {
-            self.screen.dirty = true;
+        if self.view.folded.remove(&id) {
+            self.view_dirty = true;
         }
     }
 
@@ -103,7 +101,7 @@ impl App {
 
     pub(crate) fn cmd_copy(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let to = self.address(words).ok_or("copy (after) an item")?;
-        let text = self.record.outline.text(target);
+        let text = self.outline.text(target);
         let n = text.chars().count();
         self.create_after(to, &text, json!([[0, 0, n]]))?;
         Ok(())
@@ -118,13 +116,13 @@ impl App {
 
     /// A new item after one, showing another's text in place.
     fn transclusion_after(&mut self, from: u64, after: u64) -> Result<u64, String> {
-        let spans = self.record.outline.spans_json(from);
+        let spans = self.outline.spans_json(from);
         self.create_after(after, "", spans)
     }
 
     /// A new item after one, with text and spans; its sequence number.
     fn create_after(&mut self, after: u64, add: &str, spans: Value) -> Result<u64, String> {
-        let under = self.record.outline.parent_or_top(after);
+        let under = self.outline.parent_or_top(after);
         let body =
             json!({"op": "create", "under": under, "after": after, "add": add, "spans": spans});
         Ok(self.write_here("edit", body)?.seq)
@@ -159,18 +157,18 @@ impl App {
             "link",
             json!({"from": from, "to": to, "type": kind, "facts": [fact]}),
         )?;
-        self.screen.message = self.linked(from, to, kind);
+        self.message = self.linked(from, to, kind);
         Ok(())
     }
 
     fn linked(&self, from: u64, to: u64, kind: &str) -> String {
-        let n = |id| self.record.outline.number(id);
+        let n = |id| self.outline.number(id);
         format!("linked {} to {} as {kind}", n(from), n(to))
     }
 
     pub(crate) fn cmd_follow(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let k: usize = words.first().and_then(|w| w.parse().ok()).unwrap_or(1);
-        let ends = self.record.outline.neighbours(target);
+        let ends = self.outline.neighbours(target);
         let to = *ends
             .get(k.wrapping_sub(1))
             .ok_or(format!("the target has {} links", ends.len()))?;
@@ -187,13 +185,13 @@ impl App {
     // Folds and panes.
 
     pub(crate) fn cmd_fold(&mut self, _: &[&str], target: u64) -> Result<(), String> {
-        self.screen.view.folded.insert(target);
+        self.view.folded.insert(target);
         self.write_view("fold", json!({}));
         Ok(())
     }
 
     pub(crate) fn cmd_unfold(&mut self, _: &[&str], target: u64) -> Result<(), String> {
-        self.screen.view.folded.remove(&target);
+        self.view.folded.remove(&target);
         self.write_view("fold", json!({}));
         Ok(())
     }
@@ -201,13 +199,13 @@ impl App {
     pub(crate) fn cmd_pane(&mut self, words: &[&str], target: u64) -> Result<(), String> {
         let kind = PaneKind::named(words.first().copied())
             .ok_or("pane (shows) outline, links, or suggestions")?;
-        self.screen.view.show_other(kind, target);
+        self.view.show_other(kind, target);
         self.write_view("pane", json!({}));
         Ok(())
     }
 
     pub(crate) fn cmd_switch(&mut self, _: &[&str], _: u64) -> Result<(), String> {
-        self.screen.view.switch_focus();
+        self.view.switch_focus();
         self.write_view("pane", json!({}));
         Ok(())
     }

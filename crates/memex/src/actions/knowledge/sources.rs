@@ -24,7 +24,7 @@ impl App {
         self.vet_wikidata(file)?;
         let hash = self.store_blob(&bytes)?;
         self.write_wikidata_import(file, &hash)?;
-        self.screen.message = format!(
+        self.message = format!(
             "imported wikidata: {} bytes, blob {}",
             bytes.len(),
             &hash[..12]
@@ -65,10 +65,8 @@ impl App {
     /// item's number and there are words before it.
     fn export_args(&self, words: &[&str]) -> (String, Option<u64>) {
         match words.split_last() {
-            Some((last, rest))
-                if !rest.is_empty() && self.record.outline.by_number(last).is_some() =>
-            {
-                (rest.join(" "), self.record.outline.by_number(last))
+            Some((last, rest)) if !rest.is_empty() && self.outline.by_number(last).is_some() => {
+                (rest.join(" "), self.outline.by_number(last))
             }
             _ => (words.join(" "), None),
         }
@@ -80,7 +78,7 @@ impl App {
             Some("source") => self.check_source(target)?,
             _ => return Err("check quote, or check source".into()),
         };
-        self.screen.message = format!("{} check: {ruling}", words[0]);
+        self.message = format!("{} check: {ruling}", words[0]);
         Ok(())
     }
 }

@@ -29,7 +29,7 @@ fn run(app: &mut App, line: &str) -> String {
     typ(app, line);
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
     app.evaluate().unwrap();
-    app.screen.message.clone()
+    app.message.clone()
 }
 
 /// Run a command that must succeed.
@@ -74,8 +74,8 @@ fn budget(dir: &Path) -> App {
 
 /// The marks of the view at an item, as text, in order.
 fn marks(app: &App, item: u64) -> Vec<String> {
-    let eval = app.reasoner.eval[0].as_ref().unwrap();
-    app.record.outline.views[&item]
+    let eval = app.eval[0].as_ref().unwrap();
+    app.outline.views[&item]
         .iter()
         .flat_map(|l| eval.nodes.layers.get(&l.seq).cloned().unwrap_or_default())
         .map(|(m, _)| memex::reason::show(&m))
@@ -83,11 +83,10 @@ fn marks(app: &App, item: u64) -> Vec<String> {
 }
 
 fn find(app: &App, text: &str) -> u64 {
-    app.record
-        .outline
+    app.outline
         .in_order()
         .into_iter()
-        .find(|i| app.record.outline.text(*i) == text)
+        .find(|i| app.outline.text(*i) == text)
         .unwrap()
 }
 
@@ -110,8 +109,8 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
         ]
     );
     // Each mark rests on the fact it shows.
-    let eval = app.reasoner.eval[0].as_ref().unwrap();
-    let layer = app.record.outline.views[&chart][0].seq;
+    let eval = app.eval[0].as_ref().unwrap();
+    let layer = app.outline.views[&chart][0].seq;
     for (mark, prov) in &eval.nodes.layers[&layer] {
         assert_eq!(prov.len(), 1, "{mark:?}");
         let fact = &eval.facts.iter().find(|(s, _)| *s == prov[0]).unwrap().1;
@@ -149,8 +148,8 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
     command(&mut app, "layer text(x(1), y(1), text(S)) where spent(S)");
     let spent = find(&app, "spent");
     assert_eq!(marks(&app, spent), ["text(x(1), y(1), text(2100))"]);
-    let eval = app.reasoner.eval[0].as_ref().unwrap();
-    let l = app.record.outline.views[&spent][0].seq;
+    let eval = app.eval[0].as_ref().unwrap();
+    let l = app.outline.views[&spent][0].seq;
     assert_eq!(
         eval.nodes.layers[&l][0].1.len(),
         2,
@@ -160,7 +159,7 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
     run(&mut app, &format!("retract {l}"));
     tap(&mut app, Key::Enter);
     app.evaluate().unwrap();
-    assert!(!app.record.outline.views.contains_key(&spent));
+    assert!(!app.outline.views.contains_key(&spent));
     // Replay gives the same marks.
     let before = marks(&app, chart);
     drop(app);
@@ -199,7 +198,7 @@ fn a_layer_that_could_not_be_drawn_or_would_act_is_refused() {
             "{line}: {m}"
         );
     }
-    assert!(!app.record.outline.views.contains_key(&find(&app, "chart")));
+    assert!(!app.outline.views.contains_key(&find(&app, "chart")));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -272,7 +271,7 @@ fn a_view_is_drawn_under_its_item_and_its_marks_lead_to_their_facts() {
         .expect("the bar is clickable");
     app.click(&c);
     assert_eq!(
-        app.record.outline.text(app.cursor()),
+        app.outline.text(app.cursor()),
         "food",
         "the item stating cell(food, 400)"
     );
@@ -320,10 +319,10 @@ fn figure(app: &App, title: &str) -> Vec<String> {
     let id = find(app, title);
     let depth = {
         let mut d = 0;
-        let mut p = app.record.outline.parent(id);
-        while let Some(x) = p.filter(|x| app.record.outline.items.contains_key(x)) {
+        let mut p = app.outline.parent(id);
+        while let Some(x) = p.filter(|x| app.outline.items.contains_key(x)) {
             d += 1;
-            p = app.record.outline.parent(x);
+            p = app.outline.parent(x);
         }
         d
     };
@@ -533,6 +532,6 @@ fn gallery_the_outline_itself_as_a_tree() {
     let (x, y) = below(&s, "│ Interview │", 0);
     let x = x + 2;
     app.click(&hits.at(x, y).cloned().expect("clickable"));
-    assert_eq!(app.record.outline.text(app.cursor()), "Interview");
+    assert_eq!(app.outline.text(app.cursor()), "Interview");
     std::fs::remove_dir_all(&dir).unwrap();
 }

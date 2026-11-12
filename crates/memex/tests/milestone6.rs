@@ -33,9 +33,9 @@ fn command(app: &mut App, line: &str) {
         "there is no",
     ];
     assert!(
-        !bad.iter().any(|b| app.screen.message.starts_with(b)),
+        !bad.iter().any(|b| app.message.starts_with(b)),
         "{line}: {}",
-        app.screen.message
+        app.message
     );
 }
 
@@ -97,9 +97,9 @@ fn markdown_round_trip_keeps_structure_citations_and_mathematics() {
     let mut app = open(&dir);
     command(&mut app, &format!("import document {}", src.display()));
     assert!(
-        app.screen.message.contains("losses: footnote 1, image 1"),
+        app.message.contains("losses: footnote 1, image 1"),
         "{}",
-        app.screen.message
+        app.message
     );
     let imp = app
         .journal()
@@ -114,7 +114,7 @@ fn markdown_round_trip_keeps_structure_citations_and_mathematics() {
         "losses recorded"
     );
     // Citations became facts; mathematics stayed LaTeX.
-    let facts = memex::store::facts(app.journal().entries(), app.record.tip).unwrap();
+    let facts = memex::store::facts(app.journal().entries(), app.tip).unwrap();
     assert!(facts.iter().any(|(_, f)| {
         format::terms::encode(f)
             .unwrap()
@@ -122,11 +122,10 @@ fn markdown_round_trip_keeps_structure_citations_and_mathematics() {
             .contains("buran1988")
     }));
     let texts: Vec<String> = app
-        .record
         .outline
         .in_order()
         .iter()
-        .map(|i| app.record.outline.text(*i))
+        .map(|i| app.outline.text(*i))
         .collect();
     assert!(
         texts.contains(&"\\int_0^1 x \\, dx = \\frac{1}{2}".to_string()),
@@ -177,7 +176,7 @@ fn word_round_trip_keeps_structure_citations_and_mathematics() {
     assert!(ok.success());
     let mut app = open(&dir);
     command(&mut app, &format!("import document {}", docx.display()));
-    let losses_msg = app.screen.message.clone();
+    let losses_msg = app.message.clone();
     let out = dir.join("out.docx");
     command(&mut app, &format!("export {}", out.display()));
     let (first, _, _) = docs::read(&docx).unwrap();
@@ -234,7 +233,7 @@ fn a_revised_document_opens_a_world_of_changes() {
     .unwrap();
     let mut app = open(&dir);
     command(&mut app, &format!("import document {}", src.display()));
-    let actual = app.record.outline.clone();
+    let actual = app.outline.clone();
     std::fs::write(
         &src,
         "# Essay\n\nBuran flew in 1989.\n\nThe end.\n\nA new closing line.\n",
@@ -242,9 +241,7 @@ fn a_revised_document_opens_a_world_of_changes() {
     .unwrap();
     command(&mut app, &format!("import document {}", src.display()));
     assert!(
-        app.record
-            .branch
-            .supposition
+        app.supposition
             .as_ref()
             .is_some_and(|s| s.name == "revision of essay.md")
     );
@@ -277,13 +274,12 @@ fn a_revised_document_opens_a_world_of_changes() {
     command(&mut app, &format!("retract {deletion}"));
     tap(&mut app, Key::Enter);
     command(&mut app, "commit");
-    assert!(app.record.branch.supposition.is_none());
+    assert!(app.supposition.is_none());
     let texts: Vec<String> = app
-        .record
         .outline
         .in_order()
         .iter()
-        .map(|i| app.record.outline.text(*i))
+        .map(|i| app.outline.text(*i))
         .collect();
     assert_eq!(
         texts,
@@ -295,7 +291,7 @@ fn a_revised_document_opens_a_world_of_changes() {
             "A new closing line."
         ]
     );
-    assert_ne!(app.record.outline, actual);
+    assert_ne!(app.outline, actual);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -322,22 +318,15 @@ fn a_changed_input_marks_its_results() {
         &format!("import results {}", dir.join("results.json").display()),
     );
     app.evaluate().unwrap();
-    assert!(
-        app.reasoner.found.stale.is_empty(),
-        "nothing has changed yet"
-    );
+    assert!(app.stale.is_empty(), "nothing has changed yet");
     let result = app
-        .record
         .outline
         .in_order()
         .into_iter()
-        .find(|i| app.record.outline.text(*i).starts_with("mean_delay"))
+        .find(|i| app.outline.text(*i).starts_with("mean_delay"))
         .unwrap();
-    assert_eq!(
-        app.record.outline.text(result),
-        "mean_delay = 1.55 ± 0.05 s"
-    );
-    let facts = memex::store::facts(app.journal().entries(), app.record.tip).unwrap();
+    assert_eq!(app.outline.text(result), "mean_delay = 1.55 ± 0.05 s");
+    let facts = memex::store::facts(app.journal().entries(), app.tip).unwrap();
     assert!(
         facts
             .iter()
@@ -346,10 +335,7 @@ fn a_changed_input_marks_its_results() {
     );
     std::fs::write(dir.join("data.csv"), "t,delay\n1,1.5\n2,1.9\n").unwrap();
     app.evaluate().unwrap();
-    assert_eq!(
-        app.reasoner.found.stale.get(&result),
-        Some(&vec!["data.csv".to_string()])
-    );
+    assert_eq!(app.stale.get(&result), Some(&vec!["data.csv".to_string()]));
     let mut t = ratatui::Terminal::new(ratatui::backend::TestBackend::new(140, 30)).unwrap();
     t.draw(|f| memex::ui::draw(f, &app)).unwrap();
     let buf = t.backend().buffer().clone();
@@ -375,22 +361,21 @@ fn the_quote_check() {
     let mut app = open(&dir);
     command(&mut app, &format!("import document {}", src.display()));
     let item = app
-        .record
         .outline
         .in_order()
         .into_iter()
-        .find(|i| app.record.outline.text(*i).starts_with("The 1989"))
+        .find(|i| app.outline.text(*i).starts_with("The 1989"))
         .unwrap();
-    app.screen.view.panes[0].cursor = item;
+    app.view.panes[0].cursor = item;
     command(&mut app, "check quote");
-    assert_eq!(app.screen.message, "quote check: quoted");
-    app.screen.view.pos = 4;
+    assert_eq!(app.message, "quote check: quoted");
+    app.view.pos = 4;
     for c in "first ".chars() {
         tap(&mut app, Key::Char(c));
     }
     app.flush();
     command(&mut app, "check quote");
-    assert_eq!(app.screen.message, "quote check: misquoted");
+    assert_eq!(app.message, "quote check: misquoted");
     let e = app.journal().entries().last().unwrap();
     assert!(
         memex::reason::show(&format::terms::decode(&e.body.as_ref().unwrap()["facts"][0]).unwrap())
@@ -452,10 +437,7 @@ fn the_source_check() {
         command(app, &format!("fact doi(paper, \"{doi}\")"));
         command(app, &format!("fact title(paper, \"{title}\")"));
         command(app, "check source");
-        app.screen
-            .message
-            .trim_start_matches("source check: ")
-            .to_string()
+        app.message.trim_start_matches("source check: ").to_string()
     };
     assert_eq!(
         rule(&mut app, "10.5555/good", "buran's flight-software"),
