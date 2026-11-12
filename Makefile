@@ -1,10 +1,13 @@
 # One command runs every test (docs/plan.md § Layout).
-.PHONY: test test-spikes test-tools spike-scasp
+.PHONY: test test-spikes test-rust spike-scasp
 
-test: test-spikes test-tools
+test: test-spikes test-rust
 
-test-tools:
-	python3 -W error -m unittest discover -s tests/tools -t . -p 'test_*.py'
+# Unit tests, lints as errors, and formatting.
+test-rust:
+	cargo test -q
+	cargo clippy -q --all-targets -- -D warnings
+	cargo fmt --check
 
 test-spikes:
 	swipl -q -g main -t halt tests/spikes/incremental_tabling.pl

@@ -1,0 +1,14 @@
+[package]
+name = "format"
+version = "0.1.0"
+description = "The journal format: canonical JSON (RFC 8785), terms, records and hashes"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# Parsing journal lines. float_roundtrip: parse every float exactly.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[dev-dependencies]
+# Reading object keys in written order, in one test.
+serde = "1"
