@@ -431,6 +431,8 @@ The memex supports diagrams first-rate, with the keyboard and mouse and no pen: 
 3. **Editing is ordinary editing.** A new node is a new item, typed; a new edge is a link, made with the Command quasimode and recognition on Escape. Each edit is a journal entry, so undo, versions and side-by-side comparison of two versions apply to diagrams as to text.
 4. **Diagrams are live.** A diagram over a query redraws when the facts change, and each constraint's violations show on the nodes they name.
 
+As built (12 November 2026): diagrams are views (§ Views): node and edge marks over the user's facts, laid out in layers. The five diagram kinds in the table below are not built as kinds; a flowchart, tree or argument map is node and edge layers over the facts that hold its steps or links. Adjacency matrices are cell marks. The layout follows the table's first rows (fewest crossings, straight paths); pins, size limits and splitting into linked diagrams are not built.
+
 ### Requirements and mechanisms
 
 The requirements come from the literature on diagrams; the mechanisms are proposed. The evidence column says how firmly each requirement stands.
@@ -459,6 +461,29 @@ These limits bound a diagram's size; none is the often-quoted 7 ± 2, which misr
 Time and errors understate load: the same performance can cost different mental effort (Huang, Eades and Hong 2009), so a measurement of these limits records effort as well. Sources: [Cowan 2001](https://memory.psych.missouri.edu/assets/doc/articles/2001/cowan-bbs-2001.pdf), [Cowan 2010](https://pmc.ncbi.nlm.nih.gov/articles/PMC2864034), [Yoghourdjian et al. 2020](https://arxiv.org/pdf/2008.07944), [Ghoniem et al. 2004](https://ieeexplore.ieee.org/document/1382886), [Huang, Eades and Hong 2009](https://dblp.org/rec/journals/ivs/HuangEH09).
 
 Sources: [Purchase 1997](https://link.springer.com/doi/10.1007/3-540-63938-1_67), [Ware et al. 2002](https://research.monash.edu/en/publications/cognitive-measurements-of-graph-aesthetics/), [Larkin and Simon 1987](https://mechanism.ucsd.edu/bill/teaching/F12/cs200/Readings/larkin.whyadiagramissometimesworth.1987.pdf), [Moody 2009](https://ieeexplore.ieee.org/document/5353439), [Cleveland and McGill, summary](https://www.cs.ubc.ca/~tmm/courses/533-09/slides/percep.pdf), [DRAKON rules](https://drakon-editor.sourceforge.net/language.html), [Green and Petre 1996](https://www.academia.edu/3050347/Usability_Analysis_of_Visual_Programming_Environments_a_cognitive_dimensions_framework), [Archambault and Purchase 2011](https://research.monash.edu/en/publications/animation-small-multiples-and-the-effect-of-mental-map-preservati/), [Archambault and Purchase, navigation](https://eprints.gla.ac.uk/66915).
+
+## Views
+
+As built (12 November 2026). A view is an item with layers; a layer is a mark drawn for each solution of a goal (`layer MARK where GOAL`). There are no chart types: a chart, a timeline, a spreadsheet grid, a Gantt chart, a flowchart or a tree is marks over the user's own facts and rules. The author asked that such things emerge from boxes and rules the user makes, not be built in.
+
+Sources, read for this: Wickham, *A Layered Grammar of Graphics* (2010); Satyanarayan, Moritz, Wongsuphasawat and Heer, *Vega-Lite: A Grammar of Interactive Graphics* (2017); Bostock, *Thinking with Joins* (2012) and D3's *What is D3?*; Observable Plot's documentation (what Plot is, marks, transforms, scales, interactions) and Observable Framework's *Reactivity*. Wilkinson's book itself was not read; it is known here through Wickham's comparison.
+
+| Idea | Source | In the memex |
+| --- | --- | --- |
+| A graphic is layers of marks, each mapping data to visual channels, with shared scales; no chart types | Wickham; Plot ("Plot doesn't have chart types; instead, you construct charts by layering marks") | ten marks (dot, bar, line, rule, text, tick, span, cell, node, edge), each with named channels; a view's layers share their scales |
+| Data is tidy: one row per observation | Wickham; Plot | a goal's solutions are rows by construction |
+| Keep data manipulation out of the graphic (Wickham dropped Wilkinson's DATA, TRANS and algebra because R does it) | Wickham | goals and the user's rules shape the data; the view only maps it |
+| Scales are inferred from the values, and invertible for guides | Wickham; Plot | numbers and dates on a line, anything else a category; axes drawn from the scales |
+| A unit view composed by layering | Vega-Lite (`unit := (data, transforms, mark-type, encodings)`; layer, concat, facet, repeat) | layering only; a supposition shows each view in both worlds, side by side, as a facet by world |
+| Selections as predicates over the data | Vega-Lite | not built: a click goes to the item behind a mark (below) |
+| The data join: declare the relationship between data and marks, with a key | Bostock | a layer declares it; a mark's provenance (the facts it rests on) is its key and leads back to the item |
+| Reactivity in topological order, only what is downstream of a change | Observable Framework ("runs like a spreadsheet") | each layer is a node in the existing dataflow graph |
+
+Drawing is in terminal characters. The marks choose a frame: any node or edge makes a graph, laid out in layers by a simplified Sugiyama method (cycles broken by depth-first search, layers by longest path, dummy nodes on long edges, barycentre sweeps against crossings, ports spread along each box, orthogonal edges, a cycle's closing edge looped round the right); cells alone make a grid; anything else, a plot. A mark resting on a fact in a violation is drawn loudly, so constraints show on views as they do beside items.
+
+Supporting elements built with it: `rule`, so a computation is written once and used in views, constraints and derived text; rules work under negation, disjunction, findall and forall; a violation found through a rule rests on the facts under it; the outline is offered to goals as `item_text/2` and `item_under/2`, so a view can draw the user's own notes; the planted check tries zero, negative and mixed values.
+
+Not built: interactive selections (Vega-Lite's), editing through a view (dragging a bar to `set` its fact), colour, images through the kitty graphics protocol, facets other than worlds, stats such as binning inside a view (a rule with findall does it), and recursive rules (so a view cannot follow paths of any length).
 
 ## The outline model
 
@@ -720,6 +745,10 @@ Milestone 2 fixed what the text above left open. `prolog/protocol.pl` and `crate
 | "What if" works by counterfactual revision in Worlds, with s(CASP) run with `--forall=sasp` | its default algorithm has an open bug, s(CASP) issue #13 (github.com/SWI-Prolog/sCASP/issues/13), reproduced in the translator document's trial |
 | Keys are configured in a TOML file; a name given replaces its default, and a file the memex would have to guess at is refused | the author asked to adjust key bindings (12 November 2026); TOML is a standard format with a maintained Rust parser, and refusing a wrong file is safer than starting with keys the user did not choose |
 | The mouse is off by default, on by `[mouse] enabled = true` or `--mouse`; `--no-mouse` overrides the file | the author's decision (12 November 2026); while a terminal program has the mouse, the terminal's own text selection usually needs Shift held |
+| Views are layers of marks over goals, with no chart types; charts, grids, timelines and diagrams emerge from marks over the user's facts and rules | the author's decision (12 November 2026): spreadsheets and charts should emerge from boxes and rules the user makes; after the grammar of graphics, Vega-Lite and Observable Plot |
+| Views are drawn in terminal characters first | no new dependency; the kitty graphics protocol would need a rasteriser crate |
+| The outline is offered to goals as item_text/2 and item_under/2, not stored as facts | a diagram of the user's own notes needs them; computed from the outline, they stay out of the stated facts that Suppose reads |
+| Rules are refused if recursive | the reasoner proves rules by plain recursion, which would not end; tabling them is left open |
 
 ## Open questions
 

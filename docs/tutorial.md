@@ -1,12 +1,13 @@
 # Tutorial: a first session
 
-This tutorial takes about thirty minutes (an estimate). In part 1 you
+This tutorial takes about forty minutes (an estimate). In part 1 you
 will write a short outline, state facts, add a claim from a source, write
 a constraint that catches the conflict, question the claim, adopt it and
 take it back, and try it in a supposed world. Part 1 follows the design's
 user story (docs/design.md, § A user story): notes on the Soviet Buran
 space shuttle. In part 2 you will build a small budget that computes
-itself from boxes and rules.
+itself from boxes and rules, and in part 3 draw it as a chart and a
+table, and part 1's dates as a timeline.
 
 A test performs every step below and checks every screen text quoted here
 (`crates/memex/tests/tutorial.rs`). If the memex changes and this tutorial
@@ -298,6 +299,62 @@ choosing.
 Run `close` to go back; the actual budget still says
 `Left over: 300 [derived]`. (`commit` would have made the new rent real.)
 
+## Part 3: views
+
+A view is an item that draws something, made of layers. A layer is a
+mark, such as a bar or a box, drawn once for each solution of a goal. As
+before, nothing here is a chart type the memex knows: a chart, a table
+and a timeline are marks over your own facts.
+
+## 15. A chart of the boxes
+
+Leap to `left over`, press Enter, and Shift-Tab to the top level. Type
+`Spending chart`. Then add two layers to it:
+
+- `layer bar(x(C), y(V)) where cell(C, V)`
+- `layer rule(y(I)) where cell(income, I)`
+
+The first draws a bar for each box, at the box's name and as high as its
+value; the second, a line across the chart at the income. The chart is
+drawn under the item, and the right pane says `VIEW · 2 LAYERS`, with how
+many marks each layer draws.
+
+Run `set cell(food, 900)` again. The food bar rises, and all three bars
+are drawn bold: the violation of "spending within income" rests on the
+income, rent and food facts, and so does every bar. Run `set cell(food, 500)` to
+put it back. With the mouse on (docs/guide.md, § The mouse), a click on
+a bar goes to the box that holds its value.
+
+## 16. The same boxes as a grid
+
+Press Enter and type `Budget table`. Then:
+
+`layer cell(x(value), y(C), text(V)) where cell(C, V)`
+
+A `cell` mark is a box in a grid, at column x and row y. The view is a
+table, rows in order:
+
+    food   │   500
+    income │  2000
+
+A spreadsheet is the same idea with more columns, and with boxes whose
+values come from rules (docs/guide.md, § 9).
+
+## 17. A timeline from part 1
+
+Part 1's facts are still here. Press Enter, type
+`Timeline of the programme`, then:
+
+`layer tick(x(Y), text(L)) where date(E, Y), label(E, L)`
+
+Each event is a tick on a line of years, labelled from its `label` fact:
+`Energia's first launch` in 1987, then `Buran's flight` in 1988. The talk
+notes' 1989 is not drawn: it is a claim, not a belief, and a view draws
+beliefs.
+
+docs/guide.md, § 9 has more: line charts, Gantt charts, flowcharts, and
+your own outline drawn as a tree.
+
 ## What next
 
 docs/guide.md describes every command, the files the memex keeps, the tools
@@ -311,6 +368,7 @@ around it, and how to change the keys.
   real kitty, WezTerm or Ghostty, and the memex has not yet been run in one.
 - In part 2, the boxes are an outline, not a grid, and only whole numbers
   can be supposed.
+- Views are drawn in characters, in the terminal; they are not yet images.
 - Step 9's `check` command is not performed by the tutorial test; the
   acceptance tests check journals made by the memex.
 - Holding Super may be taken by your desktop. If it is, give Suppose another

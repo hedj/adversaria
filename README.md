@@ -7,7 +7,9 @@ Facts in the notes are Prolog terms. Material from outside (documents,
 Wikidata, analysis results) is recorded as claims with their sources,
 separate from what you have adopted as your own beliefs. Constraints
 written in Prolog mark facts and claims that conflict. A supposition opens
-a second set of facts beside the current one, so the two can be compared.
+a second set of facts beside the current one, so the two can be compared. An item can draw facts
+as a chart, a table, a timeline or a diagram, from marks declared over
+Prolog queries; these update as the facts change.
 
 This repository holds a prototype, written in Rust with SWI-Prolog. It
 was built to test three questions over a month of use: whether

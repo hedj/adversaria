@@ -15,19 +15,20 @@ Contents:
 6. Addresses
 7. Facts, claims, constraints and derived text
 8. Worlds
-9. Suggestions and Wikidata
-10. Documents and results
-11. Files
-12. Tools
-13. Configuration
-14. Troubleshooting
-15. Limits
+9. Views
+10. Suggestions and Wikidata
+11. Documents and results
+12. Files
+13. Tools
+14. Configuration
+15. Troubleshooting
+16. Limits
 
 ## 1. Concepts
 
 **Journal.** Everything you do is an entry in an append-only journal: a
 file of JSON lines, each joined to the one before by a hash. Nothing is
-ever overwritten or erased, except by `purge` (§ 11). There is no Save:
+ever overwritten or erased, except by `purge` (§ 12). There is no Save:
 what you type is written a second after you stop, or when you do anything
 else. Undo is an entry too.
 
@@ -126,7 +127,7 @@ four times.
 
 ## 4. Keys and quasimodes
 
-The defaults are below. All of them can be changed (§ 13).
+The defaults are below. All of them can be changed (§ 14).
 
 ### Editing
 
@@ -191,7 +192,7 @@ Two commands ask before acting, at the foot of the screen:
 ### The mouse
 
 The mouse is off unless you turn it on, with `enabled = true` under
-`[mouse]` in the configuration (§ 13), or with `--mouse` for one run.
+`[mouse]` in the configuration (§ 14), or with `--mouse` for one run.
 `--no-mouse` turns it off for one run whatever the file says. Giving both
 flags is an error.
 
@@ -213,7 +214,7 @@ needs Shift held (recalled, not tested). That is why it is off by default.
 
 ## 5. Commands
 
-Type a command in the Command quasimode, or bind it to a key (§ 13). A
+Type a command in the Command quasimode, or bind it to a key (§ 14). A
 unique prefix is enough: `interr` runs `interrogate`. Words in parentheses
 in the help, such as `(after)`, are guide words: you may type them or leave
 them out. Unless the table says otherwise, a command acts on the **target**,
@@ -237,10 +238,10 @@ the item under the cursor.
 | `fold` | `fold` | hides the target's branch |
 | `follow` | `follow [N]` | goes to the other end of the target's Nth link (default 1) |
 | `help` | `help` | lists every command on the message line |
-| `import` | `import wikidata FILE`, `import document FILE`, `import results FILE` | imports a Wikidata subset, a document, or an analysis's results (§ 9, § 10) |
+| `import` | `import wikidata FILE`, `import document FILE`, `import results FILE` | imports a Wikidata subset, a document, or an analysis's results (§ 10, § 11) |
 | `indent` | `indent` | makes the target a child of the item above it |
 | `interrogate` | `interrogate` | asks of the target's claim: who else claims it, who claims the contrary, its source, the source's record, and what adopting it would do |
-| `layer` | `layer MARK where GOAL` | adds a layer to the target's view: one mark for each solution of GOAL (§ 8a, Views) |
+| `layer` | `layer MARK where GOAL` | adds a layer to the target's view: one mark for each solution of GOAL (§ 9) |
 | `link` | `link [FROM] to TO [as TYPE]` | links two items; FROM defaults to the target, TYPE to `link`. `cites`, `supports` and `opposes` read well in the links pane |
 | `move` | `move after ADDRESS` | moves the target's branch to follow ADDRESS |
 | `name` | `name WORD` | names the target, so WORD addresses it; the name `title` also heads the outline |
@@ -376,11 +377,112 @@ constraints, with what changed.
 `close` returns to the actual world and keeps the supposition in the
 journal. `commit` makes the supposed world the actual one.
 
-## 9. Suggestions and Wikidata
+## 9. Views
+
+A view is an item that draws something: a chart, a timeline, a grid, a
+flowchart, a tree. There are no chart types. A view is made of layers,
+and each layer is a mark drawn once for each solution of a goal:
+
+```
+layer bar(x(C), y(V)) where cell(C, V)
+```
+
+This draws one bar for each `cell(C, V)` fact, at category C, V high.
+Run `layer` with the cursor on the item that is to be the view; each
+`layer` adds a layer. A layer without `where` is drawn once, as a
+reference line: `layer rule(y(1500))`.
+
+The view is drawn under its item and changes as the facts do. With the
+cursor on it, the right pane lists its layers, with how many marks each
+draws. A mark that rests on a fact in a violation is drawn bold (a grid
+box gains `!`). With the mouse on (§ 4), a click on a mark goes to the
+item that states its fact. In a supposition, each world draws its own
+copy of every view, side by side. `retract` removes a layer, by its entry
+number, shown in the right pane.
+
+**Marks.** Each is written with its channels, `channel(Value)`:
+
+| Mark | Channels: required; optional | Draws |
+| --- | --- | --- |
+| `dot` | x, y; text | a point, labelled |
+| `bar` | x, y; text | a bar from zero: upright if x is a category, across if y is |
+| `line` | x, y; series | points joined in order of x, one line and one symbol per series |
+| `rule` | x or y | a line across the plot at that value |
+| `text` | x, y, text | a label at a point |
+| `tick` | x; y, text | a mark on the axis with its label above: a timeline. With y, on that lane |
+| `span` | x1, x2; y, text | an interval from x1 to x2, on lane y: a Gantt chart |
+| `cell` | x, y; text | a box in a grid: a table, a spreadsheet |
+| `node` | id; text, shape | a box in a graph; shape `box`, `round` or `decision` |
+| `edge` | from, to; text | an arrow from one node to another, by id |
+
+**Scales** follow from the values. Numbers and dates (`date(Y, M, D)`)
+are positions on a line; anything else is a category, in standard order
+(numbers first, then by text), the first at the top or left. All the
+layers of a view share their scales, so a rule and the bars line up. The
+marks choose how the view is drawn: any `node` or `edge` makes a graph,
+laid out in layers from top to bottom (edges that close a loop go back
+up round the right side); `cell` marks alone make a grid; anything else
+makes a plot. Marks that do not fit are named under the view.
+
+**Recipes.** Each is ordinary facts and rules, with layers over them.
+
+A bar chart with a limit:
+
+```
+layer bar(x(C), y(V)) where cell(C, V)
+layer rule(y(I)) where cell(income, I)
+```
+
+A spreadsheet: boxes at places in a grid, one computed by a rule.
+
+```
+fact at(income, b, 1)
+fact at(rent, b, 2)
+fact at(left, b, 4)
+rule value(B, V) :- cell(B, V).
+rule value(left, L) :- cell(income, I), cell(rent, R), L is I - R.
+layer cell(x(a), y(R), text(B)) where at(B, _, R)
+layer cell(x(C), y(R), text(V)) where at(B, C, R), value(B, V)
+```
+
+A line chart, one line per series: `layer line(x(M), y(V), series(S))
+where spend(S, M, V)`.
+
+A timeline: `layer tick(x(Y), text(L)) where date(E, Y), label(E, L)`.
+
+A Gantt chart: `layer span(y(T), x1(A), x2(B), text(T)) where task(T, A, B)`.
+
+A flowchart:
+
+```
+layer node(id(S), text(T)) where step(S, T)
+layer node(id(S), text(T), shape(decision)) where decision(S, T)
+layer edge(from(A), to(B), text(L)) where next(A, B, L)
+```
+
+Your own outline as a tree. The outline is offered to goals as two kinds
+of fact, `item_text(Item, Text)` and `item_under(Item, Parent)`:
+
+```
+layer node(id(I), text(T)) where item_text(I, T)
+layer edge(from(P), to(C)) where item_under(C, P)
+```
+
+Links between items work the same way. `link 2 to 5 as supports` states
+`supports(From, To)` between the two items, so with the node layer above,
+`layer edge(from(A), to(B), text(supports)) where supports(A, B)` draws
+an argument map.
+
+**Refused.** A layer is refused, with the reason, if its mark or a
+channel is unknown, a channel is missing or given twice, a variable in
+the mark is not bound by the goal, or the goal calls what a definition
+may not (§ 7).
+
+## 10. Suggestions and Wikidata
 
 The memex can read a subset of Wikidata, a public knowledge base, as
 claims whose source is Wikidata. Make a subset with the `wikidata` tool
-(§ 12), then:
+(§ 13), then:
 
 ```
 import wikidata subset.pl
@@ -414,7 +516,7 @@ why it was offered. The pane never takes the keyboard: `accept N` adopts
 the Nth, with its evidence; `dismiss N` hides it until its evidence
 changes. While the pane has focus, suggestions keep their places.
 
-## 10. Documents and results
+## 11. Documents and results
 
 **Import a document** (anything Pandoc reads: Markdown, Word, OpenDocument,
 LaTeX, HTML):
@@ -480,7 +582,7 @@ the result is marked `input changed since:`. Only regular files are
 read for this; anything else, such as a pipe or a device, counts as
 changed.
 
-## 11. Files
+## 12. Files
 
 A journal directory holds:
 
@@ -504,7 +606,7 @@ recovery has not been tested.)
 with its hash, so the chain still checks but the content is gone. It is a
 library call in this prototype (`Journal::purge`), with no command.
 
-## 12. Tools
+## 13. Tools
 
 All run from the repository with `cargo run -q -p <crate> --`, or from
 `target/release/` after `cargo build --release`.
@@ -523,7 +625,7 @@ All run from the repository with `cargo run -q -p <crate> --`, or from
 `make measures JOURNAL=…` runs the measures report on a journal. The
 `wikidata` tool needs network access to query.wikidata.org.
 
-## 13. Configuration
+## 14. Configuration
 
 The memex reads a TOML file, the first of:
 
@@ -616,7 +718,7 @@ Examples:
 
 The hints on screen (such as "F3 adopts") follow your bindings.
 
-## 14. Troubleshooting
+## 15. Troubleshooting
 
 - **"this terminal lacks the kitty keyboard protocol …"**: use kitty,
   WezTerm or Ghostty. Run it outside tmux or screen, which are not known
@@ -624,7 +726,7 @@ The hints on screen (such as "F3 adopts") follow your bindings.
 - **"the terminal did not answer a device attributes request within 2 s"**:
   the memex is not attached to a terminal, or the terminal is very slow.
 - **A quasimode key does nothing:** your desktop or terminal may take it
-  (Super often opens a launcher; Alt may open a menu). Rebind it (§ 13).
+  (Super often opens a launcher; Alt may open a menu). Rebind it (§ 14).
 - **"memex: configuration: …"**: the file and the reason are named; fix the
   line it names. `memex --print-config` shows a file that works.
 - **"no command …"**: `?` in Command lists the commands; `help` lists them
@@ -644,7 +746,7 @@ The hints on screen (such as "F3 adopts") follow your bindings.
   the journal by hand; it is hash-chained, and any change breaks the chain
   from that line on.
 
-## 15. Limits
+## 16. Limits
 
 This is a prototype, built for a one-month trial. Known limits:
 

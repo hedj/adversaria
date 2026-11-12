@@ -215,6 +215,7 @@ fn the_tutorial_works_as_written() {
     app.evaluate().unwrap();
     let mut t = T { app, dump: t.dump };
     part_two(&mut t);
+    part_three(&mut t);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -276,4 +277,85 @@ fn part_two(t: &mut T) {
     t.shows("Left over: -100");
     t.command("close");
     t.shows("Left over: 300 [derived]");
+}
+
+fn part_three(t: &mut T) {
+    // Step 15: a chart of the boxes, with a limit.
+    t.hold(Quasi::LeapForward, "left over");
+    t.tap(Key::Enter);
+    t.tap(Key::BackTab);
+    t.typ("Spending chart");
+    t.command("layer bar(x(C), y(V)) where cell(C, V)");
+    t.command("layer rule(y(I)) where cell(income, I)");
+    t.look("chart");
+    t.shows("VIEW · 2 LAYERS");
+    let chart = find(&t.app, "Spending chart");
+    let fig = memex::ui::view_figure(&t.app, 0, chart, 100, 12).text();
+    for label in ["food", "income", "rent", "500", "1200"] {
+        assert!(fig.iter().any(|l| l.contains(label)), "{label}: {fig:#?}");
+    }
+    t.command("set cell(food, 900)");
+    t.look("chart 900");
+    // Food and rent now break "spending within income": their bars are loud.
+    let loud = |t: &T| {
+        let f = memex::ui::view_figure(&t.app, 0, chart, 100, 12);
+        f.rows
+            .iter()
+            .flatten()
+            .filter(|(c, i)| *c == '█' && *i == memex::view::Ink::Loud)
+            .count()
+    };
+    // Each of the three bars has loud cells: count the columns that do.
+    let f = memex::ui::view_figure(&t.app, 0, chart, 100, 12);
+    let w = f.rows.iter().map(|r| r.len()).max().unwrap_or(0);
+    let loud_cols: Vec<usize> = (0..w)
+        .filter(|x| {
+            f.rows
+                .iter()
+                .any(|r| r.get(*x) == Some(&('█', memex::view::Ink::Loud)))
+        })
+        .collect();
+    let runs = loud_cols.windows(2).filter(|p| p[1] != p[0] + 1).count()
+        + usize::from(!loud_cols.is_empty());
+    assert_eq!(runs, 3, "income, rent and food bars bold: {loud_cols:?}");
+    assert!(loud(t) > 0);
+    t.command("set cell(food, 500)");
+    assert_eq!(loud(t), 0);
+
+    // Step 16: the same boxes as a grid.
+    t.tap(Key::Enter);
+    t.typ("Budget table");
+    t.command("layer cell(x(value), y(C), text(V)) where cell(C, V)");
+    t.look("table");
+    t.shows("food   │   500");
+    t.shows("income │  2000");
+
+    // Step 17: part 1's dates as a timeline.
+    t.tap(Key::Enter);
+    t.typ("Timeline of the programme");
+    t.command("layer tick(x(Y), text(L)) where date(E, Y), label(E, L)");
+    t.look("timeline");
+    let tl = find(&t.app, "Timeline of the programme");
+    let fig = memex::ui::view_figure(&t.app, 0, tl, 100, 12)
+        .text()
+        .join("\n");
+    in_tutorial("Energia's first launch");
+    in_tutorial("Buran's flight");
+    let (e, b) = (
+        fig.find("Energia's first launch"),
+        fig.find("Buran's flight"),
+    );
+    assert!(e.is_some() && b.is_some(), "{fig}");
+    assert!(
+        !fig.contains("1989"),
+        "the claimed date is not a belief, so not drawn: {fig}"
+    );
+}
+
+fn find(app: &App, text: &str) -> u64 {
+    app.outline
+        .in_order()
+        .into_iter()
+        .find(|i| app.outline.text(*i) == text)
+        .unwrap_or_else(|| panic!("no item {text:?}"))
 }

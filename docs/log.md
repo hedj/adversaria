@@ -525,6 +525,21 @@ The author asked whether a user could build a spreadsheet from what exists: boxe
 
 Limits: the boxes are an outline, not a grid; only integers can be supposed; one `undo` reverses only the fact part of a `set`; marks list each violation under every item it involves, which is noisy for a rule over three boxes; the constraint panel shows a stray leading colon (": income, 2000 …"), not yet investigated.
 
+## Views (12 November 2026)
+
+The author asked for graphs, charts, spreadsheets, flowcharts and timelines built from simple elements bound to Prolog queries, after reading about the grammar of graphics, D3 and Observable. Built: `rule`; `layer MARK where GOAL` with ten marks; drawing as a plot, a grid or a layered graph; views drawn under their items, live, loud on violations, clickable, and drawn in both worlds of a supposition; the outline offered as facts. docs/design.md, § Views, records the sources and what each idea became.
+
+Faults found on the way, each fixed with a test that failed first:
+
+* rules did not work inside negation, disjunction or findall;
+* `?` could not be typed inside a quoted string in a command;
+* the planted check refused constraints on negative values (`L < 0`);
+* a violation through a rule rested on the rule, not the facts under it, so the facts' marks and views were not loud;
+* the outline was drawn by item, so tall views would push the cursor off screen; drawing every item instead made milestone 3's 10,000-item test fail at 117 ms per keystroke (limit 100); drawing only items near the cursor brought it to 44 ms;
+* in the renderer: a crowded timeline lost a label; lanes read bottom up; an edge label lay under a later line; a cycle shared a route with a forward edge; two edges merged at one port.
+
+Checked: `make test` passes (187 Rust tests and the tutorial's three parts, 19 Prolog tests, 21 pseudo-terminal checks). A gallery test builds each kind through the memex's commands. Not checked: any of it in a real terminal; views wider than the screen are cut, not scrolled.
+
 ## Stage A: where it stands (12 November 2026)
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
