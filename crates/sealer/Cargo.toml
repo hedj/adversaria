@@ -1,0 +1,16 @@
+[package]
+name = "sealer"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+check = { version = "0.1.0", path = "../check" }
+ed25519-dalek = "3.0.0"
+format = { version = "0.1.0", path = "../format" }
+getrandom = "0.4.3"
+serde_json = "1.0.154"
+
+[dev-dependencies]
+memex = { path = "../memex" }
+serde_json = "1.0.154"

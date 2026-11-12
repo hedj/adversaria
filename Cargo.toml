@@ -1,7 +1,12 @@
 [workspace]
 resolver = "3"
-members = ["crates/format"]
+members = ["crates/acceptance","crates/check","crates/format", "crates/memex", "crates/sealer"]
 
 [workspace.package]
 edition = "2024"
 license = "GPL-3.0-only"
+
+# Optimise dependencies in test builds: the acceptance tests verify many
+# thousands of Ed25519 signatures. Our own crates stay unoptimised.
+[profile.dev.package."*"]
+opt-level = 2
