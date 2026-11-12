@@ -1,7 +1,10 @@
 # One command runs every test (docs/plan.md § Layout).
-.PHONY: test test-spikes spike-scasp
+.PHONY: test test-spikes test-tools spike-scasp
 
-test: test-spikes
+test: test-spikes test-tools
+
+test-tools:
+	python3 -W error -m unittest discover -s tests/tools -t . -p 'test_*.py'
 
 test-spikes:
 	swipl -q -g main -t halt tests/spikes/incremental_tabling.pl
