@@ -566,3 +566,27 @@ fn draws_at_any_size() {
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn backspace_erases_then_leaves_a_latched_quasimode() {
+    // Catches Backspace that leaves the quasimode while text remains, or
+    // that never leaves it once the text is gone.
+    let dir = temp("backspace");
+    let mut app = App::open(&dir).unwrap();
+    app.set_durable(false);
+    // Tap Command to latch it, type two letters.
+    tap(&mut app, Key::Quasi(Quasi::Command));
+    typ(&mut app, "he");
+    let input = |app: &App| match &app.mode {
+        Mode::Quasi(a) => Some(a.input.clone()),
+        _ => None,
+    };
+    assert_eq!(input(&app).as_deref(), Some("he"));
+    tap(&mut app, Key::Backspace);
+    assert_eq!(input(&app).as_deref(), Some("h"), "one character erased");
+    tap(&mut app, Key::Backspace);
+    assert_eq!(input(&app).as_deref(), Some(""), "still latched, now empty");
+    tap(&mut app, Key::Backspace);
+    assert!(matches!(app.mode, Mode::Normal), "left the quasimode");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

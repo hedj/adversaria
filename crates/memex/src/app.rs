@@ -1153,7 +1153,10 @@ impl App {
             }
             Key::Char(c) if a.q != Quasi::Scope => a.input.push(c),
             Key::Backspace => {
-                if a.input.pop().is_none() && a.latched {
+                // Erase a character; with none left, Backspace leaves a
+                // latched quasimode without acting.
+                let erased = a.input.pop().is_some();
+                if !erased && a.latched {
                     self.message.clear();
                     return Mode::Normal;
                 }
