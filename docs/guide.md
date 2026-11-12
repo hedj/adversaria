@@ -70,7 +70,10 @@ The memex needs:
 - Pandoc, for importing and exporting documents;
 - curl, for the source check.
 
-`nix develop` gives a shell with all of these (except the terminal).
+`nix-shell` gives a shell with all of these (except the terminal), and
+needs no experimental Nix features. With flakes enabled, `nix develop`
+gives the same shell. Both use the versions pinned in `flake.lock`; the
+shell is defined in `nix/devshell.nix`.
 
 To start the sealer and the memex together:
 
@@ -604,7 +607,11 @@ The hints on screen (such as "F3 adopts") follow your bindings.
 - **A constraint is "not kept"**: it did not fire on the planted violation,
   so it could never fire. Check that the body can be true.
 - **A message about Prolog, or no marks where you expect them:** SWI-Prolog
-  must be on the path (`swipl --version`). `nix develop` provides it.
+  must be on the path (`swipl --version`). `nix-shell` provides it.
+- **`nix-shell` prints an error about `<nixpkgs>` and "uses bash from your
+  environment":** your `NIX_PATH` names nixpkgs as a flake, which needs
+  flakes enabled. `nix-shell` only wanted an interactive bash from it, and
+  uses your own instead; the shell is otherwise complete.
 - **`check` reports a fault:** it names the line and the fault. Do not edit
   the journal by hand; it is hash-chained, and any change breaks the chain
   from that line on.

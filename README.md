@@ -20,7 +20,7 @@ a real terminal, only in tests that simulate one (see docs/log.md).
 - A terminal that supports the kitty keyboard protocol and the kitty
   graphics protocol, such as kitty, WezTerm or Ghostty. The memex checks
   for both at start-up and exits with a message if either is missing.
-- Nix with flakes enabled, which provides everything else. Without Nix you
+- Nix, which provides everything else. Without Nix you
   need Rust (cargo), SWI-Prolog (`swipl`), Pandoc and curl, and Python 3
   to run the tests.
 
@@ -37,11 +37,12 @@ cd adversaria
 ```
 
 ```bash
-nix develop
+nix-shell
 ```
 
-If flakes are not enabled in your Nix configuration, use
-`nix --extra-experimental-features 'nix-command flakes' develop` instead.
+`nix-shell` needs no experimental Nix features. If you have flakes
+enabled, `nix develop` gives the same shell; both use the versions pinned
+in `flake.lock`.
 
 Start the sealer and the memex:
 

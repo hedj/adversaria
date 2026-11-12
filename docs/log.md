@@ -515,6 +515,10 @@ Also noticed, not fixed: a fact nested more than about 60 deep is refused with "
 
 Checked: `make test` passes (161 Rust tests, 19 Prolog tests, 21 pseudo-terminal checks). Each fix was broken on purpose once and its test failed. Open items are listed in docs/design.md, § Input that could act.
 
+## Nix without experimental features (12 November 2026)
+
+`nix-shell` now gives the development shell with no experimental Nix features: `shell.nix` reads the pins from `flake.lock` and fetches them with `builtins.fetchTarball` and `builtins.fetchGit`; the shell is defined once, in `nix/devshell.nix`, which `flake.nix` also uses. Checked with experimental features switched off: `shell.nix` gives the same derivation as the flake, and `make test` passes inside it. Not checked: a machine whose Nix has never had flakes enabled, and macOS.
+
 ## Stage A: where it stands (12 November 2026)
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
