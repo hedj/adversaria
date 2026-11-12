@@ -550,6 +550,9 @@ Answers come only when NEXT asks for them, so the server backtracks lazily and n
 
 | Decision | Reason |
 | --- | --- |
+| License the project under GPL-3.0 | the author's decision (12 November 2026); Clex is GPL-3.0 and APE LGPL-3.0, so both can ship with it |
+| Numbers in hashed records are JSON numbers, serialised by RFC 8785 in full, not decimal strings | the author's decision (12 November 2026), declining the plan's proposal; the format stays plain JSON, and the server and the checker must both implement RFC 8785's number rules, under test |
+| Stage A starts from Wikidata subset D, the pocket base | the author's decision (12 November 2026); small enough to build and load quickly while the suggestions are tested |
 | Name the project Adversaria, with the prototype in a repository of its own | the author's decision; “memex” is taken |
 | Measure the falsifiability of formal claims: compatible, independent, refutable, characteristic number, needed premises, comparative strength, immunisation; relative to a declared observation vocabulary | the author's decision; Popper's measures, carried from Lean to Prolog through s(CASP)'s abduction |
 | Test claims by the cheapest check that could refute them: quote, source, provenance, weakest link, open parameters, independence, gaps shown, planted faults | the author's decision, adopting what transfers from the Popper project's judges of paper claims |
