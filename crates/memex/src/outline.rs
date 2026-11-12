@@ -615,6 +615,31 @@ mod tests {
         assert!(o.apply(seq, "edit", &b), "create {seq}");
     }
 
+    /// Two top-level items, the first with a child: 1 { 2 }, 3.
+    fn branch() -> Outline {
+        let mut o = Outline::default();
+        create(&mut o, 1, TOP, None, "a");
+        create(&mut o, 2, 1, None, "b");
+        create(&mut o, 3, TOP, Some(1), "c");
+        o
+    }
+
+    #[test]
+    fn a_child_is_within_its_parents_branch() {
+        assert!(branch().within(2, 1));
+    }
+
+    #[test]
+    fn an_item_is_within_its_own_branch() {
+        assert!(branch().within(1, 1));
+    }
+
+    #[test]
+    fn a_sibling_and_a_parent_are_not_within_a_branch() {
+        let o = branch();
+        assert_eq!((o.within(3, 1), o.within(1, 2)), (false, false));
+    }
+
     #[test]
     fn tree_numbers_and_order() {
         // Catches children out of order, or numbers that do not name items.
