@@ -24,6 +24,11 @@
 //!   separate piece of state); a project type, trait or constant it names.
 //!   Type::function is one referent, the function: the type that names it
 //!   is not counted again for it.
+//!   A struct of at most four fields is one chunk with its fields, as
+//!   terms defined together in a small section are (below): its fields
+//!   and its name count once, as the type. A field whose name more than
+//!   one struct has is counted apart, as is each field of a larger
+//!   struct. The report also gives the count with each field apart.
 //!   An enum's variants count as their enum (one concept, a closed set of
 //!   values). Resolution is by name, without type inference, so a method
 //!   call whose name is also a common standard-library method (`STD`
@@ -265,6 +270,34 @@ pub struct Defs {
     pub modules: BTreeSet<String>,
     /// Each variant name, with the enums that have a variant so named.
     pub variants: BTreeMap<String, BTreeSet<String>>,
+    /// Each field name, with the structs that have a field so named.
+    pub field_owners: BTreeMap<String, BTreeSet<String>>,
+    /// Each struct's number of named fields.
+    pub field_counts: BTreeMap<String, usize>,
+}
+
+/// The struct a field is a chunk of: its one owner, if that has at most
+/// `SMALL` fields.
+const SMALL: usize = 4;
+
+impl Defs {
+    fn chunk_of(&self, field: &str) -> Option<&String> {
+        let owners = self.field_owners.get(field)?;
+        let only = owners.iter().next().filter(|_| owners.len() == 1)?;
+        (self.field_counts.get(only).copied().unwrap_or(0) <= SMALL).then_some(only)
+    }
+
+    /// Referents with each small struct's fields counted as the struct.
+    fn chunked(&self, refs: &BTreeSet<String>) -> BTreeSet<String> {
+        refs.iter()
+            .map(
+                |r| match r.strip_prefix("field ").and_then(|f| self.chunk_of(f)) {
+                    Some(s) => format!("type {s}"),
+                    None => r.clone(),
+                },
+            )
+            .collect()
+    }
 }
 
 struct DefCollector<'a>(&'a mut Defs);
@@ -283,11 +316,18 @@ impl<'ast> Visit<'ast> for DefCollector<'_> {
         syn::visit::visit_trait_item_fn(self, i);
     }
     fn visit_item_struct(&mut self, i: &'ast syn::ItemStruct) {
-        self.0.types.insert(i.ident.to_string());
+        let name = i.ident.to_string();
+        self.0.types.insert(name.clone());
         if let syn::Fields::Named(f) = &i.fields {
+            self.0.field_counts.insert(name.clone(), f.named.len());
             for f in &f.named {
                 if let Some(id) = &f.ident {
                     self.0.fields.insert(id.to_string());
+                    self.0
+                        .field_owners
+                        .entry(id.to_string())
+                        .or_default()
+                        .insert(name.clone());
                 }
             }
         }
@@ -483,21 +523,24 @@ impl FnCollector<'_> {
         };
         r.visit_signature(sig);
         r.visit_block(block);
-        let mut out = r.out;
-        let ambiguous: BTreeSet<String> = r.ambiguous.difference(&out).cloned().collect();
+        let mut strict = r.out;
+        let ambiguous: BTreeSet<String> = r.ambiguous.difference(&strict).cloned().collect();
+        let mut out = self.defs.chunked(&strict);
         // A method's own type is the context it is read in, not a referent.
         if let Some(o) = self.owner.last() {
-            out.remove(&format!("type {o}"));
-            out.remove("type Self");
+            for set in [&mut out, &mut strict] {
+                set.remove(&format!("type {o}"));
+                set.remove("type Self");
+            }
         }
         self.units.push(Unit {
             file: self.file.clone(),
             name,
+            strict: (strict.len() != out.len()).then_some(strict.len()),
             referents: out,
             ambiguous,
             children: 0,
             forward: 0,
-            strict: None,
         });
     }
 }
@@ -946,10 +989,15 @@ pub fn summary(units: &[Unit], limit: usize) -> String {
     let fwd = units.iter().filter(|u| u.forward > 0).count();
     let strict = units
         .iter()
-        .filter(|u| u.strict.is_some_and(|k| k > limit))
+        .filter(|u| u.strict.unwrap_or(u.load()) > limit)
         .count();
+    let part = if units.iter().any(|u| u.file.ends_with(".rs")) {
+        "field"
+    } else {
+        "term"
+    };
     let strict = if units.iter().any(|u| u.strict.is_some()) {
-        format!("; {strict} over {limit} counting each term apart")
+        format!("; {strict} over {limit} counting each {part} apart")
     } else {
         String::new()
     };
@@ -984,7 +1032,7 @@ mod tests {
         // Catches std calls counted as project calls, a field missed, or an
         // enum's variants counted apart from their enum.
         let src = r#"
-            struct App { outline: u32, mode: Mode }
+            struct App { outline: u32, mode: Mode, a: u8, b: u8, c: u8 }
             enum Mode { Normal, Quasi(u8) }
             const TOP: u32 = 0;
             impl App {
@@ -1011,6 +1059,61 @@ mod tests {
                 "type Mode"
             ]
         );
+    }
+
+    #[test]
+    fn a_small_structs_fields_are_one_chunk_with_it() {
+        // Catches the fields of a struct of at most four counted apart, or
+        // the count with each field apart lost.
+        let src = r#"
+            struct P { a: u8, b: u8 }
+            fn f(p: P) -> u8 { p.a + p.b }
+        "#;
+        let (fns, _, _) = measure_rust(&[("a.rs".into(), src.into())], &[]).unwrap();
+        let r: Vec<&str> = fns[0].referents.iter().map(String::as_str).collect();
+        assert_eq!((r, fns[0].strict), (vec!["type P"], Some(3)));
+    }
+
+    #[test]
+    fn a_large_structs_fields_and_shared_field_names_count_apart() {
+        // Catches a struct of five fields, or a field two structs have,
+        // taken as a chunk.
+        let src = r#"
+            struct L { a: u8, b: u8, c: u8, d: u8, e: u8 }
+            struct Q { x: u8 }
+            struct R { x: u8 }
+            fn f(l: &L, q: &Q) -> u8 { l.a + l.b + q.x }
+        "#;
+        let (fns, _, _) = measure_rust(&[("a.rs".into(), src.into())], &[]).unwrap();
+        let r: Vec<&str> = fns[0].referents.iter().map(String::as_str).collect();
+        assert_eq!(r, ["field a", "field b", "field x", "type L", "type Q"]);
+    }
+
+    #[test]
+    fn the_count_with_each_field_apart_includes_units_the_chunks_do_not_change() {
+        // Catches the strict count taken only over units whose two counts
+        // differ.
+        let unit = |load: usize, strict: Option<usize>| Unit {
+            file: "a.rs".into(),
+            name: String::new(),
+            referents: (0..load).map(|i| i.to_string()).collect(),
+            ambiguous: BTreeSet::new(),
+            children: 0,
+            forward: 0,
+            strict,
+        };
+        let s = summary(&[unit(5, None), unit(3, Some(6)), unit(1, None)], 4);
+        assert!(s.contains("2 over 4 counting each field apart"), "{s}");
+    }
+
+    #[test]
+    fn a_small_structs_own_methods_read_its_fields_as_context() {
+        let src = r#"
+            struct P { a: u8, b: u8 }
+            impl P { fn sum(&self) -> u8 { self.a + self.b } }
+        "#;
+        let (fns, _, _) = measure_rust(&[("a.rs".into(), src.into())], &[]).unwrap();
+        assert_eq!((fns[0].load(), fns[0].strict), (0, Some(2)));
     }
 
     #[test]
