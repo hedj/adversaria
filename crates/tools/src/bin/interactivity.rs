@@ -72,6 +72,7 @@ fn main() {
         "docs/plan.md",
         "docs/log.md",
         "docs/translator.md",
+        "docs/structure.md",
     ]
     .iter()
     .map(|p| (p.to_string(), read(&root.join(p))))
