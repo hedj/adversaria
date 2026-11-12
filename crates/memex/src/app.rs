@@ -331,8 +331,21 @@ enum Slot {
     Text,
 }
 
+/// A command's handler: the arguments are the words after its name.
+type Handler = fn(&mut App, &Args) -> Result<Mode, String>;
+
+/// What a command is given: its name, the words after it, and the target.
+pub struct Args<'a> {
+    pub name: &'static str,
+    pub words: Vec<&'a str>,
+    pub target: u64,
+}
+
 pub struct Command {
     pub name: &'static str,
+    run: Handler,
+    /// It acts on the target item, so needs one.
+    target: bool,
     slots: &'static [(&'static str, Slot)],
     pub help: &'static str,
 }
@@ -340,186 +353,260 @@ pub struct Command {
 pub const COMMANDS: &[Command] = &[
     Command {
         name: "accept",
+        run: App::cmd_accept_dismiss,
+        target: false,
         slots: &[("suggestion", Slot::Word)],
         help: "adopt the nth suggestion shown, with its evidence",
     },
     Command {
         name: "adopt",
+        run: App::cmd_adopt,
+        target: true,
         slots: &[],
         help: "make the target's claims beliefs, keeping their source",
     },
     Command {
         name: "claim",
+        run: App::cmd_fact_claim,
+        target: true,
         slots: &[("that", Slot::Text)],
         help: "the target states a claim: a Prolog fact, then from and its source",
     },
     Command {
         name: "check",
+        run: App::cmd_check,
+        target: true,
         slots: &[("which", Slot::Word)],
         help: "check quote (the text is in its source) or check source (the DOI, through Crossref)",
     },
     Command {
         name: "close",
+        run: App::cmd_close_commit,
+        target: false,
         slots: &[],
         help: "close the supposition and return to the actual world; it stays in the journal",
     },
     Command {
         name: "commit",
+        run: App::cmd_close_commit,
+        target: false,
         slots: &[],
         help: "make the supposed world the actual one",
     },
     Command {
         name: "constraint",
+        run: App::cmd_constraint,
+        target: false,
         slots: &[("named", Slot::Text)],
         help: "a constraint: its name, a colon, then a Prolog denial false :- ...",
     },
     Command {
         name: "copy",
+        run: App::cmd_copy,
+        target: true,
         slots: &[("after", Slot::Addr)],
         help: "copy the target's text to a new item after an item",
     },
     Command {
         name: "delete",
+        run: App::cmd_delete,
+        target: true,
         slots: &[],
         help: "delete the target: a word, or an item and its branch",
     },
     Command {
         name: "fold",
+        run: App::cmd_fold_unfold,
+        target: true,
         slots: &[],
         help: "hide the target's branch",
     },
     Command {
         name: "dismiss",
+        run: App::cmd_accept_dismiss,
+        target: false,
         slots: &[("suggestion", Slot::Word)],
         help: "dismiss the nth suggestion shown; it returns only if its evidence changes",
     },
     Command {
         name: "derive",
+        run: App::cmd_derive,
+        target: true,
         slots: &[("text", Slot::Text)],
         help: "the target shows a computed text: a template with {Var}, then where and a Prolog goal",
     },
     Command {
         name: "export",
+        run: App::cmd_export,
+        target: false,
         slots: &[("to", Slot::Text)],
         help: "export the outline, or one section, as a document (md, docx, odt, tex, html)",
     },
     Command {
         name: "fact",
+        run: App::cmd_fact_claim,
+        target: true,
         slots: &[("that", Slot::Text)],
         help: "the target states a belief: a Prolog fact",
     },
     Command {
         name: "follow",
+        run: App::cmd_follow,
+        target: true,
         slots: &[("link", Slot::Word)],
         help: "go to the item at the end of the target's nth link",
     },
     Command {
         name: "help",
+        run: App::cmd_help,
+        target: false,
         slots: &[],
         help: "list every command",
     },
     Command {
         name: "import",
+        run: App::cmd_import,
+        target: false,
         slots: &[("from", Slot::Text)],
         help: "import wikidata, document or results, then a file: what it says arrives as claims",
     },
     Command {
         name: "indent",
+        run: App::cmd_indent,
+        target: true,
         slots: &[],
         help: "make the target a child of the item above it",
     },
     Command {
         name: "interrogate",
+        run: App::cmd_interrogate,
+        target: true,
         slots: &[],
         help: "ask of the target's claim: who else claims it, who disputes it, its source and record",
     },
     Command {
         name: "layer",
+        run: App::cmd_layer,
+        target: true,
         slots: &[("mark", Slot::Text)],
         help: "add a layer to the target's view: a mark, then where and a goal; one mark per solution",
     },
     Command {
         name: "link",
+        run: App::cmd_link,
+        target: true,
         slots: &[("from", Slot::Addr), ("to", Slot::Addr), ("as", Slot::Word)],
         help: "link one item to another; the type defaults to link",
     },
     Command {
         name: "move",
+        run: App::cmd_move,
+        target: true,
         slots: &[("after", Slot::Addr)],
         help: "move the target's branch to follow an item",
     },
     Command {
         name: "name",
+        run: App::cmd_name,
+        target: true,
         slots: &[("as", Slot::Word)],
         help: "give the target a name that addresses it",
     },
     Command {
         name: "new",
+        run: App::cmd_new,
+        target: false,
         slots: &[],
         help: "a new item after the target",
     },
     Command {
         name: "outdent",
+        run: App::cmd_outdent,
+        target: true,
         slots: &[],
         help: "make the target a sibling of its parent",
     },
     Command {
         name: "pane",
+        run: App::cmd_pane,
+        target: false,
         slots: &[("shows", Slot::Word)],
         help: "set the other pane to outline or links",
     },
     Command {
         name: "quit",
+        run: App::cmd_quit,
+        target: false,
         slots: &[],
         help: "write what is pending and leave",
     },
     Command {
         name: "redo",
+        run: App::cmd_redo,
+        target: false,
         slots: &[],
         help: "redo what undo undid, along the current branch",
     },
     Command {
         name: "rule",
+        run: App::cmd_rule,
+        target: false,
         slots: &[("that", Slot::Text)],
         help: "define a predicate from others: Head :- Body. Usable in derive, constraint, layer and other rules",
     },
     Command {
         name: "set",
+        run: App::cmd_set,
+        target: false,
         slots: &[("that", Slot::Text)],
         help: "state a fact and retract the beliefs it directly contradicts under a constraint; the fact goes where the replaced one was",
     },
     Command {
         name: "retract",
+        run: App::cmd_retract,
+        target: false,
         slots: &[("entry", Slot::Word)],
         help: "reverse one earlier entry, keeping later work; lists what depends on it first",
     },
     Command {
         name: "suppose",
+        run: App::cmd_suppose,
+        target: false,
         slots: &[("that", Slot::Text)],
         help: "start a named world with nothing supposed; hold Suppose to suppose a statement",
     },
     Command {
         name: "switch",
+        run: App::cmd_switch,
+        target: false,
         slots: &[],
         help: "move to the other pane",
     },
     Command {
         name: "transclude",
+        run: App::cmd_transclude,
+        target: true,
         slots: &[("from", Slot::Addr)],
         help: "show an item's text in place, in a new item after the target",
     },
     Command {
         name: "unadopt",
+        run: App::cmd_unadopt,
+        target: true,
         slots: &[],
         help: "retract the target's last adoption",
     },
     Command {
         name: "undo",
+        run: App::cmd_undo,
+        target: false,
         slots: &[],
         help: "undo the last change on this branch",
     },
     Command {
         name: "unfold",
+        run: App::cmd_fold_unfold,
+        target: true,
         slots: &[],
         help: "show the target's branch",
     },
@@ -2403,226 +2490,669 @@ impl App {
         let name = find_command(words[0])
             .ok_or_else(|| format!("no command “{}”; ? lists them", words[0]))?;
         words.remove(0);
+        let cmd = COMMANDS.iter().find(|c| c.name == name).unwrap();
         let target = self.cursor();
-        let need_target = !matches!(
-            name,
-            "help"
-                | "quit"
-                | "redo"
-                | "undo"
-                | "switch"
-                | "pane"
-                | "retract"
-                | "set"
-                | "rule"
-                | "suppose"
-                | "new"
-                | "constraint"
-                | "close"
-                | "commit"
-                | "import"
-                | "accept"
-                | "dismiss"
-                | "export"
-        );
-        if need_target && target == TOP {
+        if cmd.target && target == TOP {
             return Err("there is no item to act on".into());
         }
-        match name {
-            "help" => {
-                self.message = COMMANDS
-                    .iter()
-                    .map(|c| c.name)
-                    .collect::<Vec<_>>()
-                    .join(" · ");
+        let mode = (cmd.run)(
+            self,
+            &Args {
+                name,
+                words,
+                target,
+            },
+        )?;
+        if mode == Mode::Normal && self.view.scope != ScopeLevel::Statement {
+            self.view.scope = ScopeLevel::Statement;
+            self.view_dirty = true;
+        }
+        Ok(mode)
+    }
+
+    fn cmd_help(&mut self, _: &Args) -> Result<Mode, String> {
+        self.message = COMMANDS
+            .iter()
+            .map(|c| c.name)
+            .collect::<Vec<_>>()
+            .join(" · ");
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_quit(&mut self, _: &Args) -> Result<Mode, String> {
+        self.quit = true;
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_new(&mut self, a: &Args) -> Result<Mode, String> {
+        let target = a.target;
+        self.new_item_after(target)?;
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_switch(&mut self, _: &Args) -> Result<Mode, String> {
+        self.view.focus = 1 - self.view.focus;
+        if self.view.panes[self.view.focus].cursor == TOP {
+            self.view.panes[self.view.focus].cursor = self.view.panes[1 - self.view.focus].cursor;
+        }
+        self.write_view("pane", json!({}));
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_pane(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let other = 1 - self.view.focus;
+        self.view.panes[other].kind = match words.first().copied() {
+            Some("outline") => PaneKind::Outline,
+            Some("links") => PaneKind::Links,
+            Some("suggestions") => PaneKind::Suggestions,
+            _ => return Err("pane (shows) outline, links, or suggestions".into()),
+        };
+        self.view.panes[other].cursor = target;
+        self.write_view("pane", json!({}));
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_fold_unfold(&mut self, a: &Args) -> Result<Mode, String> {
+        let target = a.target;
+        let name = a.name;
+        if name == "fold" {
+            self.view.folded.insert(target);
+        } else {
+            self.view.folded.remove(&target);
+        }
+        self.write_view("fold", json!({}));
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_undo(&mut self, _: &Args) -> Result<Mode, String> {
+        let Some(t) = self.content_tip(self.tip).filter(|t| *t > 1) else {
+            return Err("nothing to undo on this branch".into());
+        };
+        let parent = self.entry(t).and_then(|e| e.parent);
+        self.write(parent, "undo", json!({"undoes": t}))?;
+        self.message = format!("undid entry {t}");
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_redo(&mut self, _: &Args) -> Result<Mode, String> {
+        let Some(&t) = self.redo.last() else {
+            return Err("nothing to redo".into());
+        };
+        self.write(Some(t), "redo", json!({"redoes": t}))?;
+        self.message = format!("redid entry {t}");
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_retract(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let t: u64 = words
+            .first()
+            .and_then(|w| w.trim_start_matches('#').parse().ok())
+            .ok_or("retract (entry) seq")?;
+        let dependents = self.retractable(t)?;
+        self.message.clear();
+        Ok(Mode::ConfirmRetract {
+            target: t,
+            dependents,
+        })
+    }
+
+    fn cmd_delete(&mut self, a: &Args) -> Result<Mode, String> {
+        let target = a.target;
+        if self.view.scope == ScopeLevel::Word {
+            let text = self.text_of(target);
+            let (a, b) = word_at(&text, self.view.pos);
+            let mut t = text.clone();
+            t.drain(a..b);
+            self.view.pos = a;
+            self.view_dirty = true;
+            self.write_text(target, &t)?;
+        } else {
+            self.write_here("edit", json!({"op": "delete", "item": target}))?;
+        }
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_indent(&mut self, a: &Args) -> Result<Mode, String> {
+        let target = a.target;
+        let p = self.outline.parent(target).unwrap_or(TOP);
+        let sibs = self.outline.children(p).to_vec();
+        let i = sibs.iter().position(|x| *x == target).unwrap_or(0);
+        if i == 0 {
+            return Err("the first item of a list cannot be indented".into());
+        }
+        let under = sibs[i - 1];
+        let after = self.outline.children(under).last().copied();
+        self.write_here(
+            "edit",
+            json!({"op": "move", "item": target, "under": under, "after": after}),
+        )?;
+        if self.view.folded.remove(&under) {
+            self.view_dirty = true;
+        }
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_outdent(&mut self, a: &Args) -> Result<Mode, String> {
+        let target = a.target;
+        let p = self.outline.parent(target).unwrap_or(TOP);
+        if p == TOP {
+            return Err("a top-level item cannot be outdented".into());
+        }
+        let gp = self.outline.parent(p).unwrap_or(TOP);
+        self.write_here(
+            "edit",
+            json!({"op": "move", "item": target, "under": gp, "after": p}),
+        )?;
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_move(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let to = self
+            .addresses(words, 1)
+            .ok_or("move (after) an item: a number, a name, or the start of its text")?[0];
+        if to == target || self.outline.in_order().contains(&to) && self.is_in_branch(to, target) {
+            return Err("an item cannot move into its own branch".into());
+        }
+        let under = self.outline.parent(to).unwrap_or(TOP);
+        self.write_here(
+            "edit",
+            json!({"op": "move", "item": target, "under": under, "after": to}),
+        )?;
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_copy(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let to = self.addresses(words, 1).ok_or("copy (after) an item")?[0];
+        let text = self.outline.text(target);
+        let n = text.chars().count();
+        let under = self.outline.parent(to).unwrap_or(TOP);
+        self.write_here(
+            "edit",
+            json!({"op": "create", "under": under, "after": to, "add": text, "spans": [[0, 0, n]]}),
+        )?;
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_transclude(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let from = self
+            .addresses(words, 1)
+            .ok_or("transclude (from) an item")?[0];
+        let spans = self.outline.items[&from].spans.clone();
+        let under = self.outline.parent(target).unwrap_or(TOP);
+        let e = self.write_here("edit", json!({"op": "create", "under": under, "after": target, "add": "", "spans": span_json(&spans)}))?;
+        self.set_cursor(e.seq);
+        self.write_view("move", json!({}));
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_link(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let (addr_words, kind) = match words.iter().position(|w| *w == "as") {
+            Some(i) => (&words[..i], words.get(i + 1).copied().unwrap_or("link")),
+            None => (&words[..], "link"),
+        };
+        let ends = self
+            .addresses(addr_words, 2)
+            .or_else(|| self.addresses(addr_words, 1).map(|t| vec![target, t[0]]))
+            .ok_or("link (from) an item (to) an item, (as) a type")?;
+        let fact = format::terms::Term::Compound(
+            kind.into(),
+            vec![
+                format::terms::Term::Int(ends[0] as i64),
+                format::terms::Term::Int(ends[1] as i64),
+            ],
+        );
+        let fact = format::terms::encode(&fact).map_err(|e| e.0)?;
+        self.write_here(
+            "link",
+            json!({"from": ends[0], "to": ends[1], "type": kind, "facts": [fact]}),
+        )?;
+        self.message = format!(
+            "linked {} to {} as {kind}",
+            self.outline.number(ends[0]),
+            self.outline.number(ends[1])
+        );
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_name(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let n = words.join(" ");
+        if n.is_empty() {
+            return Err("name (as) a word".into());
+        }
+        self.write_here("name", json!({"name": n, "item": target}))?;
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_follow(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let k: usize = words.first().and_then(|w| w.parse().ok()).unwrap_or(1);
+        let (out, into) = self.outline.links_of(target);
+        let ends: Vec<u64> = out
+            .iter()
+            .map(|l| l.to)
+            .chain(into.iter().map(|l| l.from))
+            .collect();
+        let to = *ends
+            .get(k.wrapping_sub(1))
+            .ok_or(format!("the target has {} links", ends.len()))?;
+        self.unfold_to(to);
+        self.set_cursor(to);
+        self.write_view("follow", json!({"to": to}));
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_export(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let (file, section) = match words.split_last() {
+            Some((last, rest)) if !rest.is_empty() && self.outline.by_number(last).is_some() => {
+                (rest.join(" "), self.outline.by_number(last))
             }
-            "quit" => self.quit = true,
-            "new" => self.new_item_after(target)?,
-            "switch" => {
-                self.view.focus = 1 - self.view.focus;
-                if self.view.panes[self.view.focus].cursor == TOP {
-                    self.view.panes[self.view.focus].cursor =
-                        self.view.panes[1 - self.view.focus].cursor;
-                }
-                self.write_view("pane", json!({}));
+            _ => (words.join(" "), None),
+        };
+        if file.is_empty() {
+            return Err("export (to) a file, and an item number for one section".into());
+        }
+        self.export(&file, section)?;
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_check(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let ruling = match words.first().copied() {
+            Some("quote") => self.check_quote(target)?,
+            Some("source") => self.check_source(target)?,
+            _ => return Err("check quote, or check source".into()),
+        };
+        self.message = format!("{} check: {ruling}", words[0]);
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_accept_dismiss(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let name = a.name;
+        let n: usize = words
+            .first()
+            .and_then(|w| w.parse().ok())
+            .ok_or(format!("{name} (suggestion) a number"))?;
+        let s = self
+            .shown_suggestions()
+            .get(n.wrapping_sub(1))
+            .map(|s| (*s).clone())
+            .ok_or(format!("there is no suggestion {n}"))?;
+        if name == "dismiss" {
+            self.write_view("dismiss", json!({"key": s.key()}));
+            self.message = format!("dismissed: {}", s.describe());
+        } else {
+            self.accept(&s)?;
+            self.message = format!("adopted: {}", s.describe());
+        }
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_fact_claim(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let name = a.name;
+        let text = words.join(" ");
+        let (fact_text, source) = match (name, text.rfind(" from ")) {
+            ("claim", Some(i)) => (
+                text[..i].to_string(),
+                Some(text[i + 6..].trim().to_string()),
+            ),
+            ("claim", None) => return Err("claim (that) a fact, from a source".into()),
+            _ => (text, None),
+        };
+        let (t, _) = self
+            .engine(0)?
+            .parse(fact_text.trim_end_matches('.'))
+            .map_err(|e| format!("not a Prolog fact: {e}"))?;
+        if !matches!(t, Term::Atom(_) | Term::Compound(..)) || !variables(&t).is_empty() {
+            return Err("a fact is an atom or a compound term, with no variables".into());
+        }
+        if reserved(&t) {
+            return Err(format!(
+                "{} is reserved: definitions are made by constraint, derive and accept",
+                functor_of(&t)
+            ));
+        }
+        let fact = match &source {
+            Some(src) => Term::Compound("claims".into(), vec![Term::Str(src.clone()), t]),
+            None => t,
+        };
+        let f = terms::encode(&fact).map_err(|e| e.0)?;
+        let mut body = json!({"op": "facts", "item": target, "facts": [f]});
+        if let Some(src) = source {
+            body["source"] = json!(src);
+        }
+        self.write_here("edit", body)?;
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_rule(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let text = words.join(" ");
+        let (t, names) = self
+            .engine(0)?
+            .parse(text.trim().trim_end_matches('.'))
+            .map_err(|e| format!("not a Prolog rule: {e}"))?;
+        let (head, body) = match &t {
+            Term::Compound(n, a) if n == ":-" && a.len() == 2 => (a[0].clone(), a[1].clone()),
+            _ => return Err("rule (that) Head :- Body.".into()),
+        };
+        let pi = functor_of(&head);
+        if reserved(&head)
+            || matches!(&head, Term::Compound(f, _) | Term::Atom(f) if f == "rule_def" || f == "node_def" || f == "claims")
+        {
+            return Err(format!("rule not kept: {pi} is reserved"));
+        }
+        // Every head variable must be bound by the body; name those
+        // that are not. `names` are in order of first appearance.
+        let in_body = variables(&body);
+        let free: Vec<String> = variables(&head)
+            .into_iter()
+            .filter(|v| !in_body.contains(v))
+            .map(|v| {
+                names
+                    .get(v as usize)
+                    .cloned()
+                    .unwrap_or_else(|| format!("_{v}"))
+            })
+            .collect();
+        if !free.is_empty() {
+            return Err(format!(
+                "rule not kept: {} in the head {} not bound by the body",
+                free.join(", "),
+                if free.len() == 1 { "is" } else { "are" }
+            ));
+        }
+        // The check reads the world's rules: bring the engine up to
+        // date first, in case it has not been evaluated since.
+        let facts = crate::store::facts(self.journal.entries(), self.tip)?;
+        self.engine(0)?.sync(&facts).map_err(|e| e.to_string())?;
+        self.engine(0)?
+            .check_rule(&head, &body)
+            .map_err(|w| format!("rule not kept: {w}"))?;
+        let seq = self.journal.entries().len() as u64 + 1;
+        let def = Term::Compound("rule_def".into(), vec![Term::Int(seq as i64), head, body]);
+        let f = terms::encode(&def).map_err(|e| e.0)?;
+        let mut b = json!({"op": "facts", "rule": text.trim(), "facts": [f]});
+        if target != TOP {
+            b["item"] = json!(target);
+        }
+        self.write_here("edit", b)?;
+        self.message = format!("rule {pi} kept");
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_set(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let text = words.join(" ");
+        let (t, _) = self
+            .engine(0)?
+            .parse(text.trim_end_matches('.'))
+            .map_err(|e| format!("not a Prolog fact: {e}"))?;
+        if !matches!(t, Term::Atom(_) | Term::Compound(..)) || !variables(&t).is_empty() {
+            return Err("a fact is an atom or a compound term, with no variables".into());
+        }
+        if reserved(&t) {
+            return Err(format!(
+                "{} is reserved: definitions are made by constraint, derive and accept",
+                functor_of(&t)
+            ));
+        }
+        self.set_fact(&t, target)?;
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_constraint(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let text = words.join(" ");
+        let (cname, rule) = text
+            .split_once(": ")
+            .ok_or("constraint (named) a name: false :- body.")?;
+        let (t, _) = self
+            .engine(0)?
+            .parse(rule.trim().trim_end_matches('.'))
+            .map_err(|e| format!("not a Prolog rule: {e}"))?;
+        let body = match &t {
+            Term::Compound(n, a)
+                if n == ":-" && a.len() == 2 && a[0] == Term::Atom("false".into()) =>
+            {
+                a[1].clone()
             }
-            "pane" => {
-                let other = 1 - self.view.focus;
-                self.view.panes[other].kind = match words.first().copied() {
-                    Some("outline") => PaneKind::Outline,
-                    Some("links") => PaneKind::Links,
-                    Some("suggestions") => PaneKind::Suggestions,
-                    _ => return Err("pane (shows) outline, links, or suggestions".into()),
-                };
-                self.view.panes[other].cursor = target;
-                self.write_view("pane", json!({}));
-            }
-            "fold" | "unfold" => {
-                if name == "fold" {
-                    self.view.folded.insert(target);
-                } else {
-                    self.view.folded.remove(&target);
-                }
-                self.write_view("fold", json!({}));
-            }
-            "undo" => {
-                let Some(t) = self.content_tip(self.tip).filter(|t| *t > 1) else {
-                    return Err("nothing to undo on this branch".into());
-                };
-                let parent = self.entry(t).and_then(|e| e.parent);
-                self.write(parent, "undo", json!({"undoes": t}))?;
-                self.message = format!("undid entry {t}");
-            }
-            "redo" => {
-                let Some(&t) = self.redo.last() else {
-                    return Err("nothing to redo".into());
-                };
-                self.write(Some(t), "redo", json!({"redoes": t}))?;
-                self.message = format!("redid entry {t}");
-            }
-            "retract" => {
-                let t: u64 = words
-                    .first()
-                    .and_then(|w| w.trim_start_matches('#').parse().ok())
-                    .ok_or("retract (entry) seq")?;
-                let dependents = self.retractable(t)?;
-                self.message.clear();
-                return Ok(Mode::ConfirmRetract {
-                    target: t,
-                    dependents,
-                });
-            }
-            "delete" => {
-                if self.view.scope == ScopeLevel::Word {
-                    let text = self.text_of(target);
-                    let (a, b) = word_at(&text, self.view.pos);
-                    let mut t = text.clone();
-                    t.drain(a..b);
-                    self.view.pos = a;
-                    self.view_dirty = true;
-                    self.write_text(target, &t)?;
-                } else {
-                    self.write_here("edit", json!({"op": "delete", "item": target}))?;
-                }
-            }
-            "indent" => {
-                let p = self.outline.parent(target).unwrap_or(TOP);
-                let sibs = self.outline.children(p).to_vec();
-                let i = sibs.iter().position(|x| *x == target).unwrap_or(0);
-                if i == 0 {
-                    return Err("the first item of a list cannot be indented".into());
-                }
-                let under = sibs[i - 1];
-                let after = self.outline.children(under).last().copied();
-                self.write_here(
-                    "edit",
-                    json!({"op": "move", "item": target, "under": under, "after": after}),
-                )?;
-                if self.view.folded.remove(&under) {
-                    self.view_dirty = true;
-                }
-            }
-            "outdent" => {
-                let p = self.outline.parent(target).unwrap_or(TOP);
-                if p == TOP {
-                    return Err("a top-level item cannot be outdented".into());
-                }
-                let gp = self.outline.parent(p).unwrap_or(TOP);
-                self.write_here(
-                    "edit",
-                    json!({"op": "move", "item": target, "under": gp, "after": p}),
-                )?;
-            }
-            "move" => {
-                let to = self
-                    .addresses(&words, 1)
-                    .ok_or("move (after) an item: a number, a name, or the start of its text")?[0];
-                if to == target
-                    || self.outline.in_order().contains(&to) && self.is_in_branch(to, target)
-                {
-                    return Err("an item cannot move into its own branch".into());
-                }
-                let under = self.outline.parent(to).unwrap_or(TOP);
-                self.write_here(
-                    "edit",
-                    json!({"op": "move", "item": target, "under": under, "after": to}),
-                )?;
-            }
-            "copy" => {
-                let to = self.addresses(&words, 1).ok_or("copy (after) an item")?[0];
-                let text = self.outline.text(target);
-                let n = text.chars().count();
-                let under = self.outline.parent(to).unwrap_or(TOP);
-                self.write_here("edit", json!({"op": "create", "under": under, "after": to, "add": text, "spans": [[0, 0, n]]}))?;
-            }
-            "transclude" => {
-                let from = self
-                    .addresses(&words, 1)
-                    .ok_or("transclude (from) an item")?[0];
-                let spans = self.outline.items[&from].spans.clone();
-                let under = self.outline.parent(target).unwrap_or(TOP);
-                let e = self.write_here("edit", json!({"op": "create", "under": under, "after": target, "add": "", "spans": span_json(&spans)}))?;
-                self.set_cursor(e.seq);
-                self.write_view("move", json!({}));
-            }
-            "link" => {
-                let (addr_words, kind) = match words.iter().position(|w| *w == "as") {
-                    Some(i) => (&words[..i], words.get(i + 1).copied().unwrap_or("link")),
-                    None => (&words[..], "link"),
-                };
-                let ends = self
-                    .addresses(addr_words, 2)
-                    .or_else(|| self.addresses(addr_words, 1).map(|t| vec![target, t[0]]))
-                    .ok_or("link (from) an item (to) an item, (as) a type")?;
-                let fact = format::terms::Term::Compound(
-                    kind.into(),
-                    vec![
-                        format::terms::Term::Int(ends[0] as i64),
-                        format::terms::Term::Int(ends[1] as i64),
-                    ],
-                );
-                let fact = format::terms::encode(&fact).map_err(|e| e.0)?;
-                self.write_here(
-                    "link",
-                    json!({"from": ends[0], "to": ends[1], "type": kind, "facts": [fact]}),
-                )?;
-                self.message = format!(
-                    "linked {} to {} as {kind}",
-                    self.outline.number(ends[0]),
-                    self.outline.number(ends[1])
-                );
-            }
-            "name" => {
-                let n = words.join(" ");
-                if n.is_empty() {
-                    return Err("name (as) a word".into());
-                }
-                self.write_here("name", json!({"name": n, "item": target}))?;
-            }
-            "follow" => {
-                let k: usize = words.first().and_then(|w| w.parse().ok()).unwrap_or(1);
-                let (out, into) = self.outline.links_of(target);
-                let ends: Vec<u64> = out
-                    .iter()
-                    .map(|l| l.to)
-                    .chain(into.iter().map(|l| l.from))
-                    .collect();
-                let to = *ends
-                    .get(k.wrapping_sub(1))
-                    .ok_or(format!("the target has {} links", ends.len()))?;
-                self.unfold_to(to);
-                self.set_cursor(to);
-                self.write_view("follow", json!({"to": to}));
-            }
-            "import" if words.first() == Some(&"document") => {
+            _ => return Err("a constraint is a denial: false :- body.".into()),
+        };
+        self.engine(0)?
+            .check_definition(&body)
+            .map_err(|w| format!("constraint not kept: {w}"))?;
+        let vars = reason::make_list(variables(&body).into_iter().map(Term::Var).collect());
+        // Tried against a planted violation before it is kept.
+        let planted = self
+            .engine(0)?
+            .plant(&vars, &body)
+            .map_err(|e| e.to_string())?;
+        if !matches!(&planted, Term::Compound(n, _) if n == "fires") {
+            return Err(format!(
+                "constraint not kept: tried against a planted violation, it did not fire ({})",
+                reason::show(&planted)
+            ));
+        }
+        let seq = self.journal.entries().len() as u64 + 1;
+        let def = Term::Compound(
+            "node_def".into(),
+            vec![
+                Term::Int(seq as i64),
+                Term::Compound(
+                    "constraint".into(),
+                    vec![Term::Str(cname.trim().into()), vars, body],
+                ),
+            ],
+        );
+        let f = terms::encode(&def).map_err(|e| e.0)?;
+        self.write_here(
+            "edit",
+            json!({"op": "constraint", "name": cname.trim(), "rule": rule.trim(), "facts": [f]}),
+        )?;
+        self.message = format!(
+            "constraint {} kept: it fires on a planted violation",
+            cname.trim()
+        );
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_layer(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let text = words.join(" ");
+        let (mark_text, goal_text) = match text.split_once(" where ") {
+            Some((m, g)) => (
+                m.trim().to_string(),
+                g.trim().trim_end_matches('.').to_string(),
+            ),
+            None => (
+                text.trim().trim_end_matches('.').to_string(),
+                "true".to_string(),
+            ),
+        };
+        // One term, so the mark and the goal share their variables.
+        let (t, names) = self
+            .engine(0)?
+            .parse(&format!("layer(({mark_text}), ({goal_text}))"))
+            .map_err(|e| format!("not a mark and a goal: {e}"))?;
+        let Term::Compound(_, a) = &t else {
+            unreachable!()
+        };
+        let (mark, goal) = (a[0].clone(), a[1].clone());
+        crate::view::channels(&mark).map_err(|e| format!("layer not kept: {e}"))?;
+        let in_goal = variables(&goal);
+        let free: Vec<String> = variables(&mark)
+            .into_iter()
+            .filter(|v| !in_goal.contains(v))
+            .map(|v| {
+                names
+                    .get(v as usize)
+                    .cloned()
+                    .unwrap_or_else(|| format!("_{v}"))
+            })
+            .collect();
+        if !free.is_empty() {
+            return Err(format!(
+                "layer not kept: {} in the mark {} not bound by the goal",
+                free.join(", "),
+                if free.len() == 1 { "is" } else { "are" }
+            ));
+        }
+        self.engine(0)?
+            .check_definition(&goal)
+            .map_err(|w| format!("layer not kept: {w}"))?;
+        let seq = self.journal.entries().len() as u64 + 1;
+        let def = Term::Compound(
+            "node_def".into(),
+            vec![
+                Term::Int(seq as i64),
+                Term::Compound("layer".into(), vec![mark, goal]),
+            ],
+        );
+        let f = terms::encode(&def).map_err(|e| e.0)?;
+        self.write_here("edit", json!({"op": "layer", "item": target, "mark": mark_text, "goal": goal_text, "facts": [f]}))?;
+        self.message = format!("layer kept: {}", mark_text);
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_derive(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let target = a.target;
+        let text = words.join(" ");
+        let (template, goal) = text
+            .split_once(" where ")
+            .ok_or("derive (text) a template with {Var}, where a goal")?;
+        let (g, names) = self
+            .engine(0)?
+            .parse(goal.trim().trim_end_matches('.'))
+            .map_err(|e| format!("not a Prolog goal: {e}"))?;
+        self.engine(0)?
+            .check_definition(&g)
+            .map_err(|w| format!("not derived: {w}"))?;
+        let vars = reason::make_list(variables(&g).into_iter().map(Term::Var).collect());
+        let def = Term::Compound(
+            "node_def".into(),
+            vec![
+                Term::Int(target as i64),
+                Term::Compound("query".into(), vec![vars, g]),
+            ],
+        );
+        let f = terms::encode(&def).map_err(|e| e.0)?;
+        self.write_here("edit", json!({"op": "derive", "item": target, "template": template.trim(), "names": names, "facts": [f]}))?;
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_interrogate(&mut self, a: &Args) -> Result<Mode, String> {
+        let target = a.target;
+        if self.claims_of(target).is_empty() {
+            return Err("the target states no claim".into());
+        }
+        self.view.interrogate = Some(target);
+        self.view.panes[1].kind = PaneKind::Links;
+        self.write_view("interrogate", json!({}));
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_adopt(&mut self, a: &Args) -> Result<Mode, String> {
+        let target = a.target;
+        let claims = self.claims_of(target);
+        if claims.is_empty() {
+            return Err("the target states no claim to adopt".into());
+        }
+        if let Some((_, _, p)) = claims.iter().find(|(_, _, p)| reserved(p)) {
+            return Err(format!(
+                "not adopted: the claim is a {}, which is reserved for constraint, derive and accept",
+                functor_of(p)
+            ));
+        }
+        for (seq, src, p) in claims {
+            let f = terms::encode(&p).map_err(|e| e.0)?;
+            self.write_here(
+                "adopt",
+                json!({"claim": seq, "item": target, "source": src, "facts": [f]}),
+            )?;
+        }
+        self.message = "adopted: a belief now, with its source kept".into();
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_unadopt(&mut self, a: &Args) -> Result<Mode, String> {
+        let target = a.target;
+        let last = self
+            .path(self.tip)
+            .iter()
+            .rev()
+            .find(|e| {
+                e.kind == "adopt"
+                    && e.body.as_ref().and_then(|b| b["item"].as_u64()) == Some(target)
+            })
+            .map(|e| e.seq)
+            .filter(|s| self.retractable(*s).is_ok())
+            .ok_or("the target has no adoption to retract")?;
+        self.write_here("retract", json!({"target": last}))?;
+        self.message = format!("adoption {last} retracted");
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_close_commit(&mut self, a: &Args) -> Result<Mode, String> {
+        let name = a.name;
+        let s = self.supposition.clone().ok_or("no supposition is open")?;
+        let parent = if name == "close" { s.actual } else { self.tip };
+        self.view.interrogate = None;
+        self.flush_text();
+        let body = self.view.to_json("world", json!({name: true}));
+        self.write(Some(parent), "view", body)?;
+        self.message = if name == "close" {
+            format!("closed “{}”; it stays in the journal", s.name)
+        } else {
+            format!("“{}” is now the actual world", s.name)
+        };
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_suppose(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        let n = words.join(" ");
+        if n.is_empty() {
+            return Err("suppose (that) a name for the world".into());
+        }
+        self.write_here("suppose", json!({"name": n}))?;
+        Ok(Mode::Normal)
+    }
+
+    fn cmd_import(&mut self, a: &Args) -> Result<Mode, String> {
+        let words = &a.words;
+        match a.words.first().copied() {
+            Some("document") => {
                 let file = words[1..].join(" ");
                 self.import_document(&file)?;
             }
-            "import" if words.first() == Some(&"results") => {
+            Some("results") => {
                 let file = words[1..].join(" ");
                 self.import_results(&file)?;
             }
-            "import" => {
+            _ => {
                 let (what, file) = match words.split_first() {
                     Some((w, rest)) if *w == "wikidata" && !rest.is_empty() => (*w, rest.join(" ")),
                     _ => {
@@ -2649,360 +3179,16 @@ impl App {
                 // Provenance after W3C PROV: what it was derived from, under
                 // what licence, and the file it came in.
                 self.write_here(
-                    "import",
-                    json!({"blob": hash, "format": "wikidata-subset", "source": "Wikidata", "file": name,
-                           "prov": {"prov:wasDerivedFrom": "https://www.wikidata.org/", "license": "CC0-1.0", "prov:wasGeneratedBy": "crates/tools/src/bin/wikidata.rs"}}),
-                )?;
+                "import",
+                json!({"blob": hash, "format": "wikidata-subset", "source": "Wikidata", "file": name,
+                       "prov": {"prov:wasDerivedFrom": "https://www.wikidata.org/", "license": "CC0-1.0", "prov:wasGeneratedBy": "crates/tools/src/bin/wikidata.rs"}}),
+            )?;
                 self.message = format!(
                     "imported {what}: {} bytes, blob {}",
                     bytes.len(),
                     &hash[..12]
                 );
             }
-            "export" => {
-                let (file, section) = match words.split_last() {
-                    Some((last, rest))
-                        if !rest.is_empty() && self.outline.by_number(last).is_some() =>
-                    {
-                        (rest.join(" "), self.outline.by_number(last))
-                    }
-                    _ => (words.join(" "), None),
-                };
-                if file.is_empty() {
-                    return Err("export (to) a file, and an item number for one section".into());
-                }
-                self.export(&file, section)?;
-            }
-            "check" => {
-                let ruling = match words.first().copied() {
-                    Some("quote") => self.check_quote(target)?,
-                    Some("source") => self.check_source(target)?,
-                    _ => return Err("check quote, or check source".into()),
-                };
-                self.message = format!("{} check: {ruling}", words[0]);
-            }
-            "accept" | "dismiss" => {
-                let n: usize = words
-                    .first()
-                    .and_then(|w| w.parse().ok())
-                    .ok_or(format!("{name} (suggestion) a number"))?;
-                let s = self
-                    .shown_suggestions()
-                    .get(n.wrapping_sub(1))
-                    .map(|s| (*s).clone())
-                    .ok_or(format!("there is no suggestion {n}"))?;
-                if name == "dismiss" {
-                    self.write_view("dismiss", json!({"key": s.key()}));
-                    self.message = format!("dismissed: {}", s.describe());
-                } else {
-                    self.accept(&s)?;
-                    self.message = format!("adopted: {}", s.describe());
-                }
-            }
-
-            "fact" | "claim" => {
-                let text = words.join(" ");
-                let (fact_text, source) = match (name, text.rfind(" from ")) {
-                    ("claim", Some(i)) => (
-                        text[..i].to_string(),
-                        Some(text[i + 6..].trim().to_string()),
-                    ),
-                    ("claim", None) => return Err("claim (that) a fact, from a source".into()),
-                    _ => (text, None),
-                };
-                let (t, _) = self
-                    .engine(0)?
-                    .parse(fact_text.trim_end_matches('.'))
-                    .map_err(|e| format!("not a Prolog fact: {e}"))?;
-                if !matches!(t, Term::Atom(_) | Term::Compound(..)) || !variables(&t).is_empty() {
-                    return Err("a fact is an atom or a compound term, with no variables".into());
-                }
-                if reserved(&t) {
-                    return Err(format!(
-                        "{} is reserved: definitions are made by constraint, derive and accept",
-                        functor_of(&t)
-                    ));
-                }
-                let fact = match &source {
-                    Some(src) => Term::Compound("claims".into(), vec![Term::Str(src.clone()), t]),
-                    None => t,
-                };
-                let f = terms::encode(&fact).map_err(|e| e.0)?;
-                let mut body = json!({"op": "facts", "item": target, "facts": [f]});
-                if let Some(src) = source {
-                    body["source"] = json!(src);
-                }
-                self.write_here("edit", body)?;
-            }
-            "rule" => {
-                let text = words.join(" ");
-                let (t, names) = self
-                    .engine(0)?
-                    .parse(text.trim().trim_end_matches('.'))
-                    .map_err(|e| format!("not a Prolog rule: {e}"))?;
-                let (head, body) = match &t {
-                    Term::Compound(n, a) if n == ":-" && a.len() == 2 => {
-                        (a[0].clone(), a[1].clone())
-                    }
-                    _ => return Err("rule (that) Head :- Body.".into()),
-                };
-                let pi = functor_of(&head);
-                if reserved(&head)
-                    || matches!(&head, Term::Compound(f, _) | Term::Atom(f) if f == "rule_def" || f == "node_def" || f == "claims")
-                {
-                    return Err(format!("rule not kept: {pi} is reserved"));
-                }
-                // Every head variable must be bound by the body; name those
-                // that are not. `names` are in order of first appearance.
-                let in_body = variables(&body);
-                let free: Vec<String> = variables(&head)
-                    .into_iter()
-                    .filter(|v| !in_body.contains(v))
-                    .map(|v| {
-                        names
-                            .get(v as usize)
-                            .cloned()
-                            .unwrap_or_else(|| format!("_{v}"))
-                    })
-                    .collect();
-                if !free.is_empty() {
-                    return Err(format!(
-                        "rule not kept: {} in the head {} not bound by the body",
-                        free.join(", "),
-                        if free.len() == 1 { "is" } else { "are" }
-                    ));
-                }
-                // The check reads the world's rules: bring the engine up to
-                // date first, in case it has not been evaluated since.
-                let facts = crate::store::facts(self.journal.entries(), self.tip)?;
-                self.engine(0)?.sync(&facts).map_err(|e| e.to_string())?;
-                self.engine(0)?
-                    .check_rule(&head, &body)
-                    .map_err(|w| format!("rule not kept: {w}"))?;
-                let seq = self.journal.entries().len() as u64 + 1;
-                let def =
-                    Term::Compound("rule_def".into(), vec![Term::Int(seq as i64), head, body]);
-                let f = terms::encode(&def).map_err(|e| e.0)?;
-                let mut b = json!({"op": "facts", "rule": text.trim(), "facts": [f]});
-                if target != TOP {
-                    b["item"] = json!(target);
-                }
-                self.write_here("edit", b)?;
-                self.message = format!("rule {pi} kept");
-            }
-            "set" => {
-                let text = words.join(" ");
-                let (t, _) = self
-                    .engine(0)?
-                    .parse(text.trim_end_matches('.'))
-                    .map_err(|e| format!("not a Prolog fact: {e}"))?;
-                if !matches!(t, Term::Atom(_) | Term::Compound(..)) || !variables(&t).is_empty() {
-                    return Err("a fact is an atom or a compound term, with no variables".into());
-                }
-                if reserved(&t) {
-                    return Err(format!(
-                        "{} is reserved: definitions are made by constraint, derive and accept",
-                        functor_of(&t)
-                    ));
-                }
-                self.set_fact(&t, target)?;
-            }
-            "constraint" => {
-                let text = words.join(" ");
-                let (cname, rule) = text
-                    .split_once(": ")
-                    .ok_or("constraint (named) a name: false :- body.")?;
-                let (t, _) = self
-                    .engine(0)?
-                    .parse(rule.trim().trim_end_matches('.'))
-                    .map_err(|e| format!("not a Prolog rule: {e}"))?;
-                let body = match &t {
-                    Term::Compound(n, a)
-                        if n == ":-" && a.len() == 2 && a[0] == Term::Atom("false".into()) =>
-                    {
-                        a[1].clone()
-                    }
-                    _ => return Err("a constraint is a denial: false :- body.".into()),
-                };
-                self.engine(0)?
-                    .check_definition(&body)
-                    .map_err(|w| format!("constraint not kept: {w}"))?;
-                let vars = reason::make_list(variables(&body).into_iter().map(Term::Var).collect());
-                // Tried against a planted violation before it is kept.
-                let planted = self
-                    .engine(0)?
-                    .plant(&vars, &body)
-                    .map_err(|e| e.to_string())?;
-                if !matches!(&planted, Term::Compound(n, _) if n == "fires") {
-                    return Err(format!(
-                        "constraint not kept: tried against a planted violation, it did not fire ({})",
-                        reason::show(&planted)
-                    ));
-                }
-                let seq = self.journal.entries().len() as u64 + 1;
-                let def = Term::Compound(
-                    "node_def".into(),
-                    vec![
-                        Term::Int(seq as i64),
-                        Term::Compound(
-                            "constraint".into(),
-                            vec![Term::Str(cname.trim().into()), vars, body],
-                        ),
-                    ],
-                );
-                let f = terms::encode(&def).map_err(|e| e.0)?;
-                self.write_here("edit", json!({"op": "constraint", "name": cname.trim(), "rule": rule.trim(), "facts": [f]}))?;
-                self.message = format!(
-                    "constraint {} kept: it fires on a planted violation",
-                    cname.trim()
-                );
-            }
-            "layer" => {
-                let text = words.join(" ");
-                let (mark_text, goal_text) = match text.split_once(" where ") {
-                    Some((m, g)) => (
-                        m.trim().to_string(),
-                        g.trim().trim_end_matches('.').to_string(),
-                    ),
-                    None => (
-                        text.trim().trim_end_matches('.').to_string(),
-                        "true".to_string(),
-                    ),
-                };
-                // One term, so the mark and the goal share their variables.
-                let (t, names) = self
-                    .engine(0)?
-                    .parse(&format!("layer(({mark_text}), ({goal_text}))"))
-                    .map_err(|e| format!("not a mark and a goal: {e}"))?;
-                let Term::Compound(_, a) = &t else {
-                    unreachable!()
-                };
-                let (mark, goal) = (a[0].clone(), a[1].clone());
-                crate::view::channels(&mark).map_err(|e| format!("layer not kept: {e}"))?;
-                let in_goal = variables(&goal);
-                let free: Vec<String> = variables(&mark)
-                    .into_iter()
-                    .filter(|v| !in_goal.contains(v))
-                    .map(|v| {
-                        names
-                            .get(v as usize)
-                            .cloned()
-                            .unwrap_or_else(|| format!("_{v}"))
-                    })
-                    .collect();
-                if !free.is_empty() {
-                    return Err(format!(
-                        "layer not kept: {} in the mark {} not bound by the goal",
-                        free.join(", "),
-                        if free.len() == 1 { "is" } else { "are" }
-                    ));
-                }
-                self.engine(0)?
-                    .check_definition(&goal)
-                    .map_err(|w| format!("layer not kept: {w}"))?;
-                let seq = self.journal.entries().len() as u64 + 1;
-                let def = Term::Compound(
-                    "node_def".into(),
-                    vec![
-                        Term::Int(seq as i64),
-                        Term::Compound("layer".into(), vec![mark, goal]),
-                    ],
-                );
-                let f = terms::encode(&def).map_err(|e| e.0)?;
-                self.write_here("edit", json!({"op": "layer", "item": target, "mark": mark_text, "goal": goal_text, "facts": [f]}))?;
-                self.message = format!("layer kept: {}", mark_text);
-            }
-            "derive" => {
-                let text = words.join(" ");
-                let (template, goal) = text
-                    .split_once(" where ")
-                    .ok_or("derive (text) a template with {Var}, where a goal")?;
-                let (g, names) = self
-                    .engine(0)?
-                    .parse(goal.trim().trim_end_matches('.'))
-                    .map_err(|e| format!("not a Prolog goal: {e}"))?;
-                self.engine(0)?
-                    .check_definition(&g)
-                    .map_err(|w| format!("not derived: {w}"))?;
-                let vars = reason::make_list(variables(&g).into_iter().map(Term::Var).collect());
-                let def = Term::Compound(
-                    "node_def".into(),
-                    vec![
-                        Term::Int(target as i64),
-                        Term::Compound("query".into(), vec![vars, g]),
-                    ],
-                );
-                let f = terms::encode(&def).map_err(|e| e.0)?;
-                self.write_here("edit", json!({"op": "derive", "item": target, "template": template.trim(), "names": names, "facts": [f]}))?;
-            }
-            "interrogate" => {
-                if self.claims_of(target).is_empty() {
-                    return Err("the target states no claim".into());
-                }
-                self.view.interrogate = Some(target);
-                self.view.panes[1].kind = PaneKind::Links;
-                self.write_view("interrogate", json!({}));
-            }
-            "adopt" => {
-                let claims = self.claims_of(target);
-                if claims.is_empty() {
-                    return Err("the target states no claim to adopt".into());
-                }
-                if let Some((_, _, p)) = claims.iter().find(|(_, _, p)| reserved(p)) {
-                    return Err(format!(
-                        "not adopted: the claim is a {}, which is reserved for constraint, derive and accept",
-                        functor_of(p)
-                    ));
-                }
-                for (seq, src, p) in claims {
-                    let f = terms::encode(&p).map_err(|e| e.0)?;
-                    self.write_here(
-                        "adopt",
-                        json!({"claim": seq, "item": target, "source": src, "facts": [f]}),
-                    )?;
-                }
-                self.message = "adopted: a belief now, with its source kept".into();
-            }
-            "unadopt" => {
-                let last = self
-                    .path(self.tip)
-                    .iter()
-                    .rev()
-                    .find(|e| {
-                        e.kind == "adopt"
-                            && e.body.as_ref().and_then(|b| b["item"].as_u64()) == Some(target)
-                    })
-                    .map(|e| e.seq)
-                    .filter(|s| self.retractable(*s).is_ok())
-                    .ok_or("the target has no adoption to retract")?;
-                self.write_here("retract", json!({"target": last}))?;
-                self.message = format!("adoption {last} retracted");
-            }
-            "close" | "commit" => {
-                let s = self.supposition.clone().ok_or("no supposition is open")?;
-                let parent = if name == "close" { s.actual } else { self.tip };
-                self.view.interrogate = None;
-                self.flush_text();
-                let body = self.view.to_json("world", json!({name: true}));
-                self.write(Some(parent), "view", body)?;
-                self.message = if name == "close" {
-                    format!("closed “{}”; it stays in the journal", s.name)
-                } else {
-                    format!("“{}” is now the actual world", s.name)
-                };
-            }
-            "suppose" => {
-                let n = words.join(" ");
-                if n.is_empty() {
-                    return Err("suppose (that) a name for the world".into());
-                }
-                self.write_here("suppose", json!({"name": n}))?;
-            }
-            _ => unreachable!(),
-        }
-        if self.view.scope != ScopeLevel::Statement {
-            self.view.scope = ScopeLevel::Statement;
-            self.view_dirty = true;
         }
         Ok(Mode::Normal)
     }
