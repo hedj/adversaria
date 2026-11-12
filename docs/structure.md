@@ -21,14 +21,35 @@ rules, written out at the top of `crates/tools/src/interactivity.rs`:
   many children as parts. The limit is 4 for both.
 - A section refers forward when it uses something defined later in its
   own document; reading in order then needs a cycle.
+- Things learned together count as one chunk: terms defined in a section
+  that defines at most four; an enum with its variants; a struct of at
+  most four fields with its fields. A field is attributed to its struct
+  by the declared types along a chain from `self` or a typed parameter,
+  else by name. Each count is also reported with each term or field
+  apart.
+
+The measure is frozen as of commit a9ed10c. It was changed six times
+during stage 2, each change tested and stated in its commit, but a
+measure changed while it judges the work is hard to trust. It changes
+again only to fix a fault that a failing test shows, stated as such.
 
 What the measure cannot see, so its numbers are bounds, not facts:
-names are resolved without types, so a call such as `.find()` may be std
-or the project's (reported as a lower and an upper bound); 172 macros
+method calls are resolved without types, so a call such as `.find()`
+may be std or the project's (reported as a lower and an upper bound);
+172 macros
 have arguments that are not expressions; concepts written in plain words,
 not as a backticked term, are not found in prose (an undercount); and a
 count of distinct referents overstates the load of a function whose steps
 are independent, until the steps are named functions.
+
+### The target
+
+Documents and the module tree: at most 4 everywhere. Functions: none
+over 8. Between 5 and 8 is accepted where splitting further would only
+add functions that pass their work on, which the measure cannot see as
+a cost: a reader follows each one. This replaces the first target of 4
+for every function, after stage 2 showed what meeting it takes (see
+Where it stands, below).
 
 ## Where it stands
 
@@ -48,6 +69,24 @@ After the documents were restructured (commit 129f016):
 | Units | Over 4 | Largest | Other |
 | --- | --- | --- | --- |
 | Markdown sections | 0 of 235; 1 counting each term apart | 4 | none with over 4 children; 16 refer forward |
+
+During stage 2 (commits a852bb9 to e05909e), measured with the frozen
+measure at e05909e:
+
+| Units | Over 4 | Over 8 | Largest |
+| --- | --- | --- | --- |
+| Rust functions | 161 of 771 | 70 | 41, `draw_outline` |
+| Rust test functions | 122 of 227 | 67 | 25 |
+| Prolog predicates | 6 of 93 | 1 | 10, `term_cells/6` |
+
+What stage 2 did: the commands dispatch through their table, and each
+of the 33 handlers, in `actions/`, is at most 4 (`App::command` had 83).
+Evaluation is in `world.rs` and `evaluation.rs`, at most 4 each. Five
+behaviours that no test checked, found by breaking code on purpose, now
+have tests. What it showed: under the target of 4, every struct must
+have at most four fields and most functions make one to three calls.
+Splitting App's 25 fields into four nested parts made the count worse
+(each level of nesting is a struct to know) and was reverted.
 
 The one section over 4 counting each term apart is the log's Milestone 1
 entry (7); its terms come from sections that each define at most four,
@@ -113,16 +152,18 @@ workspace
 └── tools: wikidata, measures, interactivity; acceptance tests
 ```
 
-The rules that keep each function at four:
+The rules that keep each function within the target:
 
-1. A long function becomes a short tree of named steps, each a function
-   with at most four referents (the steps are named for what they do).
+1. A long function becomes a short tree of named steps (the steps are
+   named for what they do), but not a chain of steps that only pass
+   their work on.
 2. A dispatch is a table, not a long match: `App::command`, with 83
    referents, becomes a lookup in the table of commands, each command's
    handler a function in its group under actions.
-3. State lives in the smallest part that needs it: the memex's 28 fields
-   are split among its four parts, and a method lives on the part whose
-   fields it uses, so it reads its own fields, not many.
+3. State lives in the smallest part that needs it, and a method lives on
+   the part whose fields it uses, so it reads its own fields, not many.
+   Nesting parts only to group fields does not help: App's 25 fields in
+   four nested parts measured worse, and the split was reverted.
 4. A test checks one thing, through helpers named for the question they
    ask, as `quasi(config, "RightAlt")`.
 
