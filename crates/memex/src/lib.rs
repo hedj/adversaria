@@ -2,9 +2,11 @@
 //! the SWI-Prolog child process come in later milestones.
 
 pub mod app;
+pub mod engine;
 pub mod journal;
 pub mod outline;
 pub mod prolog;
+pub mod reason;
 pub mod replay;
 pub mod store;
 pub mod term;

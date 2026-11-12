@@ -18,6 +18,13 @@
 //! * link `{"from":a,"to":b,"type":t,"facts":[t(a,b)]}`.
 //! * name `{"name":n,"item":i}`.
 //!
+//! * edit `{"op":"facts","item":i,"facts":[...],"source":s}`: facts stated by item
+//!   i; with a source, they are claims, `claims(Source, P)`.
+//! * edit `{"op":"constraint","name":n,"rule":text,"facts":[node_def(seq, constraint(...))]}`.
+//! * edit `{"op":"derive","item":i,"template":t,"names":[...],"facts":[node_def(i, query(...))]}`:
+//!   item i shows a value computed from the beliefs.
+//! * adopt `{"claim":seq,"item":i,"source":s,"facts":[P]}`: a claim made a belief.
+//!
 //! In spans, seq 0 means the entry itself. Positions count Unicode scalar
 //! values. An op that names an item not in the outline (after a retraction,
 //! say) is skipped.
@@ -51,8 +58,27 @@ pub struct Link {
     pub kind: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Derive {
+    pub template: String,
+    pub names: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Constraint {
+    pub name: String,
+    pub rule: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Outline {
+    /// The item each fact-bearing entry belongs to, by the entry's seq.
+    pub fact_item: BTreeMap<u64, u64>,
+    /// The source an item's claims came from.
+    pub source: HashMap<u64, String>,
+    pub derived: HashMap<u64, Derive>,
+    /// Constraints, by the seq of the entry that made each.
+    pub constraints: BTreeMap<u64, Constraint>,
     pub items: HashMap<u64, Item>,
     pub top: Vec<u64>,
     /// The characters each entry added, by seq.
@@ -321,6 +347,58 @@ impl Outline {
                     to,
                     kind,
                 });
+                true
+            }
+            ("edit", Some("facts")) => {
+                let Some(id) = num("item").filter(|i| self.items.contains_key(i)) else {
+                    return false;
+                };
+                self.fact_item.insert(seq, id);
+                if let Some(src) = body.get("source").and_then(|v| v.as_str()) {
+                    self.source.insert(id, src.to_string());
+                }
+                true
+            }
+            ("edit", Some("constraint")) => {
+                let name = body
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let rule = body
+                    .get("rule")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                self.constraints.insert(seq, Constraint { name, rule });
+                true
+            }
+            ("edit", Some("derive")) => {
+                let Some(id) = num("item").filter(|i| self.items.contains_key(i)) else {
+                    return false;
+                };
+                let template = body
+                    .get("template")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let names = body
+                    .get("names")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|n| n.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                self.derived.insert(id, Derive { template, names });
+                true
+            }
+            ("adopt", _) => {
+                let Some(id) = num("item").filter(|i| self.items.contains_key(i)) else {
+                    return false;
+                };
+                self.fact_item.insert(seq, id);
                 true
             }
             ("name", _) => {

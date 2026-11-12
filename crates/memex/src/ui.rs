@@ -3,12 +3,14 @@
 //! state always draws the same screen.
 
 use crate::app::{App, Mode, PaneKind, Quasi, ScopeLevel, command_help};
-use crate::outline::TOP;
+use crate::outline::{Outline, TOP};
+use crate::reason::{self, Prov, WorldEval};
+use format::terms::Term;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 
 fn dim() -> Style {
     Style::default().add_modifier(Modifier::DIM)
@@ -28,6 +30,11 @@ pub fn draw(f: &mut Frame, app: &App) {
     draw_top(f, app, top);
     let [left, right] =
         Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).areas(body);
+    if app.supposition.is_some() {
+        draw_worlds(f, app, body);
+        draw_prompt(f, app, prompt, guide);
+        return;
+    }
     for (i, area) in [(0, left), (1, right)] {
         match app.view.panes[i].kind {
             PaneKind::Outline => draw_outline(f, app, i, area),
@@ -45,18 +52,37 @@ pub fn draw(f: &mut Frame, app: &App) {
 
 fn draw_top(f: &mut Frame, app: &App, area: Rect) {
     let n = app.journal().entries().len();
-    let left = Line::from(vec![
+    let world = match &app.supposition {
+        Some(s) => vec![
+            Span::styled("worlds ", dim()),
+            Span::styled("actual", bold()),
+            Span::raw(" | "),
+            Span::styled(format!("suppose: {}", s.name), bold()),
+        ],
+        None => vec![
+            Span::styled("world ", dim()),
+            Span::styled(app.world.clone(), bold()),
+        ],
+    };
+    let mut parts = vec![
         Span::styled("room ", dim()),
         Span::styled(app.workspace.clone(), bold()),
         Span::raw("   "),
-        Span::styled("world ", dim()),
-        Span::styled(app.world.clone(), bold()),
+    ];
+    parts.extend(world);
+    let left = Line::from(vec![
+        Span::raw(""),
         Span::raw("   "),
         Span::styled("journal ", dim()),
         Span::styled(n.to_string(), bold()),
     ]);
+    let mut left = left;
+    left.spans.splice(0..1, parts);
     f.render_widget(Paragraph::new(left), area);
-    let right = format!("pane {} of 2", app.view.focus + 1);
+    let right = match app.eval[0].as_ref().map(status) {
+        Some(s) if !s.is_empty() => s,
+        _ => format!("pane {} of 2", app.view.focus + 1),
+    };
     let w = right.chars().count() as u16;
     if area.width > w {
         f.render_widget(
@@ -107,6 +133,17 @@ fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
             pending.iter().collect::<String>(),
             Style::default().add_modifier(Modifier::UNDERLINED),
         )];
+    }
+    if let (Some(d), Some(e)) = (app.outline.derived.get(&id), app.eval[0].as_ref())
+        && let Some(v) = e.derived.get(&id)
+    {
+        out = vec![
+            Span::raw(reason::fill(&d.template, &d.names, v, &e.facts)),
+            Span::styled(" [derived]", dim()),
+        ];
+    }
+    if let Some(src) = app.outline.source.get(&id) {
+        out.push(Span::styled(format!(" [{src}]"), dim()));
     }
     let c = cites(app, id);
     if !c.is_empty() {
@@ -163,6 +200,10 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) {
                 dim(),
             ));
         }
+        let marks = app.eval[0]
+            .as_ref()
+            .map(|e| item_marks(e, &app.outline, *id))
+            .unwrap_or_default();
         let mut line = Line::from(spans);
         if is_cursor {
             line = line.style(if app.view.scope == ScopeLevel::Branch && focused {
@@ -172,6 +213,17 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) {
             });
         }
         lines.push(line);
+        for (violation, m) in marks {
+            let style = if violation {
+                Style::default().add_modifier(Modifier::BOLD)
+            } else {
+                dim()
+            };
+            lines.push(Line::styled(
+                format!("{}  ⚑ {m}", "  ".repeat(*depth + 1)),
+                style,
+            ));
+        }
     }
     if rows.is_empty() {
         lines.push(Line::styled("(empty: type to write the first item)", dim()));
@@ -220,6 +272,22 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect) {
         ..area
     };
     let id = app.view.panes[0].cursor;
+    if let Some(i) = app.view.interrogate {
+        f.render_widget(
+            Paragraph::new(interrogation(app, i)).wrap(Wrap { trim: false }),
+            inner,
+        );
+        return;
+    }
+    if let Some(e) = app.eval[0].as_ref()
+        && !item_marks(e, &app.outline, id).is_empty()
+    {
+        f.render_widget(
+            Paragraph::new(constraint_panel(app, e, id)).wrap(Wrap { trim: false }),
+            inner,
+        );
+        return;
+    }
     let mut lines = vec![
         Line::styled("LINKS OF THE SELECTED ITEM", dim()),
         Line::raw(""),
@@ -393,8 +461,511 @@ fn draw_prompt(f: &mut Frame, app: &App, prompt: Rect, guide: Rect) {
             };
             (line, format!("{dep} · Enter retracts · Esc keeps it"))
         }
-        Mode::Normal => (Line::raw(""), app.message.clone()),
+        Mode::ConfirmSuppose { text, readings, at } => {
+            let line = Line::from(vec![
+                Span::styled(
+                    " SUPPOSE ",
+                    Style::default().add_modifier(Modifier::REVERSED),
+                ),
+                Span::raw(format!(" {text}")),
+            ]);
+            let facts = crate::store::facts(app.journal().entries(), app.tip).unwrap_or_default();
+            let r = reason::restate(&facts, &readings[*at]);
+            let more = if readings.len() > 1 {
+                " · Tab next reading"
+            } else {
+                ""
+            };
+            (
+                line,
+                format!("Do you mean: Suppose that {r}.  ⏎ yes · Esc no{more}"),
+            )
+        }
+        Mode::Normal => match hint(app) {
+            Some((p, g)) if app.message.is_empty() => (Line::raw(p), g),
+            _ => (Line::raw(""), app.message.clone()),
+        },
     };
     f.render_widget(Paragraph::new(p), prompt);
     f.render_widget(Paragraph::new(Span::styled(g, dim())), guide);
+}
+
+/// The fact a fact entry states: for a claim, what is claimed.
+fn inner(t: &Term) -> &Term {
+    match t {
+        Term::Compound(n, a) if n == "claims" && a.len() == 2 => &a[1],
+        t => t,
+    }
+}
+
+/// How two facts differ: the arguments that are not equal, here and there.
+fn difference(a: &Term, b: &Term) -> (String, String) {
+    match (inner(a), inner(b)) {
+        (Term::Compound(f, x), Term::Compound(g, y)) if f == g && x.len() == y.len() => {
+            let d: Vec<(String, String)> = x
+                .iter()
+                .zip(y)
+                .filter(|(p, q)| p != q)
+                .map(|(p, q)| (reason::show(p), reason::show(q)))
+                .collect();
+            (
+                d.iter().map(|p| p.0.clone()).collect::<Vec<_>>().join(", "),
+                d.iter().map(|p| p.1.clone()).collect::<Vec<_>>().join(", "),
+            )
+        }
+        (x, y) => (reason::show(x), reason::show(y)),
+    }
+}
+
+fn place(outline: &Outline, seq: u64) -> String {
+    match outline.fact_item.get(&seq) {
+        Some(i) => outline.number(*i),
+        None => format!("entry {seq}"),
+    }
+}
+
+/// The marks under an item: (is a violation, text) for each constraint
+/// solution that rests on one of its facts.
+pub fn item_marks(e: &WorldEval, outline: &Outline, item: u64) -> Vec<(bool, String)> {
+    let mut out = Vec::new();
+    for c in &e.constraints {
+        for (sols, violation) in [(&c.violations, true), (&c.disagreements, false)] {
+            for sol in sols {
+                let here: Vec<&Prov> = sol
+                    .prov
+                    .iter()
+                    .filter(|p| outline.fact_item.get(&p.seq()) == Some(&item))
+                    .collect();
+                let Some(h) = here.first() else { continue };
+                let kind = if violation {
+                    "violation"
+                } else {
+                    "sources disagree"
+                };
+                for o in sol
+                    .prov
+                    .iter()
+                    .filter(|p| outline.fact_item.get(&p.seq()) != Some(&item))
+                {
+                    let (Some(fh), Some(fo)) = (e.fact(h.seq()), e.fact(o.seq())) else {
+                        continue;
+                    };
+                    let (a, b) = difference(fh, fo);
+                    out.push((
+                        violation,
+                        format!(
+                            "{}, {kind}: {a} here, {b} in {}",
+                            c.name,
+                            place(outline, o.seq())
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// What the top bar says of the current world's constraints.
+fn status(e: &WorldEval) -> String {
+    let v: usize = e.constraints.iter().map(|c| c.violations.len()).sum();
+    let d: usize = e.constraints.iter().map(|c| c.disagreements.len()).sum();
+    let mut parts = Vec::new();
+    if v > 0 {
+        parts.push(format!(
+            "{v} constraint violation{}",
+            if v == 1 { "" } else { "s" }
+        ));
+    }
+    if d > 0 {
+        parts.push(format!(
+            "{d} disagreement{} between sources",
+            if d == 1 { "" } else { "s" }
+        ));
+    }
+    parts.join(" · ")
+}
+
+/// The predicates a goal or body reads, by name.
+fn predicates(t: &Term, out: &mut Vec<String>) {
+    if let Term::Compound(f, a) = t {
+        if f == "," || f == ";" || f == "\\+" {
+            a.iter().for_each(|x| predicates(x, out));
+        } else if ![
+            "is", "=", "\\=", "<", ">", "=<", ">=", "=:=", "=\\=", "==", "\\==",
+        ]
+        .contains(&f.as_str())
+        {
+            out.push(f.clone());
+        }
+    }
+}
+
+fn node_def(e: &WorldEval, id: u64) -> Option<&Term> {
+    e.facts.iter().find_map(|(_, f)| match f {
+        Term::Compound(n, a) if n == "node_def" && a.len() == 2 && a[0] == Term::Int(id as i64) => {
+            Some(&a[1])
+        }
+        _ => None,
+    })
+}
+
+/// The right pane for an item with marks: the constraint, its rule, its
+/// solutions, and what depends on the facts it reads.
+fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    for c in &e.constraints {
+        let touches = |sols: &Vec<reason::Solution>| {
+            sols.iter().any(|s| {
+                s.prov
+                    .iter()
+                    .any(|p| app.outline.fact_item.get(&p.seq()) == Some(&item))
+            })
+        };
+        if !touches(&c.violations) && !touches(&c.disagreements) {
+            continue;
+        }
+        lines.push(Line::styled(
+            format!("CONSTRAINT · {}", c.name.to_uppercase()),
+            dim(),
+        ));
+        lines.push(Line::raw(""));
+        for l in rule_lines(&c.rule) {
+            lines.push(Line::raw(format!("  {l}")));
+        }
+        lines.push(Line::raw(""));
+        for (sols, title, style) in [
+            (&c.violations, "violations", bold()),
+            (
+                &c.disagreements,
+                "disagreements between sources",
+                Style::default(),
+            ),
+        ] {
+            if sols.is_empty() {
+                continue;
+            }
+            lines.push(Line::styled(
+                format!("{title} · recomputed at journal {}", e.at),
+                dim(),
+            ));
+            for sol in sols {
+                let facts: Vec<(u64, &Term)> = sol
+                    .prov
+                    .iter()
+                    .filter_map(|p| e.fact(p.seq()).map(|f| (p.seq(), f)))
+                    .collect();
+                let key = match facts.first().map(|(_, f)| inner(f)) {
+                    Some(Term::Compound(_, a)) => {
+                        let shared: Vec<String> = (0..a.len())
+                            .filter(|k| facts.iter().all(|(_, f)| matches!(inner(f), Term::Compound(_, b) if b.get(*k) == a.get(*k))))
+                            .map(|k| reason::show(&a[k]))
+                            .collect();
+                        shared.join(", ")
+                    }
+                    _ => String::new(),
+                };
+                let parts: Vec<String> = facts
+                    .iter()
+                    .map(|(s, f)| {
+                        let (d, _) = difference(
+                            f,
+                            facts.iter().find(|(t, _)| t != s).map(|x| x.1).unwrap_or(f),
+                        );
+                        format!("{d} ({})", place(&app.outline, *s))
+                    })
+                    .collect();
+                lines.push(Line::styled(format!("{key}: {}", parts.join(" · ")), style));
+            }
+            lines.push(Line::raw(""));
+        }
+        // What depends on the facts this constraint reads: derived items
+        // whose queries read the same predicates.
+        let mut reads = Vec::new();
+        if let Some(Term::Compound(_, a)) = node_def(e, c.seq) {
+            predicates(&a[2], &mut reads);
+        }
+        let mut deps: Vec<u64> = app
+            .outline
+            .derived
+            .keys()
+            .filter(|d| {
+                let mut r = Vec::new();
+                if let Some(Term::Compound(_, a)) = node_def(e, **d) {
+                    predicates(&a[1], &mut r);
+                }
+                r.iter().any(|p| reads.contains(p))
+            })
+            .copied()
+            .collect();
+        deps.sort_by_key(|d| app.outline.in_order().iter().position(|x| x == d));
+        if !deps.is_empty() {
+            lines.push(Line::styled("depends on these facts", dim()));
+            for d in deps {
+                let text = match (app.outline.derived.get(&d), e.derived.get(&d)) {
+                    (Some(t), Some(v)) => reason::fill(&t.template, &t.names, v, &e.facts),
+                    _ => app.outline.text(d),
+                };
+                let short: String = text.chars().take(40).collect();
+                lines.push(Line::raw(format!(
+                    "  {} {short}{}",
+                    app.outline.number(d),
+                    if text.chars().count() > 40 {
+                        " …"
+                    } else {
+                        ""
+                    }
+                )));
+            }
+        }
+    }
+    lines
+}
+
+/// The right pane when a claim is interrogated (one key, F2).
+fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
+    let Some(e) = app.eval[0].as_ref() else {
+        return vec![Line::raw("not yet evaluated")];
+    };
+    let mut lines = vec![
+        Line::styled("INTERROGATE · WHAT IS CLAIMED HERE", dim()),
+        Line::raw(""),
+        Line::raw(app.outline.text(item)),
+        Line::raw(""),
+    ];
+    for (seq, src, p) in app.claims_of(item) {
+        lines.push(Line::raw(format!(
+            "claims: {} — from {src}",
+            reason::restate(&e.facts, &p)
+        )));
+        lines.push(Line::styled(format!("  entry {seq}"), dim()));
+        lines.push(Line::styled("who else claims it", dim()));
+        let others: Vec<String> = e
+            .facts
+            .iter()
+            .filter(|(s, f)| *s != seq && inner(f) == &p)
+            .map(|(s, f)| match f {
+                Term::Compound(n, a) if n == "claims" => {
+                    format!("  {} ({})", place(&app.outline, *s), reason::show(&a[0]))
+                }
+                _ => format!("  {} (a belief)", place(&app.outline, *s)),
+            })
+            .collect();
+        if others.is_empty() {
+            lines.push(Line::raw("  no one else"));
+        }
+        lines.extend(others.into_iter().map(Line::raw));
+        lines.push(Line::styled("who claims the contrary", dim()));
+        let mut contrary = Vec::new();
+        for c in &e.constraints {
+            for sol in c.disagreements.iter().chain(&c.violations) {
+                if !sol.prov.iter().any(|q| q.seq() == seq) {
+                    continue;
+                }
+                for o in sol.prov.iter().filter(|q| q.seq() != seq) {
+                    if let Some(f) = e.fact(o.seq()) {
+                        contrary.push(format!(
+                            "  {}: {} ({})",
+                            place(&app.outline, o.seq()),
+                            reason::restate(&e.facts, inner(f)),
+                            c.name
+                        ));
+                    }
+                }
+            }
+        }
+        if contrary.is_empty() {
+            contrary.push("  no one".into());
+        }
+        lines.extend(contrary.into_iter().map(Line::raw));
+        lines.push(Line::styled("the source's record", dim()));
+        let path_adopts: Vec<&format::record::Entry> = app
+            .journal()
+            .entries()
+            .iter()
+            .filter(|x| {
+                x.kind == "adopt" && x.body.as_ref().is_some_and(|b| b["source"] == src.as_str())
+            })
+            .collect();
+        let retracted = path_adopts
+            .iter()
+            .filter(|a| {
+                app.journal().entries().iter().any(|r| {
+                    r.kind == "retract"
+                        && r.body.as_ref().and_then(|b| b["target"].as_u64()) == Some(a.seq)
+                })
+            })
+            .count();
+        lines.push(Line::raw(format!(
+            "  {} of its claims adopted, {retracted} of them retracted since",
+            path_adopts.len()
+        )));
+    }
+    lines.push(Line::styled("if adopted", dim()));
+    lines.push(Line::raw(format!(
+        "  {}",
+        app.preview
+            .clone()
+            .unwrap_or_else(|| "not yet computed".into())
+    )));
+    lines.push(Line::raw(""));
+    lines.push(Line::styled("F3 adopts · F4 retracts an adoption", dim()));
+    lines
+}
+
+/// Fading hint: while the cursor is on an item with marks, how to try the
+/// other reading; it stops once Suppose has been used four times.
+fn hint(app: &App) -> Option<(String, String)> {
+    let e = app.eval[0].as_ref()?;
+    if item_marks(e, &app.outline, app.cursor()).is_empty() {
+        return None;
+    }
+    let used = app
+        .journal()
+        .entries()
+        .iter()
+        .filter(|x| x.kind == "suppose")
+        .count();
+    let left = 4usize.checked_sub(used).filter(|n| *n > 0)?;
+    Some((
+        "Hold SUPPOSE and type a statement to try it in a new world. Nothing in this world changes.".into(),
+        format!("fading hint · shown until Suppose has been used {left} more time{}", if left == 1 { "" } else { "s" }),
+    ))
+}
+
+/// A supposition: the actual world and the supposed one side by side, row
+/// for row. Rows are the items that state facts or show derived values.
+fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
+    let Some(sup) = &app.supposition else { return };
+    let [l, r] =
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area);
+    let actual = app.outline_at(sup.actual);
+    let worlds = [
+        (&actual, app.eval[1].as_ref(), "WORLD · ACTUAL".to_string()),
+        (
+            &app.outline,
+            app.eval[0].as_ref(),
+            format!("WORLD · SUPPOSE {}", sup.name.to_uppercase()),
+        ),
+    ];
+    let mut rows: Vec<u64> = actual
+        .in_order()
+        .into_iter()
+        .filter(|i| actual.fact_item.values().any(|x| x == i) || actual.derived.contains_key(i))
+        .collect();
+    for i in app.outline.in_order() {
+        if (app.outline.fact_item.values().any(|x| *x == i) || app.outline.derived.contains_key(&i))
+            && !rows.contains(&i)
+        {
+            rows.push(i);
+        }
+    }
+    let text = |o: &Outline, e: Option<&WorldEval>, i: u64| -> String {
+        match (
+            o.derived.get(&i),
+            e.and_then(|e| e.derived.get(&i).map(|v| (e, v))),
+        ) {
+            (Some(d), Some((e, v))) => reason::fill(&d.template, &d.names, v, &e.facts),
+            _ => o.text(i),
+        }
+    };
+    let left_facts: Vec<u64> = worlds[0]
+        .1
+        .map(|e| e.facts.iter().map(|x| x.0).collect())
+        .unwrap_or_default();
+    let right_facts: Vec<u64> = worlds[1]
+        .1
+        .map(|e| e.facts.iter().map(|x| x.0).collect())
+        .unwrap_or_default();
+    let set_aside: Vec<u64> = left_facts
+        .iter()
+        .filter(|s| !right_facts.contains(s))
+        .copied()
+        .collect();
+    for (k, (o, e, title), area) in [(0, worlds[0].clone(), l), (1, worlds[1].clone(), r)] {
+        let mut lines = vec![Line::styled(title, dim()), Line::raw("")];
+        for i in &rows {
+            let here = text(o, e, *i);
+            let there = text(worlds[1 - k].0, worlds[1 - k].1, *i);
+            let gone = k == 1 && set_aside.iter().any(|s| actual.fact_item.get(s) == Some(i));
+            let mut spans = vec![Span::styled(
+                here.clone(),
+                if here != there && k == 1 {
+                    bold()
+                } else {
+                    Style::default()
+                },
+            )];
+            if here != there && k == 0 {
+                spans.push(Span::styled("  - - -", dim()));
+            }
+            if gone {
+                spans.push(Span::styled("  (fact retracted here)", dim()));
+            }
+            lines.push(Line::from(spans));
+        }
+        lines.push(Line::raw(""));
+        if let Some(e) = e {
+            for c in &e.constraints {
+                let mut t = format!(
+                    "Constraint {}: {} violation{}",
+                    c.name,
+                    c.violations.len(),
+                    if c.violations.len() == 1 { "" } else { "s" }
+                );
+                if !c.disagreements.is_empty() {
+                    t.push_str(&format!(
+                        ", {} disagreement{}",
+                        c.disagreements.len(),
+                        if c.disagreements.len() == 1 { "" } else { "s" }
+                    ));
+                }
+                if k == 1 && !set_aside.is_empty() {
+                    t.push_str(&format!(
+                        " · {} retracted here",
+                        set_aside
+                            .iter()
+                            .map(|s| place(&actual, *s))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                }
+                lines.push(Line::raw(t));
+            }
+        }
+        f.render_widget(
+            Paragraph::new(lines).block(Block::default().borders(if k == 0 {
+                Borders::RIGHT
+            } else {
+                Borders::NONE
+            })),
+            area,
+        );
+    }
+}
+
+/// A rule laid out as in the design: the head, then one literal of the body
+/// per line, split only at commas outside brackets.
+fn rule_lines(rule: &str) -> Vec<String> {
+    let (head, body) = match rule.split_once(":-") {
+        Some((h, b)) => (format!("{} :-", h.trim()), b.trim()),
+        None => return vec![rule.to_string()],
+    };
+    let mut out = vec![head];
+    let (mut depth, mut cur) = (0i32, String::new());
+    for ch in body.chars() {
+        match ch {
+            '(' | '[' => depth += 1,
+            ')' | ']' => depth -= 1,
+            _ => {}
+        }
+        if ch == ',' && depth == 0 {
+            out.push(format!("  {},", cur.trim()));
+            cur.clear();
+        } else {
+            cur.push(ch);
+        }
+    }
+    out.push(format!("  {}", cur.trim()));
+    out
 }

@@ -22,7 +22,9 @@ the server sends ATOM_IS for it, with the same request number.
 :- use_module(library(lists)).
 
 :- dynamic query_engine/2.       % Req, Engine
-:- dynamic fact_ref/3.           % Seq, Fact, ClauseRef
+% fact_ref/3 (Seq, Fact, ClauseRef) is declared incremental in dataflow.pl,
+% so tabled nodes that read it are recomputed when it changes.
+:- consult(dataflow).
 
 :- initialization(main, main).
 

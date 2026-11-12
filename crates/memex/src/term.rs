@@ -164,7 +164,16 @@ pub fn run(dir: &Path) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let mut term = Terminal::new(CrosstermBackend::new(out)).map_err(|e| e.to_string())?;
     let result = (|| -> io::Result<()> {
+        let mut evaluated_at = None;
         while !app.quit {
+            // Reason again when the journal has moved: constraints and
+            // derived values are computed from it, never stored in it.
+            if evaluated_at != Some((app.tip, app.journal().entries().len())) {
+                if let Err(e) = app.evaluate() {
+                    app.message = e;
+                }
+                evaluated_at = Some((app.tip, app.journal().entries().len()));
+            }
             term.draw(|f| ui::draw(f, &app))?;
             if event::poll(Duration::from_secs(1))? {
                 if let event::Event::Key(k) = event::read()?

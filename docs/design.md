@@ -216,6 +216,16 @@ Nothing that comes from outside is trusted as a fact. An imported document, a we
 3. **Interrogating is one key.** On any claim, a single key opens questions answered at once from the store: who else claims it, and who claims the contrary; what follows if it is adopted, previewed as a world; where it came from, with its provenance; how this source's earlier claims fared, adopted or retracted; and what the model can find to support or oppose it, among works already in the store.
 4. **Sources build a record.** Each adoption or retraction of a source's claim is a fact about that source, so how reliable a source has been is a query, not an impression.
 
+### As built (milestone 4)
+
+* **Facts on items.** An item states facts (`fact date(buran_flight, 1988)`), or a source's claims (`claim date(buran_flight, 1989) from my notes, conference talk`), stored as `claims(Source, P)`. Adopting (F3) writes an `adopt` entry naming the claim, its item and its source, with P as a belief; F4 retracts the last adoption. Interrogating (F2) answers the five questions above from the store, with the preview of adoption computed in a spare engine.
+* **Constraints and derived items are dataflow nodes**, defined by `node_def` facts in the journal and computed by an incrementally tabled `node/2` in `prolog/dataflow.pl`. A constraint's body is matched against beliefs and claims together: a solution resting on beliefs alone is a violation (shown loudly), one resting on a claim a disagreement between sources (shown dimmed). The tables must be shared: the server runs each query in its own engine, and private tables were rebuilt for every query.
+* **Dependencies are per call variant**, as milestone 0's spike found: a node is recomputed only when a changed fact unifies with a call it made. A sentence that reads the dates of two named events is not recomputed when a third event gets a date.
+* **The planted violation**: before a constraint is kept, its variables are given distinct integers, in every order until its built-ins hold, the other literals are planted as facts, and the constraint is run over them. A constraint that cannot fire is refused.
+* **Suppose without APE**: the readings are the world's own facts with one number changed to a number in the text, ranked by how many words name the fact's other arguments, and restated through a generic frame and `label` facts ("the date of Buran's flight is 1989"); Tab gives the next reading. Then revision: each belief that breaks a constraint together with the supposition is retracted in the supposed world only (the supposition is the more entrenched).
+* **Worlds**: a supposition shows the actual world and the supposed one side by side, row for row; `close` returns to the actual world by a `view` entry whose parent is the actual head, keeping the branch; `commit` makes the supposed world actual.
+* **The fading hint** to try Suppose on a marked item stops once Suppose has been used four times.
+
 ### Testing claims
 
 A claim is tested by the cheapest check that could refute it. These checks come from the author's “Popper” project, which routes each claim of a physics paper to such a judge; it has 105 passing tests but no measured rate of catching errors yet. The mechanisms below are proposed.
@@ -585,6 +595,9 @@ Milestone 2 fixed what the text above left open. `prolog/protocol.pl` and `crate
 | Die on a garbled message header, at either end; no restart | the author's decision (12 November 2026); a stream out of step cannot be trusted again |
 | The interface replays from the journal: every change of state goes through applying an entry, live and in replay; navigation is journaled as `view` entries | made when milestone 3 was built (12 November 2026); the plan requires replay to reproduce the screen, and Licklider's count of searching and following links needs those actions recorded |
 | An item whose preceding sibling is gone is placed first; only a missing parent makes an edit fail | made when milestone 3 was built; otherwise retracting an item would also remove unrelated items written after it |
+| Constraints are matched against beliefs and claims together; a solution resting on a claim is a disagreement, shown dimmed, apart from violations | made when milestone 4 was built (12 November 2026), as § Claims and beliefs asks |
+| A supposition sets aside, in its world only, the beliefs that break a constraint together with it | made when milestone 4 was built; the supposition is the more entrenched, after the translator document's revision loop |
+| Without APE, Suppose reads English through the world's own facts and offers readings to choose with Tab | made when milestone 4 was built; the plan makes APE's restatement optional here |
 | Query protocol version 1: big-endian words, tags and message types numbered, BLOBs typed by their first byte, ATOM\_IS naming atoms, answers as one term per variable, DONE with a status; queries as SWI-Prolog engines | made precise when milestone 2 was built (12 November 2026); the design left these open, and ATOM\_IS could not name an atom the server introduced |
 | Journal bodies carry facts as `"facts"`; a retract names its target; a world's store is its path's facts less those retracted | made precise when milestone 2 was built (12 November 2026), so that facts replay from the journal |
 | Format version 1 is fixed in detail: seals name the entry's hash `entry_hash`; an entry's hash leaves out its body, which `body_hash` stands for; one root per journal; purge bodies, key records and the key file as § The journal format states | made precise when milestone 1 was built (12 November 2026); the design named two fields of a seal `hash`, and left the rest open |
@@ -632,8 +645,8 @@ Milestone 2 fixed what the text above left open. `prolog/protocol.pl` and `crate
 ## Open questions
 
 - [ ] How fast does the journal grow in real use, and how are span lists compacted?
-- [ ] Does SWI-Prolog's incremental tabling work as recalled, and how do s(CASP)'s untabled queries join the dataflow graph?
-- [ ] At what granularity are dependencies recorded (fact, predicate, item), and what does recording cost?
+- [x] Does SWI-Prolog's incremental tabling work as recalled? Yes (milestone 0's spike; milestone 4's nodes), with shared tables. Open: how s(CASP)'s untabled queries join the dataflow graph.
+- [x] At what granularity are dependencies recorded? Per call variant, by SWI-Prolog (milestone 4). Open: what recording costs at scale.
 - [ ] Which keys of a standard keyboard fall under the thumbs for Leap, Scope, Command and Suppose, and which of them do the operating system and the terminal take?
 - [ ] How large a diagram must layout handle within 0.1 s?
 - [ ] Which timestamping service, and how often?

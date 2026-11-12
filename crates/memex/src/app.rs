@@ -14,9 +14,12 @@
 //! (cursor, folds, panes, scope) and, in its `op`, the action: move, leap,
 //! follow, fold, pane, scope. Counting actions by kind reads these.
 
+use crate::engine::{Engine, variables};
 use crate::journal::{Error as JournalError, Journal};
 use crate::outline::{Outline, Span, TOP, span_json};
+use crate::reason::{self, ConstraintEval, Prov, WorldEval, solutions};
 use format::record::Entry;
+use format::terms::{self, Term};
 use serde_json::{Value, json};
 use std::collections::{BTreeSet, HashSet};
 use std::path::Path;
@@ -116,6 +119,8 @@ pub struct View {
     pub pos: usize,
     pub folded: BTreeSet<u64>,
     pub scope: ScopeLevel,
+    /// The claim item being interrogated, shown in the links pane.
+    pub interrogate: Option<u64>,
 }
 
 impl Default for View {
@@ -135,6 +140,7 @@ impl Default for View {
             pos: 0,
             folded: BTreeSet::new(),
             scope: ScopeLevel::Statement,
+            interrogate: None,
         }
     }
 }
@@ -156,7 +162,7 @@ impl View {
         let mut v = json!({
             "op": op,
             "panes": self.panes.iter().map(|p| json!({"kind": kind(p.kind), "cursor": p.cursor})).collect::<Vec<_>>(),
-            "focus": self.focus, "pos": self.pos, "folded": self.folded.iter().collect::<Vec<_>>(), "scope": scope,
+            "focus": self.focus, "pos": self.pos, "folded": self.folded.iter().collect::<Vec<_>>(), "scope": scope, "interrogate": self.interrogate,
         });
         if let (Value::Object(m), Value::Object(x)) = (&mut v, extra) {
             m.extend(x);
@@ -181,6 +187,7 @@ impl View {
             .as_array()
             .map(|f| f.iter().filter_map(|x| x.as_u64()).collect())
             .unwrap_or_default();
+        self.interrogate = b["interrogate"].as_u64();
         self.scope = match b["scope"].as_str() {
             Some("word") => ScopeLevel::Word,
             Some("branch") => ScopeLevel::Branch,
@@ -211,6 +218,21 @@ pub enum Mode {
         target: u64,
         dependents: Vec<u64>,
     },
+    /// "Do you mean?": a supposition's readings, the one shown, waiting for
+    /// Enter (yes), Esc (no) or Tab (the next reading).
+    ConfirmSuppose {
+        text: String,
+        readings: Vec<Term>,
+        at: usize,
+    },
+}
+
+/// An open supposition: a world sprouted from the actual one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Supposition {
+    pub name: String,
+    /// The head of the actual world it was sprouted from.
+    pub actual: u64,
 }
 
 /// Text typed into an item but not yet written.
@@ -237,6 +259,15 @@ pub struct App {
     view_dirty: bool,
     last_leap: Option<(String, bool)>,
     pub quit: bool,
+    pub supposition: Option<Supposition>,
+    /// Reasoning: the current world's engine, the actual world's while a
+    /// supposition is open, and one for previews.
+    engines: [Option<Engine>; 3],
+    /// What reasoning found: [0] the current world, [1] the actual world
+    /// while a supposition is open.
+    pub eval: [Option<WorldEval>; 2],
+    /// Interrogation's preview of adopting a claim: violations it would raise.
+    pub preview: Option<String>,
 }
 
 const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
@@ -256,6 +287,31 @@ pub struct Command {
 
 pub const COMMANDS: &[Command] = &[
     Command {
+        name: "adopt",
+        slots: &[],
+        help: "make the target's claims beliefs, keeping their source (F3)",
+    },
+    Command {
+        name: "claim",
+        slots: &[("that", Slot::Text)],
+        help: "the target states a claim: a Prolog fact, then from and its source",
+    },
+    Command {
+        name: "close",
+        slots: &[],
+        help: "close the supposition and return to the actual world; it stays in the journal",
+    },
+    Command {
+        name: "commit",
+        slots: &[],
+        help: "make the supposed world the actual one",
+    },
+    Command {
+        name: "constraint",
+        slots: &[("named", Slot::Text)],
+        help: "a constraint: its name, a colon, then a Prolog denial false :- ...",
+    },
+    Command {
         name: "copy",
         slots: &[("after", Slot::Addr)],
         help: "copy the target's text to a new item after an item",
@@ -271,6 +327,16 @@ pub const COMMANDS: &[Command] = &[
         help: "hide the target's branch",
     },
     Command {
+        name: "derive",
+        slots: &[("text", Slot::Text)],
+        help: "the target shows a computed text: a template with {Var}, then where and a Prolog goal",
+    },
+    Command {
+        name: "fact",
+        slots: &[("that", Slot::Text)],
+        help: "the target states a belief: a Prolog fact",
+    },
+    Command {
         name: "follow",
         slots: &[("link", Slot::Word)],
         help: "go to the item at the end of the target's nth link",
@@ -284,6 +350,11 @@ pub const COMMANDS: &[Command] = &[
         name: "indent",
         slots: &[],
         help: "make the target a child of the item above it",
+    },
+    Command {
+        name: "interrogate",
+        slots: &[],
+        help: "ask of the target's claim: who else claims it, who disputes it, its source and record (F2)",
     },
     Command {
         name: "link",
@@ -346,6 +417,11 @@ pub const COMMANDS: &[Command] = &[
         help: "show an item's text in place, in a new item after the target",
     },
     Command {
+        name: "unadopt",
+        slots: &[],
+        help: "retract the target's last adoption (F4)",
+    },
+    Command {
         name: "undo",
         slots: &[],
         help: "undo the last change on this branch",
@@ -384,6 +460,10 @@ impl App {
             view_dirty: false,
             last_leap: None,
             quit: false,
+            supposition: None,
+            engines: [None, None, None],
+            eval: [None, None],
+            preview: None,
         };
         if app.journal.entries().is_empty() {
             let e = app.journal.append("edit", json!({"op": "init"}))?;
@@ -428,6 +508,7 @@ impl App {
         };
         match e.kind.as_str() {
             "view" => {
+                let jump = e.parent != Some(self.tip);
                 if let Some(b) = &e.body {
                     self.view.restore(b);
                     if b["op"] == "leap" {
@@ -435,8 +516,14 @@ impl App {
                             .as_str()
                             .map(|p| (p.to_string(), b["forward"] != false));
                     }
+                    if b["op"] == "world" {
+                        self.supposition = None;
+                    }
                 }
                 self.tip = e.seq;
+                if jump {
+                    self.rebuild();
+                }
             }
             "undo" => {
                 if let Some(t) = e.body.as_ref().and_then(|b| b["undoes"].as_u64()) {
@@ -456,9 +543,6 @@ impl App {
                 if incremental {
                     if let Some(b) = &e.body {
                         self.outline.apply(e.seq, &e.kind, b);
-                        if e.kind == "suppose" {
-                            self.world = b["name"].as_str().unwrap_or("supposed").to_string();
-                        }
                     }
                 } else {
                     self.rebuild();
@@ -466,8 +550,19 @@ impl App {
                 if e.kind != "purge" {
                     self.redo.clear();
                 }
+                if e.kind == "suppose"
+                    && let Some(b) = &e.body
+                {
+                    let actual = e.parent.unwrap_or(1);
+                    let name = b["name"].as_str().unwrap_or("supposed").to_string();
+                    self.supposition = Some(Supposition { name, actual });
+                }
             }
         }
+        self.world = self
+            .supposition
+            .as_ref()
+            .map_or("actual".into(), |s| s.name.clone());
         self.repair_cursors(&before);
     }
 
@@ -515,9 +610,13 @@ impl App {
     }
 
     fn rebuild(&mut self) {
-        let (o, w, _) = self.replay(self.tip, None);
+        let (o, _, _) = self.replay(self.tip, None);
         self.outline = o;
-        self.world = w;
+    }
+
+    /// The outline of another world, by its head.
+    pub fn outline_at(&self, head: u64) -> Outline {
+        self.replay(head, None).0
     }
 
     /// After the outline changes, a cursor on a vanished item moves to the
@@ -738,6 +837,9 @@ impl App {
             Mode::Normal => self.normal(ev),
             Mode::Quasi(a) => self.quasi(a, ev),
             Mode::ConfirmRetract { target, dependents } => self.confirm(target, dependents, ev),
+            Mode::ConfirmSuppose { text, readings, at } => {
+                self.confirm_suppose(text, readings, at, ev)
+            }
         };
     }
 
@@ -810,6 +912,9 @@ impl App {
                     listing: true,
                 });
             }
+            Key::F(2) => self.run_simple("interrogate"),
+            Key::F(3) => self.run_simple("adopt"),
+            Key::F(4) => self.run_simple("unadopt"),
             Key::F(6) => self.run_simple("switch"),
             Key::F(10) => self.run_simple("quit"),
             _ => {}
@@ -946,11 +1051,24 @@ impl App {
             }
             Quasi::Scope => self.write_view("scope", json!({})),
             Quasi::Suppose => {
-                if !a.input.trim().is_empty() {
-                    let r = self.write_here("suppose", json!({"name": a.input.trim()}));
-                    if let Err(m) = r {
+                let text = a.input.trim().to_string();
+                if text.is_empty() {
+                    return Mode::Normal;
+                }
+                let facts =
+                    crate::store::facts(self.journal.entries(), self.tip).unwrap_or_default();
+                let readings = reason::readings(&facts, &text);
+                if readings.is_empty() {
+                    // No reading: a named world, with nothing supposed in it.
+                    if let Err(m) = self.write_here("suppose", json!({"name": text})) {
                         self.message = m;
                     }
+                } else {
+                    return Mode::ConfirmSuppose {
+                        text,
+                        readings,
+                        at: 0,
+                    };
                 }
             }
             Quasi::Command => return self.run_command(&a.input),
@@ -976,6 +1094,215 @@ impl App {
             }
             _ => Mode::ConfirmRetract { target, dependents },
         }
+    }
+
+    fn confirm_suppose(&mut self, text: String, readings: Vec<Term>, at: usize, ev: Event) -> Mode {
+        if ev.press == Press::Up {
+            return Mode::ConfirmSuppose { text, readings, at };
+        }
+        match ev.key {
+            Key::Enter => {
+                let fact = readings[at].clone();
+                if let Err(m) = self.suppose(&text, &fact) {
+                    self.message = m;
+                }
+                Mode::Normal
+            }
+            Key::Tab => {
+                let at = (at + 1) % readings.len();
+                Mode::ConfirmSuppose { text, readings, at }
+            }
+            Key::Escape => {
+                self.message = "nothing supposed".into();
+                Mode::Normal
+            }
+            _ => Mode::ConfirmSuppose { text, readings, at },
+        }
+    }
+
+    /// Sprout a world in which `fact` holds; then set aside, in that world
+    /// only, each belief that breaks a constraint together with it (the
+    /// supposition is entrenched over the beliefs it contradicts).
+    fn suppose(&mut self, name: &str, fact: &Term) -> Result<(), String> {
+        let f = terms::encode(fact).map_err(|e| e.0)?;
+        let s = self.write_here("suppose", json!({"name": name, "facts": [f]}))?;
+        let mut set_aside = Vec::new();
+        for _ in 0..5 {
+            self.evaluate()?;
+            let eval = self.eval[0].as_ref().ok_or("no evaluation")?;
+            let mut targets: Vec<u64> = Vec::new();
+            for c in &eval.constraints {
+                for v in &c.violations {
+                    if v.prov.iter().any(|p| p.seq() == s.seq) {
+                        targets.extend(v.prov.iter().map(Prov::seq).filter(|q| *q != s.seq));
+                    }
+                }
+            }
+            targets.sort();
+            targets.dedup();
+            targets.retain(|t| self.retractable(*t).is_ok());
+            if targets.is_empty() {
+                break;
+            }
+            for t in targets {
+                self.write_here("retract", json!({"target": t}))?;
+                set_aside.push(t);
+            }
+        }
+        self.evaluate()?;
+        let places: Vec<String> = set_aside.iter().map(|t| self.fact_place(*t)).collect();
+        self.message = if places.is_empty() {
+            "supposed; nothing set aside".into()
+        } else {
+            format!("supposed; set aside in this world: {}", places.join(", "))
+        };
+        Ok(())
+    }
+
+    /// Where a fact entry's fact is stated, in the actual world: its item's
+    /// number, or "entry n".
+    pub fn fact_place(&self, seq: u64) -> String {
+        let head = self.supposition.as_ref().map_or(self.tip, |s| s.actual);
+        let o = self.outline_at(head);
+        match o.fact_item.get(&seq) {
+            Some(i) => o.number(*i),
+            None => format!("entry {seq}"),
+        }
+    }
+
+    fn engine(&mut self, k: usize) -> Result<&mut Engine, String> {
+        if self.engines[k].is_none() {
+            self.engines[k] =
+                Some(Engine::start().map_err(|e| format!("cannot start Prolog: {e}"))?);
+        }
+        Ok(self.engines[k].as_mut().unwrap())
+    }
+
+    /// The engine of the current world, for tests that count evaluations.
+    pub fn current_engine(&mut self) -> Result<&mut Engine, String> {
+        self.engine(0)
+    }
+
+    /// Reason over the worlds shown: sync each world's facts into its engine,
+    /// and read its constraints and derived values. Nothing here changes the
+    /// journal; it is computed from it.
+    pub fn evaluate(&mut self) -> Result<(), String> {
+        let heads: Vec<u64> = match &self.supposition {
+            Some(s) => vec![self.tip, s.actual],
+            None => vec![self.tip],
+        };
+        self.eval = [None, None];
+        for (k, head) in heads.into_iter().enumerate() {
+            let facts = crate::store::facts(self.journal.entries(), head)?;
+            let outline = if k == 0 {
+                self.outline.clone()
+            } else {
+                self.outline_at(head)
+            };
+            let mut eval = WorldEval {
+                facts: facts.clone(),
+                at: self.journal.entries().len(),
+                ..Default::default()
+            };
+            if facts.is_empty() {
+                self.eval[k] = Some(eval);
+                continue;
+            }
+            let engine = self.engine(k)?;
+            engine.sync(&facts).map_err(|e| e.to_string())?;
+            for (seq, c) in &outline.constraints {
+                if !facts.iter().any(|(s, _)| s == seq) {
+                    continue; // retracted in this world
+                }
+                let v = engine.node(*seq).map_err(|e| e.to_string())?;
+                let (violations, disagreements) = solutions(&v)
+                    .into_iter()
+                    .partition(|s| s.prov.iter().all(|p| matches!(p, Prov::Belief(_))));
+                eval.constraints.push(ConstraintEval {
+                    seq: *seq,
+                    name: c.name.clone(),
+                    rule: c.rule.clone(),
+                    violations,
+                    disagreements,
+                });
+            }
+            for item in outline.derived.keys() {
+                if let Ok(v) = engine.node(*item) {
+                    eval.derived.insert(*item, v);
+                }
+            }
+            self.eval[k] = Some(eval);
+        }
+        self.preview = None;
+        if let Some(item) = self.view.interrogate {
+            self.preview = Some(self.preview_adoption(item)?);
+        }
+        Ok(())
+    }
+
+    /// What adopting an item's claims would raise, computed in a spare
+    /// engine: a preview of adopting it, as a world.
+    fn preview_adoption(&mut self, item: u64) -> Result<String, String> {
+        let mut facts = crate::store::facts(self.journal.entries(), self.tip)?;
+        let next = self.journal.entries().len() as u64 + 1;
+        let claims: Vec<Term> = self
+            .claims_of(item)
+            .into_iter()
+            .map(|(_, _, p)| p)
+            .collect();
+        if claims.is_empty() {
+            return Ok("no claims to adopt".into());
+        }
+        facts.extend(claims.into_iter().map(|p| (next, p)));
+        let constraints: Vec<(u64, String)> = self
+            .outline
+            .constraints
+            .iter()
+            .map(|(s, c)| (*s, c.name.clone()))
+            .collect();
+        let engine = self.engine(2)?;
+        engine.sync(&facts).map_err(|e| e.to_string())?;
+        let mut raised = Vec::new();
+        for (seq, name) in constraints {
+            let Ok(v) = engine.node(seq) else { continue };
+            let n = solutions(&v)
+                .iter()
+                .filter(|s| {
+                    s.prov.iter().all(|p| matches!(p, Prov::Belief(_)))
+                        && s.prov.iter().any(|p| p.seq() == next)
+                })
+                .count();
+            if n > 0 {
+                raised.push(format!(
+                    "{n} violation{} of {name}",
+                    if n == 1 { "" } else { "s" }
+                ));
+            }
+        }
+        Ok(if raised.is_empty() {
+            "adopting it raises no violation".into()
+        } else {
+            format!("adopting it would raise {}", raised.join(", "))
+        })
+    }
+
+    /// An item's claims: (entry seq, source, claimed fact).
+    pub fn claims_of(&self, item: u64) -> Vec<(u64, String, Term)> {
+        let facts = crate::store::facts(self.journal.entries(), self.tip).unwrap_or_default();
+        facts
+            .into_iter()
+            .filter(|(s, _)| self.outline.fact_item.get(s) == Some(&item))
+            .filter_map(|(s, f)| match f {
+                Term::Compound(n, a) if n == "claims" && a.len() == 2 => {
+                    let src = match &a[0] {
+                        Term::Str(x) | Term::Atom(x) => x.clone(),
+                        t => reason::show(t),
+                    };
+                    Some((s, src, a[1].clone()))
+                }
+                _ => None,
+            })
+            .collect()
     }
 
     // ------------------------------------------------------------------
@@ -1064,7 +1391,18 @@ impl App {
         let target = self.cursor();
         let need_target = !matches!(
             name,
-            "help" | "quit" | "redo" | "undo" | "switch" | "pane" | "retract" | "suppose" | "new"
+            "help"
+                | "quit"
+                | "redo"
+                | "undo"
+                | "switch"
+                | "pane"
+                | "retract"
+                | "suppose"
+                | "new"
+                | "constraint"
+                | "close"
+                | "commit"
         );
         if need_target && target == TOP {
             return Err("there is no item to act on".into());
@@ -1253,6 +1591,151 @@ impl App {
                 self.unfold_to(to);
                 self.set_cursor(to);
                 self.write_view("follow", json!({"to": to}));
+            }
+            "fact" | "claim" => {
+                let text = words.join(" ");
+                let (fact_text, source) = match (name, text.rfind(" from ")) {
+                    ("claim", Some(i)) => (
+                        text[..i].to_string(),
+                        Some(text[i + 6..].trim().to_string()),
+                    ),
+                    ("claim", None) => return Err("claim (that) a fact, from a source".into()),
+                    _ => (text, None),
+                };
+                let (t, _) = self
+                    .engine(0)?
+                    .parse(fact_text.trim_end_matches('.'))
+                    .map_err(|e| format!("not a Prolog fact: {e}"))?;
+                if !matches!(t, Term::Atom(_) | Term::Compound(..)) || !variables(&t).is_empty() {
+                    return Err("a fact is an atom or a compound term, with no variables".into());
+                }
+                let fact = match &source {
+                    Some(src) => Term::Compound("claims".into(), vec![Term::Str(src.clone()), t]),
+                    None => t,
+                };
+                let f = terms::encode(&fact).map_err(|e| e.0)?;
+                let mut body = json!({"op": "facts", "item": target, "facts": [f]});
+                if let Some(src) = source {
+                    body["source"] = json!(src);
+                }
+                self.write_here("edit", body)?;
+            }
+            "constraint" => {
+                let text = words.join(" ");
+                let (cname, rule) = text
+                    .split_once(": ")
+                    .ok_or("constraint (named) a name: false :- body.")?;
+                let (t, _) = self
+                    .engine(0)?
+                    .parse(rule.trim().trim_end_matches('.'))
+                    .map_err(|e| format!("not a Prolog rule: {e}"))?;
+                let body = match &t {
+                    Term::Compound(n, a)
+                        if n == ":-" && a.len() == 2 && a[0] == Term::Atom("false".into()) =>
+                    {
+                        a[1].clone()
+                    }
+                    _ => return Err("a constraint is a denial: false :- body.".into()),
+                };
+                let vars = reason::make_list(variables(&body).into_iter().map(Term::Var).collect());
+                // Tried against a planted violation before it is kept.
+                let planted = self
+                    .engine(0)?
+                    .plant(&vars, &body)
+                    .map_err(|e| e.to_string())?;
+                if !matches!(&planted, Term::Compound(n, _) if n == "fires") {
+                    return Err(format!(
+                        "constraint not kept: tried against a planted violation, it did not fire ({})",
+                        reason::show(&planted)
+                    ));
+                }
+                let seq = self.journal.entries().len() as u64 + 1;
+                let def = Term::Compound(
+                    "node_def".into(),
+                    vec![
+                        Term::Int(seq as i64),
+                        Term::Compound(
+                            "constraint".into(),
+                            vec![Term::Str(cname.trim().into()), vars, body],
+                        ),
+                    ],
+                );
+                let f = terms::encode(&def).map_err(|e| e.0)?;
+                self.write_here("edit", json!({"op": "constraint", "name": cname.trim(), "rule": rule.trim(), "facts": [f]}))?;
+                self.message = format!(
+                    "constraint {} kept: it fires on a planted violation",
+                    cname.trim()
+                );
+            }
+            "derive" => {
+                let text = words.join(" ");
+                let (template, goal) = text
+                    .split_once(" where ")
+                    .ok_or("derive (text) a template with {Var}, where a goal")?;
+                let (g, names) = self
+                    .engine(0)?
+                    .parse(goal.trim().trim_end_matches('.'))
+                    .map_err(|e| format!("not a Prolog goal: {e}"))?;
+                let vars = reason::make_list(variables(&g).into_iter().map(Term::Var).collect());
+                let def = Term::Compound(
+                    "node_def".into(),
+                    vec![
+                        Term::Int(target as i64),
+                        Term::Compound("query".into(), vec![vars, g]),
+                    ],
+                );
+                let f = terms::encode(&def).map_err(|e| e.0)?;
+                self.write_here("edit", json!({"op": "derive", "item": target, "template": template.trim(), "names": names, "facts": [f]}))?;
+            }
+            "interrogate" => {
+                if self.claims_of(target).is_empty() {
+                    return Err("the target states no claim".into());
+                }
+                self.view.interrogate = Some(target);
+                self.view.panes[1].kind = PaneKind::Links;
+                self.write_view("interrogate", json!({}));
+            }
+            "adopt" => {
+                let claims = self.claims_of(target);
+                if claims.is_empty() {
+                    return Err("the target states no claim to adopt".into());
+                }
+                for (seq, src, p) in claims {
+                    let f = terms::encode(&p).map_err(|e| e.0)?;
+                    self.write_here(
+                        "adopt",
+                        json!({"claim": seq, "item": target, "source": src, "facts": [f]}),
+                    )?;
+                }
+                self.message = "adopted: a belief now, with its source kept".into();
+            }
+            "unadopt" => {
+                let last = self
+                    .path(self.tip)
+                    .iter()
+                    .rev()
+                    .find(|e| {
+                        e.kind == "adopt"
+                            && e.body.as_ref().and_then(|b| b["item"].as_u64()) == Some(target)
+                    })
+                    .map(|e| e.seq)
+                    .filter(|s| self.retractable(*s).is_ok())
+                    .ok_or("the target has no adoption to retract")?;
+                self.write_here("retract", json!({"target": last}))?;
+                self.message = format!("adoption {last} retracted");
+            }
+            "close" | "commit" => {
+                let s = self.supposition.clone().ok_or("no supposition is open")?;
+                let parent = if name == "close" { s.actual } else { self.tip };
+                self.view.interrogate = None;
+                self.flush_text();
+                let body = self.view.to_json("world", json!({name: true}));
+                self.write(Some(parent), "view", body)?;
+                self.message = if name == "close" {
+                    format!("closed “{}”; it stays in the journal", s.name)
+                } else {
+                    format!("“{}” is now the actual world", s.name)
+                };
             }
             "suppose" => {
                 let n = words.join(" ");
