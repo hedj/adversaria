@@ -28,8 +28,9 @@
 //!   terms defined together in a small section are (below): its fields
 //!   and its name count once, as the type. A field whose name more than
 //!   one struct has is counted apart, as is each field of a larger
-//!   struct, including each a struct literal or pattern of it names. The
-//!   report also gives the count with each field apart.
+//!   struct, including each a struct literal or pattern of it names. In
+//!   a small struct's own methods, `self.f` is context, as its type is.
+//!   The report also gives the count with each field apart.
 //!   An enum's variants count as their enum (one concept, a closed set of
 //!   values). Resolution is by name, without type inference, so a method
 //!   call whose name is also a common standard-library method (`STD`
@@ -379,9 +380,22 @@ struct Refs<'a> {
     out: BTreeSet<String>,
     ambiguous: BTreeSet<String>,
     blind: &'a mut Blind,
+    /// The type whose method this is, if it is a struct of at most SMALL
+    /// fields: its fields, read through self, are context.
+    small_owner: Option<String>,
+    /// Fields read as that struct's own (self.f), and those read otherwise.
+    own: BTreeSet<String>,
+    other: BTreeSet<String>,
 }
 
 impl Refs<'_> {
+    /// Whether `base.f` is self's field, in a method of a small struct.
+    fn own_small_field(&self, base: &syn::Expr, f: &str) -> bool {
+        let is_self = matches!(base, syn::Expr::Path(p) if p.path.is_ident("self"));
+        let owns = |o: &String| self.defs.field_owners.get(f).is_some_and(|s| s.contains(o));
+        is_self && self.small_owner.as_ref().is_some_and(owns)
+    }
+
     /// The fields a literal or pattern of a struct larger than a chunk
     /// names: each is a referent (a small struct's are its type's).
     fn large_struct_fields<'b>(
@@ -523,6 +537,11 @@ impl<'ast> Visit<'ast> for Refs<'_> {
             let f = id.to_string();
             if self.defs.fields.contains(&f) {
                 self.out.insert(format!("field {f}"));
+                if self.own_small_field(&i.base, &f) {
+                    self.own.insert(format!("field {f}"));
+                } else {
+                    self.other.insert(format!("field {f}"));
+                }
             }
         }
         syn::visit::visit_expr_field(self, i);
@@ -545,17 +564,28 @@ struct FnCollector<'a> {
 
 impl FnCollector<'_> {
     fn measure(&mut self, name: String, block: &syn::Block, sig: &syn::Signature) {
+        let small_owner = self
+            .owner
+            .last()
+            .filter(|o| self.defs.field_counts.get(*o).is_some_and(|n| *n <= SMALL))
+            .cloned();
         let mut r = Refs {
             defs: self.defs,
             out: BTreeSet::new(),
             ambiguous: BTreeSet::new(),
             blind: self.blind,
+            small_owner,
+            own: BTreeSet::new(),
+            other: BTreeSet::new(),
         };
         r.visit_signature(sig);
         r.visit_block(block);
         let mut strict = r.out;
         let ambiguous: BTreeSet<String> = r.ambiguous.difference(&strict).cloned().collect();
-        let mut out = self.defs.chunked(&strict);
+        let context: BTreeSet<String> = r.own.difference(&r.other).cloned().collect();
+        let mut out = self
+            .defs
+            .chunked(&strict.difference(&context).cloned().collect());
         // A method's own type is the context it is read in, not a referent.
         if let Some(o) = self.owner.last() {
             for set in [&mut out, &mut strict] {
@@ -1134,6 +1164,21 @@ mod tests {
         };
         let s = summary(&[unit(5, None), unit(3, Some(6)), unit(1, None)], 4);
         assert!(s.contains("2 over 4 counting each field apart"), "{s}");
+    }
+
+    #[test]
+    fn a_small_structs_own_fields_are_context_even_if_others_share_the_name() {
+        // Catches self.x counted where x is also another struct's field.
+        let src = r#"
+            struct P { x: u8, y: u8 }
+            struct Q { x: u8 }
+            struct L { x: u8, a: u8, b: u8, c: u8, d: u8 }
+            impl P { fn f(&self) -> u8 { self.x } }
+            impl L { fn g(&self) -> u8 { self.x } }
+        "#;
+        let (fns, _, _) = measure_rust(&[("a.rs".into(), src.into())], &[]).unwrap();
+        let loads: Vec<usize> = fns.iter().map(|u| u.load()).collect();
+        assert_eq!(loads, [0, 1], "P's own field is context; L's is not");
     }
 
     #[test]
