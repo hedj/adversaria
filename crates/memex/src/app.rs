@@ -34,6 +34,15 @@ pub enum Quasi {
 }
 
 impl Quasi {
+    /// Every quasimode, in order.
+    pub const ALL: [Quasi; 5] = [
+        Quasi::LeapForward,
+        Quasi::LeapBack,
+        Quasi::Command,
+        Quasi::Scope,
+        Quasi::Suppose,
+    ];
+
     pub fn label(self) -> &'static str {
         match self {
             Quasi::LeapForward => "LEAP",

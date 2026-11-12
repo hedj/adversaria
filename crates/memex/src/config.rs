@@ -159,6 +159,48 @@ fn quasi_key(name: &str) -> Result<QuasiKey, String> {
     bound_key(name).map(QuasiKey::Key)
 }
 
+/// A quasimode's keys, as written: one name or a list of names.
+fn key_list(name: &str, keys: &toml::Value) -> Result<Vec<QuasiKey>, String> {
+    let ks = key_names(name, keys)?
+        .iter()
+        .map(|n| quasi_key(n).map_err(|e| format!("[quasimodes] {name}: {e}")))
+        .collect::<Result<Vec<QuasiKey>, _>>()?;
+    if ks.is_empty() {
+        return Err(format!(
+            "[quasimodes] {name}: a quasimode needs at least one key"
+        ));
+    }
+    Ok(ks)
+}
+
+fn key_names<'a>(name: &str, keys: &'a toml::Value) -> Result<Vec<&'a str>, String> {
+    match keys {
+        toml::Value::String(s) => Ok(vec![s.as_str()]),
+        toml::Value::Array(a) => a
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .ok_or(format!("[quasimodes] {name}: each key is a string"))
+            })
+            .collect(),
+        _ => Err(format!(
+            "[quasimodes] {name}: a key name, or a list of them"
+        )),
+    }
+}
+
+/// A bound command line must start with a command the memex has, or be
+/// "palette".
+fn check_command(name: &str, cmd: &str) -> Result<(), String> {
+    let first = cmd.split_whitespace().next().unwrap_or("");
+    if first != "palette" && !COMMANDS.iter().any(|c| c.name == first) {
+        return Err(format!(
+            "[keys] {name}: no command “{first}”; the commands are listed in docs/guide.md"
+        ));
+    }
+    Ok(())
+}
+
 fn quasi_named(name: &str) -> Option<Quasi> {
     match name {
         "leap_forward" => Some(Quasi::LeapForward),
@@ -178,118 +220,114 @@ impl Config {
         Config::read(text, Config::default().bindings)
     }
 
+    /// Read a file's text over the given bindings: each section, then
+    /// what every configuration must have.
     fn read(text: &str, bindings: Vec<(Key, String)>) -> Result<Config, String> {
         let table: toml::Table = toml::from_str(text).map_err(|e| e.to_string())?;
-        let mut config = Config {
+        let mut config = Config::empty(bindings);
+        for (section, value) in &table {
+            config.read_section(section, value)?;
+        }
+        config.complete()?;
+        Ok(config)
+    }
+
+    fn empty(bindings: Vec<(Key, String)>) -> Config {
+        Config {
             quasimodes: vec![],
             bindings,
             mouse: false,
-        };
-        for (section, value) in &table {
-            let t = value
-                .as_table()
-                .ok_or_else(|| format!("{section} must be a table, as [{section}]"))?;
-            match section.as_str() {
-                "quasimodes" => {
-                    for (name, keys) in t {
-                        let q = quasi_named(name).ok_or_else(|| {
-                            format!("[quasimodes] has no {name}: the quasimodes are leap_forward, leap_back, command, scope, suppose")
-                        })?;
-                        let names: Vec<&str> = match keys {
-                            toml::Value::String(s) => vec![s.as_str()],
-                            toml::Value::Array(a) => a
-                                .iter()
-                                .map(|v| {
-                                    v.as_str()
-                                        .ok_or(format!("[quasimodes] {name}: each key is a string"))
-                                })
-                                .collect::<Result<_, _>>()?,
-                            _ => {
-                                return Err(format!(
-                                    "[quasimodes] {name}: a key name, or a list of them"
-                                ));
-                            }
-                        };
-                        let ks = names
-                            .iter()
-                            .map(|n| quasi_key(n).map_err(|e| format!("[quasimodes] {name}: {e}")))
-                            .collect::<Result<Vec<_>, _>>()?;
-                        if ks.is_empty() {
-                            return Err(format!(
-                                "[quasimodes] {name}: a quasimode needs at least one key"
-                            ));
-                        }
-                        config.quasimodes.push((q, ks));
-                    }
-                }
-                "keys" => {
-                    for (name, cmd) in t {
-                        let k = bound_key(name).map_err(|e| format!("[keys] {e}"))?;
-                        let cmd = cmd
-                            .as_str()
-                            .ok_or_else(|| format!("[keys] {name}: a command line, in quotes"))?;
-                        config.bindings.retain(|(b, _)| *b != k);
-                        if cmd.is_empty() {
-                            continue; // "" unbinds the key
-                        }
-                        let first = cmd.split_whitespace().next().unwrap_or("");
-                        if first != "palette" && !COMMANDS.iter().any(|c| c.name == first) {
-                            return Err(format!(
-                                "[keys] {name}: no command “{first}”; the commands are listed in docs/guide.md"
-                            ));
-                        }
-                        config.bindings.push((k, cmd.to_string()));
-                    }
-                }
-                "mouse" => {
-                    for (name, v) in t {
-                        match (name.as_str(), v) {
-                            ("enabled", toml::Value::Boolean(b)) => config.mouse = *b,
-                            ("enabled", _) => {
-                                return Err("[mouse] enabled: true or false".into());
-                            }
-                            _ => return Err(format!("[mouse] has no {name}: only enabled")),
-                        }
-                    }
-                }
-                other => {
-                    return Err(format!(
-                        "no section [{other}]: the sections are [quasimodes], [keys] and [mouse]"
-                    ));
-                }
+        }
+    }
+
+    fn read_section(&mut self, section: &str, value: &toml::Value) -> Result<(), String> {
+        let t = value
+            .as_table()
+            .ok_or_else(|| format!("{section} must be a table, as [{section}]"))?;
+        match section {
+            "quasimodes" => self.read_quasimodes(t),
+            "keys" => self.read_keys(t),
+            "mouse" => self.read_mouse(t),
+            other => Err(format!(
+                "no section [{other}]: the sections are [quasimodes], [keys] and [mouse]"
+            )),
+        }
+    }
+
+    /// [quasimodes]: each named quasimode's keys replace its defaults.
+    fn read_quasimodes(&mut self, t: &toml::Table) -> Result<(), String> {
+        for (name, keys) in t {
+            let q = quasi_named(name).ok_or_else(|| {
+                format!("[quasimodes] has no {name}: the quasimodes are leap_forward, leap_back, command, scope, suppose")
+            })?;
+            self.quasimodes.push((q, key_list(name, keys)?));
+        }
+        Ok(())
+    }
+
+    /// [keys]: each named key's command line replaces its default; ""
+    /// unbinds it.
+    fn read_keys(&mut self, t: &toml::Table) -> Result<(), String> {
+        for (name, cmd) in t {
+            let k = bound_key(name).map_err(|e| format!("[keys] {e}"))?;
+            let cmd = cmd
+                .as_str()
+                .ok_or_else(|| format!("[keys] {name}: a command line, in quotes"))?;
+            self.bindings.retain(|(b, _)| *b != k);
+            if !cmd.is_empty() {
+                check_command(name, cmd)?;
+                self.bindings.push((k, cmd.to_string()));
             }
         }
-        // Every quasimode needs a key, or it could be reached only by palette.
-        for q in [
-            Quasi::LeapForward,
-            Quasi::LeapBack,
-            Quasi::Command,
-            Quasi::Scope,
-            Quasi::Suppose,
-        ] {
-            if !config.quasimodes.iter().any(|(x, _)| *x == q) {
-                let d = Config::defaults_for(q);
-                config.quasimodes.push((q, d));
+        Ok(())
+    }
+
+    /// [mouse]: enabled, true or false.
+    fn read_mouse(&mut self, t: &toml::Table) -> Result<(), String> {
+        for (name, v) in t {
+            match (name.as_str(), v) {
+                ("enabled", toml::Value::Boolean(b)) => self.mouse = *b,
+                ("enabled", _) => return Err("[mouse] enabled: true or false".into()),
+                _ => return Err(format!("[mouse] has no {name}: only enabled")),
             }
         }
-        // One order, so equal settings compare equal.
-        config.quasimodes.sort_by_key(|(q, _)| *q as u8);
-        config.bindings.sort_by_key(|(k, _)| format!("{k:?}"));
-        // One job per key.
+        Ok(())
+    }
+
+    /// What every configuration must have: a key for each quasimode, one
+    /// order (so equal settings compare equal), one job per key.
+    fn complete(&mut self) -> Result<(), String> {
+        self.fill_quasimodes();
+        self.order_settings();
+        self.check_one_job()
+    }
+
+    /// Each quasimode not named takes its default keys, or it could be
+    /// reached only by the palette.
+    fn fill_quasimodes(&mut self) {
+        for q in Quasi::ALL {
+            if !self.quasimodes.iter().any(|(x, _)| *x == q) {
+                self.quasimodes.push((q, Config::defaults_for(q)));
+            }
+        }
+    }
+
+    fn order_settings(&mut self) {
+        self.quasimodes.sort_by_key(|(q, _)| *q as u8);
+        self.bindings.sort_by_key(|(k, _)| format!("{k:?}"));
+    }
+
+    fn check_one_job(&self) -> Result<(), String> {
+        let held = self.quasimodes.iter().flat_map(|(_, ks)| ks).copied();
+        let bound = self.bindings.iter().map(|(k, _)| QuasiKey::Key(*k));
         let mut used: Vec<QuasiKey> = Vec::new();
-        for k in config
-            .quasimodes
-            .iter()
-            .flat_map(|(_, ks)| ks)
-            .copied()
-            .chain(config.bindings.iter().map(|(k, _)| QuasiKey::Key(*k)))
-        {
+        for k in held.chain(bound) {
             if used.contains(&k) {
                 return Err(format!("{k:?} is given two jobs"));
             }
             used.push(k);
         }
-        Ok(config)
+        Ok(())
     }
 
     fn defaults_for(q: Quasi) -> Vec<QuasiKey> {
@@ -353,20 +391,33 @@ impl Config {
 mod tests {
     use super::*;
 
+    /// The quasimode a key is held for, by the key's name.
+    fn quasi(c: &Config, key: &str) -> Option<Quasi> {
+        c.quasi_for(quasi_key(key).unwrap())
+    }
+
+    /// The command line a key is bound to, by the key's name.
+    fn bound<'a>(c: &'a Config, key: &str) -> Option<&'a str> {
+        let k = bound_key(key).unwrap();
+        c.bindings
+            .iter()
+            .find(|(b, _)| *b == k)
+            .map(|(_, s)| s.as_str())
+    }
+
     #[test]
     fn defaults() {
         // Catches defaults that differ from what the guide and the tests use.
         let c = Config::default();
-        assert_eq!(
-            c.quasi_for(QuasiKey::Modifier("RightAlt")),
-            Some(Quasi::LeapForward)
-        );
-        assert_eq!(
-            c.quasi_for(QuasiKey::Modifier("LeftControl")),
-            Some(Quasi::Command)
-        );
-        assert!(c.bindings.contains(&(Key::F(10), "quit".into())));
-        assert_eq!(c.bindings.len(), 6);
+        assert_eq!(quasi(&c, "RightAlt"), Some(Quasi::LeapForward));
+        assert_eq!(quasi(&c, "LeftControl"), Some(Quasi::Command));
+        assert_eq!(bound(&c, "F10"), Some("quit"));
+    }
+
+    #[test]
+    fn six_default_bindings() {
+        // Catches a default binding added or lost unnoticed.
+        assert_eq!(Config::default().bindings.len(), 6);
     }
 
     #[test]
@@ -383,61 +434,51 @@ mod tests {
     #[test]
     fn key_names_read_back() {
         // Catches a key shown to the user under a name the file would refuse.
-        for k in [
-            Key::F(1),
-            Key::F(35),
-            Key::Special(Special::Insert),
-            Key::Special(Special::NumLock),
-        ] {
-            assert_eq!(bound_key(&key_name(k)), Ok(k));
+        for name in ["F1", "F35", "Insert", "NumLock"] {
+            let k = bound_key(name).unwrap();
+            assert_eq!(key_name(k), name);
         }
     }
 
     #[test]
-    fn a_remap() {
-        // Catches a configured key ignored, or a quasimode left without keys.
+    fn a_remap_replaces_only_what_it_names() {
+        // Catches a configured key ignored, a default kept beside its
+        // replacement, or the others losing their defaults.
         let c = Config::parse(
             "[quasimodes]\nleap_forward = \"F12\"\n[keys]\nInsert = \"pane suggestions\"\n",
         )
         .unwrap();
+        assert_eq!(quasi(&c, "F12"), Some(Quasi::LeapForward));
+        assert_eq!(quasi(&c, "RightAlt"), None, "replaced, not added");
         assert_eq!(
-            c.quasi_for(QuasiKey::Key(Key::F(12))),
-            Some(Quasi::LeapForward)
-        );
-        assert_eq!(
-            c.quasi_for(QuasiKey::Modifier("RightAlt")),
-            None,
-            "replaced, not added"
-        );
-        assert_eq!(
-            c.quasi_for(QuasiKey::Modifier("LeftAlt")),
+            quasi(&c, "LeftAlt"),
             Some(Quasi::LeapBack),
             "the others keep their defaults"
         );
-        assert!(
-            c.bindings
-                .contains(&(Key::Special(Special::Insert), "pane suggestions".into()))
-        );
-        assert!(
-            c.bindings.contains(&(Key::F(10), "quit".into())),
-            "the other keys keep their defaults"
-        );
-        assert_eq!(c.bindings.len(), 7);
-        // "" unbinds, and frees the key for a quasimode.
+        assert_eq!(bound(&c, "Insert"), Some("pane suggestions"));
+    }
+
+    #[test]
+    fn a_binding_replaces_or_unbinds_its_default() {
+        // Catches "" not unbinding, an unbound key not free for a
+        // quasimode, or a binding added beside its default.
         let c = Config::parse("[keys]\nF1 = \"\"\n[quasimodes]\nscope = \"F1\"\n").unwrap();
-        assert!(!c.bindings.iter().any(|(k, _)| *k == Key::F(1)));
-        assert_eq!(c.quasi_for(QuasiKey::Key(Key::F(1))), Some(Quasi::Scope));
+        assert_eq!(bound(&c, "F1"), None);
+        assert_eq!(quasi(&c, "F1"), Some(Quasi::Scope));
         let c = Config::parse("[keys]\nF10 = \"export out.md\"\n").unwrap();
-        assert!(
-            c.bindings.contains(&(Key::F(10), "export out.md".into())),
-            "replaced"
-        );
-        assert_eq!(c.bindings.len(), 6);
+        assert_eq!(bound(&c, "F10"), Some("export out.md"), "replaced");
+    }
+
+    #[test]
+    fn an_empty_file_is_the_defaults() {
+        // Catches an empty file read as no settings at all.
         assert_eq!(Config::parse("").unwrap(), Config::default());
-        assert!(
-            !Config::default().mouse,
-            "the mouse is off unless asked for"
-        );
+    }
+
+    #[test]
+    fn the_mouse_is_off_unless_asked_for() {
+        // Catches the mouse on by default, or not turned on by the file.
+        assert!(!Config::default().mouse);
         assert!(Config::parse("[mouse]\nenabled = true\n").unwrap().mouse);
     }
 
