@@ -66,6 +66,15 @@ pub enum Key {
     Quasi(Quasi),
 }
 
+/// What a mouse click acts on (crate::ui::Hits says where each is drawn).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Click {
+    /// An item's line in an outline pane: the cursor goes there.
+    Item { pane: usize, id: u64 },
+    /// A hint or a suggestion: the command line it stands for runs.
+    Command(String),
+}
+
 /// Keys the memex leaves free for the user's bindings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Special {
@@ -939,6 +948,36 @@ impl App {
                 self.confirm_suppose(text, readings, at, ev)
             }
         };
+    }
+
+    /// A click, from the mouse. It acts only when no quasimode or question
+    /// is open, and does what the keyboard would: moving the cursor is a
+    /// view change like an arrow key; a command is run as a bound key runs
+    /// it, keeping any confirmation it asks for.
+    pub fn click(&mut self, c: &Click) {
+        if self.mode != Mode::Normal {
+            return;
+        }
+        match c {
+            Click::Item { pane, id } => {
+                if !self.outline.items.contains_key(id) || *pane > 1 {
+                    return;
+                }
+                self.flush_text();
+                self.message.clear();
+                if self.view.focus != *pane {
+                    self.view.focus = *pane;
+                    self.write_view("pane", json!({}));
+                }
+                self.set_cursor(*id);
+                self.view_dirty = true;
+            }
+            Click::Command(line) => {
+                self.flush();
+                self.message.clear();
+                self.run_simple(line);
+            }
+        }
     }
 
     /// How to run a command by key: its bound key, else by name.

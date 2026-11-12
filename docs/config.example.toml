@@ -29,3 +29,11 @@ F3 = "adopt"
 F4 = "unadopt"
 F6 = "switch"
 F10 = "quit"
+
+# The mouse. When enabled, a click on an item moves the cursor there, a click
+# on a hint such as "F3 adopts" runs its command, and a click on a suggestion
+# accepts it. Off by default: while the memex has the mouse, the terminal's
+# own text selection usually needs Shift held. `memex --mouse` or
+# `memex --no-mouse` overrides this for one run.
+[mouse]
+enabled = false

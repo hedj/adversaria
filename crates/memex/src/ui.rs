@@ -2,7 +2,7 @@
 //! story, scene 1). Drawing reads the state and changes nothing, so the same
 //! state always draws the same screen.
 
-use crate::app::{App, Mode, PaneKind, Quasi, ScopeLevel, command_help};
+use crate::app::{App, Click, Mode, PaneKind, Quasi, ScopeLevel, command_help};
 use crate::outline::{Outline, TOP};
 use crate::reason::{self, Prov, WorldEval};
 use format::terms::Term;
@@ -19,7 +19,34 @@ fn bold() -> Style {
     Style::default().add_modifier(Modifier::BOLD)
 }
 
+/// Where a click lands: the places drawn that a click acts on, in the
+/// frame just drawn.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Hits(pub Vec<(Rect, Click)>);
+
+impl Hits {
+    /// What a click at (x, y) would act on, if anything.
+    pub fn at(&self, x: u16, y: u16) -> Option<&Click> {
+        self.0
+            .iter()
+            .find(|(r, _)| r.contains(Position { x, y }))
+            .map(|(_, c)| c)
+    }
+    fn add(&mut self, area: Rect, r: Rect, c: Click) {
+        let r = r.intersection(area);
+        if r.width > 0 && r.height > 0 {
+            self.0.push((r, c));
+        }
+    }
+}
+
 pub fn draw(f: &mut Frame, app: &App) {
+    draw_hits(f, app);
+}
+
+/// Draw the screen, and say where clicks would land.
+pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
+    let mut hits = Hits::default();
     let [top, body, prompt, guide] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(3),
@@ -33,13 +60,13 @@ pub fn draw(f: &mut Frame, app: &App) {
     if app.supposition.is_some() {
         draw_worlds(f, app, body);
         draw_prompt(f, app, prompt, guide);
-        return;
+        return hits;
     }
     for (i, area) in [(0, left), (1, right)] {
         match app.view.panes[i].kind {
-            PaneKind::Outline => draw_outline(f, app, i, area),
-            PaneKind::Links => draw_links(f, app, area),
-            PaneKind::Suggestions => draw_suggestions(f, app, area),
+            PaneKind::Outline => draw_outline(f, app, i, area, &mut hits),
+            PaneKind::Links => draw_links(f, app, area, &mut hits),
+            PaneKind::Suggestions => draw_suggestions(f, app, area, &mut hits),
         }
     }
     if let Mode::Quasi(a) = &app.mode
@@ -47,8 +74,11 @@ pub fn draw(f: &mut Frame, app: &App) {
         && (a.listing || !a.input.is_empty())
     {
         draw_list(f, app, a.q, &a.input, a.listing, left);
+        // The list covers the outline: no item under it is clickable.
+        hits.0.retain(|(r, _)| r.intersection(left).is_empty());
     }
     draw_prompt(f, app, prompt, guide);
+    hits
 }
 
 fn draw_top(f: &mut Frame, app: &App, area: Rect) {
@@ -160,7 +190,7 @@ fn title(app: &App) -> String {
     }
 }
 
-fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) {
+fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hits) {
     let block = Block::default().borders(if pane == 0 {
         Borders::RIGHT
     } else {
@@ -179,6 +209,13 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) {
     let focused = app.view.focus == pane && matches!(app.mode, Mode::Normal | Mode::Quasi(_));
     let mut lines = Vec::new();
     for (id, depth) in rows.iter().skip(offset).take(h) {
+        // The item's own line; its marks, below it, are not part of it.
+        let y = rows_area.y.saturating_add(lines.len() as u16);
+        hits.add(
+            rows_area,
+            Rect::new(rows_area.x, y, rows_area.width, 1),
+            Click::Item { pane, id: *id },
+        );
         let kids = app.outline.children(*id).len();
         let folded = app.view.folded.contains(id);
         let mark = match (kids, folded) {
@@ -270,7 +307,7 @@ fn inverse(kind: &str) -> String {
     }
 }
 
-fn draw_links(f: &mut Frame, app: &App, area: Rect) {
+fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
     let inner = Rect {
         x: area.x + 2,
         width: area.width.saturating_sub(2),
@@ -278,10 +315,32 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect) {
     };
     let id = app.view.panes[0].cursor;
     if let Some(i) = app.view.interrogate {
-        f.render_widget(
-            Paragraph::new(interrogation(app, i)).wrap(Wrap { trim: false }),
-            inner,
+        let p = Paragraph::new(interrogation(app, i)).wrap(Wrap { trim: false });
+        let used = p.line_count(inner.width) as u16;
+        f.render_widget(p, inner);
+        // The hint on its own line after the answers, each part clickable.
+        let (a, u) = (
+            format!("{} adopts", app.key_for("adopt")),
+            format!("{} retracts an adoption", app.key_for("unadopt")),
         );
+        let y = inner.y.saturating_add(used);
+        if y < inner.y + inner.height {
+            let w = |s: &str| s.chars().count() as u16;
+            f.render_widget(
+                Paragraph::new(Line::styled(format!("{a} · {u}"), dim())),
+                Rect::new(inner.x, y, inner.width, 1),
+            );
+            hits.add(
+                inner,
+                Rect::new(inner.x, y, w(&a), 1),
+                Click::Command("adopt".into()),
+            );
+            hits.add(
+                inner,
+                Rect::new(inner.x + w(&a) + 3, y, w(&u), 1),
+                Click::Command("unadopt".into()),
+            );
+        }
         return;
     }
     if let Some(e) = app.eval[0].as_ref()
@@ -812,14 +871,7 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
             .unwrap_or_else(|| "not yet computed".into())
     )));
     lines.push(Line::raw(""));
-    lines.push(Line::styled(
-        format!(
-            "{} adopts · {} retracts an adoption",
-            app.key_for("adopt"),
-            app.key_for("unadopt")
-        ),
-        dim(),
-    ));
+    // The hint follows, drawn by draw_links, where a click can find it.
     lines
 }
 
@@ -986,7 +1038,7 @@ fn rule_lines(rule: &str) -> Vec<String> {
 
 /// The suggestion pane: few in view, ranked by evidence, each with why it
 /// was offered. It never takes the keyboard: accept or dismiss by command.
-fn draw_suggestions(f: &mut Frame, app: &App, area: Rect) {
+fn draw_suggestions(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
     let inner = Rect {
         x: area.x + 2,
         width: area.width.saturating_sub(2),
@@ -1000,9 +1052,23 @@ fn draw_suggestions(f: &mut Frame, app: &App, area: Rect) {
         ),
         Line::raw(""),
     ];
+    let mut y = inner.y.saturating_add(lines.len() as u16);
     for (i, s) in shown.iter().enumerate() {
-        lines.push(Line::raw(format!("{}. {}", i + 1, s.describe())));
-        lines.push(Line::styled(format!("   {}", s.evidence), dim()));
+        let these = vec![
+            Line::raw(format!("{}. {}", i + 1, s.describe())),
+            Line::styled(format!("   {}", s.evidence), dim()),
+        ];
+        // A click anywhere on a suggestion, wrapped lines included, accepts it.
+        let h = Paragraph::new(these.clone())
+            .wrap(Wrap { trim: false })
+            .line_count(inner.width) as u16;
+        hits.add(
+            inner,
+            Rect::new(inner.x, y, inner.width, h),
+            Click::Command(format!("accept {}", i + 1)),
+        );
+        y = y.saturating_add(h);
+        lines.extend(these);
     }
     if shown.is_empty() {
         lines.push(Line::styled("nothing to suggest", dim()));

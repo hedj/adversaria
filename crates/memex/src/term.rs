@@ -138,6 +138,16 @@ pub fn map_key(k: event::KeyEvent, config: &Config) -> Option<Event> {
     Some(Event { key, press })
 }
 
+/// What a mouse event clicks, if anything: a press of the left button on
+/// something drawn to be clicked. Other buttons, releases, drags and the
+/// wheel do nothing.
+pub fn clicked(m: event::MouseEvent, hits: &ui::Hits) -> Option<crate::app::Click> {
+    match m.kind {
+        event::MouseEventKind::Down(event::MouseButton::Left) => hits.at(m.column, m.row).cloned(),
+        _ => None,
+    }
+}
+
 /// The configuration's name for a modifier key.
 fn modifier_name(m: ModifierKeyCode) -> Option<&'static str> {
     use ModifierKeyCode::*;
@@ -200,9 +210,13 @@ pub fn run(dir: &Path, config: Config) -> Result<(), String> {
         PushKeyboardEnhancementFlags(flags)
     )
     .map_err(|e| e.to_string())?;
+    if config.mouse {
+        execute!(out, event::EnableMouseCapture).map_err(|e| e.to_string())?;
+    }
     let mut term = Terminal::new(CrosstermBackend::new(out)).map_err(|e| e.to_string())?;
     let result = (|| -> io::Result<()> {
         let mut evaluated_at = None;
+        let mut hits = ui::Hits::default();
         while !app.quit {
             // Reason again when the journal has moved: constraints and
             // derived values are computed from it, never stored in it.
@@ -212,12 +226,20 @@ pub fn run(dir: &Path, config: Config) -> Result<(), String> {
                 }
                 evaluated_at = Some((app.tip, app.journal().entries().len()));
             }
-            term.draw(|f| ui::draw(f, &app))?;
+            term.draw(|f| hits = ui::draw_hits(f, &app))?;
             if event::poll(Duration::from_secs(1))? {
-                if let event::Event::Key(k) = event::read()?
-                    && let Some(ev) = map_key(k, &config)
-                {
-                    app.handle(ev);
+                match event::read()? {
+                    event::Event::Key(k) => {
+                        if let Some(ev) = map_key(k, &config) {
+                            app.handle(ev);
+                        }
+                    }
+                    event::Event::Mouse(m) => {
+                        if let Some(c) = clicked(m, &hits) {
+                            app.click(&c);
+                        }
+                    }
+                    _ => {}
                 }
             } else if app.pending() {
                 // A second without a key: write what is pending.
@@ -227,6 +249,9 @@ pub fn run(dir: &Path, config: Config) -> Result<(), String> {
         app.flush();
         Ok(())
     })();
+    if config.mouse {
+        let _ = execute!(io::stdout(), event::DisableMouseCapture);
+    }
     let _ = execute!(
         io::stdout(),
         PopKeyboardEnhancementFlags,

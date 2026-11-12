@@ -180,6 +180,48 @@ def main():
         check("nothing is written when the configuration is refused",
               not os.path.exists(os.path.join(j, "journal.jsonl")))
 
+        # 5. The mouse. Off by default: the memex does not ask the terminal
+        #    for mouse reports (crossterm asks with CSI ? 1006 h, SGR mode).
+        MOUSE_ON = b"\x1b[?1006h"
+        status, out = run(binary, os.path.join(d, "nomouse"), KITTY_REPLY, [b"\x1b[21~"])
+        check("by default the memex does not take the mouse", status == 0 and MOUSE_ON not in out,
+              f"status {status}")
+
+        # 6. Enabled in the configuration: a left click (SGR: CSI < 0 ; col ; row M,
+        #    then m to release) on the first item moves the cursor there, so
+        #    the next key typed goes into it.
+        with open(conf, "w", encoding="utf-8") as f:
+            f.write("[mouse]\nenabled = true\n")
+        j = os.path.join(d, "mouse")
+        keys = [press_release(c) for c in "Hello"]
+        keys += [b"\r"]
+        keys += [press_release(c) for c in "World"]
+        # Rows: 1 the top bar, 2 and 3 the pane's head, 4 the first item.
+        keys += [b"\x1b[<0;6;4M", b"\x1b[<0;6;4m"]
+        keys += [press_release("Z")]
+        keys += [b"\x1b[21~"]
+        status, out = run(binary, j, KITTY_REPLY, keys, args=["--config", conf])
+        check("with [mouse] enabled the memex takes the mouse", MOUSE_ON in out, out[-200:])
+        check("and gives it back on leaving", b"\x1b[?1006l" in out, out[-200:])
+        es = entries(j) if os.path.exists(os.path.join(j, "journal.jsonl")) else []
+        items = {e["seq"]: e["body"].get("add") for e in es
+                 if e["kind"] == "edit" and e["body"].get("op") == "create"}
+        first = min(items) if items else None
+        typed_into = [(e["body"].get("item"), e["body"].get("add")) for e in es
+                      if e["kind"] == "edit" and e["body"].get("op") == "text"]
+        check("a click on the first item put the next key there",
+              any(i == first and "Z" in (t or "") for i, t in typed_into), (first, typed_into))
+
+        # 7. --no-mouse overrides the configuration.
+        status, out = run(binary, os.path.join(d, "overridden"), KITTY_REPLY, [b"\x1b[21~"],
+                          args=["--config", conf, "--no-mouse"])
+        check("--no-mouse overrides [mouse] enabled", status == 0 and MOUSE_ON not in out, f"status {status}")
+        # And --mouse turns it on without a configuration.
+        status, out = run(binary, os.path.join(d, "flagged"), KITTY_REPLY, [b"\x1b[21~"], args=["--mouse"])
+        check("--mouse turns it on", status == 0 and MOUSE_ON in out, f"status {status}")
+        status, out = run(binary, os.path.join(d, "both"), KITTY_REPLY, [], args=["--mouse", "--no-mouse"])
+        check("--mouse with --no-mouse is a usage error", status == 2, f"status {status}")
+
     print(f"{failures} failed")
     sys.exit(1 if failures else 0)
 

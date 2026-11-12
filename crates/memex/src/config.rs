@@ -44,6 +44,14 @@ F3 = "adopt"
 F4 = "unadopt"
 F6 = "switch"
 F10 = "quit"
+
+# The mouse. When enabled, a click on an item moves the cursor there, a click
+# on a hint such as "F3 adopts" runs its command, and a click on a suggestion
+# accepts it. Off by default: while the memex has the mouse, the terminal's
+# own text selection usually needs Shift held. `memex --mouse` or
+# `memex --no-mouse` overrides this for one run.
+[mouse]
+enabled = false
 "#;
 
 /// A key a quasimode may be held on.
@@ -59,6 +67,8 @@ pub enum QuasiKey {
 pub struct Config {
     pub quasimodes: Vec<(Quasi, Vec<QuasiKey>)>,
     pub bindings: Vec<(Key, String)>,
+    /// Whether the memex takes the mouse ([mouse] enabled).
+    pub mouse: bool,
 }
 
 impl Default for Config {
@@ -173,6 +183,7 @@ impl Config {
         let mut config = Config {
             quasimodes: vec![],
             bindings,
+            mouse: false,
         };
         for (section, value) in &table {
             let t = value
@@ -230,9 +241,20 @@ impl Config {
                         config.bindings.push((k, cmd.to_string()));
                     }
                 }
+                "mouse" => {
+                    for (name, v) in t {
+                        match (name.as_str(), v) {
+                            ("enabled", toml::Value::Boolean(b)) => config.mouse = *b,
+                            ("enabled", _) => {
+                                return Err("[mouse] enabled: true or false".into());
+                            }
+                            _ => return Err(format!("[mouse] has no {name}: only enabled")),
+                        }
+                    }
+                }
                 other => {
                     return Err(format!(
-                        "no section [{other}]: the sections are [quasimodes] and [keys]"
+                        "no section [{other}]: the sections are [quasimodes], [keys] and [mouse]"
                     ));
                 }
             }
@@ -412,6 +434,11 @@ mod tests {
         );
         assert_eq!(c.bindings.len(), 6);
         assert_eq!(Config::parse("").unwrap(), Config::default());
+        assert!(
+            !Config::default().mouse,
+            "the mouse is off unless asked for"
+        );
+        assert!(Config::parse("[mouse]\nenabled = true\n").unwrap().mouse);
     }
 
     #[test]
@@ -433,6 +460,8 @@ mod tests {
             ("[colours]\nx = 1\n", "no section [colours]"),
             ("[keys\n", "TOML parse error"),
             ("[quasimodes]\nleap_back = []\n", "at least one key"),
+            ("[mouse]\nenabled = \"yes\"\n", "true or false"),
+            ("[mouse]\nwheel = true\n", "has no wheel"),
         ];
         for (text, why) in cases {
             let e = Config::parse(text).unwrap_err();
