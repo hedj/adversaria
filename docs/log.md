@@ -217,8 +217,22 @@ Deliberate breaks, each made a test fail: INT range off by one, in Prolog and in
 Not done, or weak:
 
 * The server runs every goal it is sent, with the user's full rights. The only client is the memex itself, so this is by design, but it is a fact to know.
-* A malformed header stops the server, and the client reports that it stopped; nothing restarts the server yet.
+* A malformed header stops the server, and the client reports that it stopped; nothing restarts the server yet. *Settled the same day*: the author ruled that both ends die (see below).
 * Rust holds integers in 64 bits, so a wider integer from Prolog is refused, not carried.
+
+## Dying on a garbled header (12 November 2026)
+
+The author ruled: die on a garbled message header. Before, the server printed an error and ended with status 0, as if all were well; a header cut short after its first byte was taken for a clean end of input.
+
+Now:
+
+* The server says why ("dying on a garbled message") and exits with status 1, for a non-zero reserved field, an unknown type, no request number, a message cut short, or a header cut short. A clean end of input still exits 0. A well-framed request with a bad body still gets DONE 1, and the server carries on.
+* The client, on a garbled message from the server or on the server stopping, kills the child and records the reason (with the exit status). Every later call fails with `Error::Dead` and that reason. Nothing restarts it. The client is a library, so it returns the error rather than ending the process; the memex program will exit on it.
+* An over-long message from the client is refused before it is sent, and does not kill the connection: it is the client's own mistake, not a stream out of step.
+
+Checked: three new tests (the server's exit status and message for five kinds of garbled header, and 0 for a clean end; the client dying with the server; the client dying on garbage from a fake server). Three deliberate breaks each made one fail: the server stopping with status 0; the client treating a stopped server as an ordinary error; the client passing a garbled reply through. A fourth break, removing the dead check in `receive`, made none fail: it was redundant with the check in `send`, and gave the same reason, so it was removed. `make test` exits 0 here and in `nix develop -i`.
+
+Two faults met on the way: a fake server written as `initialization((Goal1, Goal2), main)` did not run its goal, while the same goal as a named `main` did; I did not find why. And the first fake test waited out its 60-second timeout before failing, because nothing arrived.
 
 ### Sizes (counted, after milestone 2)
 
