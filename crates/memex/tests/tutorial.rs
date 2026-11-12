@@ -207,5 +207,73 @@ fn the_tutorial_works_as_written() {
     // Step 9: quit.
     t.key(Key::F(10));
     assert!(t.app.quit);
+    t.app.flush();
+
+    // Part 2, in the same journal, started again.
+    let mut app = App::open(&dir).unwrap();
+    app.set_durable(false);
+    app.evaluate().unwrap();
+    let mut t = T { app, dump: t.dump };
+    part_two(&mut t);
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn part_two(t: &mut T) {
+    // Step 10: a box after the last item of part 1, at the top level.
+    t.hold(Quasi::LeapForward, "talk");
+    t.tap(Key::Enter);
+    t.tap(Key::BackTab);
+    t.typ("Budget");
+    t.tap(Key::Enter);
+    t.typ("income");
+    t.tap(Key::Tab);
+    t.command("fact cell(income, 2000)");
+    t.command("derive Income: {V} where cell(income, V)");
+    t.look("income");
+    t.shows("Income: 2000 [derived]");
+
+    // Step 11: more boxes, and one computed from them.
+    t.tap(Key::Enter);
+    t.typ("rent");
+    t.command("fact cell(rent, 1200)");
+    t.command("derive Rent: {V} where cell(rent, V)");
+    t.tap(Key::Enter);
+    t.typ("food");
+    t.command("fact cell(food, 400)");
+    t.command("derive Food: {V} where cell(food, V)");
+    t.tap(Key::Enter);
+    t.typ("left");
+    t.command(
+        "derive Left over: {L} where cell(income, I), cell(rent, R), cell(food, F), L is I - R - F",
+    );
+    t.look("left over");
+    t.shows("Left over: 400 [derived]");
+
+    // Step 12: rules.
+    t.command("constraint one value per cell: false :- cell(C, A), cell(C, B), A \\= B.");
+    t.command("constraint spending within income: false :- cell(income, I), cell(rent, R), cell(food, F), R + F > I.");
+    t.says("constraint spending within income kept: it fires on a planted violation");
+
+    // Step 13: change a value.
+    t.command("set cell(food, 900)");
+    t.look("set 900");
+    t.says("set; replaced the fact at 2.3; left for you: 1 violation of spending within income");
+    t.shows("Food: 900 [derived]");
+    t.shows("Left over: -100 [derived]");
+    t.shows("1 constraint violation");
+    t.command("set cell(food, 500)");
+    t.look("set 500");
+    t.shows("Left over: 300 [derived]");
+    t.lacks("constraint violation");
+
+    // Step 14: what if.
+    t.hold(Quasi::Suppose, "rent is 1600");
+    t.look("suppose rent?");
+    t.shows("Do you mean: Suppose that the cell of rent is 1600.  ⏎ yes · Esc no");
+    t.key(Key::Enter);
+    t.look("supposed rent");
+    t.says("set aside in this world: 2.2; left for you: 1 violation of spending within income");
+    t.shows("Left over: -100");
+    t.command("close");
+    t.shows("Left over: 300 [derived]");
 }

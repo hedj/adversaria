@@ -1,10 +1,12 @@
 # Tutorial: a first session
 
-This tutorial takes about twenty minutes. You will write a short outline,
-state facts, add a claim from a source, write a constraint that catches the
-conflict, question the claim, adopt it and take it back, and try it in a
-supposed world. It follows the design's user story (docs/design.md, § A user
-story): notes on the Soviet Buran space shuttle.
+This tutorial takes about thirty minutes (an estimate). In part 1 you
+will write a short outline, state facts, add a claim from a source, write
+a constraint that catches the conflict, question the claim, adopt it and
+take it back, and try it in a supposed world. Part 1 follows the design's
+user story (docs/design.md, § A user story): notes on the Soviet Buran
+space shuttle. In part 2 you will build a small budget that computes
+itself from boxes and rules.
 
 A test performs every step below and checks every screen text quoted here
 (`crates/memex/tests/tutorial.rs`). If the memex changes and this tutorial
@@ -190,6 +192,112 @@ fault it finds.
 When you are done, delete `$HOME/adversaria-tutorial` and
 `$HOME/.adversaria-tutorial.key` if you no longer want them.
 
+## Part 2: boxes that compute
+
+The memex has no spreadsheet. But items can hold values, derived text can
+compute from values, and constraints can relate them, and that is most of
+what a spreadsheet does. This part builds a small household budget that
+way. Nothing in it is special to budgets or spreadsheets: `cell` below is
+a name chosen here, not something the memex knows.
+
+Start the memex again in the same journal, with the same `make run`
+command as in step 1. Part 1's outline is still there.
+
+## 10. A box that holds a value
+
+Leap to `talk` (the last item of part 1), press Enter for a new item and
+Shift-Tab to bring it to the top level, and type `Budget`. Press Enter,
+type `income`, and press Tab to put it under Budget.
+
+Give the item a value, as a fact, and make it show that value:
+
+- `fact cell(income, 2000)`
+- `derive Income: {V} where cell(income, V)`
+
+The item now reads:
+
+    Income: 2000 [derived]
+
+The text you typed (`income`) stays in the journal; the item shows the
+derived text instead, and will follow the value when it changes.
+
+## 11. More boxes, and one computed from them
+
+Make two more boxes the same way. Press Enter, type `rent`, then:
+
+- `fact cell(rent, 1200)`
+- `derive Rent: {V} where cell(rent, V)`
+
+Press Enter, type `food`, then:
+
+- `fact cell(food, 400)`
+- `derive Food: {V} where cell(food, V)`
+
+Now a box computed from the others. Press Enter, type `left`, then:
+
+`derive Left over: {L} where cell(income, I), cell(rent, R), cell(food, F), L is I - R - F`
+
+It reads:
+
+    Left over: 400 [derived]
+
+## 12. Rules between the boxes
+
+Two constraints. The first says a box holds one value; the second, that
+spending must not exceed income:
+
+`constraint one value per cell: false :- cell(C, A), cell(C, B), A \= B.`
+
+`constraint spending within income: false :- cell(income, I), cell(rent, R), cell(food, F), R + F > I.`
+
+Each is tried against a planted violation before it is kept, as in step
+5:
+
+    constraint spending within income kept: it fires on a planted violation
+
+## 13. Change a value
+
+`set` states a fact and takes back the facts it directly contradicts:
+here, because of the rule "one value per cell", the old food value. It
+does not matter where the cursor is; the new value goes on the Food box.
+
+`set cell(food, 900)`
+
+The memex says:
+
+    set; replaced the fact at 2.3; left for you: 1 violation of spending within income
+
+Every box that depends on food is recomputed at once: the screen shows
+`Food: 900 [derived]` and `Left over: -100 [derived]`, and the top bar
+says `1 constraint violation`, marked under the boxes involved. The memex
+does not choose how to repair it (lower the rent? the food?); that is left
+to you. Put food back within income:
+
+`set cell(food, 500)`
+
+Now `Left over: 300 [derived]`, and the violation is gone.
+
+## 14. What if
+
+To see what a change would do without making it, suppose it, as in step
+8. Hold Super, type `rent is 1600`, and release. The memex asks:
+
+    Do you mean: Suppose that the cell of rent is 1600.  ⏎ yes · Esc no
+
+Press Enter. The two worlds are shown side by side, box for box: in the
+supposed one, the old rent is set aside and `Left over: -100`. The memex
+says:
+
+    supposed; set aside in this world: 2.2; left for you: 1 violation of spending within income
+
+Only the old rent is set aside. Income and food stay: with them, the new
+rent breaks "spending within income", but any of the three could be the
+one to change, so the memex leaves that violation for you rather than
+choosing.
+
+Run `close` to go back; the actual budget still says
+`Left over: 300 [derived]`. (`commit` would have made the new rent real.)
+
 ## What next
 
 docs/guide.md describes every command, the files the memex keeps, the tools
@@ -201,6 +309,8 @@ around it, and how to change the keys.
   real terminal. A separate test (`tests/memex_in_a_pty.py`) drives the
   program through a pseudo-terminal with kitty's key encoding. Neither is a
   real kitty, WezTerm or Ghostty, and the memex has not yet been run in one.
+- In part 2, the boxes are an outline, not a grid, and only whole numbers
+  can be supposed.
 - Step 9's `check` command is not performed by the tutorial test; the
   acceptance tests check journals made by the memex.
 - Holding Super may be taken by your desktop. If it is, give Suppose another
