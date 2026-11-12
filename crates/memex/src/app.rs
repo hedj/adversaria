@@ -403,7 +403,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "import",
         slots: &[("from", Slot::Text)],
-        help: "import wikidata and a file of facts made by the wikidata tool: claims whose source is Wikidata",
+        help: "import wikidata, document or results, then a file: what it says arrives as claims",
     },
     Command {
         name: "indent",
@@ -463,7 +463,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "suppose",
         slots: &[("that", Slot::Text)],
-        help: "start a named world (milestone 4 gives it meaning)",
+        help: "start a named world with nothing supposed; hold Suppose to suppose a statement",
     },
     Command {
         name: "switch",
