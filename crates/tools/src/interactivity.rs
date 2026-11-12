@@ -33,7 +33,8 @@
 //! * Rust module: each other module of the project, or crate of the
 //!   workspace, that it names. Items it takes from its parent module
 //!   (`super::f`, `use super::{f, g}`) are one referent, the parent; an
-//!   item taken from the crate's root (`crate::f`) is one, the crate.
+//!   item taken from the crate's root (`crate::f`) is one, the crate. A
+//!   name there that is a module's (`use crate::view`) is that module.
 //! * Markdown section: each section or document it cites (by §, by a
 //!   docs/ path), and each backticked term defined in another section. A
 //!   term is defined where it is a heading, the first backticked cell of a
@@ -565,6 +566,7 @@ pub fn measure_rust(
     for (_, f) in &parsed {
         DefCollector(&mut defs).visit_file(f);
     }
+    let names = module_names(files);
     let mut blind = Blind::default();
     let mut fns = Vec::new();
     let mut modules = Vec::new();
@@ -578,24 +580,29 @@ pub fn measure_rust(
         };
         c.visit_file(f);
         fns.extend(c.units);
-        modules.push(module_unit(name, f, crates));
+        modules.push(module_unit(name, f, crates, &names));
     }
     Ok((fns, modules, blind))
 }
 
 /// A file as a module: the other modules and workspace crates it names.
-fn module_unit(name: &str, f: &syn::File, crates: &[String]) -> Unit {
+fn module_unit(name: &str, f: &syn::File, crates: &[String], names: &BTreeSet<String>) -> Unit {
     struct Mods<'a> {
         crates: &'a [String],
         out: BTreeSet<String>,
         children: usize,
         /// The module `super` names, from the file's path.
         parent: String,
+        /// The project's modules, by name.
+        names: &'a BTreeSet<String>,
     }
     impl Mods<'_> {
-        /// The module an item of `crate` or `super` belongs to.
-        fn owner(&self, first: &str) -> String {
-            if first == "super" {
+        /// What a name under `crate` or `super` refers to: a module, if it
+        /// is one; else the module it is an item of.
+        fn owner(&self, first: &str, item: &str) -> String {
+            if self.names.contains(item) {
+                format!("mod {item}")
+            } else if first == "super" {
                 format!("mod {}", self.parent)
             } else {
                 "mod crate".into()
@@ -610,7 +617,7 @@ fn module_unit(name: &str, f: &syn::File, crates: &[String]) -> Unit {
                     self.out.insert(format!("mod {}", s[1]));
                 }
                 Some(first @ ("crate" | "super")) if s.len() == 2 => {
-                    let o = self.owner(first);
+                    let o = self.owner(first, &s[1]);
                     self.out.insert(o);
                 }
                 Some(c) if self.crates.iter().any(|x| x == c) && s.len() > 1 => {
@@ -626,8 +633,8 @@ fn module_unit(name: &str, f: &syn::File, crates: &[String]) -> Unit {
                 if first == "crate" || first == "super" {
                     if let syn::UseTree::Path(q) = &*p.tree {
                         self.out.insert(format!("mod {}", q.ident));
-                    } else if let syn::UseTree::Name(_) = &*p.tree {
-                        let o = self.owner(&first);
+                    } else if let syn::UseTree::Name(q) = &*p.tree {
+                        let o = self.owner(&first, &q.ident.to_string());
                         self.out.insert(o);
                     } else if let syn::UseTree::Group(g) = &*p.tree {
                         for t in &g.items {
@@ -635,8 +642,8 @@ fn module_unit(name: &str, f: &syn::File, crates: &[String]) -> Unit {
                                 syn::UseTree::Path(q) => {
                                     self.out.insert(format!("mod {}", q.ident));
                                 }
-                                syn::UseTree::Name(_) => {
-                                    let o = self.owner(&first);
+                                syn::UseTree::Name(q) => {
+                                    let o = self.owner(&first, &q.ident.to_string());
                                     self.out.insert(o);
                                 }
                                 _ => {}
@@ -664,6 +671,7 @@ fn module_unit(name: &str, f: &syn::File, crates: &[String]) -> Unit {
         out: BTreeSet::new(),
         children: 0,
         parent: parent_module(name),
+        names,
     };
     m.visit_file(f);
     // A file does not refer to itself.
@@ -681,6 +689,22 @@ fn module_unit(name: &str, f: &syn::File, crates: &[String]) -> Unit {
         forward: 0,
         strict: None,
     }
+}
+
+/// The project's module names: each file's stem, and the directory of
+/// each mod.rs.
+fn module_names(files: &[(String, String)]) -> BTreeSet<String> {
+    files
+        .iter()
+        .filter_map(|(n, _)| {
+            let p = Path::new(n);
+            match p.file_stem()?.to_str()? {
+                "mod" => p.parent()?.file_name()?.to_str().map(String::from),
+                "lib" | "main" => None,
+                stem => Some(stem.to_string()),
+            }
+        })
+        .collect()
 }
 
 /// The module `super` names in a file: the directory a.rs is in, or for
@@ -997,6 +1021,21 @@ mod tests {
         let (_, mods, _) = measure_rust(&[("src/k/d.rs".into(), src.into())], &[]).unwrap();
         let r: Vec<&str> = mods[0].referents.iter().map(String::as_str).collect();
         assert_eq!(r, ["mod k", "mod x", "mod z"]);
+    }
+
+    #[test]
+    fn a_module_imported_by_name_is_that_module() {
+        // Catches `use crate::view;` counted as an item of the crate's root.
+        let files = [
+            (
+                "src/u.rs".to_string(),
+                "use crate::view;\nuse crate::f;\n".to_string(),
+            ),
+            ("src/view.rs".to_string(), String::new()),
+        ];
+        let (_, mods, _) = measure_rust(&files, &[]).unwrap();
+        let r: Vec<&str> = mods[0].referents.iter().map(String::as_str).collect();
+        assert_eq!(r, ["mod crate", "mod view"]);
     }
 
     #[test]
