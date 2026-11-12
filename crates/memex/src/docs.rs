@@ -41,9 +41,17 @@ pub fn format_of(path: &Path) -> Option<&'static str> {
     }
 }
 
+/// Run Pandoc to read a document, sandboxed: it may read only the files
+/// named on the command line, so a document cannot pull in another file
+/// (LaTeX \input, \include) or fetch anything.
 fn pandoc(args: &[&str], input: Option<&[u8]>) -> Result<Vec<u8>, String> {
+    pandoc_run(true, args, input)
+}
+
+fn pandoc_run(sandbox: bool, args: &[&str], input: Option<&[u8]>) -> Result<Vec<u8>, String> {
     use std::io::Write;
     let mut child = Command::new("pandoc")
+        .args(sandbox.then_some("--sandbox"))
         .args(args)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -65,11 +73,22 @@ fn pandoc(args: &[&str], input: Option<&[u8]>) -> Result<Vec<u8>, String> {
     Ok(out.stdout)
 }
 
+/// A path as Pandoc's argument: one that starts with "-" gets "./" before
+/// it, so Pandoc cannot read it as an option.
+fn path_arg(path: &Path) -> String {
+    let p = path.to_string_lossy();
+    if p.starts_with('-') {
+        format!("./{p}")
+    } else {
+        p.into_owned()
+    }
+}
+
 /// Read a document into blocks, the losses, and its metadata as Pandoc gives it.
 pub fn read(path: &Path) -> Result<(Vec<Block>, Losses, Value), String> {
     let fmt = format_of(path)
         .ok_or("not a document format the memex reads (md, docx, odt, tex, html)")?;
-    let p = path.to_string_lossy();
+    let p = path_arg(path);
     let json = pandoc(&["-f", fmt, "-t", "json", &p], None)?;
     let doc: Value =
         serde_json::from_slice(&json).map_err(|e| format!("pandoc gave no JSON tree: {e}"))?;
@@ -458,14 +477,16 @@ pub fn write(markdown: &str, path: &Path, sources: &[String]) -> Result<(), Stri
             .join("\n")
     );
     let doc = format!("{meta}{markdown}");
-    let p = path.to_string_lossy();
+    let p = path_arg(path);
     let mut args = vec!["-f", "markdown", "-o", &p, "--standalone"];
     if fmt != "markdown" {
         args.extend(["-t", fmt]);
     } else {
         args.extend(["-t", "markdown"]);
     }
-    pandoc(&args, Some(doc.as_bytes()))?;
+    // Not sandboxed: Pandoc 3.1.3's sandbox cannot find its own data files
+    // for Word and OpenDocument output (see docs/log.md).
+    pandoc_run(false, &args, Some(doc.as_bytes()))?;
     Ok(())
 }
 
@@ -517,7 +538,7 @@ pub fn normal(s: &str) -> String {
 
 /// A document's plain text, through Pandoc, for the quote check.
 pub fn plain_text(path: &Path, fmt: &str) -> Result<String, String> {
-    let p = path.to_string_lossy();
+    let p = path_arg(path);
     Ok(String::from_utf8_lossy(&pandoc(
         &["-f", fmt, "-t", "plain", "--wrap=none", &p],
         None,
