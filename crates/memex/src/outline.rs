@@ -593,6 +593,43 @@ impl Outline {
         span_json(&self.items[&id].spans)
     }
 
+    /// The item an address names: "#seq", an outline number ("3.2"), a
+    /// name, or the start of only one item's text.
+    pub fn addressed(&self, a: &str) -> Option<u64> {
+        if a.is_empty() {
+            return None;
+        }
+        self.by_seq(a)
+            .or_else(|| self.by_number(a))
+            .or_else(|| self.by_name(a))
+            .or_else(|| self.by_prefix(a))
+    }
+
+    /// "#seq": an item by its sequence number.
+    fn by_seq(&self, a: &str) -> Option<u64> {
+        a.strip_prefix('#')
+            .and_then(|s| s.parse().ok())
+            .filter(|i| self.items.contains_key(i))
+    }
+
+    fn by_name(&self, a: &str) -> Option<u64> {
+        self.names
+            .get(a)
+            .copied()
+            .filter(|i| self.items.contains_key(i))
+    }
+
+    /// The one item whose text starts so, ignoring case.
+    fn by_prefix(&self, a: &str) -> Option<u64> {
+        let la = a.to_lowercase();
+        let hits: Vec<u64> = self
+            .in_order()
+            .into_iter()
+            .filter(|id| self.text(*id).to_lowercase().starts_with(&la))
+            .collect();
+        (hits.len() == 1).then(|| hits[0])
+    }
+
     /// All items in outline order, depth first.
     pub fn in_order(&self) -> Vec<u64> {
         let mut out = Vec::with_capacity(self.items.len());

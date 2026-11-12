@@ -310,51 +310,67 @@ impl App {
     /// Run a command line, as typed in the Command quasimode.
     pub fn run_command(&mut self, line: &str) -> Mode {
         self.flush();
-        let mode = match self.command(line.trim()) {
-            Ok(mode) => mode,
-            Err(m) => {
-                self.message = m;
-                Mode::Normal
-            }
-        };
+        let mode = self.command_or_message(line.trim());
         self.flush();
         self.update_frozen();
         mode
     }
 
+    /// Run a command; if it fails, its error becomes the message.
+    fn command_or_message(&mut self, line: &str) -> Mode {
+        self.command(line).unwrap_or_else(|m| {
+            self.message = m;
+            Mode::Normal
+        })
+    }
+
+    /// Run a command line; the mode it leaves: Normal, unless the command
+    /// asks a question.
+    pub(crate) fn command(&mut self, line: &str) -> Result<Mode, String> {
+        let Some((cmd, words)) = parse_line(line)? else {
+            return Ok(Mode::Normal);
+        };
+        self.run(cmd, &words)?;
+        Ok(self.next_mode())
+    }
+
+    fn run(&mut self, cmd: &Command, words: &[&str]) -> Result<(), String> {
+        let target = self.target_for(cmd)?;
+        (cmd.run)(self, words, target)
+    }
+
+    /// The item a command acts on: the cursor's, which it must have if the
+    /// command needs one.
+    fn target_for(&self, cmd: &Command) -> Result<u64, String> {
+        let target = self.cursor();
+        if cmd.target && target == TOP {
+            return Err("there is no item to act on".into());
+        }
+        Ok(target)
+    }
+
+    /// The mode a command set, if any, taken out; scope returns to the
+    /// statement unless a question is open.
+    fn next_mode(&mut self) -> Mode {
+        if self.mode == Mode::Normal {
+            self.statement_scope();
+        }
+        std::mem::replace(&mut self.mode, Mode::Normal)
+    }
+
+    fn statement_scope(&mut self) {
+        if self.view.scope != ScopeLevel::Statement {
+            self.view.scope = ScopeLevel::Statement;
+            self.view_dirty = true;
+        }
+    }
+
+    // Addresses.
+
     /// An item named by its outline number ("3.2"), its name, "#seq", or the
     /// start of its text if only one item's text starts so.
     pub fn resolve(&self, addr: &str) -> Option<u64> {
-        let a = addr.trim();
-        if a.is_empty() {
-            return None;
-        }
-        if let Some(id) = a
-            .strip_prefix('#')
-            .and_then(|s| s.parse().ok())
-            .filter(|i| self.outline.items.contains_key(i))
-        {
-            return Some(id);
-        }
-        if let Some(id) = self.outline.by_number(a) {
-            return Some(id);
-        }
-        if let Some(id) = self
-            .outline
-            .names
-            .get(a)
-            .filter(|i| self.outline.items.contains_key(i))
-        {
-            return Some(*id);
-        }
-        let la = a.to_lowercase();
-        let hits: Vec<u64> = self
-            .outline
-            .in_order()
-            .into_iter()
-            .filter(|id| self.outline.text(*id).to_lowercase().starts_with(&la))
-            .collect();
-        (hits.len() == 1).then(|| hits[0])
+        self.outline.addressed(addr.trim())
     }
 
     /// The one item that words address.
@@ -379,26 +395,7 @@ impl App {
         })
     }
 
-    pub(crate) fn command(&mut self, line: &str) -> Result<Mode, String> {
-        let mut words: Vec<&str> = line.split_whitespace().collect();
-        if words.is_empty() {
-            return Ok(Mode::Normal);
-        }
-        let name = find_command(words[0])
-            .ok_or_else(|| format!("no command “{}”; ? lists them", words[0]))?;
-        words.remove(0);
-        let cmd = COMMANDS.iter().find(|c| c.name == name).unwrap();
-        let target = self.cursor();
-        if cmd.target && target == TOP {
-            return Err("there is no item to act on".into());
-        }
-        (cmd.run)(self, &words, target)?;
-        if self.mode == Mode::Normal && self.view.scope != ScopeLevel::Statement {
-            self.view.scope = ScopeLevel::Statement;
-            self.view_dirty = true;
-        }
-        Ok(std::mem::replace(&mut self.mode, Mode::Normal))
-    }
+    // The command line as shown.
 
     /// The command line as shown: once the command is recognised, each slot
     /// is preceded by its guide word in parentheses ("link 3.2 (to) source 9").
@@ -407,50 +404,86 @@ impl App {
         if words.is_empty() {
             return String::new();
         }
-        let Some(name) = find_command(words[0])
-            .filter(|n| *n == words[0].to_lowercase() || input.ends_with(' '))
+        let Some(cmd) = find_command(words[0])
+            .filter(|c| c.name == words[0].to_lowercase() || input.ends_with(' '))
         else {
             return input.to_string();
         };
-        let cmd = COMMANDS.iter().find(|c| c.name == name).unwrap();
         words.remove(0);
         let open = input.ends_with(' ');
-        if name == "link" {
-            let (addr, kind) = match words.iter().position(|w| *w == "as") {
-                Some(i) => (&words[..i], Some(words[i + 1..].join(" "))),
-                None => (&words[..], None),
-            };
-            let shown = match self.addresses(addr, 2) {
-                Some(_) => {
-                    let k = (1..addr.len())
-                        .find(|k| {
-                            self.resolve(&addr[..*k].join(" ")).is_some()
-                                && self.resolve(&addr[*k..].join(" ")).is_some()
-                        })
-                        .unwrap();
-                    format!("link {} (to) {}", addr[..k].join(" "), addr[k..].join(" "))
-                }
-                None if addr.is_empty() => "link (to)".to_string(),
-                None => format!("link (to) {}", addr.join(" ")),
-            };
-            return match kind {
-                Some(k) => format!("{shown} (as) {k}"),
-                None if open && self.addresses(addr, 2).is_some() => format!("{shown} (as)"),
-                None => shown,
-            };
+        if cmd.name == "link" {
+            return self.guided_link(&words, open);
         }
-        let mut out = name.to_string();
-        if let Some((noise, _)) = cmd.slots.first() {
-            if !words.is_empty() || open {
-                out.push_str(&format!(" ({noise})"));
-            }
-            if !words.is_empty() {
-                out.push(' ');
-                out.push_str(&words.join(" "));
-            }
-        }
-        out
+        guided_slots(cmd, &words, open)
     }
+
+    /// The link command's line: its two ends, then its type.
+    fn guided_link(&self, words: &[&str], open: bool) -> String {
+        let (addr, kind) = split_kind(words);
+        let two = self.addresses(addr, 2).is_some();
+        let shown = self.guided_ends(addr, two);
+        match kind {
+            Some(k) => format!("{shown} (as) {k}"),
+            None if open && two => format!("{shown} (as)"),
+            None => shown,
+        }
+    }
+
+    fn guided_ends(&self, addr: &[&str], two: bool) -> String {
+        if two {
+            let k = self.split_point(addr);
+            format!("link {} (to) {}", addr[..k].join(" "), addr[k..].join(" "))
+        } else if addr.is_empty() {
+            "link (to)".to_string()
+        } else {
+            format!("link (to) {}", addr.join(" "))
+        }
+    }
+
+    /// Where words that address two items divide.
+    fn split_point(&self, addr: &[&str]) -> usize {
+        (1..addr.len())
+            .find(|k| {
+                self.resolve(&addr[..*k].join(" ")).is_some()
+                    && self.resolve(&addr[*k..].join(" ")).is_some()
+            })
+            .unwrap()
+    }
+}
+
+/// A command's words, and its first slot's guide word before them.
+fn guided_slots(cmd: &Command, words: &[&str], open: bool) -> String {
+    let mut out = cmd.name.to_string();
+    if let Some((noise, _)) = cmd.slots.first() {
+        if !words.is_empty() || open {
+            out.push_str(&format!(" ({noise})"));
+        }
+        if !words.is_empty() {
+            out.push(' ');
+            out.push_str(&words.join(" "));
+        }
+    }
+    out
+}
+
+/// A link command's addresses, and the words after "as", if there are any.
+fn split_kind<'a>(words: &'a [&'a str]) -> (&'a [&'a str], Option<String>) {
+    match words.iter().position(|w| *w == "as") {
+        Some(i) => (&words[..i], Some(words[i + 1..].join(" "))),
+        None => (words, None),
+    }
+}
+
+/// A command line's command and the words after it; None if it is empty.
+fn parse_line(line: &str) -> Result<Option<(&'static Command, Vec<&str>)>, String> {
+    let mut words: Vec<&str> = line.split_whitespace().collect();
+    if words.is_empty() {
+        return Ok(None);
+    }
+    let cmd =
+        find_command(words[0]).ok_or_else(|| format!("no command “{}”; ? lists them", words[0]))?;
+    words.remove(0);
+    Ok(Some((cmd, words)))
 }
 
 /// Whether a command line ends inside a quoted string ("…" or '…'), so a
@@ -473,13 +506,14 @@ pub(crate) fn in_quotes(input: &str) -> bool {
     open.is_some()
 }
 
-pub(crate) fn find_command(w: &str) -> Option<&'static str> {
+/// The command a word names: exactly, or as the start of only one.
+pub(crate) fn find_command(w: &str) -> Option<&'static Command> {
     let w = w.to_lowercase();
     if let Some(c) = COMMANDS.iter().find(|c| c.name == w) {
-        return Some(c.name);
+        return Some(c);
     }
     let hits: Vec<&Command> = COMMANDS.iter().filter(|c| c.name.starts_with(&w)).collect();
-    (hits.len() == 1).then(|| hits[0].name)
+    (hits.len() == 1).then(|| hits[0])
 }
 
 /// Recognition on Escape: complete the command word if it is unambiguous.
@@ -487,7 +521,7 @@ pub(crate) fn complete_command(input: &str) -> String {
     let mut parts = input.splitn(2, ' ');
     let first = parts.next().unwrap_or("");
     let rest = parts.next();
-    match find_command(first) {
+    match find_command(first).map(|c| c.name) {
         Some(name) if rest.is_none() => format!("{name} "),
         Some(name) => format!("{name} {}", rest.unwrap()),
         None => input.to_string(),
@@ -498,15 +532,22 @@ pub(crate) fn complete_command(input: &str) -> String {
 pub fn command_help(input: &str) -> Vec<String> {
     let first = input.split_whitespace().next().unwrap_or("");
     match find_command(first).filter(|_| input.contains(' ')) {
-        Some(name) => {
-            let c = COMMANDS.iter().find(|c| c.name == name).unwrap();
-            let slots: Vec<String> = c.slots.iter().map(|(n, _)| format!("({n}) …")).collect();
-            vec![format!("{name} {} — {}", slots.join(" "), c.help)]
-        }
-        None => COMMANDS
-            .iter()
-            .filter(|c| c.name.starts_with(&first.to_lowercase()))
-            .map(|c| format!("{} — {}", c.name, c.help))
-            .collect(),
+        Some(c) => vec![usage(c)],
+        None => commands_starting(&first.to_lowercase()),
     }
+}
+
+/// A command's slots, each with its guide word, and what it does.
+fn usage(c: &Command) -> String {
+    let slots: Vec<String> = c.slots.iter().map(|(n, _)| format!("({n}) …")).collect();
+    format!("{} {} — {}", c.name, slots.join(" "), c.help)
+}
+
+/// The commands whose names start so, each with what it does.
+fn commands_starting(prefix: &str) -> Vec<String> {
+    COMMANDS
+        .iter()
+        .filter(|c| c.name.starts_with(prefix))
+        .map(|c| format!("{} — {}", c.name, c.help))
+        .collect()
 }
