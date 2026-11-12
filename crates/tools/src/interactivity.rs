@@ -30,7 +30,11 @@
 //!   one struct has is counted apart, as is each field of a larger
 //!   struct, including each a struct literal or pattern of it names. In
 //!   a small struct's own methods, `self.f` is context, as its type is.
-//!   The report also gives the count with each field apart.
+//!   A chain of fields from `self` or from a parameter of declared type
+//!   (`self.screen.input.mode`, `app.record.tip`) is resolved by each
+//!   field's declared type, so a field is attributed to its struct even
+//!   where other structs share its name; other fields are resolved by
+//!   name as above. The report also gives the count with each field apart.
 //!   An enum's variants count as their enum (one concept, a closed set of
 //!   values). Resolution is by name, without type inference, so a method
 //!   call whose name is also a common standard-library method (`STD`
@@ -276,6 +280,9 @@ pub struct Defs {
     pub field_owners: BTreeMap<String, BTreeSet<String>>,
     /// Each struct's number of named fields.
     pub field_counts: BTreeMap<String, usize>,
+    /// Each struct field's declared type, where it is a named type:
+    /// (struct, field) -> the type's last path segment.
+    pub field_types: BTreeMap<(String, String), String>,
 }
 
 /// The struct a field is a chunk of: its one owner, if that has at most
@@ -287,18 +294,6 @@ impl Defs {
         let owners = self.field_owners.get(field)?;
         let only = owners.iter().next().filter(|_| owners.len() == 1)?;
         (self.field_counts.get(only).copied().unwrap_or(0) <= SMALL).then_some(only)
-    }
-
-    /// Referents with each small struct's fields counted as the struct.
-    fn chunked(&self, refs: &BTreeSet<String>) -> BTreeSet<String> {
-        refs.iter()
-            .map(
-                |r| match r.strip_prefix("field ").and_then(|f| self.chunk_of(f)) {
-                    Some(s) => format!("type {s}"),
-                    None => r.clone(),
-                },
-            )
-            .collect()
     }
 }
 
@@ -330,6 +325,9 @@ impl<'ast> Visit<'ast> for DefCollector<'_> {
                         .entry(id.to_string())
                         .or_default()
                         .insert(name.clone());
+                    if let Some(t) = named_type(&f.ty) {
+                        self.0.field_types.insert((name.clone(), id.to_string()), t);
+                    }
                 }
             }
         }
@@ -380,20 +378,80 @@ struct Refs<'a> {
     out: BTreeSet<String>,
     ambiguous: BTreeSet<String>,
     blind: &'a mut Blind,
-    /// The type whose method this is, if it is a struct of at most SMALL
-    /// fields: its fields, read through self, are context.
-    small_owner: Option<String>,
-    /// Fields read as that struct's own (self.f), and those read otherwise.
-    own: BTreeSet<String>,
-    other: BTreeSet<String>,
+    /// The type whose method this is.
+    owner: Option<String>,
+    /// The declared type of self and of each parameter not rebound.
+    locals: BTreeMap<String, String>,
+    /// For each field referent, what each resolved read of it counts as
+    /// in chunks: its small struct's type, the field itself (a large
+    /// struct's), or nothing (the method's own small struct's).
+    resolved: BTreeMap<String, BTreeSet<String>>,
+    /// Field referents with a read that could not be resolved by type.
+    by_name: BTreeSet<String>,
 }
 
 impl Refs<'_> {
-    /// Whether `base.f` is self's field, in a method of a small struct.
-    fn own_small_field(&self, base: &syn::Expr, f: &str) -> bool {
-        let is_self = matches!(base, syn::Expr::Path(p) if p.path.is_ident("self"));
-        let owns = |o: &String| self.defs.field_owners.get(f).is_some_and(|s| s.contains(o));
-        is_self && self.small_owner.as_ref().is_some_and(owns)
+    /// The declared type of an expression that is a local of known type
+    /// or a chain of fields from one.
+    fn type_of(&self, e: &syn::Expr) -> Option<String> {
+        match e {
+            syn::Expr::Path(p) => p
+                .path
+                .get_ident()
+                .and_then(|i| self.locals.get(&i.to_string()).cloned()),
+            syn::Expr::Field(f) => {
+                let syn::Member::Named(id) = &f.member else {
+                    return None;
+                };
+                let t = self.type_of(&f.base)?;
+                self.defs.field_types.get(&(t, id.to_string())).cloned()
+            }
+            syn::Expr::Paren(p) => self.type_of(&p.expr),
+            syn::Expr::Reference(r) => self.type_of(&r.expr),
+            _ => None,
+        }
+    }
+
+    /// What `base.f` counts as in chunks, if base's type is known and has
+    /// the field: "" for the method's own small struct's field.
+    fn field_chunk(&self, base: &syn::Expr, f: &str) -> Option<String> {
+        let t = self.type_of(base)?;
+        if !self
+            .defs
+            .field_owners
+            .get(f)
+            .is_some_and(|s| s.contains(&t))
+        {
+            return None;
+        }
+        let small = self.defs.field_counts.get(&t).is_some_and(|n| *n <= SMALL);
+        Some(match (small, self.owner.as_ref() == Some(&t)) {
+            (true, true) => String::new(),
+            (true, false) => format!("type {t}"),
+            (false, _) => format!("field {f}"),
+        })
+    }
+
+    /// The referents counted in chunks: each field referent as what its
+    /// reads resolved to, or by name where a read was not resolved.
+    fn chunked(&self) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        for r in &self.out {
+            let Some(f) = r.strip_prefix("field ") else {
+                out.insert(r.clone());
+                continue;
+            };
+            if let Some(labels) = self.resolved.get(r) {
+                out.extend(labels.iter().filter(|l| !l.is_empty()).cloned());
+            }
+            if self.by_name.contains(r) {
+                out.insert(match self.defs.chunk_of(f) {
+                    Some(st) => format!("type {st}"),
+                    None => r.clone(),
+                });
+            }
+        }
+        out
     }
 
     /// The fields a literal or pattern of a struct larger than a chunk
@@ -416,7 +474,12 @@ impl Refs<'_> {
         }
         for m in members {
             if let syn::Member::Named(id) = m {
-                self.out.insert(format!("field {id}"));
+                let r = format!("field {id}");
+                self.resolved
+                    .entry(r.clone())
+                    .or_default()
+                    .insert(r.clone());
+                self.out.insert(r);
             }
         }
     }
@@ -536,12 +599,16 @@ impl<'ast> Visit<'ast> for Refs<'_> {
         if let syn::Member::Named(id) = &i.member {
             let f = id.to_string();
             if self.defs.fields.contains(&f) {
-                self.out.insert(format!("field {f}"));
-                if self.own_small_field(&i.base, &f) {
-                    self.own.insert(format!("field {f}"));
-                } else {
-                    self.other.insert(format!("field {f}"));
+                let r = format!("field {f}");
+                match self.field_chunk(&i.base, &f) {
+                    Some(c) => {
+                        self.resolved.entry(r.clone()).or_default().insert(c);
+                    }
+                    None => {
+                        self.by_name.insert(r.clone());
+                    }
                 }
+                self.out.insert(r);
             }
         }
         syn::visit::visit_expr_field(self, i);
@@ -551,6 +618,52 @@ impl<'ast> Visit<'ast> for Refs<'_> {
     }
     // A function defined inside another is its own unit, measured apart.
     fn visit_item_fn(&mut self, _: &'ast syn::ItemFn) {}
+}
+
+/// A type's name, if it is a named type, or a reference to one: the last
+/// segment of its path.
+fn named_type(t: &syn::Type) -> Option<String> {
+    match t {
+        syn::Type::Path(p) => p.path.segments.last().map(|s| s.ident.to_string()),
+        syn::Type::Reference(r) => named_type(&r.elem),
+        syn::Type::Paren(p) => named_type(&p.elem),
+        _ => None,
+    }
+}
+
+/// self's type and each parameter's declared type, by name, less any name
+/// a let or a closure in the body binds again.
+fn typed_locals(
+    owner: Option<&str>,
+    sig: &syn::Signature,
+    block: &syn::Block,
+) -> BTreeMap<String, String> {
+    let mut locals = BTreeMap::new();
+    for input in &sig.inputs {
+        match input {
+            syn::FnArg::Receiver(_) => {
+                if let Some(o) = owner {
+                    locals.insert("self".to_string(), o.to_string());
+                }
+            }
+            syn::FnArg::Typed(t) => {
+                if let (syn::Pat::Ident(i), Some(ty)) = (&*t.pat, named_type(&t.ty)) {
+                    locals.insert(i.ident.to_string(), ty);
+                }
+            }
+        }
+    }
+    struct Rebound(BTreeSet<String>);
+    impl<'ast> Visit<'ast> for Rebound {
+        fn visit_pat_ident(&mut self, i: &'ast syn::PatIdent) {
+            self.0.insert(i.ident.to_string());
+            syn::visit::visit_pat_ident(self, i);
+        }
+    }
+    let mut rebound = Rebound(BTreeSet::new());
+    rebound.visit_block(block);
+    locals.retain(|name, _| name == "self" || !rebound.0.contains(name));
+    locals
 }
 
 /// Functions in one file, with their referents.
@@ -564,28 +677,22 @@ struct FnCollector<'a> {
 
 impl FnCollector<'_> {
     fn measure(&mut self, name: String, block: &syn::Block, sig: &syn::Signature) {
-        let small_owner = self
-            .owner
-            .last()
-            .filter(|o| self.defs.field_counts.get(*o).is_some_and(|n| *n <= SMALL))
-            .cloned();
+        let owner = self.owner.last().cloned();
         let mut r = Refs {
             defs: self.defs,
             out: BTreeSet::new(),
             ambiguous: BTreeSet::new(),
             blind: self.blind,
-            small_owner,
-            own: BTreeSet::new(),
-            other: BTreeSet::new(),
+            locals: typed_locals(owner.as_deref(), sig, block),
+            owner,
+            resolved: BTreeMap::new(),
+            by_name: BTreeSet::new(),
         };
         r.visit_signature(sig);
         r.visit_block(block);
+        let mut out = r.chunked();
         let mut strict = r.out;
         let ambiguous: BTreeSet<String> = r.ambiguous.difference(&strict).cloned().collect();
-        let context: BTreeSet<String> = r.own.difference(&r.other).cloned().collect();
-        let mut out = self
-            .defs
-            .chunked(&strict.difference(&context).cloned().collect());
         // A method's own type is the context it is read in, not a referent.
         if let Some(o) = self.owner.last() {
             for set in [&mut out, &mut strict] {
@@ -1142,11 +1249,12 @@ mod tests {
             struct L { a: u8, b: u8, c: u8, d: u8, e: u8 }
             struct Q { x: u8 }
             struct R { x: u8 }
-            fn f(l: &L, q: &Q) -> u8 { l.a + l.b + q.x }
+            fn mk() -> Q { Q { x: 1 } }
+            fn f(l: &L) -> u8 { let q = mk(); l.a + l.b + q.x }
         "#;
         let (fns, _, _) = measure_rust(&[("a.rs".into(), src.into())], &[]).unwrap();
-        let r: Vec<&str> = fns[0].referents.iter().map(String::as_str).collect();
-        assert_eq!(r, ["field a", "field b", "field x", "type L", "type Q"]);
+        let r: Vec<&str> = fns[1].referents.iter().map(String::as_str).collect();
+        assert_eq!(r, ["field a", "field b", "field x", "fn mk", "type L"]);
     }
 
     #[test]
@@ -1179,6 +1287,45 @@ mod tests {
         let (fns, _, _) = measure_rust(&[("a.rs".into(), src.into())], &[]).unwrap();
         let loads: Vec<usize> = fns.iter().map(|u| u.load()).collect();
         assert_eq!(loads, [0, 1], "P's own field is context; L's is not");
+    }
+
+    #[test]
+    fn a_chain_of_fields_from_self_is_resolved_by_declared_types() {
+        // Catches screen.input counted as a field apart because another
+        // struct also has a field named input.
+        let src = r#"
+            struct App { screen: Screen }
+            struct Screen { input: Input, view: u8 }
+            struct Input { mode: u8 }
+            struct Active { input: u8, a: u8, b: u8, c: u8, d: u8 }
+            impl App { fn f(&self) -> u8 { self.screen.input.mode + self.screen.view } }
+        "#;
+        let (fns, _, _) = measure_rust(&[("a.rs".into(), src.into())], &[]).unwrap();
+        let r: Vec<&str> = fns[0].referents.iter().map(String::as_str).collect();
+        assert_eq!(r, ["type Input", "type Screen"]);
+    }
+
+    #[test]
+    fn a_typed_parameter_is_resolved_unless_rebound() {
+        // Catches a parameter's declared type used after a let binds its
+        // name again.
+        let src = r#"
+            struct P { x: u8 }
+            struct Q { x: u8 }
+            struct L { x: u8, a: u8, b: u8, c: u8, d: u8 }
+            fn f(p: &P, l: &L) -> u8 { p.x + l.x }
+            fn g(p: &P) -> u8 { let p = Q { x: 1 }; p.x }
+        "#;
+        let (fns, _, _) = measure_rust(&[("a.rs".into(), src.into())], &[]).unwrap();
+        let f: Vec<&str> = fns[0].referents.iter().map(String::as_str).collect();
+        let g: Vec<&str> = fns[1].referents.iter().map(String::as_str).collect();
+        assert_eq!(
+            (f, g),
+            (
+                vec!["field x", "type L", "type P"],
+                vec!["field x", "type P", "type Q"]
+            )
+        );
     }
 
     #[test]
