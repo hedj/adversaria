@@ -11,5 +11,6 @@ publish = false
 check = { path = "../check" }
 format = { path = "../format" }
 memex = { path = "../memex" }
+protocol = { path = "../protocol" }
 sealer = { path = "../sealer" }
 serde_json = "1.0.154"
