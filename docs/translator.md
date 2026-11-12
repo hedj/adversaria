@@ -2,13 +2,15 @@
 
 10 November 2026. Exported from the living Claude Doc of the same name.
 
-## Summary
+## 1. Aims
+
+### Summary
 
 This document designs a byte-level English ↔ Prolog translator of about 9.6M parameters. The model is a Complex Koopman Reservoir: a fixed complex linear recurrence with no weights, a raw window, a hashed copy window over a page of text, and a quadratic Kolmogorov–Arnold readout.
 
 Inference uses only additions and multiplications. The hardware that would run the model at speed is out of scope here. A deterministic translator handles controlled English, and the model rewrites free English into it. Training costs about $15–50 in GPU time and data, plus an estimated 1–4 weeks of work on the controlled grammar and verb lexicon. Every figure for the model is an estimate from a paper design; nothing has been built or trained. The measured figures are APE's acceptance rates and timings and the s(CASP) trials.
 
-## Goals and constraints
+### Goals and constraints
 
 The translator runs locally, with no trust in any outside party, and every output is checked before use.
 
@@ -23,7 +25,51 @@ The translator runs locally, with no trust in any outside party, and every outpu
 
 Outsourcing to untrusted servers was considered and rejected for this task. With one untrusted party, confidentiality needs homomorphic encryption, whose cost in traffic and computation is not estimated here. A local model of this size avoids the question.
 
-## Model structure
+### Risks, tests and open questions
+
+The largest risk is that the fixed reservoir, with no learned recurrence, is too weak for language; the copy task decides this before anything is built.
+
+| Risk | Test (one variable changed; same data, size and training budget) | Null hypothesis |
+| --- | --- | --- |
+| A fixed reservoir is weaker than a learned recurrence | Fixed reservoir against a learned Koopman front end; translation exact-match and byte perplexity | The fixed reservoir is no worse |
+| Recall at a distance fails | Copy an identifier after gaps of 8 to 4K bytes, with and without the copy window | The copy window adds nothing |
+| Two 48-value heads lack precision | Copy task with 1 head of 96 values against 2 heads of 48, with and without the hash | Heads and hash add nothing |
+| A quadratic readout is no better than a linear one | Linear against quadratic readout, recurrence fixed | No difference |
+| Phase carries no information | Modulus \|s\|² against the complex state (Re, Im) | No difference |
+| The hard argmax at inference mismatches the soft attention in training | Train with straight-through gradients; compare inference with soft and hard pointers | No difference |
+| Quality is too low at this size | Exact-match on held-out Prolog clauses and queries, after the check-and-resample loop | (a measurement, not a hypothesis) |
+
+Open questions:
+
+- [ ] On real tasks, what share of interactions are questions in English, against navigation and editing?
+- [ ] How long does each task take with the English loop, and with ACE or Prolog typed directly?
+
+### Sources
+
+Pages opened for this document:
+
+- [Attempto Controlled English: description](http://attempto.ifi.uzh.ch/site/main.php?text=description/description.html)
+- [ACE construction rules](http://attempto.ifi.uzh.ch/site/docs/ace_constructionrules.html) and [interpretation rules](http://attempto.ifi.uzh.ch/site/docs/ace_interpretationrules.html)
+- [Lojban (Wikipedia)](https://en.wikipedia.org/wiki/Lojban)
+- [Simplified Technical English (Wikipedia)](https://en.wikipedia.org/wiki/Simplified_Technical_English)
+- [Inform 7](https://ganelson.github.io/inform-website/)
+- [GSM8K-Prolog](https://huggingface.co/datasets/Thomas-X-Yang/gsm8k-prolog)
+- [Phabricator T437880: Wikidata statement counts](https://phabricator.wikimedia.org/T437880)
+- [Warth, Ohshima, Kaehler and Kay: Worlds (ECOOP 2011)](https://link.springer.com/doi/10.1007/978-3-642-22655-7_9)
+- [RAND R-3160: ROSS, an object-oriented language for constructing simulations](https://www.rand.org/pubs/reports/R3160.html)
+- [RAND N-1854-1: The ROSS Language Manual](https://www.rand.org/pubs/notes/N1854-1.html)
+- [s(CASP): justifications for goal-directed constraint answer set programming (arXiv 2009.10238)](https://arxiv.org/abs/2009.10238)
+- [Logical English and s(CASP) (CEUR Vol-3193)](https://ceur-ws.org/Vol-3193/paper5GDE.pdf)
+- [Counterfactual explanation generation with s(CASP) (arXiv 2310.14497)](https://arxiv.org/abs/2310.14497v1)
+- [OpenCyc: introduction to the ontology](https://www.qrg.northwestern.edu/nextkb/IntroOpenCycOnt.pdf)
+- [Attempto: reasoning with ACE (course slides)](https://attempto.ifi.uzh.ch/site/courses/files/ACE.Course.UniZH.1206.Reasoning.pdf)
+- [s(CASP) issue #13: negated existential returns a false answer with a multi-variable body](https://github.com/SWI-Prolog/sCASP/issues/13)
+
+Other figures are measured in this document's trials, or are estimates from this design and from memory, marked as such where they appear.
+
+## 2. The model
+
+### Model structure
 
 The model reads one byte at a time. A recurrence with fixed weights keeps the long-range statistics, two windows keep the exact recent text, and one learned polynomial readout combines them.
 
@@ -43,7 +89,7 @@ The reservoir's state is updated as s = λ·s + (1 − |λ|)·\[x = v\] for each
 
 The exact context is the 8 raw bytes plus the copy window. Beyond it the reservoir keeps only blurred statistics, out to about 2K bytes at the longest time constant.
 
-## Training and data
+### Training and data
 
 The model stays at 9.6M parameters but does a narrower job: it rewrites free English into the controlled English that a deterministic translator handles. Training costs about $15–50 in GPU time and data. The largest cost is about 1–4 weeks of engineering on the controlled grammar and the verb lexicon (a guess).
 
@@ -84,7 +130,7 @@ To cut the cost of the rest:
 
 Training on untrusted servers is safe. Neither data nor weights are secret, and every output of the finished model is checked.
 
-## Restricted input languages: what to borrow
+### Restricted input languages: what to borrow
 
 The cheapest gain is to accept only a controlled English in which each sentence has one meaning. The model then shrinks to a normaliser from free English into that subset, and a deterministic grammar does much of the rest.
 
@@ -104,7 +150,9 @@ Restrictions worth adopting, in order of value:
 
 Logical English (Kowalski and Dávila) and PENG (Schwitter) compile controlled English to Prolog and are the closest prior work, but their pages could not be reached, so they are not assessed here.
 
-## Conversational loop
+## 3. Conversation
+
+### Conversational loop
 
 The model proposes a sentence in Attempto Controlled English (ACE), and the user confirms it before anything is translated. The user sees APE's own restatement of what it parsed, not the model's sentence, so a wrong parse shows. The model's proposals set most of a round's time: APE's parse and restatement take about 3.6 ms (measured; see the memex design's Prolog timings).
 
@@ -128,7 +176,7 @@ Of 15 sentences newly accepted after rewriting, APE restated 12 faithfully, 1 wi
 
 The model stays untrusted: it only proposes, and the user, who knows what was meant, confirms.
 
-### Proposing a formulation: alternatives to the model
+#### Proposing a formulation: alternatives to the model
 
 A neural model is not the only way to propose the controlled form for "do you mean?", and it is probably not the best first one. A predictive editor and a memory of confirmed pairs teach the system better and need no trained model. The model remains the best guesser for new free English, so it fits as a fallback. Only the rewriting rules are measured; the rest are estimates.
 
@@ -149,7 +197,7 @@ Recommended order, if measurement agrees:
 
 The memex design's Decisions follow this. To decide, log real inputs for a while and measure what share the editor, the memory and the rewriting rules handle without the model. The remainder is the model's only job.
 
-### Where APE spends its time
+#### Where APE spends its time
 
 APE (about 19K lines of Prolog, LGPL-3.0, with the Clex lexicon) spends most of its time in a grammar that backtracks heavily, not in the lexicon, so choice points and the trail must be fast. This was measured on the 711 GSM8K sentences, with the full Clex lexicon, by APE's own phase timers and SWI-Prolog's profiler.
 
@@ -176,7 +224,7 @@ The profiler samples, its top 30 predicates cover only about 55% of the time, an
 
 Clex is GPL-3.0, which matters if the lexicon is distributed with the memex.
 
-## A knowledge-base chatbot
+### A knowledge-base chatbot
 
 The same model and Prolog can answer questions about the world if the knowledge lives in Prolog facts, not in the weights. A model of 9.6M parameters holds only about 2.4 MB of knowledge, at roughly 2 bits per parameter (a figure recalled from published scaling studies, not checked). That is a few hundred thousand simple facts at most, against more than a billion statements in Wikidata (from memory).
 
@@ -200,7 +248,7 @@ Limits:
 - Questions outside the controlled grammar need a round of "do you mean?" before they can be asked.
 - On a PC the knowledge base is a local file, loaded into SWI-Prolog. Its lookup time is not measured.
 
-### Roles in a conversation
+#### Roles in a conversation
 
 The model specialises in conversation and in working out what the user means; the facts stay in Prolog. With the knowledge held outside, its 9.6M parameters go to fluency and intent, which a small model handles far better than world knowledge.
 
@@ -219,7 +267,7 @@ Limits:
 - The check needs the phrased answer to parse as ACE. An answer that does not parse falls back to APE's plain restatement of the facts.
 - Training data shifts to dialogue. Synthetic conversations around knowledge-base queries (question, clarification, ACE, facts, answer) cost little to generate. Open dialogue corpora exist, but which ones, and under what licence, is not checked.
 
-### The Wikidata subset
+#### The Wikidata subset
 
 A useful subset is about 25M facts and about 0.8 GB: the roughly 1M best-known entities, about 300 common relations, and no external identifiers. Only the starting totals come from a source: about 1.78 billion statements on 121 million items, of which scholarly articles are 55.5% and astronomical objects 8.5%, leaving about 641 million ([Phabricator T437880](https://phabricator.wikimedia.org/T437880), undated). Every cut after that is an estimate.
 
@@ -240,7 +288,29 @@ Open points:
 - [ ] What share of a sample of expected questions does subset C answer, and which relations do the answers use?
 - [ ] How are relations named, so that each verb frame in the lexicon maps to a predicate of the base?
 
-## Suggesting facts, rules and constraints
+### A natural-language shell
+
+The same loop can drive a shell: the user types a command in English, and its effects are shown and confirmed before anything changes. This is close kin to the fourth-generation languages and English database front ends, such as Intellect, of the early 1980s. Their history, recalled here from memory and not checked, gives the lessons.
+
+| Lesson from the 4GL era | How this design fares |
+| --- | --- |
+| Habitability: users could not predict which English was accepted, and hit invisible walls | Better: the model rewrites free English into the subset, and "do you mean?" shows what was understood |
+| Brittle at the edge of the domain | The same: commands work only within the facts and rules written down, but "no answer" is honest |
+| The survivors were declarative cores: SQL and spreadsheets | ACE translated to Prolog is such a core, and an expert can use it directly |
+| Performance surprises: a short query could expand into a costly plan | The same risk: step limits must cap a search |
+| Lock-in to one vendor's language | Avoided where possible: ACE, Prolog and s(CASP) are open, and the facts are CC0 |
+
+A shell adds side effects, which the 4GLs guarded only with "are you sure?". Worlds give a dry run:
+
+1. The command runs first in a sprouted world, so its effects are only recorded there.
+2. The world's changes are restated in ACE: "This will delete 3 files: …".
+3. The user confirms, and the world is committed: `commit` becomes "execute". Or the world is discarded.
+
+A dry run covers only effects that a world can capture: files, facts, and messages queued but not yet sent. An effect that leaves the machine, such as a byte already on the serial line, cannot be undone, so it must be held back until the commit.
+
+## 4. Reasoning with it
+
+### Suggesting facts, rules and constraints
 
 The model has a further purpose: it suggests formal statements for the user to accept, so the user writes less Prolog. This meets the memex's main risk, that a knowledge base stalls when entering knowledge costs more than it returns. Wikidata already supplies facts about the public world; the suggestions cover the rest.
 
@@ -255,11 +325,11 @@ Three rules keep the suggestions honest. A suggestion enters the journal only wh
 
 The model runs all the time, over whatever the user is working on, and keeps a pane of suggestions up to date. One click adopts a suggestion and another unadopts it: adopting writes an entry to the journal and unadopting retracts it, so both are ordinary edits under universal undo, and the dataflow graph recomputes what depends on them. Pointing at a suggestion previews it in place: the violations it would raise or clear, and the items it would change. The pane follows the rules for a system that offers help unasked, after Horvitz's principles of mixed-initiative interfaces (1999, recalled and not checked): it never takes the keyboard or moves what the user is looking at; it never reorders a suggestion under the pointer; it ranks by evidence and keeps few suggestions in view; and each dismissal is recorded, so a refused suggestion does not come back unless its evidence changes.
 
-## What-if questions: counterfactual simulation
+### What-if questions: counterfactual simulation
 
 The chatbot answers "what if" by supposing a condition in a separate world, setting aside the facts that contradict it, and then answering or simulating forward. It can simulate only worlds whose rules of change are written down, by the user in ACE or by an engineer as a library. "What if the reservoir loses 5% a day?" is in scope; "what if Napoleon had won?" is not. This is a design sketch; nothing in it is built or measured.
 
-### Simulation in the style of ROSS
+#### Simulation in the style of ROSS
 
 | Idea from RAND's ROSS | Role here |
 | --- | --- |
@@ -270,7 +340,7 @@ The chatbot answers "what if" by supposing a condition in a separate world, sett
 
 Time is logical only, so the same question always gets the same answer. An inverse question, such as "what price makes the profit at least 100 dollars?", is a constraint problem, not a simulation, and uses the constraint-Prolog extension.
 
-### Worlds
+#### Worlds
 
 Each supposition runs in a world, after VPRI's Worlds (Warth, Ohshima, Kaehler and Kay, 2011). A child world reads through to its parent and keeps its own writes, so storage grows only with the changes, not with the 0.8 GB base.
 
@@ -285,7 +355,7 @@ A world is a small table of facts added and removed. A lookup checks the current
 
 In the memex a world is a branch of the journal's undo tree (see the memex design): Suppose sprouts a branch, undoing and then editing sprouts another, each named by its first change, and commit makes a branch the actual world. Reversing one earlier decision, such as an adopted suggestion, is a retraction on the current branch, not a new world.
 
-### Counterfactual revision
+#### Counterfactual revision
 
 Before it answers, a supposition sets aside the facts that contradict it, as belief revision does: remove what contradicts the condition, then add it (the Levi identity of AGM revision, from memory).
 
@@ -312,7 +382,7 @@ Before it answers, a supposition sets aside the facts that contradict it, as bel
 | Integrity constraints for the about 300 relations | harvested where Wikidata has them, written otherwise |
 | Domain behaviour libraries (populations, money, stocks and flows, queues) | open-ended: the main cost, and what decides what can be simulated |
 
-### Prior work, and a trial of s(CASP)
+#### Prior work, and a trial of s(CASP)
 
 No existing system found does all of this, but s(CASP) with Logical English covers enough to replace three parts of it: the constraint extension, the search in the revision loop, and the explanations.
 
@@ -358,64 +428,3 @@ Open points:
 - [ ] Whether a fact removed in a child world masks the parent's entry in all three orderings cleanly.
 - [ ] How deep suppositions nest in real conversations, which sets the cost of each lookup.
 
-## A natural-language shell
-
-The same loop can drive a shell: the user types a command in English, and its effects are shown and confirmed before anything changes. This is close kin to the fourth-generation languages and English database front ends, such as Intellect, of the early 1980s. Their history, recalled here from memory and not checked, gives the lessons.
-
-| Lesson from the 4GL era | How this design fares |
-| --- | --- |
-| Habitability: users could not predict which English was accepted, and hit invisible walls | Better: the model rewrites free English into the subset, and "do you mean?" shows what was understood |
-| Brittle at the edge of the domain | The same: commands work only within the facts and rules written down, but "no answer" is honest |
-| The survivors were declarative cores: SQL and spreadsheets | ACE translated to Prolog is such a core, and an expert can use it directly |
-| Performance surprises: a short query could expand into a costly plan | The same risk: step limits must cap a search |
-| Lock-in to one vendor's language | Avoided where possible: ACE, Prolog and s(CASP) are open, and the facts are CC0 |
-
-A shell adds side effects, which the 4GLs guarded only with "are you sure?". Worlds give a dry run:
-
-1. The command runs first in a sprouted world, so its effects are only recorded there.
-2. The world's changes are restated in ACE: "This will delete 3 files: …".
-3. The user confirms, and the world is committed: `commit` becomes "execute". Or the world is discarded.
-
-A dry run covers only effects that a world can capture: files, facts, and messages queued but not yet sent. An effect that leaves the machine, such as a byte already on the serial line, cannot be undone, so it must be held back until the commit.
-
-## Risks, tests and open questions
-
-The largest risk is that the fixed reservoir, with no learned recurrence, is too weak for language; the copy task decides this before anything is built.
-
-| Risk | Test (one variable changed; same data, size and training budget) | Null hypothesis |
-| --- | --- | --- |
-| A fixed reservoir is weaker than a learned recurrence | Fixed reservoir against a learned Koopman front end; translation exact-match and byte perplexity | The fixed reservoir is no worse |
-| Recall at a distance fails | Copy an identifier after gaps of 8 to 4K bytes, with and without the copy window | The copy window adds nothing |
-| Two 48-value heads lack precision | Copy task with 1 head of 96 values against 2 heads of 48, with and without the hash | Heads and hash add nothing |
-| A quadratic readout is no better than a linear one | Linear against quadratic readout, recurrence fixed | No difference |
-| Phase carries no information | Modulus \|s\|² against the complex state (Re, Im) | No difference |
-| The hard argmax at inference mismatches the soft attention in training | Train with straight-through gradients; compare inference with soft and hard pointers | No difference |
-| Quality is too low at this size | Exact-match on held-out Prolog clauses and queries, after the check-and-resample loop | (a measurement, not a hypothesis) |
-
-Open questions:
-
-- [ ] On real tasks, what share of interactions are questions in English, against navigation and editing?
-- [ ] How long does each task take with the English loop, and with ACE or Prolog typed directly?
-
-## Sources
-
-Pages opened for this document:
-
-- [Attempto Controlled English: description](http://attempto.ifi.uzh.ch/site/main.php?text=description/description.html)
-- [ACE construction rules](http://attempto.ifi.uzh.ch/site/docs/ace_constructionrules.html) and [interpretation rules](http://attempto.ifi.uzh.ch/site/docs/ace_interpretationrules.html)
-- [Lojban (Wikipedia)](https://en.wikipedia.org/wiki/Lojban)
-- [Simplified Technical English (Wikipedia)](https://en.wikipedia.org/wiki/Simplified_Technical_English)
-- [Inform 7](https://ganelson.github.io/inform-website/)
-- [GSM8K-Prolog](https://huggingface.co/datasets/Thomas-X-Yang/gsm8k-prolog)
-- [Phabricator T437880: Wikidata statement counts](https://phabricator.wikimedia.org/T437880)
-- [Warth, Ohshima, Kaehler and Kay: Worlds (ECOOP 2011)](https://link.springer.com/doi/10.1007/978-3-642-22655-7_9)
-- [RAND R-3160: ROSS, an object-oriented language for constructing simulations](https://www.rand.org/pubs/reports/R3160.html)
-- [RAND N-1854-1: The ROSS Language Manual](https://www.rand.org/pubs/notes/N1854-1.html)
-- [s(CASP): justifications for goal-directed constraint answer set programming (arXiv 2009.10238)](https://arxiv.org/abs/2009.10238)
-- [Logical English and s(CASP) (CEUR Vol-3193)](https://ceur-ws.org/Vol-3193/paper5GDE.pdf)
-- [Counterfactual explanation generation with s(CASP) (arXiv 2310.14497)](https://arxiv.org/abs/2310.14497v1)
-- [OpenCyc: introduction to the ontology](https://www.qrg.northwestern.edu/nextkb/IntroOpenCycOnt.pdf)
-- [Attempto: reasoning with ACE (course slides)](https://attempto.ifi.uzh.ch/site/courses/files/ACE.Course.UniZH.1206.Reasoning.pdf)
-- [s(CASP) issue #13: negated existential returns a false answer with a multi-variable body](https://github.com/SWI-Prolog/sCASP/issues/13)
-
-Other figures are measured in this document's trials, or are estimates from this design and from memory, marked as such where they appear.
