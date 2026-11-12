@@ -208,7 +208,13 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
     let offset = (at + 3).saturating_sub(h);
     let focused = app.view.focus == pane && matches!(app.mode, Mode::Normal | Mode::Quasi(_));
     let mut lines = Vec::new();
+    // The drawn line the cursor's item is on: items above it may have mark
+    // lines, so it is not the item's index.
+    let mut cursor_line = None;
     for (id, depth) in rows.iter().skip(offset).take(h) {
+        if *id == cursor {
+            cursor_line = Some(lines.len());
+        }
         // The item's own line; its marks, below it, are not part of it.
         let y = rows_area.y.saturating_add(lines.len() as u16);
         hits.add(
@@ -284,8 +290,9 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
         };
         let x = rows_area.x as usize + 2 * depth + 2 + num + app.view.pos;
         // The cursor's row may be off screen when the pane has fewer rows
-        // than the offset assumes (a terminal a few lines high).
-        let shown = at.checked_sub(offset).filter(|r| *r < h);
+        // than the offset assumes (a terminal a few lines high), or when the
+        // mark lines above it fill the pane.
+        let shown = cursor_line.filter(|r| *r < h);
         if let Some(r) = shown
             && x < (rows_area.x + rows_area.width) as usize
         {

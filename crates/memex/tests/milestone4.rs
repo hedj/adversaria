@@ -439,3 +439,22 @@ fn replay_reproduces_claims_constraints_and_worlds() {
     assert_eq!(screen(&r).lines[..n], screen(&app).lines[..n]);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn the_text_cursor_sits_on_its_item_below_mark_lines() {
+    // Catches the text cursor drawn by item count, which puts it on a mark
+    // line when an item above has marks (found 12 November 2026).
+    use ratatui::backend::Backend;
+    let dir = temp("cursor-row");
+    let mut app = scene(&dir);
+    leap(&mut app, "talk notes");
+    let mut t = Terminal::new(TestBackend::new(200, 45)).unwrap();
+    t.draw(|f| memex::ui::draw(f, &app)).unwrap();
+    let p = t.backend_mut().get_cursor_position().unwrap();
+    let buf = t.backend().buffer().clone();
+    let row: String = (0..200)
+        .map(|x| buf[(x, p.y)].symbol().to_string())
+        .collect();
+    assert!(row.contains("Talk notes"), "the cursor is on {row:?}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
