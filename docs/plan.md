@@ -17,15 +17,15 @@ Build what answers these. Everything else waits for stage B (listed at the end).
 
 * `docs/design.md` is the design. Section names below refer to it. Where this plan and the design disagree, the design wins; report the disagreement.
 * `docs/translator.md` covers the English–Prolog translator. Stage A uses none of its model; it may use APE (see milestone 0).
-* The design was exported from a living document ("bcw-3 memex: working design"). From now on, record changes in `docs/design.md` itself, in the same commit as the code that needs them.
-* The design describes the target machine, bcw-3, as well. Stage A runs on a PC. Where the design says "the supervisor", the PC prototype uses a separate process with the same duties (see milestone 1). Ignore the WAM engine, the FPGA boards, SPI flash and bcw-1's display hardware, except that the client emulates the display's limits.
+* The design was exported from a living document. From now on, record changes in `docs/design.md` itself, in the same commit as the code that needs them.
+* Stage A runs on a PC. The sealer, a separate process, dates and signs the journal (see milestone 1).
 
 ## Decisions already made (do not reopen)
 
 From `docs/design.md` § Decisions and the sections named:
 
-* Path 2: a browser client and a SWI-Prolog server, split at the query protocol (§ Parallel paths, § Query protocol). The PC prototype is the version for others.
-* The journal: append-only, hash-chained, dated and signed by a process the memex cannot read; open format (§ The journal format).
+* The PC prototype: a browser client and a SWI-Prolog server, split at the query protocol (§ The PC prototype, § Query protocol). The PC prototype is the version for others.
+* The journal: append-only, hash-chained, dated and signed by the sealer, a separate process that alone holds the key and writes the seals; open format (§ The journal format).
 * Imported content is a claim, never a fact; adopting and interrogating take one click or key (§ Claims and beliefs).
 * Retract, don't rewind; undo is a tree; a world is a branch (§ The journal).
 * Quasimodes, with latching and a command palette beside them (§ Quasimodes, not modes).
@@ -49,8 +49,8 @@ The session needs, and milestone 0 checks: SWI-Prolog 9 or later (with `library(
 
 ```
 server/        SWI-Prolog: store, journal writer, dataflow, constraints, protocol, websocket
-client/        TypeScript, no framework: outline, panes, quasimodes, display emulation
-sealer/        Python: the PC stand-in for the supervisor (dates, signatures, due dates)
+client/        TypeScript, no framework: outline, panes, quasimodes
+sealer/        Python: the sealer (dates and signatures)
 tools/         Python: reference checker, importers, measures report, Wikidata subset builder
 tests/         one directory per part; every test says what fault it catches
 docs/          design.md, translator.md, plan.md, and a log of measured results
@@ -60,7 +60,7 @@ One command runs every test (`make test`). One command starts the system (`make 
 
 ## Milestones
 
-Estimates assume Claude writes the code and the author reviews it; they are estimates, not measurements (§ Estimate for path 2). Each milestone ends with: all tests pass, each acceptance check below shown with its output, the measured sizes (lines of code by language, test count) recorded in `docs/log.md`, and one commit per change.
+Estimates assume Claude writes the code and the author reviews it; they are estimates, not measurements (§ Estimate for the PC prototype). Each milestone ends with: all tests pass, each acceptance check below shown with its output, the measured sizes (lines of code by language, test count) recorded in `docs/log.md`, and one commit per change.
 
 ### Milestone 0: toolchain and spikes (about 1 week)
 
@@ -78,7 +78,7 @@ Acceptance: `docs/log.md` holds the versions and both spike results with their o
 Read: § The journal, § The journal format, § Signed entries and exchanging journals (signing only).
 
 1. Server: append entries to `journal.jsonl` with `seq`, `parent`, `prev`, `kind`, `body`, `body_hash`, `hash`, hashed as § The journal format says.
-2. Sealer (stand-in for the supervisor): a separate process that watches `journal.jsonl`, and for each new entry appends a seal record to `seals.jsonl` with the date from the system clock, the author's key fingerprint and an Ed25519 signature. The server never reads `seals.jsonl`; a test enforces this (no code path in `server/` opens it). The user's private key lives in a file only the sealer reads.
+2. Sealer: a separate process that watches `journal.jsonl`, and for each new entry appends a seal record to `seals.jsonl` with the date from the system clock, the author's key fingerprint and an Ed25519 signature. The server never writes `seals.jsonl` and never holds a key; a test enforces this (no code path in `server/` writes `seals.jsonl` or reads the private key). The user's private key lives in a file only the sealer reads.
 3. `keys.jsonl` holds the public key.
 4. Purge: replace one entry's `body` with null, keep `body_hash`, write a purge entry.
 5. Reference checker (`tools/check.py`, about 100–150 lines): verifies both chains, every signature and every blob's name, and needs nothing else.
@@ -110,7 +110,6 @@ Read: § A user story (scenes 1 and 4), § The outline model, § Quasimodes, not
 2. Leap (forward and back) with recognition on Escape and guide words; Command with noise words and `?` help; Scope; Suppose (milestone 4 gives it meaning). Each quasimode can be held or latched; a command palette offers every command by name.
 3. Undo and redo along the current branch; retraction of any earlier entry, listing what depends on it before confirming.
 4. Two panes side by side.
-5. Display emulation: 1280 × 720, 16 intensities of one ramp and one tint, as in `docs/design/s1.png`.
 
 Acceptance:
 

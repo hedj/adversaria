@@ -1,20 +1,20 @@
-# bcw-3 memex: working design
+# Adversaria: working design
 
-11 November 2026. Exported from the living Claude Doc of the same name.
+11 November 2026. Exported from the living Claude Doc of the design.
 
 ## Purpose
 
 The project is named **Adversaria**, after the notebooks in which scholars kept their observations, excerpts and drafts. A web search found no clashing software (a search cannot prove absence; no trademark registry was searched). Its prototype moves to a repository of its own; this document still calls the system “the memex” where it describes its design.
 
-The memex is a cognitive augment for the one user of bcw-3, in the sense of Bush's memex (1945) and Engelbart's NLS (1968). It holds the user's own material, links it, finds it fast and shows it many ways. Reasoning over it in English comes later, through the translator in [Complex Koopman Reservoir: a local English–Prolog translator](https://claude.ai/artifact/K7iZLMRqHUyunZdX6wSyLS).
+The memex is a cognitive augment for its one user, in the sense of Bush's memex (1945) and Engelbart's NLS (1968). It holds the user's own material, links it, finds it fast and shows it many ways. Reasoning over it in English comes later, through the translator in [Complex Koopman Reservoir: a local English–Prolog translator](https://claude.ai/artifact/K7iZLMRqHUyunZdX6wSyLS).
 
 This is a working document, kept alongside the design conversation. Figures are estimates unless marked as measured; history is recalled from memory unless a source is linked.
 
-The target hardware is bcw-3's core with bcw-1's peripherals, as the author has decided: its external memory, graphics and display path, storage, input and network (see Hardware, after bcw-1), plus the WAM engine on a second ECP5-85F. The book itself so far gives only the 65,536-byte pool (`pool.pool`).
+The design does not depend on a platform. Its prototype runs on a PC: a browser client and a SWI-Prolog server, split at the query protocol, and a separate sealer process that dates and signs journal entries (see The PC prototype). Hardware that might run the memex is out of scope here.
 
 ## A user story
 
-A morning's work on an essay about how Buran's flight software was reviewed. The screens are mock-ups, not software: they are drawn to bcw-1's display, 1280×720 with 16 intensities of one ramp and one tint. The flight dates are real; the talk notes, sources 7 and 9, and the counts of actions are invented for the story.
+A morning's work on an essay about how Buran's flight software was reviewed. The screens are mock-ups, not software. The flight dates are real; the talk notes, sources 7 and 9, and the counts of actions are invented for the story.
 
 ### 1. Finding your place: Leap
 
@@ -24,9 +24,9 @@ You hold Leap and type “dra”. Three matches appear as you type, with the gui
 
 ### 2. The memex notices a conflict: a constraint
 
-You record a claim from a conference talk, attributed to its speaker: “the 1989 flight was the only one”. It is a claim, not a belief of yours, so the memex reports a disagreement between sources, not a broken fact: your source says 1988, the talk says 1989, and both items get a tinted mark naming the other. The right pane shows the rule, a Prolog denial, the disagreement, and what depends on the date. A fading hint suggests trying the other date with Suppose.
+You record a claim from a conference talk, attributed to its speaker: “the 1989 flight was the only one”. It is a claim, not a belief of yours, so the memex reports a disagreement between sources, not a broken fact: your source says 1988, the talk says 1989, and both items get a highlighted mark naming the other. The right pane shows the rule, a Prolog denial, the disagreement, and what depends on the date. A fading hint suggests trying the other date with Suppose.
 
-![Mock-up: two items tinted by the constraint one date per event, with the rule and its violation in the right pane](design/s2.png)
+![Mock-up: two items highlighted by the constraint one date per event, with the rule and its violation in the right pane](design/s2.png)
 
 ### 3. Trying the other date: Suppose, and “do you mean?”
 
@@ -36,7 +36,7 @@ You hold Suppose and type “the flight was in 1989”. The translator restates 
 
 ### 4. Building the argument: a diagram, Command, and where the work went
 
-You switch the section to an argument map. The thesis and its supports run straight down one vertical; objections sit to the right in a notched shape, and sources are rounded. One objection is tinted: it cites no source. You hold Command and type “link 3.2 source 9”; the noise word “(to)” fills itself in, and on release the edge appears without moving a pinned node. On the right, the journal's count of today's 482 actions shows searching as the largest share, mostly for dates: Licklider's point, measured on your own work.
+You switch the section to an argument map. The thesis and its supports run straight down one vertical; objections sit to the right in a notched shape, and sources are rounded. One objection is highlighted: it cites no source. You hold Command and type “link 3.2 source 9”; the noise word “(to)” fills itself in, and on release the edge appears without moving a pinned node. On the right, the journal's count of today's 482 actions shows searching as the largest share, mostly for dates: Licklider's point, measured on your own work.
 
 ![Mock-up: an argument map with the main path on one vertical, and the journal's count of actions by kind](design/s4.png)
 
@@ -44,58 +44,33 @@ You switch the section to an argument map. The thesis and its supports run strai
 
 | Term | Meaning |
 | --- | --- |
-| Room | a program of the user, run by the executive with its own region and capabilities (`executive.room`) |
 | Journal | the append-only record of every change; described below |
+| Sealer | a separate process that dates and signs each journal entry, and alone holds the private key; described under The journal |
 | World | a branch of the journal's undo tree, after VPRI's Worlds: it reads through to its parent and keeps its own changes, so suppositions, undone work and versions do not disturb the original; Suppose names one |
 | Quasimode | a state kept only while a key is held, after Raskin; described under The outline model |
 | Controlled English | a subset of English with one meaning per sentence; here ACE |
 | ACE | Attempto Controlled English, a controlled English that its parser turns into logic |
 | APE | the Attempto Parsing Engine: parses ACE and restates a parse in ACE |
 | s(CASP) | a Prolog-based reasoner used here for counterfactual questions |
-| WAM engine | planned hardware, the only place Prolog runs: a second ECP5-85F with 1 GB of DDR3 and two 512 GB A2-class SD cards (index and data), joined to bcw-3 by a dedicated 32-bit link at 100 MHz, running Prolog compiled for the Warren Abstract Machine; see Timing estimates |
-| Model accelerator | planned hardware that runs a small neural model proposing ACE for free English |
 | Predictive editor | an editor that offers only the words the grammar accepts next |
-| Hot layer | the part of the store kept in the 16 MB external memory; see Storage |
-| Storage accelerator | bcw-1's device for bulk storage: SPI flash, reached by handles to extents (`12_STORAGE.md` §1.1) |
 | Mechanism IDs | N (NLS/Augment), X (Xanadu), J (notebooks), L (live simulation); listed under Mechanisms considered |
-
-## Hardware, after bcw-1
-
-bcw-1's design documents (repository hedj/bcw, `docs/`) specify the peripherals bcw-3 will have. bcw-1 states the same purpose as this memex: "a cognitive augment: an instrument with the immediacy and predictability of a physical tool" (`02_SYSTEM_OVERVIEW.md` §1). Most of what it specifies supports the design; two points conflicted with it, and the author has resolved both.
-
-| Device | What bcw-1 specifies | What it means for the memex |
-| --- | --- | --- |
-| External memory | 16 MB of 32-bit asynchronous static RAM, about 420 MB/s usable; "no worker can address \[it\] at all. Everything moves between them by block transfer" (`04_MEMORY_ACCELERATOR.md`) | the 16 MB hot layer is confirmed, but it is a staging store: a process reaches it only by transfers, through the mover |
-| Pool and regions | 64 kB pool, 48 kB of it for workers; "A process shall fit its region whole", and a larger one "does not run" | **Resolved:** the memex software and its working data fit a region and move blocks in and out of external memory; Prolog runs only on the WAM engine |
-| Display path | a beam-racing compositor with no framebuffer: 1280×720 at 85 Hz, a change ahead of the beam visible "within one scanline" (15.69 µs); tiles placed by the supervisor; 4-bit intensity surfaces through one 16-entry RGB ramp; vector content as monotonic strokes; one tint colour for marked strokes (`07_SURFACE_ENGINE.md`, `08_GRAPHICS_DISPLAY.md`) | display latency is negligible against the 0.1 s limit, so computation sets it. Panes are tiles, text comes from glyph surfaces or strokes, and the lines joining matching spans, charts and diagrams are strokes. Highlighting has 16 intensities and one tint, not a palette |
-| Mover | one operation: a masked, strided rectangle copy between extents, also used for transfers to external memory | moves journal blocks, index blocks and glyphs between external memory, surfaces and a region |
-| Bulk storage | SPI flash on 6 pins, quad-rate reads after boot, 256-byte pages; only the supervisor erases; the filesystem runs on a worker (`12_STORAGE.md`) | **Resolved:** SPI flash is small, but the append-only journal suits it (pages are programmed in order, erasure is rare). The knowledge base, with Wikidata subsets of about 0.8–9.5 GB, lives on the WAM engine's 512 GB cards |
-| Input | two USB ports, keyboard and mouse at boot protocol, polled every 1 ms; events go to the supervisor, which routes them (`13_HID.md`) | each report gives the keys held, so key presses and releases are known and quasimodes work; routing by the supervisor keeps keystrokes private between rooms |
-| Network | 100BASE-TX full duplex; the protocol stack runs on a worker; about 49 Mbit/s guaranteed lossless (`10_ETHERNET.md`) | capture and import over the network, parsed in a confined worker |
-| Time | a worker has no readable clock, only "suspend me and resume me no sooner than δ" (`01_ARCHITECTURE_RATIONALE.md` §4.5) | consistent with this design: sequence numbers, not timestamps. bcw-1 keeps wall time in the supervisor, a 32-bit counter from a 32.768 kHz crystal corrected by network time (`15_SYSTEM_PERIPHERALS.md` §2.1); no worker reads it |
-
-Prolog runs only on the WAM engine (see Glossary). The engine holds the link facts, the knowledge base and the worlds, and answers queries. bcw-3 holds the journal, the outline and the display; its memex software stays small enough for a region and asks the engine through a handle. The engine joins bcw-3 by a dedicated link, not the network: 32 bits wide at 100 MHz, 400 MB/s raw. bcw-1 budgets 50 MB/s for worker transfers through the mover, within a peak demand of 212 MB/s on the 420 MB/s external memory (`04_MEMORY_ACCELERATOR.md` §3.3), so the link is not the slower path for a block. bcw-3 runs at 95 MHz, so the link crosses clock domains, and it takes about 32 data pins plus a clock and handshake on each FPGA.
-
-The engine carries 1 GB of DDR3 and two 512 GB A2-class SD cards, each read in 4-bit mode by its own controller, extended to use its card's command queue and cache, on which A2's random-read rate depends (recalled, not checked). The controller is ZipCPU's open SDIO controller (github.com/ZipCPU/sdspi): 1,438 Xilinx 6-input LUTs without DMA and 2,708 with it, as its source reports; its count in ECP5 LUT4s is not synthesised. The DDR3 holds the working set. The index card holds every fact in three orderings: subject–relation–object, relation–object–subject and object–subject–relation. Each of the seven patterns of bound arguments in a triple is a prefix of one of them, so every lookup costs a bounded number of reads whatever it binds. A fact of more than three arguments is stored as triples. The data card holds labels, strings, item text and large values. Index reads and data reads proceed at once, at an estimated 100–400 random reads on each card within 0.1 s. That bounds the lookups, not the search: a query that backtracks over many answers still costs a read for each.
-
-Each change to a fact writes all three orderings, so changes are buffered in the DDR3 and applied to the index card lazily, when no reads wait: an SD card can pause for tens of milliseconds while it reorganises (recalled, not checked), and a read must not wait behind a write. A lookup consults the buffer as well as the card. The buffer has a bound; when it is full, the engine writes back even if reads wait. After each batch of index writes completes, the engine records on the index card the journal sequence number it has applied up to. The DDR3 loses the buffer at power-off, so at start the engine asks bcw-3 over the link for the journal entries after that mark, and bcw-3 reads them from SPI flash.
 
 ## Features
 
-The core is a store of items with permanent addresses, typed links and named trails through them, fast search, views, and an append-only journal of every change. NLS had the addresses and the journal, and Bush's memex had the trails. bcw-3 adds three constraints: no clock in a process that writes, sharing only through capabilities, and storage reached through bcw-1's storage accelerator. Priorities 1–3 order the work within step 1 of the order of work; priority 4 needs steps 2 and later.
+The core is a store of items with permanent addresses, typed links and named trails through them, fast search, views, and an append-only journal of every change. NLS had the addresses and the journal, and Bush's memex had the trails. Priorities 1–4 order the work.
 
-| Feature | From | What it needs on bcw-3 | Priority |
+| Feature | From | What it needs | Priority |
 | --- | --- | --- | --- |
 | Items with permanent addresses, down to a paragraph or statement | NLS: every statement had an address | addresses in the append-only journal, which never change (adopted: X3, N2) | 1 |
-| An append-only journal of every change, which can be cited | NLS's Journal | each edit a committed world (Worlds); entries ordered by sequence number, because the memex holds no clock: a process that has had one keeps only reading capabilities, and the memex must write (`system.no-clock`) | 1 |
-| Typed links from any item or span to any other | Bush's associative linking; NLS links | a plain link table (from, to, type) that native code follows in step 1; from step 2 the WAM engine also holds links as facts (`supports(A, B)`, `cites(A, B)`), so Prolog can follow them | 1 |
-| Search by words and by structure | NLS content filters | an inverted index over text and the link table, in native code, answering within the 0.1 s limit (L6), which serves `design.latency`; Prolog over links from step 2 | 1 |
-| Views: the same structure as outline, levels or filtered | NLS view specs | views as queries over the store, rendered without copying; content filters in Prolog from step 2 | 2 |
+| An append-only journal of every change, which can be cited | NLS's Journal | each edit a committed world (Worlds); entries ordered by sequence number, and dated and signed by the sealer | 1 |
+| Typed links from any item or span to any other | Bush's associative linking; NLS links | a plain link table (from, to, type), also held as Prolog facts (`supports(A, B)`, `cites(A, B)`), so Prolog can follow them | 1 |
+| Search by words and by structure | NLS content filters | an inverted index over text and the link table, answering within the 0.1 s limit (L6); Prolog over links | 1 |
+| Views: the same structure as outline, levels or filtered | NLS view specs | views as queries over the store, rendered without copying; content filters in Prolog | 2 |
 | Several panes side by side | Bush's twin screens; NLS windows | two or more views at once, for comparing and linking | 2 |
 | Named trails: ordered paths through items | Bush: trails named, recalled and copied for a colleague | a trail is a named list of links | 2 |
 | Annotation: marginal notes attached to a span | Bush's marginal notes; NLS comments | anchors to character ranges that survive edits | 2 |
-| Sharing trails | Bush | passed by capability in a request through the executive, so that a room's answers still depend only on its own calls (\`system.answers\`, \`executive.no-interference\`), and revocable (`design.revocation`) | 3 |
-| Capture beyond typing | Bush: dictation and a camera | import over bcw-1's Ethernet, parsed by a confined worker; mail, calendars and web pages as well (see Mail, calendars and the web) | 3 |
+| Sharing trails | Bush | exported as a signed bundle (see Signed entries and exchanging journals) | 3 |
+| Capture beyond typing | Bush: dictation and a camera | import of files and pages from the network; mail, calendars and web pages as well (see Mail, calendars and the web) | 3 |
 | An interface for a trained user | Engelbart's chord keyset | keyboard commands and typed controlled English, with the predictive editor to teach it | 3 |
 | Reasoning over the store | beyond Bush and Engelbart | items and links as facts, so "what if" and "do you mean?" work on the user's own knowledge | 4 |
 
@@ -103,18 +78,18 @@ The core is a store of items with permanent addresses, typed links and named tra
 
 One append-only journal carries five adopted mechanisms at once: permanent span addresses (X3), every version kept with branches (X4), named statements (N2), who changed what (N8), and a log of computation (J4). Nothing in it is ever overwritten, so each follows from one rule.
 
-1. Every change is an entry with a sequence number, its author (the user or a room), and its operation: text appended, structure changed, a name set, a link made, or a query run with its answer, unless the room has switched off the journalling of queries.
+1. Every change is an entry with a sequence number, its author, and its operation: text appended, structure changed, a name set, a link made, or a query run with its answer, unless the user has switched off the journalling of queries.
 2. Text is appended once and never rewritten. The address of a span is its position in the journal, so it never changes and is never reused (X3).
 3. A statement is a list of spans plus its place in the outline. An edit writes a new list as a new entry; the old one stays, so every version is kept. A branch is a world sprouted from any entry (X4).
 4. A name is an entry mapping it to a statement, so links that use names survive restructuring (N2).
-5. Each statement's latest entry names its author and sequence number, so "who changed this, and since which entry" is a query. The memex holds no clock (see Features): the supervisor dates each entry, and the memex never reads the dates (N8, `system.no-clock`).
+5. Each statement's latest entry names its author and sequence number, so "who changed this, and since which entry" is a query. The sealer dates each entry, and the memex reads the dates to show them (N8).
 6. A query and its answer are journal entries, recording the world they ran in, so any result can be run again on the same state (J4).
 
 Two more follow without extra mechanism. Annotation anchors on span addresses survive edits, because surviving characters keep their addresses. Transclusion (X1) becomes a list of spans that points into another statement's text; it is adopted under References.
 
 The cost is growth: the journal is never shortened, so span lists need compacting, and a true deletion, for privacy or by law, is a purge: it removes an entry's content and keeps its hash, so the chain still checks (see The journal format).
 
-The journal also measures the user's own work, as Licklider's 1957 study of himself did: he found about 85% of his "thinking" time went to getting into a position to think, by searching, plotting and transforming ("Man-Computer Symbiosis", 1960, §3.1). A view over the journal counts the user's actions by kind (searching, following links, transforming, writing, deciding), so the memex shows where the work goes and which clerical steps to remove next. It counts actions, not seconds: entries carry sequence numbers, not timestamps, and no worker reads a clock (`system.no-clock`).
+The journal also measures the user's own work, as Licklider's 1957 study of himself did: he found about 85% of his "thinking" time went to getting into a position to think, by searching, plotting and transforming ("Man-Computer Symbiosis", 1960, §3.1). A view over the journal counts the user's actions by kind (searching, following links, transforming, writing, deciding), so the memex shows where the work goes and which clerical steps to remove next. It counts actions, not seconds: an entry's date says when it was sealed, not how long its work took.
 
 Undo has two forms, after the literature on selective undo (Berlage 1994; Prakash and Knister 1994; Yoon and Myers 2015, where selective undo made programmers about twice as fast). Plain undo and redo move along the current branch, as everyone expects. To reverse one earlier decision, such as an adoption, the user **retracts** it instead of rewinding to it: a retraction is a new entry that reverses the old one and keeps everything done since, and before it is confirmed the dataflow graph lists what depended on it. Retracting is unadopting, generalised to any entry, so it adds no concept. Every adoption of a suggestion is an entry marked as one, with the suggestion's evidence, so an adoption made without checking can be found and retracted later, the user can see the path of their decisions, and, since entries are facts, a query searches them (“every suggestion I adopted this week”, “what did I decide about Buran's date”).
 
@@ -123,16 +98,16 @@ Undoing and then editing starts a new branch instead of discarding the old one, 
 The journal is a scientific record, so its entries are dated and chained. These are obligations, not preferences: research-integrity codes, funders and journals expect a record that is attributable, unaltered and dated, as a bound lab notebook's dated pages are.
 
 1. **Hash-chained.** Each entry holds the SHA-256 hash of the entry it follows, so the journal is a chain of hashes along each branch and a tree of them across branches, as Git's commits are. Changing or removing any entry breaks every hash after it, which anyone can check from the journal alone.
-2. **Dated by the supervisor.** The memex holds no clock (`system.no-clock`), so it cannot date its own entries. bcw-1's supervisor keeps wall time, a 32.768 kHz counter set from the network; it stamps each entry with the date as the entry commits, in a log of seals of its own whose records are hash-chained too, each binding an entry's hash to a date and to its author's signature. The supervisor keeps the dates, and the memex never reads them, so `system.no-clock` holds: the supervisor draws each date in a tile beside its entry, which the memex cannot read, and answers questions by date (“what did I decide last week”) in its own tile. Choosing an entry there moves the memex to it as a user action, so the memex learns which entry the user chose, never when it was written. On a PC the prototype reads the system clock instead.
+2. **Dated by the sealer.** A separate process, the sealer, alone holds the private key and alone writes `seals.jsonl`. As each entry commits, the sealer stamps it with the date from the system clock, in a log of seals of its own whose records are hash-chained too, each binding an entry's hash to a date and to its author's signature. The memex never writes a seal and never holds a key, so it cannot date or sign an entry. It reads the dates, to show each one beside its entry and to answer questions by date (“what did I decide last week”).
 3. **Anchored outside.** From time to time the hash at the head of each branch can be sent to an external timestamping service (RFC 3161), which proves that the record existed by that date without revealing its content.
 
 ### The journal format
 
-The journal must outlive the memex, so its format is open, plain and documented, and readable with common tools. One format serves for storage and export; the query protocol's tagged cells are only how terms cross the link.
+The journal must outlive the memex, so its format is open, plain and documented, and readable with common tools. One format serves for storage and export; the query protocol's tagged cells are only how terms cross between the client and the server.
 
 | Part | Specification |
 | --- | --- |
-| Files | each room keeps a directory: `journal.jsonl`, written only by the memex; `seals.jsonl`, written only by the supervisor; `keys.jsonl`, the public keys of the authors whose entries the journal holds; and `blobs/`, holding images, figures and imported files, each named by the SHA-256 of its content |
+| Files | each journal is a directory: `journal.jsonl`, written only by the memex; `seals.jsonl`, written only by the sealer; `keys.jsonl`, the public keys of the authors whose entries the journal holds; and `blobs/`, holding images, figures and imported files, each named by the SHA-256 of its content |
 | Lines | JSON Lines: UTF-8 text, strings in Unicode NFC, one JSON object per line, never rewritten except by a purge, which replaces one entry's `body` with null. The first line of each file is a header: `{"format": "memex-journal", "version": 1}`, or `"memex-seals"` or `"memex-keys"` |
 | An entry | `seq`, its sequence number; `parent`, the `seq` of the entry it follows, null for the first; `prev`, the hash of that entry; `kind`, one of edit, link, adopt, retract, suppose, name, import, purge, undo, redo; `body`, whose fields the kind defines; `hash`, the entry's own hash |
 | A term | a JSON integer or number; a JSON string for a Prolog string; `{"a": name}` for an atom; `{"v": n}` for a variable; `{"f": name, "args": [...]}` for a compound term |
@@ -141,7 +116,7 @@ The journal must outlive the memex, so its format is open, plain and documented,
 | The hash | SHA-256, in lowercase hexadecimal, of the record without its `hash` field and with its `body` replaced by the SHA-256 of the body, serialised by the JSON Canonicalization Scheme (RFC 8785). The entry keeps that `body_hash`, so a purged body leaves every hash checkable, and a purge entry names what it removed and why |
 | Checking | a reference checker of an estimated 100–150 lines of Python is published with the format; it verifies both chains, every signature against `keys.jsonl`, and every blob's name, and needs nothing from the memex |
 
-Text costs space: a JSON entry takes several times the bytes of its tagged cells (an estimate), which counts against SPI flash's capacity, still an open question. The format's version number allows later kinds and fields; a reader ignores fields it does not know.
+Text costs space: a JSON entry takes several times the bytes of its tagged cells (an estimate). The format's version number allows later kinds and fields; a reader ignores fields it does not know.
 
 The history pane draws the undo tree by the rules for diagrams:
 
@@ -170,39 +145,33 @@ The memex is a dataflow graph over the journal, in the spreadsheet model. This o
 5. A sweep evaluates the graph over a range of one parameter as sibling worlds; pointing at one result selects that world.
 6. A scenario is a named world. A table comparing scenarios is a query across worlds, so it stays live; Excel's scenario reports, by contrast, are not recalculated.
 
-It holds three properties by structure. Nodes are pure queries over committed worlds, so there is no hidden state. The memex holds no clock and has no volatile function, so the same inputs always give the same values (`system.no-clock`, `system.answers`). Any value can be rebuilt from the journal, so caching values is an optimisation, not a source of truth.
+It holds three properties by structure. Nodes are pure queries over committed worlds, so there is no hidden state. No node reads the clock or calls a volatile function: a query about dates, such as “last week”, takes the present date as a parameter that its journal entry records, so the same inputs always give the same values. Any value can be rebuilt from the journal, so caching values is an optimisation, not a source of truth.
 
 SWI-Prolog's incremental tabling, recalled from memory and not checked, records which facts each tabled answer depends on and recomputes only what a change invalidates: the engine of rule 3 above, built in. s(CASP) is not tabled, so how its counterfactual queries join the graph is open.
 
-Constraints are nodes too, so the memex turns up flaws without being asked, as Licklider wanted computers to do in trial-and-error thinking. A constraint is a Prolog denial over one world, such as two items that claim the same date for different events, or a claim that cites a retracted source. Its node's value is the list of violations, recomputed on every change like any other node, and each violation shows beside the items it names. Constraints run on the WAM engine, so they arrive with step 2. The user need not write them all: the translator's model suggests constraints, facts and rules, each shown with the violations or exceptions it would raise, and each entering the journal only when accepted (see the translator document). The model runs all the time and keeps a pane of suggestions; one click adopts a suggestion and another unadopts it, each an ordinary journal entry under universal undo.
+Constraints are nodes too, so the memex turns up flaws without being asked, as Licklider wanted computers to do in trial-and-error thinking. A constraint is a Prolog denial over one world, such as two items that claim the same date for different events, or a claim that cites a retracted source. Its node's value is the list of violations, recomputed on every change like any other node, and each violation shows beside the items it names. The user need not write them all: the translator's model suggests constraints, facts and rules, each shown with the violations or exceptions it would raise, and each entering the journal only when accepted (see the translator document). The model runs all the time and keeps a pane of suggestions; one click adopts a suggestion and another unadopts it, each an ordinary journal entry under universal undo.
 
 ### Response time (adopted L6)
 
 The graph must update within the limits that keep interaction direct (Nielsen, 1993, updated 2014, citing Miller 1968 and Card, Robertson and Mackinlay 1991):
 
-| Interaction | Limit | Why | Meets it |
+| Interaction | Limit | Why | On a PC |
 | --- | --- | --- | --- |
-| Navigating and editing the outline, a Leap, following a link | 0.1 s | "the limit for having the user feel that the system is reacting instantaneously" | native code on bcw-3, in software: an index lookup and a redisplay (estimate) |
-| Dragging a control, changing a view that runs a Prolog filter | 0.1 s | the limit for direct manipulation | the WAM engine, for updates that stay within about 100 ms; a simulation update is estimated at 10–300 ms, if the engine supports attributed variables, so only small models stay live; software on bcw-3 does not |
-| A query, a parse with its restatement, a "do you mean?" proposal | 1 s | keeps "the user's flow of thought" | the WAM engine: a parse and its restatement in about 5–13 ms; with a model proposal, a round in about 0.4–1.2 s |
+| Navigating and editing the outline, a Leap, following a link | 0.1 s | "the limit for having the user feel that the system is reacting instantaneously" | an index lookup and a redisplay (estimate) |
+| Dragging a control, changing a view that runs a Prolog filter | 0.1 s | the limit for direct manipulation | SWI-Prolog: s(CASP) queries took 2–66 ms on small tests (measured), so only small models stay live |
+| A query, a parse with its restatement, a "do you mean?" proposal | 1 s | keeps "the user's flow of thought" | a parse and its restatement in about 3.6 ms (measured); a model's proposal sets the time of a round |
 | A long simulation or search | 10 s | keeps attention; beyond it, show progress and allow interruption | most work, with a progress indicator |
 
-### Timing estimates
+### Prolog timings
 
-Every Prolog timing in either document comes from this table; the translator document gives the model's own timings.
+Every Prolog timing in either document comes from this table.
 
-| Operation | Measured on a 4-core Xeon (SWI-Prolog) | Software on one bcw-3 thread (estimate) | WAM engine (estimate) |
-| --- | --- | --- | --- |
-| APE parse of one sentence | about 2.5 ms (tokenise 0.96, parse 1.52, anaphora 0.03) | about 1–15 s | about 3–8 ms, plus tokenising in native code on bcw-3 |
-| APE restatement | about 1.1 ms | about 1–15 s | about 2–6 ms |
-| Parse and restatement together | about 3.6 ms | about 2–30 s | about 5–13 ms |
-| s(CASP) counterfactual or simulation query (small tests) | 2–66 ms | seconds | about 10–300 ms, if the engine supports attributed variables |
-| Model accelerator: one proposal of about 100 bytes | — | — | about 0.4 s, on the accelerator |
-| One "do you mean?" round with the model, 1–3 candidates | — | — | about 0.4–1.2 s |
-
-The engine's estimates follow one rule: the Xeon's time for the Prolog work, multiplied by 2–5. Tokenising, about 38% of APE's time in the profile, moves to native code on bcw-3 and is left out: a parse is 1.55 ms of Prolog on the Xeon, so 3–8 ms; a restatement 1.1 ms, so 2–6 ms. The software estimates scale by bcw-3's speed of one instruction per 8 cycles at 95 MHz per thread.
-
-Animation is paced by the compositor, which takes each tile's descriptor at the start of its pass (bcw-1), not by the process, so the memex never reads a clock (`system.no-clock`).
+| Operation | Measured on a 4-core Xeon (SWI-Prolog) |
+| --- | --- |
+| APE parse of one sentence | about 2.5 ms (tokenise 0.96, parse 1.52, anaphora 0.03) |
+| APE restatement | about 1.1 ms |
+| Parse and restatement together | about 3.6 ms |
+| s(CASP) counterfactual or simulation query (small tests) | 2–66 ms |
 
 Sources: [Response Times: The 3 Important Limits](https://www.nngroup.com/articles/response-times-3-important-limits/), [Observable runtime](https://github.com/observablehq/runtime), [Explorable Explanations](http://worrydream.com/ExplorableExplanations/), [Up and Down the Ladder of Abstraction](http://worrydream.com/LadderOfAbstraction/), [Manipulate](https://reference.wolfram.com/language/ref/Manipulate.html), [Excel recalculation](https://learn.microsoft.com/en-us/office/client-developer/excel/excel-recalculation), [Introduction to What-If Analysis](https://support.microsoft.com/en-us/office/introduction-to-what-if-analysis-22bffa5f-e891-4acc-bf7a-e4645c446fb4).
 
@@ -212,7 +181,7 @@ Four adopted mechanisms: three merge candidates that did the same job in differe
 
 | Mechanism | Merged from | How it works here |
 | --- | --- | --- |
-| Views | N5 view specs, N6 freezing, J3 synchronised views, X5 side-by-side versions | A view is a query over the store: an outline level, a truncation, and a content filter written in Prolog (from step 2, once the WAM engine is added). Views open in panes, and a pane can be frozen in place. Two panes can show versions or worlds side by side, with lines joining spans that share journal addresses. |
+| Views | N5 view specs, N6 freezing, J3 synchronised views, X5 side-by-side versions | A view is a query over the store: an outline level, a truncation, and a content filter written in Prolog. Views open in panes, and a pane can be frozen in place. Two panes can show versions or worlds side by side, with lines joining spans that share journal addresses. |
 | References | X1 transclusion, J6 code blocks called as functions, J3 mirrored output | Content is defined once and used elsewhere by reference: a span (transclusion), a query called with arguments, or a result shown in another place. A reference is resolved through permanent addresses and shows its origin, so the same content appears "knowably" in more than one place. |
 | Anchors | N3 markers, X2 links that cannot break | A named point or span is anchored on journal addresses. Links attach to anchors, can be followed from either end, and stay attached through edits; only deleted characters drop out. |
 | Workspaces | J5 saved workspaces | The open panes, their views and their layout form an item in the journal, kept as the user works with no Save. A workspace is restored or switched by name, and any earlier state of it can be reopened from the journal. |
@@ -224,9 +193,9 @@ NLS reported that a skilled user changes view settings "several times in as many
 Science compares: two states that differ in one thing, seen under the same questions. Worlds give the states; the interface makes comparing them direct. Gleicher et al. found that every design for visual comparison is built from three parts: juxtaposition, superposition and explicit encoding of the differences (“Visual comparison for information visualization”, 2011). The mechanisms below are proposed.
 
 1. **A comparison is an item.** It names its worlds (A and B, or more) and the views to compare. Like any item it is kept in the journal, linked and searched, so a comparison made last month reopens as it was.
-2. **One variable at a time.** The comparison states what differs between its worlds, computed from their own changes (“A and B differ in: the date of Buran's flight”), and marks it with the tint when more than one thing differs.
+2. **One variable at a time.** The comparison states what differs between its worlds, computed from their own changes (“A and B differ in: the date of Buran's flight”), and marks it in a highlight colour when more than one thing differs.
 3. **Juxtapose.** Each world in its own pane, side by side, rows aligned by item and joined by lines where they correspond. Charts in every pane share one scale, since position on a common scale is judged best (Cleveland and McGill).
-4. **Superpose.** For two worlds, one chart or diagram holds both: A in the intensity ramp and B in the one tint, which bcw-1's display supplies.
+4. **Superpose.** For two worlds, one chart or diagram holds both: A in the ordinary colours and B in a highlight colour.
 5. **Encode the difference.** A table of only what differs: facts added and removed, derived values with their change, constraint violations gained and lost.
 6. **Linked panes.** Scrolling, selecting and Leap move every pane together. An edit applies to all the worlds unless it is the variable under test, after subjunctive interfaces (Lunzer and Hornbæk 2008).
 7. **More than two.** A supposition over a range (“suppose the date is 1987 to 1990”) makes a family of worlds, shown as small multiples on one scale; up to about four panes side by side, the span of working memory, and more as small multiples.
@@ -306,12 +275,12 @@ Each argument of an open predicate has a domain: a finite list of values, an int
 The memex is not a tool for analysing data; Python, R and Julia are. It takes their results in as facts that carry their provenance, so a claim built on a number can be traced to the data and the code that made it. The mechanisms below are proposed.
 
 1. **One exchange file per run.** The analysis writes its results as rows (CSV or JSON) and a provenance record in the W3C PROV model: the script and its version-control commit, the command, the tool and library versions, and a content hash of each input file. A small helper library in each language writes it, so the analysis changes by one call.
-2. **An import is a journal entry.** It adds the results as facts, each citing the import; the history pane shows it in the shape for imports. A figure comes in as an image, shown in the display's 16 intensities, beside the facts it plots.
+2. **An import is a journal entry.** It adds the results as facts, each citing the import; the history pane shows it in the shape for imports. A figure comes in as an image, shown beside the facts it plots.
 3. **Values carry units.** A result declares its unit, and constraints check units and ranges as they check anything else: a probability above 1, or a length added to a time, is a violation.
 4. **Re-running is comparing.** Importing a new run of the same analysis starts a world beside the old one, so the A/B comparison shows which results changed and which claims depend on them; adopting the new run is a decision like any other, and retracting it restores the old.
 5. **Reproducible by construction.** The provenance record holds what is needed to run the analysis again; the memex marks a result whose inputs no longer match their hashes.
 
-On a PC the helper writes the file where the memex reads it. On bcw-3 the file arrives over the network and is parsed by a confined worker, as other captured material is.
+The helper writes the file where the memex reads it.
 
 ## Uncertainty
 
@@ -327,11 +296,11 @@ A measured value without its uncertainty is half a fact. The memex holds four ki
 
 1. **One rule chooses the method.** Bounds alone give interval arithmetic; measurements through a nearly linear model give the GUM's law; anything else numerical gives Monte Carlo; discrete alternatives give weighted worlds; vague terms give fuzzy degrees. The choice is shown with each result, so the reader knows what an interval means.
 2. **Correlation is kept.** Inputs that share a cause carry their covariance, or come from one sampled source, since ignoring correlation is the commonest error in propagating uncertainty.
-3. **Constraints become three-valued.** A constraint over uncertain values is satisfied for every value, violated for every value, or possibly violated, the last with its probability where one is known. A possible violation shows in outline, a certain one filled, both in the tint.
-4. **Charts show it.** Error bars and intervals on a common scale; a distribution as a small density curve in strokes; in an A/B comparison, the overlap of two worlds' distributions.
+3. **Constraints become three-valued.** A constraint over uncertain values is satisfied for every value, violated for every value, or possibly violated, the last with its probability where one is known. A possible violation shows in outline, a certain one filled, both in a highlight colour.
+4. **Charts show it.** Error bars and intervals on a common scale; a distribution as a small density curve; in an A/B comparison, the overlap of two worlds' distributions.
 5. **Imports carry it.** Results from Python, R or Julia bring their uncertainties and covariances, or their samples as a blob.
 
-Large Monte Carlo runs belong in the analysis tools, whose samples are then imported; the WAM engine and bcw-3 run small models only.
+Large Monte Carlo runs belong in the analysis tools, whose samples are then imported; the memex runs small models only.
 
 ## Sources and references
 
@@ -350,11 +319,11 @@ This makes questions about sources ordinary queries: which claims rest on a sing
 
 A scientist's work arrives as documents and leaves as documents: drafts from co-authors in Word or LaTeX, papers as PDF, and manuscripts, reports and theses to journals and examiners. Import and export are therefore a primary feature, not an accessory. The mechanisms below are proposed.
 
-1. **One boundary format.** Every document crosses into the memex as Pandoc's document tree in JSON, and leaves the same way. Pandoc converts between that tree and Markdown, LaTeX, Word, OpenDocument, HTML, EPUB and JATS, the XML that journals use. The memex reads and writes only the tree: on a PC it runs Pandoc itself; bcw-3 cannot run Pandoc, so the conversion happens on another machine and a confined worker parses only the JSON.
+1. **One boundary format.** Every document crosses into the memex as Pandoc's document tree in JSON, and leaves the same way. Pandoc converts between that tree and Markdown, LaTeX, Word, OpenDocument, HTML, EPUB and JATS, the XML that journals use. The memex reads and writes only the tree, and runs Pandoc itself to convert it.
 2. **A document maps onto the outline.** Headings become outline levels; paragraphs, lists and block quotes become items; citations become `cites` facts against sources; mathematics stays as LaTeX in its own items; figures and attached files go to `blobs/`; tables become items holding rows. Comments become annotations anchored to their spans.
 3. **Re-import is comparison.** When a co-author returns a revised draft, importing it starts a world beside the current one. The A/B comparison shows each change, and the user adopts or retracts them one by one; tracked changes in a Word file arrive as suggestions in the pane. This is a merge that leaves a record: who changed what, and what the user decided.
 4. **Export is a view.** A section of the outline, in one world, is exported as a manuscript: Markdown or LaTeX through Pandoc, with citations written as CSL-JSON and formatted to the journal's style. An exported document records the hashes of the entries it was made from, so a published text traces back to the record.
-5. **Scholarly PDF is the hard case.** A PDF holds layout, not structure. GROBID, which extracts the structure of scholarly papers (title, sections, references) as TEI XML, converts it on another machine; the result is imported with its provenance, and references are matched to works by DOI. Imperfect extraction is expected, so the import is a world to be checked before adoption.
+5. **Scholarly PDF is the hard case.** A PDF holds layout, not structure. GROBID, which extracts the structure of scholarly papers (title, sections, references) as TEI XML, converts it as a separate service; the result is imported with its provenance, and references are matched to works by DOI. Imperfect extraction is expected, so the import is a world to be checked before adoption.
 6. **Read-only pages for colleagues.** A trail, an argument map or a section exports as plain HTML, with the hashes of its entries, for readers who do not run the memex; they can read it, and check it against a shared bundle, but not change it.
 
 Round trips lose what the outline does not hold: page layout, fonts, and a journal's template. These belong to the export's style, not to the record.
@@ -366,22 +335,22 @@ Most of a knowledge worker's week passes in mail, meetings and the web, so these
 1. **Mail** from mbox or `.eml` files: each message an item, its sender the source, its thread a trail, its attachments blobs.
 2. **Calendars** from iCalendar (`.ics`) files: each event an item with its people and its date; a deadline is a fact.
 3. **Web pages**, clipped as their text and an image of the page, with the address and the hash of what was fetched.
-4. **Due dates are watched by the supervisor.** The memex holds no clock, so it cannot tell when a deadline nears; the supervisor, which keeps time, shows what is due and overdue in its own tile, as it shows dates, and choosing an item there moves the memex to it as a user action.
+4. **Due dates are shown by the memex.** It compares each deadline with the present date, read from the system clock for this pane only, and lists what is due and overdue in a pane of its own; choosing an item there moves to it. No dataflow node reads the clock (see Dataflow).
 
 The memex does not send mail or keep a calendar: it imports them to be thought about, and leaves sending and scheduling to the tools that do them.
 
 ## Signed entries and exchanging journals
 
-Collaborators can share the record itself, not only documents made from it. Real-time co-editing stays out: each room has one user, and the book's isolation rules (`system.no-interference`) forbid state shared between processes, so all sharing goes through export and import. The mechanisms below are proposed.
+Collaborators can share the record itself, not only documents made from it. Real-time co-editing stays out: each journal has one user, and all sharing goes through export and import. The mechanisms below are proposed.
 
-1. **Every entry is signed.** The supervisor holds each user's private key and, as it seals an entry, signs the entry's hash with Ed25519 (RFC 8032) beside the date. The memex never holds a key, so a room cannot sign for anyone. On a PC the prototype keeps the key in a file of its own. A signature says who wrote an entry; the hash chain says it is unaltered; the date says when.
+1. **Every entry is signed.** The sealer holds each user's private key, in a file that only it reads, and, as it seals an entry, signs the entry's hash with Ed25519 (RFC 8032) beside the date. The memex never holds a key, so it cannot sign for anyone. A signature says who wrote an entry; the hash chain says it is unaltered; the date says when.
 2. **An entry is known by its hash.** Sequence numbers are local to a journal; across journals an entry is named by its hash, as Git names commits, so the same entry held by two people is recognised as one.
 3. **A bundle carries a branch.** Exporting for a collaborator writes a bundle: the entries of chosen branches or sections, their seal records, the public keys of their authors, and the blobs they refer to. Sensitive blobs are left out, or sent encrypted to the recipient's key.
 4. **Import checks, then offers a world.** On import the memex verifies every hash, chain and signature, and refuses a bundle that fails. A verified bundle arrives as a world, rooted where it shares history with the user's journal, or as a separate root where it does not. The A/B comparison shows what the collaborator changed.
 5. **Adoption keeps authorship.** Adopting a collaborator's entry writes an adopt entry in the user's journal that names the original by its hash and author, so the record always shows who wrote what and who accepted it. Retracting works as for any adoption.
 6. **Trust is a fact.** The keys the user trusts, and for what, are facts in the journal; a constraint flags entries signed by an unknown key.
 
-On a PC a bundle travels as a file, by any means. On bcw-3 it arrives over the network and a confined worker parses it, as other imports do. Bundles answer asynchronous collaboration; editing together in real time is ruled out by the isolation rules, not merely missing.
+A bundle travels as a file, by any means. Bundles answer asynchronous collaboration; editing together in real time is left out on purpose, since each journal has one user.
 
 ## Diagrams
 
@@ -391,7 +360,6 @@ The memex supports diagrams first-rate, with the keyboard and mouse and no pen: 
 2. **The memex lays it out.** Layered layout for directed graphs, trees for hierarchies, and charts for data. The user pins a node by dragging it with the mouse; the pin is a fact in the journal, and layout keeps every pinned node (see Requirements and mechanisms below).
 3. **Editing is ordinary editing.** A new node is a new item, typed; a new edge is a link, made with the Command quasimode and recognition on Escape. Each edit is a journal entry, so undo, versions and side-by-side comparison of two versions apply to diagrams as to text.
 4. **Diagrams are live.** A diagram over a query redraws when the facts change, and each constraint's violations show on the nodes they name.
-5. **It draws with bcw-1's compositor.** Node labels come from glyph surfaces, and edges, arrowheads and chart lines are monotonic strokes, a curve split where it turns back. Emphasis is by intensity and the one tint.
 
 ### Requirements and mechanisms
 
@@ -402,10 +370,10 @@ The requirements come from the literature on diagrams; the mechanisms are propos
 | Minimise edge crossings; they matter far more than bends or symmetry | Purchase 1997 | strong; symmetry inconclusive | layout's first objective is fewest crossings (layered layout with median ordering of each layer), then straight paths, then bends; symmetry is not an objective |
 | Keep paths continuous and straight, and nodes on them few-branched | Ware, Purchase, Colpoys and McGill 2002 | measured; weights not confirmed | long edges run straight through their layers; the path the user follows (a trail, or the main path of a flowchart) lies on one vertical line |
 | Put related things together, so the reader need not search | Larkin and Simon 1987 | foundational theory | every label sits on or beside its node, with no legend; an item's annotations and constraint violations show beside it; lines join a node to its item in an outline pane |
-| One symbol for each concept, easy to tell apart, suggestive of its meaning, few in number, with text beside the graphics | Moody 2009 | design theory; four of its nine principles confirmed, five from memory | a fixed set of node shapes and line styles, one for each kind of item or link, told apart by shape and line style rather than colour (bcw-1 gives 16 intensities and one tint); every symbol carries a text label |
+| One symbol for each concept, easy to tell apart, suggestive of its meaning, few in number, with text beside the graphics | Moody 2009 | design theory; four of its nine principles confirmed, five from memory | a fixed set of node shapes and line styles, one for each kind of item or link, told apart by shape and line style rather than colour; every symbol carries a text label |
 | Manage complexity by splitting into linked diagrams | Moody 2009; DRAKON's silhouette | design theory and practice | a diagram over a size limit splits along the outline hierarchy into linked sub-diagrams, joined by Leap, at the size limits below |
 | Fit the notation to the task | Moody 2009 (cognitive fit) | design theory | five diagram kinds, each with its own layout: flowchart, argument map (supports and opposes), tree, chart, and adjacency matrix |
-| Charts: position on a common scale is judged most accurately, then length, angle and area, with colour last | Cleveland and McGill 1984; replicated by Heer and Bostock | strong | dot and bar charts on a common baseline; no pie charts; no quantity encoded in intensity or tint |
+| Charts: position on a common scale is judged most accurately, then length, angle and area, with colour last | Cleveland and McGill 1984; replicated by Heer and Bostock | strong | dot and bar charts on a common baseline; no pie charts; no quantity encoded in colour or brightness |
 | Flowcharts: vertical flow, right angles only, no crossings, the main path straight down, exceptions to the right, branches ordered left to right | DRAKON | practitioner rules, untested alone; agrees with Purchase on crossings | the flowchart kind follows DRAKON's rules: main path on one vertical, worse outcomes further right, right-angle routing |
 | Avoid meaning carried by layout alone, viscosity and hidden dependencies | Green and Petre 1996 | analytic framework | position carries no meaning the facts lack, so no edit forces a manual re-layout; dependencies are links, shown on request |
 | Keep a changing diagram stable | Archambault and Purchase 2011–2013 | weak: helped navigation only; side-by-side views beat animation | pins and minimal change when the user navigates a diagram; versions compared side by side, not animated |
@@ -467,7 +435,7 @@ Raskin's further rules, adopted:
 Limits:
 
 - Holding Leap while typing "has been criticized as uncomfortable" (Wikipedia, Archy); the held keys should fall under the thumbs, as on the Canon Cat's two large Leap keys.
-- Quasimodes need key-down and key-up events. bcw-1's USB keyboard input, at boot protocol, reports the keys held, so presses and releases are known (`13_HID.md`).
+- Quasimodes need key-down and key-up events. Browsers report both, but the operating system and the browser take some keys.
 - The zooming interface of THE and Archy is not adopted; Archy's prototype "did not include code for zooming".
 
 Conventional shortcuts sit beside the quasimodes, for laptops without thumb keys and for accessibility: each quasimode can be latched by tapping its key instead of holding it, and a command palette offers every command by name with recognition. Holding remains the fast path; nothing needs it.
@@ -476,19 +444,16 @@ Sources: [The Humane Interface](https://en.wikipedia.org/wiki/The_Humane_Interfa
 
 ## Storage
 
-Bulk storage is bcw-1's SPI flash, its boot medium (`12_STORAGE.md` §2.1), so it is present from step 1. It holds the journal and the items; its capacity is open, and SPI flash is small. A process reaches external memory only through the mover and bulk storage only through the storage accelerator, and a slow device costs more turns still, so what the user is working on stays in the 16 MB hot layer. The knowledge base lives on the WAM engine, not here.
+On a PC the journal's directory and the Wikidata subset are local files.
 
-*Diagram, kept in the living doc only: storage tiers: pool, external memory, SPI flash, WAM engine.*
-
-- Indexes and link tables are B-trees or sorted runs in whole blocks: a search costs one or two reads of bulk storage after the cached top levels.
+- Indexes and link tables are B-trees or sorted runs in whole blocks: a search costs one or two reads of the disk after the cached top levels.
 - The journal is append-only, so writes are sequential, nothing is overwritten, and old versions stay citable at no cost.
-- Each room gets its own area of bulk storage, through its own capability, so one room's data or access pattern cannot reach another's answers (`system.answers`).
-- Opening an item or following a trail loads its neighbourhood (linked items, annotations) into the hot layer.
+- Opening an item or following a trail loads its neighbourhood (linked items, annotations) into memory.
 - Plain text is small: 100,000 pages of about 5 KB is about 0.5 GB, plus an index of about 30–100%.
 
 ## Mechanisms considered
 
-Every candidate from NLS/Augment, Xanadu, notebook environments and live simulation has been settled. Adopted: X3, X4, N2, N8 and J4 under The journal; L1–L6, with J1, J2 and J6, under Dataflow; N3, N5, N6, X1, X2, X5, J3 and J5 under Views, references and anchors; N1, N4 and N7 under The outline model. J7 is implicit in bcw-3's treatment of hostile input. N9, N10 and X6 were dropped. The sources are listed below.
+Every candidate from NLS/Augment, Xanadu, notebook environments and live simulation has been settled. Adopted: X3, X4, N2, N8 and J4 under The journal; L1–L6, with J1, J2 and J6, under Dataflow; N3, N5, N6, X1, X2, X5, J3 and J5 under Views, references and anchors; N1, N4 and N7 under The outline model. J7 is implicit in treating everything imported as a claim (see Claims and beliefs). N9, N10 and X6 were dropped. The sources are listed below.
 
 | ID | Mechanism | Source | Outcome |
 | --- | --- | --- | --- |
@@ -514,7 +479,7 @@ Every candidate from NLS/Augment, Xanadu, notebook environments and live simulat
 | J4 | A log of computation | JupyterLab | adopted: The journal |
 | J5 | Saved workspaces | JupyterLab | adopted: workspaces |
 | J6 | Code blocks as functions | Org-mode Babel | adopted: references; Dataflow |
-| J7 | Untrusted output until trusted | JupyterLab | implicit in bcw-3 |
+| J7 | Untrusted output until trusted | JupyterLab | implicit: imports are claims |
 | L1 | Recomputation by dependency | Excel, Observable | adopted: Dataflow |
 | L2 | Reactive documents | Bret Victor | adopted: Dataflow |
 | L3 | Up and down the ladder of abstraction | Bret Victor | adopted: Dataflow |
@@ -524,35 +489,17 @@ Every candidate from NLS/Augment, Xanadu, notebook environments and live simulat
 
 Sources: [NLS (Wikipedia)](<https://en.wikipedia.org/wiki/NLS_(computer_system)>), [The Mother of All Demos](https://en.wikipedia.org/wiki/The_Mother_of_All_Demos), [About NLS/Augment](https://www.dougengelbart.org/content/view/155/), [Engelbart 1968 paper](http://dougengelbart.org/content/view/140/), [Augmenting Human Intellect](https://www.dougengelbart.org/content/view/138/), [Project Xanadu](https://en.wikipedia.org/wiki/Project_Xanadu), [Transclusion](https://en.wikipedia.org/wiki/Transclusion), [Xanalogical structure](https://xanadu.com.au/ted/XUsurvey/xuDation.html), [Transcopyright](https://xanadu.com/xuTco.html), [Enfilade](<https://en.wikipedia.org/wiki/Enfilade_(Xanadu)>), [JupyterLab overview](https://jupyterlab.readthedocs.io/en/latest/getting_started/overview.html), [JupyterLab notebooks](https://jupyterlab.readthedocs.io/en/latest/user/notebook.html), [JupyterLab documents and kernels](https://jupyterlab.readthedocs.io/en/latest/user/documents_kernels.html), [Project Jupyter](https://en.wikipedia.org/wiki/Project_Jupyter), [Org-mode Babel](https://orgmode.org/worg/org-contrib/babel/intro.html).
 
-## Order of work
+## The PC prototype
 
-1. Build the memex as software on bcw-3, in worker regions with the 16 MB external memory as a staging store and the journal on SPI flash: the journal, the outline with its quasimodes, links, search, views, panes, trails and annotation. Navigation, editing and following links run in native code within 0.1 s; Prolog filters, queries and the dataflow graph over them wait for step 2.
-2. Add the WAM engine (see Glossary), so that Prolog runs, and live updates, queries, parses and restatements meet their limits (see Timing estimates).
-3. Add "do you mean?" without a model: the predictive editor, APE's repair hints, and a memory of confirmed pairs.
-4. Add the model accelerator last, as a fallback for free English that the memory cannot match, if logged use shows such input is common.
+The prototype is a browser client and a SWI-Prolog server, split at one interface, the query protocol below, which is fixed first. It puts the memex in use early: journal, outline, quasimodes, dataflow, s(CASP). The client and the server can each be replaced on its own. The prototype is also the version for others: a PC is what other people and their organisations can run.
 
-SPI flash, bcw-1's boot medium, is present from step 1 and holds the journal; its capacity is an open question.
-
-## Parallel paths
-
-Steps 1 and 2 of the order of work run as four parallel paths. They meet at one interface, the query protocol below, which is fixed first.
-
-| Path | What it delivers | Depends on | Main risk |
-| --- | --- | --- | --- |
-| 1. The WAM engine | the board, the core, storage, the link and replay | the protocol; the engine's instruction set and built-ins | its size: it is a machine of its own |
-| 2. The memex on a PC, over SWI-Prolog | the memex in use early: journal, outline, quasimodes, dataflow, s(CASP); its client and its Prolog server split at the protocol | the protocol; the engine's subset of Prolog | SWI-only features (tabling, incremental tabling, CLP(Q), strings, garbage collection) turn path 3 into a rewrite; timings on a PC say nothing of bcw-3 |
-| 3. Porting the memex to the WAM engine | path 2's Prolog running on path 1 | paths 1 and 2 | attributed variables for s(CASP); incremental tabling, on which the dataflow design relies |
-| 4. bcw-3 user interface | the outline, panes, glyphs and strokes on bcw-1's compositor, within a 48 kB region | bcw-1's peripherals on bcw-3; the protocol, for queries | the region's size; 16 intensities and one tint for all highlighting |
-
-Path 2's client stands in for path 4, and its SWI-Prolog server for path 1, so each half can be replaced on its own. Path 2 is also the version for others: a PC is what other people and their organisations can run, while bcw-3 is the author's own instrument. One rule binds path 2: its Prolog uses only the engine's subset, written down as the subset grows.
-
-### Estimate for path 2
+### Estimate for the PC prototype
 
 These are estimates by judgement, not measurements. They assume a browser client talking to SWI-Prolog over the query protocol, APE and s(CASP) as they are, no trained model, and one experienced developer; the second column has Claude writing the code while the author directs and reviews.
 
 | Part | Weeks, by hand | Weeks, with Claude | Why |
 | --- | --- | --- | --- |
-| Query protocol, journal, panes, count of actions, emulation of bcw-1's display | 6–10 | 1–2 | well specified and routine |
+| Query protocol, journal, panes, count of actions | 6–10 | 1–2 | well specified and routine |
 | Outline editor: items, transclusion, links | 3–5 | 1–2 | editing behaviour needs many rounds of trial |
 | Quasimodes: Leap, Command with noise words, recognition, ?, Scope, Suppose | 2–3 | 1–2 | their feel is judged by hand; browsers report key releases, but the system takes some keys |
 | Dataflow, constraints and worlds on SWI's incremental tabling | 4–8 | 2–4 | the most uncertain part: incremental tabling is unchecked, and s(CASP) is not tabled |
@@ -568,13 +515,13 @@ These are estimates by judgement, not measurements. They assume a browser client
 | Integration and daily use | 2–4 | 1–2 | the author's use sets the pace |
 | **Total** | **36–68** | **13–28** | overlapping parts shorten the second column |
 
-A scripted demonstration of the user story's four scenes takes about 4–6 weeks by hand, or 1–2 with Claude. Published evidence on speed-ups from AI is mixed (recalled, not checked): about 56% faster on one small, well-defined task with Copilot (Peng et al. 2023), and about 19% slower for experienced developers in large codebases they knew (METR 2025). This prototype is new code with a written design, nearer the first case, so the second column assumes the gain falls mainly on writing code, not on the loops of design and feel. The prototype answers whether the interaction works and how much of SWI-Prolog the memex uses; it says nothing of timing on bcw-3 or the WAM engine.
+A scripted demonstration of the user story's four scenes takes about 4–6 weeks by hand, or 1–2 with Claude. Published evidence on speed-ups from AI is mixed (recalled, not checked): about 56% faster on one small, well-defined task with Copilot (Peng et al. 2023), and about 19% slower for experienced developers in large codebases they knew (METR 2025). This prototype is new code with a written design, nearer the first case, so the second column assumes the gain falls mainly on writing code, not on the loops of design and feel. The prototype answers whether the interaction works and how much of SWI-Prolog the memex uses.
 
 ## Query protocol
 
-Text, Prolog terms written and read as ASCII, costs no bandwidth that matters: the 400 MB/s link carries a 100-byte query in 0.25 µs. Its cost is code: a term reader and writer, with operators, quoting and escapes, both in a 48 kB region on bcw-3 and in the engine. The protocol sends terms as the engine's own 32-bit tagged cells, in prefix order, so each side decodes in one pass of a small loop and the engine copies the cells straight into its heap. Erlang's external term format and SWI-Prolog's `fast_term_serialized` apply the same idea in bytes (recalled, not checked).
+Text, Prolog terms written and read as ASCII, costs no bandwidth that matters. Its cost is code: a term reader and writer, with operators, quoting and escapes, on each side. The protocol sends terms as 32-bit tagged cells, in prefix order, so each side decodes in one pass of a small loop, and a Prolog system can copy the cells straight into its heap. Erlang's external term format and SWI-Prolog's `fast_term_serialized` apply the same idea in bytes (recalled, not checked).
 
-A message is a header word, a request number, and cells. The header holds the type (8 bits), the room (8 bits) and the length in words (16 bits). bcw-3's end of the link writes the room, not the process, so no process can name another room.
+A message is a header word, a request number, and cells. The header holds the type (8 bits), a reserved field (8 bits, written as zero) and the length in words (16 bits).
 
 | Cell tag (3 bits) | Value (29 bits) | Followed by |
 | --- | --- | --- |
@@ -588,35 +535,33 @@ Lists are `'.'/2` structures, and three tags are spare. `supports(X, item42)` ta
 
 | Message | Direction | Body |
 | --- | --- | --- |
-| QUERY | to the engine | the goal |
-| NEXT | to the engine | n: send up to n more answers |
-| CANCEL | to the engine | nothing; the engine drops the query's choice points |
-| ASSERT, RETRACT | to the engine | the fact, and its journal sequence number |
-| ATOM | to the engine | a name, as a BLOB |
-| JOURNAL | to the engine | journal entries, answering FETCH |
-| ANSWER | to bcw-3 | one term, with one argument for each VAR of the query |
-| DONE | to bcw-3 | no more answers, failure, or an error term |
-| ATOM\_IS | to bcw-3 | the atom's number |
-| FETCH | to bcw-3 | a journal sequence number: send the entries after it |
+| QUERY | to the server | the goal |
+| NEXT | to the server | n: send up to n more answers |
+| CANCEL | to the server | nothing; the server drops the query's choice points |
+| ASSERT, RETRACT | to the server | the fact, and its journal sequence number |
+| ATOM | to the server | a name, as a BLOB |
+| ANSWER | to the client | one term, with one argument for each VAR of the query |
+| DONE | to the client | no more answers, failure, or an error term |
+| ATOM\_IS | to the client | the atom's number |
 
-Answers come only when NEXT asks for them, so the engine backtracks lazily and no buffer on either side grows without bound. Atom numbers are kept per room, so the number an atom gets tells one room nothing of what another has interned. Path 2 sends the same messages over a pipe between its client and SWI-Prolog, with an encoder and decoder in Prolog of an estimated 100–200 lines.
+Answers come only when NEXT asks for them, so the server backtracks lazily and no buffer on either side grows without bound. The prototype sends these messages over a pipe between its client and SWI-Prolog, with an encoder and decoder in Prolog of an estimated 100–200 lines.
 
 ## Decisions
 
 | Decision | Reason |
 | --- | --- |
-| Name the project Adversaria, with the prototype in a repository of its own | the author's decision; “memex” is taken, and the prototype shares no code, tools or audience with bcw-3 |
+| Name the project Adversaria, with the prototype in a repository of its own | the author's decision; “memex” is taken |
 | Measure the falsifiability of formal claims: compatible, independent, refutable, characteristic number, needed premises, comparative strength, immunisation; relative to a declared observation vocabulary | the author's decision; Popper's measures, carried from Lean to Prolog through s(CASP)'s abduction |
 | Test claims by the cheapest check that could refute them: quote, source, provenance, weakest link, open parameters, independence, gaps shown, planted faults | the author's decision, adopting what transfers from the Popper project's judges of paper claims |
 | Imported content is a claim, never a fact; adopting and interrogating a claim take one click or key. The PC prototype is the version for others; purges keep the chain checkable; mail, calendars and the web are imported; quasimodes can be latched and a command palette offers every command; trails and maps export as read-only HTML | the author's decisions, after an outside review of the design's fit for general knowledge workers |
-| Entries are signed by the supervisor with the author's key; journals are exchanged as verified bundles that arrive as worlds | the author's decision; collaborators share the record itself, with authorship kept, while the isolation rules still forbid shared state |
+| Entries are signed by the sealer with the author's key; journals are exchanged as verified bundles that arrive as worlds | the author's decision; collaborators share the record itself, with authorship kept, and no state is shared while they edit |
 | Support uncertainty: intervals, the GUM's propagation, Monte Carlo, weighted worlds and fuzzy degrees, kept apart and chosen by one rule | the author's decision; a measured value without its uncertainty is half a fact |
 | Import and export of documents are a primary feature, through Pandoc's document tree; re-import is A/B comparison | the author's decision; a scientist's work arrives and leaves as documents |
 | The model suggests references, chosen only from works in the store | the author's decision; finding sources is clerical work, and choosing among existing works rules out invented references |
 | References are facts: a source is an item described by Wikidata's properties; import from BibTeX and CSL-JSON, export to CSL-JSON | the author's decision; no separate reference manager, and questions about sources become queries and constraints |
-| The journal's format is open: JSON Lines with canonical JSON (RFC 8785) hashed by SHA-256, a separate log of seals (dates and signatures) by the supervisor, and blobs named by their hashes | the author's decision; a scientific record must outlive the tools that made it |
-| The supervisor keeps the dates; the memex never reads them | the author's decision; it keeps `system.no-clock` without an exception, while the record is still dated |
-| Journal entries are hash-chained and dated by the supervisor | the author's decision; a scientific record must be unaltered and dated, and the memex itself holds no clock |
+| The journal's format is open: JSON Lines with canonical JSON (RFC 8785) hashed by SHA-256, a separate log of seals (dates and signatures) by the sealer, and blobs named by their hashes | the author's decision; a scientific record must outlive the tools that made it |
+| The sealer alone writes the dates and signatures and alone holds the key; the memex reads the dates | the author's decision; the record is dated and signed by a process the memex cannot impersonate, and reading the dates lets the memex show them and answer questions by date |
+| Journal entries are hash-chained and dated by the sealer | the author's decision; a scientific record must be unaltered and dated |
 | Import results from analysis tools as facts with provenance | the author's decision; the memex sits beside the scientist's analysis tools, not in their place |
 | The interface supports A/B comparison of worlds: juxtaposed, superposed, and as a table of differences | the author's decision; science compares states that differ in one thing, and worlds already hold those states |
 | Retract, don't rewind: an earlier decision is reversed by a new entry on the current branch; branches come only from Suppose and from undoing then editing | the author's decision, after the literature on selective undo; it keeps most work on one branch and adds no concept, since retracting generalises unadopting |
@@ -627,44 +572,26 @@ Answers come only when NEXT asks for them, so the engine backtracks lazily and n
 | The translator's model also suggests facts, rules and constraints for the user to accept | the author's decision; the main risk is that the user will not write facts and constraints, and Wikidata covers only the public world |
 | First-rate support for diagrams, with keyboard and mouse; no pen | the author's decision; pens are awkward for language input, and a diagram as a view over items and links reuses the journal, queries and dataflow |
 | Count the user's actions by kind from the journal; run constraints as dataflow nodes whose values are their violations | the author's decision, after Licklider's "Man-Computer Symbiosis" (1960): measure where the work goes, and let the machine expose flaws during formulation |
-| Adopt the query protocol: terms as the engine's 32-bit tagged cells in prefix order, answers on demand, rooms written by bcw-3's end of the link, atom numbers per room | the author's decision; one decoding loop on each side instead of a term reader and writer in a 48 kB region |
-| Steps 1 and 2 run as four parallel paths: the WAM engine; the memex on a PC over SWI-Prolog; the port to the engine; bcw-3's user interface | the author's decision; the memex is in use before the engine exists, and the paths meet at the query protocol |
-| Buffer index updates in DDR3 and apply them lazily | the author's decision; consultations are expected to outnumber changes by far (a guess of 1,000–100,000 to 1, to be measured), and a card's write pauses must not delay reads |
-| Index every fact on the index card in three orderings (SPO, POS, OSP) | the author's decision to index every pattern of bound arguments; three orderings cover all seven patterns of a triple by prefix, so each lookup's worst case is bounded, and they fill a small part of the 512 GB card |
-| The WAM engine's SD controllers support the card's command queue and cache | the author's decision; A2's random-read rate depends on them (recalled, not checked) |
-| The WAM engine carries 1 GB of DDR3 and two 512 GB A2-class SD cards, one for the index and one for the data, each with its own controller | the author's decision; the knowledge base and its indexes live there. An SD card replaced an NVMe SSD, whose PCIe root port and NVMe host would take an estimated 12–30% of the FPGA, need the transceiver variant, and are closed vendor IP |
-| The WAM engine joins bcw-3 by a dedicated 32-bit link at 100 MHz | the author's decision; queries do not share the 100BASE-TX network |
-| Prolog runs only on the WAM engine, a second ECP5-85F (see Glossary) | bcw-1 requires a process to fit its region whole, and no worker addresses external memory; the knowledge base outgrows SPI flash |
-| Target bcw-1's peripherals: 16 MB static RAM, the beam-racing compositor and mover, SPI flash storage, USB input, 100BASE-TX | the author's decision; bcw-1 states the same purpose, a cognitive augment |
+| Adopt the query protocol: terms as 32-bit tagged cells in prefix order, answers on demand, a reserved field in the header | the author's decision; one decoding loop on each side instead of a term reader and writer |
+| Build the memex as a PC prototype: a browser client and a SWI-Prolog server, split at the query protocol | the author's decision; the memex is in use early, and each half can be replaced on its own |
 | Adopt J5: workspaces as items in the journal | a layout is just another view of the store, so the journal keeps it with no Save |
 | No modes: quasimodes (Leap, Scope, Command, Suppose) choose the target, then a command acts on it | a held key cannot be forgotten, so mode errors cannot occur; after Raskin |
 | Add TOPS-20's recognition on Escape, guide words, and help on "?" to the outline model's aids | they teach commands and argument order in place; guide words name the slots of the verb frames |
 | Adopt N1, N4 and N7 as the outline model, with onscreen aids to learning | NLS's structure gave experts speed; the aids address its known difficulty of learning |
 | Adopt views, references and anchors (merging N3, N5, N6, X1, X2, X5, J3); merge executable content (J1, J2, J6) into reactive documents; drop N9, N10, X6; J7 is implicit | each group did one job in several systems; the dropped ones concern practice, collaboration or licensing, not mechanism |
-| Move the WAM engine to step 2 of the order of work | live interaction (L6) needs it; software on bcw-3 cannot meet 0.1 s |
-| Adopt L6: response-time limits of 0.1 s, 1 s and 10 s on the dataflow graph | live interaction depends on them; they set what the WAM engine must achieve |
+| Adopt L6: response-time limits of 0.1 s, 1 s and 10 s on the dataflow graph | live interaction depends on them |
 | Adopt dataflow over the journal, merging L1–L5 | five candidates are one mechanism seen from different sides |
 | Adopt the mechanisms an append-only journal gives almost free: X3, X4, N2, N8, J4 | one rule (nothing overwritten) yields all five |
-| bcw-3's bulk storage is bcw-1's SPI flash, holding the journal from step 1 | it is bcw-1's boot medium, so it is present from the start; it is small, so the knowledge base lives on the WAM engine |
-| The memex comes first, as software on bcw-3 | most of the augmentation needs no new hardware |
 | "Do you mean?" starts without a model: predictive editor, repair hints, memory of pairs | they teach the controlled English, and cost almost nothing |
-| The model accelerator is a late fallback | its value depends on how much free English the cheaper methods miss |
-| The translator is English ↔ Prolog only | Prolog runs on the WAM engine; Lean runs on neither machine |
+| The translator's model is a late fallback | its value depends on how much free English the cheaper methods miss |
+| The translator is English ↔ Prolog only | the memex's facts, rules and queries are Prolog |
 | "What if" works by counterfactual revision in Worlds, with s(CASP) run with `--forall=sasp` | its default algorithm has an open bug, s(CASP) issue #13 (github.com/SWI-Prolog/sCASP/issues/13), reproduced in the translator document's trial |
 
 ## Open questions
 
-- [ ] Which SPI flash device, of what capacity and read rate? It sets how large the store can be, and how many lookups a search can afford.
 - [ ] How fast does the journal grow in real use, and how are span lists compacted?
-- [ ] How is the bulk storage partitioned between rooms, so that one room's answers depend only on its own calls (`system.answers`)?
 - [ ] Does SWI-Prolog's incremental tabling work as recalled, and how do s(CASP)'s untabled queries join the dataflow graph?
 - [ ] At what granularity are dependencies recorded (fact, predicate, item), and what does recording cost?
-- [ ] Which keys of a USB keyboard fall under the thumbs for Leap, Scope, Command and Suppose? (bcw-1's boot-protocol input reports the keys held, so presses and releases are known.)
-- [ ] Which parts enter the book, its proofs and its audit: the WAM engine, APE, s(CASP), the memex software? APE and s(CASP) alone are about 39K lines of Prolog (measured), about 49 audit days against the 40-day budget (`design.audit-budget`).
-- [ ] What does command queue and cache support add to each SD controller's logic, and how many random reads a second does an A2-class card then give? The class promises at least 4,000 IOPS; measured cards fell short, perhaps because their hosts did not use the queue.
-- [ ] The WAM engine serves every room. For a room's answers to depend only on its own calls, and its rate on nothing another room does (`system.answers`, `system.no-timing-channel`), the engine needs per-room partitions of facts, worlds and the write buffer, and link time in fixed slots per room. Or does the engine serve one room only?
-- [ ] How large may the WAM engine's write buffer grow before it forces write-back, and how long can a forced write-back delay reads?
-- [ ] Which SD bus mode does the engine drive: 3.3 V high speed at about 25 MB/s, or UHS-I at 1.8 V? A2's promised rates may depend on it.
-- [ ] How does the link frame messages in fixed time slots for each room?
-- [ ] Where does diagram layout run, in a worker region on bcw-3 or on the WAM engine, and how large a diagram must it lay out within 0.1 s? How many strokes on one scanline can bcw-1's compositor sustain (its span-less fetch is still open)?
-- [ ] Which timestamping service, how often, and over which link does the head hash leave bcw-3?
+- [ ] Which keys of a standard keyboard fall under the thumbs for Leap, Scope, Command and Suppose, and which of them do the operating system and the browser take?
+- [ ] How large a diagram must layout handle within 0.1 s?
+- [ ] Which timestamping service, and how often?
