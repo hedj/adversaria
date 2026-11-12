@@ -38,11 +38,11 @@ def press_release(ch, mods=0):
     return key(ord(ch), mods, 1) + key(ord(ch), mods, 3)
 
 
-def run(binary, journal, reply, keys, timeout=10):
+def run(binary, journal, reply, keys, timeout=10, args=()):
     """Start the memex in a pty; answer its probe; send keys; return (status, output)."""
     pid, fd = pty.fork()
     if pid == 0:
-        os.execv(binary, [binary, journal])
+        os.execv(binary, [binary, *args, journal])
     # A terminal 120 columns by 40 rows, as a window would be.
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 120, 0, 0))
     out = b""
@@ -112,6 +112,9 @@ def main():
         failures += 0 if ok else 1
 
     with tempfile.TemporaryDirectory() as d:
+        # The user's own configuration must not change what is tested.
+        os.environ.pop("ADVERSARIA_CONFIG", None)
+        os.environ["XDG_CONFIG_HOME"] = os.path.join(d, "no-config")
         # 1. A terminal without the protocols: refused, saying what is missing.
         status, out = run(binary, os.path.join(d, "plain"), PLAIN_REPLY, [])
         text = out.decode("utf-8", "replace")
@@ -139,6 +142,43 @@ def main():
               len(leaps) == 1 and leaps[0]["pattern"] == "hel", leaps)
         first = next((e["seq"] for e in es if e["kind"] == "edit" and e["body"].get("op") == "create"), None)
         check("the Leap went back to the first item", leaps and leaps[0].get("found") == first, (leaps, first))
+
+        # 3. A configuration that moves Leap forward to F12, unbinds F10 and
+        #    binds Insert to quit.
+        conf = os.path.join(d, "config.toml")
+        with open(conf, "w", encoding="utf-8") as f:
+            f.write('[quasimodes]\nleap_forward = "F12"\n[keys]\nF10 = ""\nInsert = "quit"\n')
+        j = os.path.join(d, "remapped")
+        keys = [press_release(c) for c in "Hello"]
+        keys += [b"\r"]
+        keys += [press_release(c) for c in "World"]
+        keys += [b"\x1b[24;1:1~"]  # F12 pressed: hold Leap forward
+        keys += [press_release(c) for c in "hel"]
+        keys += [b"\x1b[24;1:3~"]  # F12 released
+        keys += [b"\x1b[21~"]  # F10: now unbound, so the memex keeps running
+        keys += [press_release("Z")]
+        keys += [b"\x1b[2~"]  # Insert: quit
+        status, out = run(binary, j, KITTY_REPLY, keys, args=["--config", conf])
+        check("a remapped key quits", status == 0, f"status {status}: {out[-300:]!r}")
+        es = entries(j) if os.path.exists(os.path.join(j, "journal.jsonl")) else []
+        leaps = [e["body"] for e in es if e["kind"] == "view" and e["body"].get("op") == "leap"]
+        check("a held F12 made one Leap, ended by its release",
+              len(leaps) == 1 and leaps[0]["pattern"] == "hel", leaps)
+        texts = [e["body"].get("add") for e in es if e["kind"] == "edit" and e["body"].get("op") == "text"]
+        check("the Leap pattern was not typed as text", "hel" not in "".join(t or "" for t in texts), texts)
+        check("F10, unbound, did not quit: a key typed after it was written",
+              any("Z" in (t or "") for t in texts), texts)
+
+        # 4. A configuration that is wrong: refused before the terminal is touched.
+        with open(conf, "w", encoding="utf-8") as f:
+            f.write('[keys]\nF2 = "frobnicate"\n')
+        j = os.path.join(d, "badconf")
+        status, out = run(binary, j, KITTY_REPLY, [], args=["--config", conf])
+        text = out.decode("utf-8", "replace")
+        check("a wrong configuration is refused", status == 2, f"status {status}")
+        check("the refusal names the file and the fault", conf in text and "frobnicate" in text, text[-300:])
+        check("nothing is written when the configuration is refused",
+              not os.path.exists(os.path.join(j, "journal.jsonl")))
 
     print(f"{failures} failed")
     sys.exit(1 if failures else 0)

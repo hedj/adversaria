@@ -61,7 +61,23 @@ pub enum Key {
     Home,
     End,
     F(u8),
+    /// A key with no editing job, free to bind (crate::config).
+    Special(Special),
     Quasi(Quasi),
+}
+
+/// Keys the memex leaves free for the user's bindings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Special {
+    Insert,
+    PageUp,
+    PageDown,
+    Menu,
+    Pause,
+    ScrollLock,
+    PrintScreen,
+    CapsLock,
+    NumLock,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -284,6 +300,8 @@ pub struct App {
     observed: Option<(Vec<String>, Vec<String>)>,
     /// Suggestions recorded as offered (shown in the pane), by identity.
     pub offered: BTreeSet<String>,
+    /// Keys bound to command lines, from the configuration.
+    pub bindings: Vec<(Key, String)>,
 }
 
 const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
@@ -310,7 +328,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "adopt",
         slots: &[],
-        help: "make the target's claims beliefs, keeping their source (F3)",
+        help: "make the target's claims beliefs, keeping their source",
     },
     Command {
         name: "claim",
@@ -395,7 +413,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "interrogate",
         slots: &[],
-        help: "ask of the target's claim: who else claims it, who disputes it, its source and record (F2)",
+        help: "ask of the target's claim: who else claims it, who disputes it, its source and record",
     },
     Command {
         name: "link",
@@ -460,7 +478,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "unadopt",
         slots: &[],
-        help: "retract the target's last adoption (F4)",
+        help: "retract the target's last adoption",
     },
     Command {
         name: "undo",
@@ -498,6 +516,7 @@ impl App {
             message: String::new(),
             workspace,
             pending_text: None,
+            bindings: crate::config::Config::default().bindings,
             view_dirty: false,
             last_leap: None,
             quit: false,
@@ -939,9 +958,29 @@ impl App {
                 listing: false,
             });
         }
+        if let Some(line) = self
+            .bindings
+            .iter()
+            .find(|(k, _)| *k == ev.key)
+            .map(|(_, l)| l.clone())
+        {
+            self.flush();
+            if line == "palette" {
+                return Mode::Quasi(Active {
+                    q: Quasi::Command,
+                    input: String::new(),
+                    latched: true,
+                    used: false,
+                    listing: true,
+                });
+            }
+            self.run_simple(&line);
+            // Keep what the command asked for, such as a confirmation.
+            return std::mem::replace(&mut self.mode, Mode::Normal);
+        }
         let f = self.view.focus;
-        if self.view.panes[f].kind == PaneKind::Links && !matches!(ev.key, Key::F(_)) {
-            self.message = "this pane shows links; switch (F6) to edit".into();
+        if self.view.panes[f].kind == PaneKind::Links {
+            self.message = "this pane shows links; run switch to edit".into();
             return Mode::Normal;
         }
         self.message.clear();
@@ -981,21 +1020,6 @@ impl App {
                 };
                 self.view_dirty = true;
             }
-            Key::F(1) => {
-                self.flush();
-                return Mode::Quasi(Active {
-                    q: Quasi::Command,
-                    input: String::new(),
-                    latched: true,
-                    used: false,
-                    listing: true,
-                });
-            }
-            Key::F(2) => self.run_simple("interrogate"),
-            Key::F(3) => self.run_simple("adopt"),
-            Key::F(4) => self.run_simple("unadopt"),
-            Key::F(6) => self.run_simple("switch"),
-            Key::F(10) => self.run_simple("quit"),
             _ => {}
         }
         Mode::Normal

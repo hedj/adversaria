@@ -1,0 +1,31 @@
+# Adversaria: key configuration. Copy to ~/.config/adversaria/config.toml
+# and edit. Every key here is named as below; see docs/guide.md.
+#
+# Quasimode keys: LeftAlt RightAlt LeftControl RightControl LeftSuper
+#   RightSuper LeftHyper RightHyper LeftMeta RightMeta IsoLevel3Shift
+#   IsoLevel5Shift, F1 to F35, Insert PageUp PageDown Menu Pause ScrollLock
+#   PrintScreen CapsLock NumLock.
+# Bound keys: F1 to F35, Insert PageUp PageDown Menu Pause ScrollLock
+#   PrintScreen CapsLock NumLock.
+# Reserved, for editing, and refused: Enter Tab Backspace Delete Esc, the
+#   arrows, Home End, Shift, and any printable character.
+
+# Each quasimode is held (or tapped, to latch it) on any of its keys. A
+# quasimode named here replaces its default keys; the others keep theirs.
+[quasimodes]
+leap_forward = ["RightAlt", "IsoLevel3Shift"]
+leap_back = ["LeftAlt"]
+command = ["LeftControl"]
+scope = ["RightControl"]
+suppose = ["LeftSuper", "RightSuper"]
+
+# A key runs a command line, as typed in the Command quasimode; "palette"
+# opens the command palette; "" unbinds the key. A key named here replaces
+# its default; the others keep theirs.
+[keys]
+F1 = "palette"
+F2 = "interrogate"
+F3 = "adopt"
+F4 = "unadopt"
+F6 = "switch"
+F10 = "quit"

@@ -6,7 +6,10 @@
 //! graphics protocol, for images. At start it asks the terminal, and refuses
 //! to start if either is missing.
 
-use crate::app::{App, Event, Key, Press, Quasi};
+#[cfg(test)]
+use crate::app::Quasi;
+use crate::app::{App, Event, Key, Press, Special};
+use crate::config::{Config, QuasiKey};
 use crate::ui;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -84,24 +87,18 @@ pub fn probe(timeout: Duration) -> io::Result<Option<Support>> {
     Ok(rx.recv_timeout(timeout).ok())
 }
 
-/// The keys the memex reads, from crossterm's key events. Quasimode keys
-/// (provisional defaults, under the thumbs where a keyboard allows): Leap
-/// forward Right Alt, Leap back Left Alt, Command Left Ctrl, Scope Right
-/// Ctrl, Suppose Super.
-pub fn map_key(k: event::KeyEvent) -> Option<Event> {
+/// The keys the memex reads, from crossterm's key events. Which keys are
+/// the quasimodes comes from the configuration (crate::config); a key with
+/// no editing job and no configured use is ignored.
+pub fn map_key(k: event::KeyEvent, config: &Config) -> Option<Event> {
     let press = match k.kind {
         KeyEventKind::Release => Press::Up,
         _ => Press::Down,
     };
     let key = match k.code {
-        KeyCode::Modifier(m) => Key::Quasi(match m {
-            ModifierKeyCode::RightAlt | ModifierKeyCode::IsoLevel3Shift => Quasi::LeapForward,
-            ModifierKeyCode::LeftAlt => Quasi::LeapBack,
-            ModifierKeyCode::LeftControl => Quasi::Command,
-            ModifierKeyCode::RightControl => Quasi::Scope,
-            ModifierKeyCode::LeftSuper | ModifierKeyCode::RightSuper => Quasi::Suppose,
-            _ => return None,
-        }),
+        KeyCode::Modifier(m) => {
+            Key::Quasi(config.quasi_for(QuasiKey::Modifier(modifier_name(m)?))?)
+        }
         KeyCode::Char(c) => Key::Char(c),
         KeyCode::Enter => Key::Enter,
         KeyCode::Backspace => Key::Backspace,
@@ -116,9 +113,49 @@ pub fn map_key(k: event::KeyEvent) -> Option<Event> {
         KeyCode::Home => Key::Home,
         KeyCode::End => Key::End,
         KeyCode::F(n) => Key::F(n),
+        KeyCode::Insert => Key::Special(Special::Insert),
+        KeyCode::PageUp => Key::Special(Special::PageUp),
+        KeyCode::PageDown => Key::Special(Special::PageDown),
+        KeyCode::Menu => Key::Special(Special::Menu),
+        KeyCode::Pause => Key::Special(Special::Pause),
+        KeyCode::ScrollLock => Key::Special(Special::ScrollLock),
+        KeyCode::PrintScreen => Key::Special(Special::PrintScreen),
+        KeyCode::CapsLock => Key::Special(Special::CapsLock),
+        KeyCode::NumLock => Key::Special(Special::NumLock),
         _ => return None,
     };
+    if let Some(q) = config.quasi_for(QuasiKey::Key(key)) {
+        return Some(Event {
+            key: Key::Quasi(q),
+            press,
+        });
+    }
+    // An unbound key with no editing job does nothing; dropping it here
+    // keeps lock keys from reaching the app at all.
+    if matches!(key, Key::Special(_)) && !config.bindings.iter().any(|(b, _)| *b == key) {
+        return None;
+    }
     Some(Event { key, press })
+}
+
+/// The configuration's name for a modifier key.
+fn modifier_name(m: ModifierKeyCode) -> Option<&'static str> {
+    use ModifierKeyCode::*;
+    Some(match m {
+        LeftAlt => "LeftAlt",
+        RightAlt => "RightAlt",
+        LeftControl => "LeftControl",
+        RightControl => "RightControl",
+        LeftSuper => "LeftSuper",
+        RightSuper => "RightSuper",
+        LeftHyper => "LeftHyper",
+        RightHyper => "RightHyper",
+        LeftMeta => "LeftMeta",
+        RightMeta => "RightMeta",
+        IsoLevel3Shift => "IsoLevel3Shift",
+        IsoLevel5Shift => "IsoLevel5Shift",
+        LeftShift | RightShift => return None,
+    })
 }
 
 /// Why the terminal will not do, if it will not.
@@ -143,7 +180,7 @@ pub fn refusal(s: Option<Support>) -> Option<String> {
 }
 
 /// Run the memex on a journal directory in this terminal.
-pub fn run(dir: &Path) -> Result<(), String> {
+pub fn run(dir: &Path, config: Config) -> Result<(), String> {
     terminal::enable_raw_mode().map_err(|e| e.to_string())?;
     let support = probe(Duration::from_secs(2));
     if let Some(why) = refusal(support.as_ref().ok().copied().flatten()) {
@@ -151,6 +188,7 @@ pub fn run(dir: &Path) -> Result<(), String> {
         return Err(why);
     }
     let mut app = App::open(dir).map_err(|e| e.to_string())?;
+    app.bindings = config.bindings.clone();
     let mut out = io::stdout();
     let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
         | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
@@ -177,7 +215,7 @@ pub fn run(dir: &Path) -> Result<(), String> {
             term.draw(|f| ui::draw(f, &app))?;
             if event::poll(Duration::from_secs(1))? {
                 if let event::Event::Key(k) = event::read()?
-                    && let Some(ev) = map_key(k)
+                    && let Some(ev) = map_key(k, &config)
                 {
                     app.handle(ev);
                 }
@@ -285,6 +323,7 @@ mod tests {
     fn keys_map_with_their_releases() {
         // Catches a quasimode key whose release is lost, or keys mismapped.
         use event::{KeyEvent, KeyEventState, KeyModifiers};
+        let c = Config::default();
         let k = |code, kind| KeyEvent {
             code,
             modifiers: KeyModifiers::NONE,
@@ -292,23 +331,69 @@ mod tests {
             state: KeyEventState::NONE,
         };
         assert_eq!(
-            map_key(k(
-                KeyCode::Modifier(ModifierKeyCode::RightAlt),
-                KeyEventKind::Release
-            )),
+            map_key(
+                k(
+                    KeyCode::Modifier(ModifierKeyCode::RightAlt),
+                    KeyEventKind::Release
+                ),
+                &c
+            ),
             Some(Event::up(Key::Quasi(Quasi::LeapForward)))
         );
         assert_eq!(
-            map_key(k(
-                KeyCode::Modifier(ModifierKeyCode::LeftControl),
-                KeyEventKind::Press
-            )),
+            map_key(
+                k(
+                    KeyCode::Modifier(ModifierKeyCode::LeftControl),
+                    KeyEventKind::Press
+                ),
+                &c
+            ),
             Some(Event::down(Key::Quasi(Quasi::Command)))
         );
         assert_eq!(
-            map_key(k(KeyCode::Char('d'), KeyEventKind::Repeat)),
+            map_key(k(KeyCode::Char('d'), KeyEventKind::Repeat), &c),
             Some(Event::down(Key::Char('d')))
         );
-        assert_eq!(map_key(k(KeyCode::CapsLock, KeyEventKind::Press)), None);
+        assert_eq!(map_key(k(KeyCode::CapsLock, KeyEventKind::Press), &c), None);
+    }
+
+    #[test]
+    fn keys_follow_the_configuration() {
+        // Catches a remapped quasimode or binding that the reader ignores.
+        use event::{KeyEvent, KeyEventState, KeyModifiers};
+        let k = |code, kind| KeyEvent {
+            code,
+            modifiers: KeyModifiers::NONE,
+            kind,
+            state: KeyEventState::NONE,
+        };
+        let c = Config::parse(
+            "[quasimodes]\nleap_forward = [\"F12\"]\ncommand = [\"RightAlt\"]\n[keys]\nInsert = \"undo\"\n",
+        )
+        .unwrap();
+        let alt = KeyCode::Modifier(ModifierKeyCode::RightAlt);
+        assert_eq!(
+            map_key(k(alt, KeyEventKind::Press), &c),
+            Some(Event::down(Key::Quasi(Quasi::Command)))
+        );
+        assert_eq!(
+            map_key(k(KeyCode::F(12), KeyEventKind::Release), &c),
+            Some(Event::up(Key::Quasi(Quasi::LeapForward)))
+        );
+        assert_eq!(
+            map_key(k(KeyCode::Insert, KeyEventKind::Press), &c),
+            Some(Event::down(Key::Special(Special::Insert)))
+        );
+        assert_eq!(
+            map_key(
+                k(
+                    KeyCode::Modifier(ModifierKeyCode::LeftControl),
+                    KeyEventKind::Press
+                ),
+                &c
+            ),
+            None,
+            "LeftControl lost its job when command moved"
+        );
     }
 }

@@ -9,3 +9,4 @@ format = { version = "0.1.0", path = "../format" }
 protocol = { version = "0.1.0", path = "../protocol" }
 ratatui = "0.30"
 serde_json = "1.0.154"
+toml = "1.2.1"
