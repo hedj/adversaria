@@ -335,16 +335,17 @@ impl Refs<'_> {
                     || matches!(q, "Self" | "crate" | "super" | "self")
                     || self.defs.modules.contains(q)
             });
-            if self.defs.types.contains(s) {
-                self.out.insert(format!("type {s}"));
-            } else if let Some(e) = self
+            // A variant only as Enum::Variant (a bare None or Ok is std's),
+            // and as a variant even where a type has the same name.
+            let variant = self
                 .defs
                 .variants
                 .get(s)
-                .filter(|e| qual == Some(e.as_str()) || qual == Some("Self"))
-            {
-                // A variant only as Enum::Variant: a bare None or Ok is std's.
+                .filter(|e| qual == Some(e.as_str()) || qual == Some("Self"));
+            if let Some(e) = variant {
                 self.out.insert(format!("type {e}"));
+            } else if self.defs.types.contains(s) {
+                self.out.insert(format!("type {s}"));
             } else if self.defs.consts.contains(s) {
                 self.out.insert(format!("const {s}"));
             } else if last
@@ -875,15 +876,20 @@ mod tests {
         // Catches std's None counted as a project variant of the same name,
         // or Vec::new as the project's new.
         let src = r#"
-            enum Scale { Line, None }
+            enum Scale { Line, None, S }
             struct S;
             impl S { fn new() -> S { S } }
             fn f() -> Option<u8> { let v: Vec<u8> = Vec::new(); let _ = S::new(); None }
+            fn g() -> Scale { Scale::S }
         "#;
         let (fns, _, _) = measure_rust(&[("b.rs".into(), src.into())], &[]).unwrap();
         let f = fns.iter().find(|u| u.name == "f").unwrap();
         let r: Vec<&str> = f.referents.iter().map(String::as_str).collect();
         assert_eq!(r, ["fn new", "type S"]);
+        // Scale::S is the variant, not the struct S.
+        let g = fns.iter().find(|u| u.name == "g").unwrap();
+        let r: Vec<&str> = g.referents.iter().map(String::as_str).collect();
+        assert_eq!(r, ["type Scale"]);
     }
 
     #[test]
