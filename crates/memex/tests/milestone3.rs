@@ -590,3 +590,24 @@ fn backspace_erases_then_leaves_a_latched_quasimode() {
     assert!(matches!(app.mode, Mode::Normal), "left the quasimode");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_question_mark_inside_quotes_is_text() {
+    // In Command, ? lists what may come next; inside a quoted string it is
+    // part of the string. Catches "Is it late?" losing its question mark.
+    let dir = temp("question");
+    let mut app = App::open(&dir).unwrap();
+    app.set_durable(false);
+    tap(&mut app, Key::Quasi(Quasi::Command));
+    typ(&mut app, "fact q(\"Is it late?\", 'why?') ?");
+    let (input, listing) = match &app.mode {
+        Mode::Quasi(a) => (a.input.clone(), a.listing),
+        m => panic!("{m:?}"),
+    };
+    assert_eq!(
+        input, "fact q(\"Is it late?\", 'why?') ",
+        "inside quotes, ? is text"
+    );
+    assert!(listing, "outside them, ? still lists");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

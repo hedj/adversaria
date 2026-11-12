@@ -1159,7 +1159,11 @@ impl App {
         }
         a.used = true;
         match ev.key {
-            Key::Char('?') if a.q != Quasi::Suppose => a.listing = !a.listing,
+            Key::Char('?')
+                if a.q != Quasi::Suppose && !(a.q == Quasi::Command && in_quotes(&a.input)) =>
+            {
+                a.listing = !a.listing
+            }
             Key::Char(' ') if a.q == Quasi::Scope => {
                 self.view.scope = match self.view.scope {
                     ScopeLevel::Word => ScopeLevel::Statement,
@@ -3157,6 +3161,26 @@ fn functor_of(t: &Term) -> String {
         Term::Atom(a) => format!("{a}/0"),
         _ => "term".into(),
     }
+}
+
+/// Whether a command line ends inside a quoted string ("…" or '…'), so a
+/// ? typed now is part of the string, not a request for help.
+fn in_quotes(input: &str) -> bool {
+    let mut open: Option<char> = None;
+    let mut escaped = false;
+    for c in input.chars() {
+        match (open, c) {
+            (Some(_), '\\') if !escaped => {
+                escaped = true;
+                continue;
+            }
+            (Some(q), c) if c == q && !escaped => open = None,
+            (None, '"' | '\'') => open = Some(c),
+            _ => {}
+        }
+        escaped = false;
+    }
+    open.is_some()
 }
 
 fn find_command(w: &str) -> Option<&'static str> {
