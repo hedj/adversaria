@@ -539,6 +539,60 @@ impl Outline {
         (at != TOP).then_some(at)
     }
 
+    /// An item's parent: TOP for a top-level item or one not in the outline.
+    pub fn parent_or_top(&self, id: u64) -> u64 {
+        self.parent(id).unwrap_or(TOP)
+    }
+
+    /// An item's parent, if the item is not top-level.
+    pub fn parent_item(&self, id: u64) -> Option<u64> {
+        self.parent(id).filter(|p| *p != TOP)
+    }
+
+    /// The item before this one among its siblings.
+    pub fn previous_sibling(&self, id: u64) -> Option<u64> {
+        let siblings = self.children(self.parent_or_top(id));
+        let i = siblings.iter().position(|x| *x == id)?;
+        i.checked_sub(1).map(|j| siblings[j])
+    }
+
+    pub fn last_child(&self, id: u64) -> Option<u64> {
+        self.children(id).last().copied()
+    }
+
+    /// Whether an item is in the branch under top, top included.
+    pub fn in_branch(&self, id: u64, top: u64) -> bool {
+        let mut at = Some(id);
+        while let Some(x) = at {
+            if x == top {
+                return true;
+            }
+            at = self.parent(x);
+        }
+        false
+    }
+
+    /// Whether an item is top itself, or is in the outline and under top.
+    pub fn within(&self, id: u64, top: u64) -> bool {
+        id == top || self.in_order().contains(&id) && self.in_branch(id, top)
+    }
+
+    /// The items at the other ends of an item's links: those it links to,
+    /// then those that link to it.
+    pub fn neighbours(&self, id: u64) -> Vec<u64> {
+        let (out, into) = self.links_of(id);
+        out.iter()
+            .map(|l| l.to)
+            .chain(into.iter().map(|l| l.from))
+            .collect()
+    }
+
+    /// An item's spans, as an edit entry gives them, to show its text in
+    /// place elsewhere.
+    pub fn spans_json(&self, id: u64) -> Value {
+        span_json(&self.items[&id].spans)
+    }
+
     /// All items in outline order, depth first.
     pub fn in_order(&self) -> Vec<u64> {
         let mut out = Vec::with_capacity(self.items.len());

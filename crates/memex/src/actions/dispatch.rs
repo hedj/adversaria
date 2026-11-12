@@ -287,6 +287,20 @@ pub const COMMANDS: &[Command] = &[
 ];
 
 impl App {
+    pub(crate) fn cmd_help(&mut self, _: &[&str], _: u64) -> Result<(), String> {
+        self.message = COMMANDS
+            .iter()
+            .map(|c| c.name)
+            .collect::<Vec<_>>()
+            .join(" · ");
+        Ok(())
+    }
+
+    pub(crate) fn cmd_quit(&mut self, _: &[&str], _: u64) -> Result<(), String> {
+        self.quit = true;
+        Ok(())
+    }
+
     pub(crate) fn run_simple(&mut self, name: &str) {
         self.mode = Mode::Normal;
         let m = self.run_command(name);
@@ -341,6 +355,11 @@ impl App {
             .filter(|id| self.outline.text(*id).to_lowercase().starts_with(&la))
             .collect();
         (hits.len() == 1).then(|| hits[0])
+    }
+
+    /// The one item that words address.
+    pub(crate) fn address(&self, words: &[&str]) -> Option<u64> {
+        self.addresses(words, 1).map(|a| a[0])
     }
 
     /// Split words into addresses: the first split where every part resolves.

@@ -14,7 +14,6 @@
 //! (cursor, folds, panes, scope) and, in its `op`, the action: move, leap,
 //! follow, fold, pane, scope. Counting actions by kind reads these.
 
-use crate::actions::COMMANDS;
 use crate::actions::dispatch::{complete_command, in_quotes};
 use crate::engine::{Engine, variables};
 use crate::journal::{Error as JournalError, Journal};
@@ -134,6 +133,18 @@ pub enum PaneKind {
     Suggestions,
 }
 
+impl PaneKind {
+    /// The kind of pane a word names, as the pane command takes it.
+    pub(crate) fn named(word: Option<&str>) -> Option<PaneKind> {
+        match word {
+            Some("outline") => Some(Self::Outline),
+            Some("links") => Some(Self::Links),
+            Some("suggestions") => Some(Self::Suggestions),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScopeLevel {
     Word,
@@ -183,6 +194,34 @@ impl Default for View {
 }
 
 impl View {
+    /// The pane without focus.
+    fn other(&mut self) -> &mut Pane {
+        &mut self.panes[1 - self.focus]
+    }
+
+    /// Show a kind of pane, at an item, in the pane without focus.
+    pub(crate) fn show_other(&mut self, kind: PaneKind, at: u64) {
+        let p = self.other();
+        p.kind = kind;
+        p.cursor = at;
+    }
+
+    /// Move focus to the other pane; it starts at this pane's cursor if it
+    /// has none.
+    pub(crate) fn switch_focus(&mut self) {
+        let from = self.panes[self.focus].cursor;
+        self.focus = 1 - self.focus;
+        let p = &mut self.panes[self.focus];
+        if p.cursor == TOP {
+            p.cursor = from;
+        }
+    }
+
+    /// Whether commands act on the word at the cursor.
+    pub(crate) fn in_word(&self) -> bool {
+        self.scope == ScopeLevel::Word
+    }
+
     fn to_json(&self, op: &str, extra: Value) -> Value {
         let kind = |k: PaneKind| match k {
             PaneKind::Outline => "outline",
@@ -587,7 +626,7 @@ impl App {
         Ok(e)
     }
 
-    fn write_here(&mut self, kind: &str, body: Value) -> Result<Entry, String> {
+    pub(crate) fn write_here(&mut self, kind: &str, body: Value) -> Result<Entry, String> {
         self.write(Some(self.tip), kind, body)
     }
 
@@ -603,7 +642,7 @@ impl App {
         }
     }
 
-    fn write_view(&mut self, op: &str, extra: Value) {
+    pub(crate) fn write_view(&mut self, op: &str, extra: Value) {
         self.flush_text();
         self.view_dirty = false;
         let body = self.view.to_json(op, extra);
@@ -622,7 +661,7 @@ impl App {
 
     /// Write an item's new text: unchanged characters at the start and end
     /// keep their spans; the middle is added by this entry.
-    fn write_text(&mut self, item: u64, new: &[char]) -> Result<(), String> {
+    pub(crate) fn write_text(&mut self, item: u64, new: &[char]) -> Result<(), String> {
         let old: Vec<char> = self.outline.text(item).chars().collect();
         if old == new {
             return Ok(());
@@ -660,7 +699,7 @@ impl App {
         self.view.panes[self.view.focus].cursor
     }
 
-    fn set_cursor(&mut self, id: u64) {
+    pub(crate) fn set_cursor(&mut self, id: u64) {
         let f = self.view.focus;
         self.view.panes[f].cursor = id;
         self.view.pos = self.text_of(id).len();
@@ -748,7 +787,7 @@ impl App {
         format!("{pattern}{common}")
     }
 
-    fn unfold_to(&mut self, id: u64) {
+    pub(crate) fn unfold_to(&mut self, id: u64) {
         let mut at = self.outline.parent(id);
         while let Some(p) = at {
             self.view.folded.remove(&p);
@@ -928,7 +967,7 @@ impl App {
         self.view_dirty = true;
     }
 
-    fn new_item_after(&mut self, id: u64) -> Result<(), String> {
+    pub(crate) fn new_item_after(&mut self, id: u64) -> Result<(), String> {
         let (under, after) = if id == TOP {
             (TOP, None)
         } else {
@@ -2119,65 +2158,6 @@ impl App {
     // ------------------------------------------------------------------
     // Commands.
 
-    pub(crate) fn cmd_help(&mut self, _: &[&str], _: u64) -> Result<(), String> {
-        self.message = COMMANDS
-            .iter()
-            .map(|c| c.name)
-            .collect::<Vec<_>>()
-            .join(" · ");
-        Ok(())
-    }
-
-    pub(crate) fn cmd_quit(&mut self, _: &[&str], _: u64) -> Result<(), String> {
-        self.quit = true;
-        Ok(())
-    }
-
-    pub(crate) fn cmd_new(&mut self, _: &[&str], target: u64) -> Result<(), String> {
-        self.new_item_after(target)?;
-        Ok(())
-    }
-
-    pub(crate) fn cmd_switch(&mut self, _: &[&str], _: u64) -> Result<(), String> {
-        self.view.focus = 1 - self.view.focus;
-        if self.view.panes[self.view.focus].cursor == TOP {
-            self.view.panes[self.view.focus].cursor = self.view.panes[1 - self.view.focus].cursor;
-        }
-        self.write_view("pane", json!({}));
-        Ok(())
-    }
-
-    pub(crate) fn cmd_pane(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        let other = 1 - self.view.focus;
-        self.view.panes[other].kind = match words.first().copied() {
-            Some("outline") => PaneKind::Outline,
-            Some("links") => PaneKind::Links,
-            Some("suggestions") => PaneKind::Suggestions,
-            _ => return Err("pane (shows) outline, links, or suggestions".into()),
-        };
-        self.view.panes[other].cursor = target;
-        self.write_view("pane", json!({}));
-        Ok(())
-    }
-
-    pub(crate) fn cmd_fold(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        self.fold_unfold("fold", words, target)
-    }
-
-    pub(crate) fn cmd_unfold(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        self.fold_unfold("unfold", words, target)
-    }
-
-    fn fold_unfold(&mut self, name: &str, _: &[&str], target: u64) -> Result<(), String> {
-        if name == "fold" {
-            self.view.folded.insert(target);
-        } else {
-            self.view.folded.remove(&target);
-        }
-        self.write_view("fold", json!({}));
-        Ok(())
-    }
-
     pub(crate) fn cmd_undo(&mut self, _: &[&str], _: u64) -> Result<(), String> {
         let Some(t) = self.content_tip(self.tip).filter(|t| *t > 1) else {
             return Err("nothing to undo on this branch".into());
@@ -2208,147 +2188,6 @@ impl App {
             target: t,
             dependents,
         };
-        Ok(())
-    }
-
-    pub(crate) fn cmd_delete(&mut self, _: &[&str], target: u64) -> Result<(), String> {
-        if self.view.scope == ScopeLevel::Word {
-            let text = self.text_of(target);
-            let (a, b) = word_at(&text, self.view.pos);
-            let mut t = text.clone();
-            t.drain(a..b);
-            self.view.pos = a;
-            self.view_dirty = true;
-            self.write_text(target, &t)?;
-        } else {
-            self.write_here("edit", json!({"op": "delete", "item": target}))?;
-        }
-        Ok(())
-    }
-
-    pub(crate) fn cmd_indent(&mut self, _: &[&str], target: u64) -> Result<(), String> {
-        let p = self.outline.parent(target).unwrap_or(TOP);
-        let sibs = self.outline.children(p).to_vec();
-        let i = sibs.iter().position(|x| *x == target).unwrap_or(0);
-        if i == 0 {
-            return Err("the first item of a list cannot be indented".into());
-        }
-        let under = sibs[i - 1];
-        let after = self.outline.children(under).last().copied();
-        self.write_here(
-            "edit",
-            json!({"op": "move", "item": target, "under": under, "after": after}),
-        )?;
-        if self.view.folded.remove(&under) {
-            self.view_dirty = true;
-        }
-        Ok(())
-    }
-
-    pub(crate) fn cmd_outdent(&mut self, _: &[&str], target: u64) -> Result<(), String> {
-        let p = self.outline.parent(target).unwrap_or(TOP);
-        if p == TOP {
-            return Err("a top-level item cannot be outdented".into());
-        }
-        let gp = self.outline.parent(p).unwrap_or(TOP);
-        self.write_here(
-            "edit",
-            json!({"op": "move", "item": target, "under": gp, "after": p}),
-        )?;
-        Ok(())
-    }
-
-    pub(crate) fn cmd_move(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        let to = self
-            .addresses(words, 1)
-            .ok_or("move (after) an item: a number, a name, or the start of its text")?[0];
-        if to == target || self.outline.in_order().contains(&to) && self.is_in_branch(to, target) {
-            return Err("an item cannot move into its own branch".into());
-        }
-        let under = self.outline.parent(to).unwrap_or(TOP);
-        self.write_here(
-            "edit",
-            json!({"op": "move", "item": target, "under": under, "after": to}),
-        )?;
-        Ok(())
-    }
-
-    pub(crate) fn cmd_copy(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        let to = self.addresses(words, 1).ok_or("copy (after) an item")?[0];
-        let text = self.outline.text(target);
-        let n = text.chars().count();
-        let under = self.outline.parent(to).unwrap_or(TOP);
-        self.write_here(
-            "edit",
-            json!({"op": "create", "under": under, "after": to, "add": text, "spans": [[0, 0, n]]}),
-        )?;
-        Ok(())
-    }
-
-    pub(crate) fn cmd_transclude(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        let from = self
-            .addresses(words, 1)
-            .ok_or("transclude (from) an item")?[0];
-        let spans = self.outline.items[&from].spans.clone();
-        let under = self.outline.parent(target).unwrap_or(TOP);
-        let e = self.write_here("edit", json!({"op": "create", "under": under, "after": target, "add": "", "spans": span_json(&spans)}))?;
-        self.set_cursor(e.seq);
-        self.write_view("move", json!({}));
-        Ok(())
-    }
-
-    pub(crate) fn cmd_link(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        let (addr_words, kind) = match words.iter().position(|w| *w == "as") {
-            Some(i) => (&words[..i], words.get(i + 1).copied().unwrap_or("link")),
-            None => (words, "link"),
-        };
-        let ends = self
-            .addresses(addr_words, 2)
-            .or_else(|| self.addresses(addr_words, 1).map(|t| vec![target, t[0]]))
-            .ok_or("link (from) an item (to) an item, (as) a type")?;
-        let fact = format::terms::Term::Compound(
-            kind.into(),
-            vec![
-                format::terms::Term::Int(ends[0] as i64),
-                format::terms::Term::Int(ends[1] as i64),
-            ],
-        );
-        let fact = format::terms::encode(&fact).map_err(|e| e.0)?;
-        self.write_here(
-            "link",
-            json!({"from": ends[0], "to": ends[1], "type": kind, "facts": [fact]}),
-        )?;
-        self.message = format!(
-            "linked {} to {} as {kind}",
-            self.outline.number(ends[0]),
-            self.outline.number(ends[1])
-        );
-        Ok(())
-    }
-
-    pub(crate) fn cmd_name(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        let n = words.join(" ");
-        if n.is_empty() {
-            return Err("name (as) a word".into());
-        }
-        self.write_here("name", json!({"name": n, "item": target}))?;
-        Ok(())
-    }
-
-    pub(crate) fn cmd_follow(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        let k: usize = words.first().and_then(|w| w.parse().ok()).unwrap_or(1);
-        let (out, into) = self.outline.links_of(target);
-        let ends: Vec<u64> = out
-            .iter()
-            .map(|l| l.to)
-            .chain(into.iter().map(|l| l.from))
-            .collect();
-        let to = *ends
-            .get(k.wrapping_sub(1))
-            .ok_or(format!("the target has {} links", ends.len()))?;
-        self.unfold_to(to);
-        self.set_cursor(to);
-        self.write_view("follow", json!({"to": to}));
         Ok(())
     }
 
@@ -2791,17 +2630,6 @@ impl App {
         Ok(())
     }
 
-    fn is_in_branch(&self, id: u64, top: u64) -> bool {
-        let mut at = Some(id);
-        while let Some(x) = at {
-            if x == top {
-                return true;
-            }
-            at = self.outline.parent(x);
-        }
-        false
-    }
-
     /// The last entry on the path that changed content: what undo undoes.
     fn content_tip(&self, from: u64) -> Option<u64> {
         let mut at = Some(from);
@@ -2930,7 +2758,7 @@ fn functor_of(t: &Term) -> String {
 }
 
 /// The word around a text position: [start, end).
-fn word_at(text: &[char], pos: usize) -> (usize, usize) {
+pub(crate) fn word_at(text: &[char], pos: usize) -> (usize, usize) {
     let pos = pos.min(text.len());
     let mut a = pos;
     while a > 0 && !text[a - 1].is_whitespace() {
