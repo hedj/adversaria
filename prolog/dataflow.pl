@@ -24,6 +24,9 @@ journal seq in fact_ref/3; a claim is the fact claims(Source, P).
 */
 
 :- dynamic([node_def/2, fact_ref/3], [incremental(true)]).
+%   Filled by server.pl once it is loaded: the predicates that are not the
+%   user's facts.
+:- dynamic(server_predicate/1).
 :- table node/2 as (incremental, shared).
 
 node(Id, V) :-
@@ -50,7 +53,7 @@ holds_all((A, B), P) :- !,
     holds_all(A, P1),
     holds_all(B, P2),
     append(P1, P2, P).
-holds_all(G, []) :- builtin(G), !, call(G).
+holds_all(G, []) :- builtin(G), !, safe_call(G).
 holds_all(G, [Who]) :- holds(G, Who).
 
 %   Provenance names the fact too: belief(Seq, Fact), claim(Source, Seq,
@@ -62,11 +65,86 @@ holds(G, claim(Src, S, G)) :- fact_ref(S, claims(Src, G), _).
 holds(G, claim("Wikidata", S, G)) :- wd_import(S, _), wd_claim(G).
 
 beliefs((A, B)) :- !, beliefs(A), beliefs(B).
-beliefs(G) :- builtin(G), !, call(G).
+beliefs(G) :- builtin(G), !, safe_call(G).
 beliefs(G) :- fact_ref(_, G, _).
 beliefs(G) :- fact_ref(_, rule_def(_, G, B), _), beliefs(B).
 
 builtin(G) :- predicate_property(system:G, built_in).
+
+		 /*******************************
+		 *     WHAT A DEFINITION MAY CALL *
+		 *******************************/
+
+%   A constraint's body, a derived value's goal and a rule's body are read
+%   by the reasoner, so they must only read: built-ins are called, and
+%   shell/1, open/3, assertz/1 and halt/0 are built-ins too. A built-in is
+%   called only if it is on the list below (comparison, arithmetic, type
+%   tests, term, atom and string operations, sorting), or is negation,
+%   disjunction, if-then-else, findall/3,4 or forall/2 whose subgoals all
+%   pass the same test. Inside those, a goal that is not a built-in must be
+%   one of the user's fact predicates, not one of this server's own.
+
+%!  safe_call(:Goal) is nondet.
+%   call(Goal), if vet/1 allows it; else a permission error naming what
+%   is not allowed.
+safe_call(G) :- vet(G), call(G).
+
+%!  vet(+Goal) is det.
+%   Throw error(permission_error(call, not_allowed, What), _) unless Goal
+%   may be called by the reasoner.
+vet(G) :- var(G), !, not_allowed(variable_goal).
+vet((A, B)) :- !, vet(A), vet(B).
+vet((A ; B)) :- !, vet(A), vet(B).
+vet((A -> B)) :- !, vet(A), vet(B).
+vet((A *-> B)) :- !, vet(A), vet(B).
+vet(\+ A) :- !, vet(A).
+vet(findall(_, G, _)) :- !, vet(G).
+vet(findall(_, G, _, _)) :- !, vet(G).
+vet(forall(C, A)) :- !, vet(C), vet(A).
+vet(G) :- builtin(G), !, functor(G, N, A), ( safe_builtin(N, A) -> true ; not_allowed(N/A) ).
+vet(G) :- callable(G), \+ own_predicate(G), !.
+vet(G) :- callable(G), !, functor(G, N, A), not_allowed(N/A).
+vet(G) :- not_allowed(G).
+
+not_allowed(What) :- throw(error(permission_error(call, not_allowed, What), _)).
+
+%   A predicate this server's files define (node/2, load_wikidata/2,
+%   fact_ref/3, ...) or a library's: not the user's facts.
+own_predicate(G) :- functor(G, N, A), server_predicate(N/A), !.
+own_predicate(G) :- predicate_property(user:G, file(_)), !.
+own_predicate(G) :- predicate_property(user:G, imported_from(_)).
+
+%!  check_definition(+Body) is det.
+%   For the memex, before it keeps a constraint or derived value: vet/1,
+%   so a refused definition never enters the journal.
+check_definition(Body) :- vet(Body).
+
+safe_builtin(N, A) :- safe_builtin_(N, A), !.
+safe_builtin_(=, 2).      safe_builtin_(\=, 2).     safe_builtin_(==, 2).
+safe_builtin_(\==, 2).    safe_builtin_(@<, 2).      safe_builtin_(@>, 2).
+safe_builtin_(@=<, 2).    safe_builtin_(@>=, 2).     safe_builtin_(compare, 3).
+safe_builtin_(=@=, 2).    safe_builtin_(\=@=, 2).
+safe_builtin_(is, 2).     safe_builtin_(=:=, 2).     safe_builtin_(=\=, 2).
+safe_builtin_(<, 2).      safe_builtin_(>, 2).       safe_builtin_(=<, 2).
+safe_builtin_(>=, 2).     safe_builtin_(succ, 2).    safe_builtin_(plus, 3).
+safe_builtin_(between, 3).
+safe_builtin_(true, 0).   safe_builtin_(fail, 0).    safe_builtin_(false, 0).
+safe_builtin_(var, 1).    safe_builtin_(nonvar, 1).  safe_builtin_(atom, 1).
+safe_builtin_(number, 1). safe_builtin_(integer, 1). safe_builtin_(float, 1).
+safe_builtin_(string, 1). safe_builtin_(atomic, 1).  safe_builtin_(compound, 1).
+safe_builtin_(callable, 1). safe_builtin_(is_list, 1). safe_builtin_(ground, 1).
+safe_builtin_(functor, 3). safe_builtin_(arg, 3).    safe_builtin_(=.., 2).
+safe_builtin_(copy_term, 2).
+safe_builtin_(atom_length, 2). safe_builtin_(atom_concat, 3). safe_builtin_(sub_atom, 5).
+safe_builtin_(atom_chars, 2).  safe_builtin_(atom_codes, 2).  safe_builtin_(char_code, 2).
+safe_builtin_(atom_number, 2). safe_builtin_(atom_string, 2). safe_builtin_(number_codes, 2).
+safe_builtin_(number_string, 2). safe_builtin_(upcase_atom, 2). safe_builtin_(downcase_atom, 2).
+safe_builtin_(atomic_list_concat, 2). safe_builtin_(atomic_list_concat, 3).
+safe_builtin_(string_concat, 3). safe_builtin_(string_length, 2). safe_builtin_(sub_string, 5).
+safe_builtin_(string_chars, 2). safe_builtin_(string_codes, 2). safe_builtin_(string_code, 3).
+safe_builtin_(string_lower, 2). safe_builtin_(string_upper, 2). safe_builtin_(split_string, 4).
+safe_builtin_(length, 2). safe_builtin_(msort, 2). safe_builtin_(sort, 2).
+safe_builtin_(sort, 4).   safe_builtin_(keysort, 2). safe_builtin_(memberchk, 2).
 
 %!  plant_check(+Vars, +Body, -Result) is det.
 %   Try a constraint against a planted violation (docs/design.md § Testing
@@ -83,7 +161,7 @@ plant_check(Vars, Body, Result) :-
         (   permutation(Ns, P),
             copy_term(Vs-B, P-Ground),
             literals(Ground, Facts, Builtins),
-            maplist(call, Builtins),
+            maplist(safe_call, Builtins),
             planted_holds(Ground, Facts)
         ->  Result = fires(Facts)
         ;   Result = broken(no_planted_values_make_the_body_true)
@@ -98,7 +176,7 @@ literals(G, [G], []).
 
 %   Run the body with the planted facts as the only beliefs.
 planted_holds((A, B), Fs) :- !, planted_holds(A, Fs), planted_holds(B, Fs).
-planted_holds(G, _) :- builtin(G), !, call(G).
+planted_holds(G, _) :- builtin(G), !, safe_call(G).
 planted_holds(G, Fs) :- memberchk(G, Fs).
 
 

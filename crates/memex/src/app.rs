@@ -2615,6 +2615,12 @@ impl App {
                 if !matches!(t, Term::Atom(_) | Term::Compound(..)) || !variables(&t).is_empty() {
                     return Err("a fact is an atom or a compound term, with no variables".into());
                 }
+                if reserved(&t) {
+                    return Err(format!(
+                        "{} is reserved: definitions are made by constraint, derive and accept",
+                        functor_of(&t)
+                    ));
+                }
                 let fact = match &source {
                     Some(src) => Term::Compound("claims".into(), vec![Term::Str(src.clone()), t]),
                     None => t,
@@ -2643,6 +2649,9 @@ impl App {
                     }
                     _ => return Err("a constraint is a denial: false :- body.".into()),
                 };
+                self.engine(0)?
+                    .check_definition(&body)
+                    .map_err(|w| format!("constraint not kept: {w}"))?;
                 let vars = reason::make_list(variables(&body).into_iter().map(Term::Var).collect());
                 // Tried against a planted violation before it is kept.
                 let planted = self
@@ -2682,6 +2691,9 @@ impl App {
                     .engine(0)?
                     .parse(goal.trim().trim_end_matches('.'))
                     .map_err(|e| format!("not a Prolog goal: {e}"))?;
+                self.engine(0)?
+                    .check_definition(&g)
+                    .map_err(|w| format!("not derived: {w}"))?;
                 let vars = reason::make_list(variables(&g).into_iter().map(Term::Var).collect());
                 let def = Term::Compound(
                     "node_def".into(),
@@ -2705,6 +2717,12 @@ impl App {
                 let claims = self.claims_of(target);
                 if claims.is_empty() {
                     return Err("the target states no claim to adopt".into());
+                }
+                if let Some((_, _, p)) = claims.iter().find(|(_, _, p)| reserved(p)) {
+                    return Err(format!(
+                        "not adopted: the claim is a {}, which is reserved for constraint, derive and accept",
+                        functor_of(p)
+                    ));
                 }
                 for (seq, src, p) in claims {
                     let f = terms::encode(&p).map_err(|e| e.0)?;
@@ -2872,6 +2890,20 @@ pub fn encode_doi(doi: &str) -> String {
             _ => format!("%{b:02X}"),
         })
         .collect()
+}
+
+/// Facts only constraint, derive and accept may write: definitions the
+/// reasoner runs, checked by those commands (prolog/dataflow.pl, vet/1).
+fn reserved(t: &Term) -> bool {
+    matches!(t, Term::Compound(f, a) if (f == "node_def" && a.len() == 2) || (f == "rule_def" && a.len() == 3))
+}
+
+fn functor_of(t: &Term) -> String {
+    match t {
+        Term::Compound(f, a) => format!("{f}/{}", a.len()),
+        Term::Atom(a) => format!("{a}/0"),
+        _ => "term".into(),
+    }
 }
 
 fn find_command(w: &str) -> Option<&'static str> {

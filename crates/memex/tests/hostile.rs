@@ -258,3 +258,113 @@ fn a_wikidata_file_holds_only_ground_facts_of_its_three_shapes() {
     app.evaluate().unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// A file a planted goal would create; the tests check it never appears.
+fn marker(dir: &Path) -> (PathBuf, String) {
+    let m = dir.join("RAN");
+    let s = m.display().to_string();
+    (m, s)
+}
+
+#[test]
+fn a_definition_cannot_run_a_side_effect() {
+    // Constraint bodies and derived goals call built-ins; shell/1 is one.
+    // Catches a definition, typed or arriving as a believed fact, that runs
+    // a command, writes a file or stops the reasoner.
+    let dir = temp("defs");
+    let (m, ms) = marker(&dir);
+    let mut app = open(&dir);
+    typ(&mut app, "Buran.");
+    app.flush();
+    command(&mut app, "fact date(buran_flight, 1988)");
+    let cases = [
+        format!("constraint c1: false :- date(E, Y), shell('touch {ms}')."),
+        format!("constraint c2: false :- date(E, Y), \\+ shell('touch {ms}')."),
+        format!("constraint c3: false :- date(E, Y), (Y > 0 ; shell('touch {ms}'))."),
+        format!("constraint c4: false :- date(E, Y), findall(x, shell('touch {ms}'), _)."),
+        "constraint c5: false :- date(E, Y), halt.".to_string(),
+        "constraint c6: false :- date(E, Y), assertz(date(x, 1)).".to_string(),
+        "constraint c7: false :- date(E, Y), G = halt, call(G).".to_string(),
+        format!("derive x {{N}} where date(buran_flight, N), shell('touch {ms}')"),
+        format!("fact node_def(99, query([], shell('touch {ms}')))"),
+        format!("fact rule_def(r, p(1), shell('touch {ms}'))"),
+        format!("claim node_def(98, query([], shell('touch {ms}'))) from a document"),
+    ];
+    for line in &cases {
+        let msg = command(&mut app, line);
+        assert!(
+            msg.contains("not allowed") || msg.contains("reserved"),
+            "{line}: {msg}"
+        );
+        assert!(!m.exists(), "{line} ran a command");
+    }
+    // What constraints are for still works: comparison, arithmetic,
+    // negation and disjunction over facts.
+    let ok = command(
+        &mut app,
+        "constraint late: false :- date(E, Y), \\+ (Y < 1900 ; Y > 2100), Z is Y mod 4, Z =:= 1.",
+    );
+    assert!(ok.contains("kept"), "{ok}");
+    app.evaluate().unwrap();
+    assert!(!m.exists());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn the_reasoner_runs_no_side_effect_however_a_definition_arrives() {
+    // Past the memex's own checks: facts sent straight to the server, as a
+    // journal written by something else would be replayed. Catches a server
+    // that stores a clause, or a reasoner that calls any built-in.
+    let dir = temp("server");
+    let (m, ms) = marker(&dir);
+    let mut p = memex::prolog::Prolog::start().unwrap();
+    let c = |f: &str, a: Vec<format::terms::Term>| format::terms::Term::Compound(f.into(), a);
+    let s = |x: &str| format::terms::Term::Atom(x.into());
+    let shell = c("shell", vec![s(&format!("touch {ms}"))]);
+    // A definition whose goal runs a command: stored (node_def is how
+    // definitions arrive), but evaluating it is refused.
+    p.assert_fact(
+        &c(
+            "node_def",
+            vec![
+                format::terms::Term::Int(9),
+                c("query", vec![s("[]"), shell.clone()]),
+            ],
+        ),
+        1,
+    )
+    .unwrap();
+    let r = p.all(
+        &c(
+            "node",
+            vec![format::terms::Term::Int(9), format::terms::Term::Var(0)],
+        ),
+        1,
+    );
+    assert!(format!("{r:?}").contains("not_allowed"), "{r:?}");
+    assert!(!m.exists(), "evaluating the definition ran the command");
+    // A clause, a module-qualified fact, and the server's own predicates
+    // are refused outright.
+    for (i, f) in [
+        c(":-", vec![s("p"), shell.clone()]),
+        c(
+            ":",
+            vec![s("lists"), c("append", vec![s("a"), s("b"), s("c")])],
+        ),
+        c(
+            "fact_ref",
+            vec![format::terms::Term::Int(1), s("x"), s("y")],
+        ),
+        c("wd", vec![s("Q1"), s("P1"), s("x")]),
+        c("query_engine", vec![s("a"), s("b")]),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let r = p.assert_fact(&f, 10 + i as u64);
+        assert!(format!("{r:?}").contains("reserved"), "{f:?}: {r:?}");
+    }
+    p.all(&s("p"), 1).ok();
+    assert!(!m.exists());
+    std::fs::remove_dir_all(&dir).unwrap();
+}

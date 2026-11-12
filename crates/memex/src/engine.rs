@@ -174,6 +174,38 @@ impl Engine {
         Ok(())
     }
 
+    /// Whether a constraint's body or a derived goal calls only what the
+    /// reasoner allows (prolog/dataflow.pl, vet/1). Err says what is not
+    /// allowed, in words.
+    pub fn check_definition(&mut self, body: &Term) -> Result<(), String> {
+        match self.p.all(&c("check_definition", vec![body.clone()]), 1) {
+            Ok(_) => Ok(()),
+            Err(Error::Prolog(Term::Compound(e, a)))
+                if e == "error"
+                    && matches!(&a[0], Term::Compound(p, pa) if p == "permission_error" && pa.len() == 3 && pa[1] == Term::Atom("not_allowed".into())) =>
+            {
+                let Term::Compound(_, pa) = &a[0] else {
+                    unreachable!()
+                };
+                let what = match &pa[2] {
+                    Term::Compound(s, na) if s == "/" && na.len() == 2 => {
+                        format!(
+                            "{}/{}",
+                            crate::reason::show(&na[0]),
+                            crate::reason::show(&na[1])
+                        )
+                    }
+                    Term::Atom(v) if v == "variable_goal" => "a goal held in a variable".into(),
+                    other => crate::reason::show(other),
+                };
+                Err(format!(
+                    "{what} is not allowed: a definition may only read facts, compare and compute (docs/guide.md, § 7)"
+                ))
+            }
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
     /// Check a file of Wikidata facts as the loader reads it, keeping
     /// nothing: Err names the first term that is not one.
     pub fn check_wikidata(&mut self, file: &std::path::Path) -> Result<(), Error> {

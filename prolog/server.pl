@@ -26,6 +26,10 @@ the server sends ATOM_IS for it, with the same request number.
 % so tabled nodes that read it are recomputed when it changes.
 :- consult(dataflow).
 
+%   Every predicate the user module has once the server is loaded is the
+%   server's or a library's, never the user's facts (see storable/1).
+:- forall(current_predicate(user:PI), assertz(server_predicate(PI))).
+
 :- initialization(main, main).
 
 main :-
@@ -96,7 +100,25 @@ memex_fact(Seq, Fact) :- fact_ref(Seq, Fact, _).
 
 fact_seq(Fact, Seq) :-
     (   callable(Fact) -> true ; throw(protocol_error(fact_not_callable)) ),
+    (   storable(Fact) -> true ; functor(Fact, N, A), throw(protocol_error(reserved(N/A))) ),
     (   integer(Seq), Seq >= 1 -> true ; throw(protocol_error(seq_not_positive)) ).
+
+%   A fact may be stored if it is a plain fact of the user's own: not a
+%   clause (Head :- Body would be a rule, run when Head is called), not
+%   module-qualified, and not of a predicate this server, a library or the
+%   system defines (fact_ref/3, wd/3, append/3, ...). node_def/2 is the one
+%   predicate of the server's that the memex writes: definitions arrive as
+%   facts, and dataflow.pl's vet/1 decides what they may call.
+storable(F) :- F = node_def(_, _), !.
+storable(F) :- functor(F, N, A), memberchk(N/A, [(:-)/2, (:-)/1, (?-)/1, (-->)/2, (:)/2]), !, fail.
+storable(F) :- functor(F, N, A), server_predicate(N/A), !, fail.
+storable(F) :-
+    (   predicate_property(user:F, defined)
+    ->  predicate_property(user:F, dynamic),
+        \+ predicate_property(user:F, file(_)),
+        \+ predicate_property(user:F, imported_from(_))
+    ;   true
+    ).
 
 %   A fact's predicate is dynamic and incremental, so tabled queries over it
 %   are recomputed when it changes (docs/design.md § Dataflow).
