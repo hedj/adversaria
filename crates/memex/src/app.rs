@@ -2051,8 +2051,14 @@ impl App {
             let mut changed = Vec::new();
             for input in b["prov"]["used"].as_array().cloned().unwrap_or_default() {
                 let p = input["path"].as_str().unwrap_or("");
-                let now = std::fs::read(base.join(p))
+                // Only a regular file is read: a pipe would block forever,
+                // and a device such as /dev/zero never ends. Anything else
+                // counts as changed.
+                let path = base.join(p);
+                let now = std::fs::metadata(&path)
                     .ok()
+                    .filter(|m| m.is_file())
+                    .and_then(|_| std::fs::read(&path).ok())
                     .map(|x| format::record::sha256_hex(&x));
                 if now.as_deref() != input["sha256"].as_str() {
                     changed.push(p.to_string());

@@ -368,3 +368,49 @@ fn the_reasoner_runs_no_side_effect_however_a_definition_arrives() {
     assert!(!m.exists());
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_results_file_cannot_make_the_memex_read_forever() {
+    // The stale-result check reads each input the results file names, on
+    // every evaluation. Catches an input such as a named pipe (blocks
+    // forever) or /dev/zero (reads until memory runs out) being read.
+    let dir = temp("results");
+    let fifo = dir.join("pipe");
+    assert!(
+        std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let results = dir.join("results.json");
+    std::fs::write(
+        &results,
+        serde_json::json!({
+            "format": "memex-results", "version": 1,
+            "results": [{"name": "x", "value": 1.0, "uncertainty": 0.1, "unit": "s"}],
+            "prov": {"activity": {"script": "a.py", "commit": "abc"},
+                     "used": [{"path": fifo.display().to_string(), "sha256": "00"},
+                              {"path": "/dev/zero", "sha256": "00"}]}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let journal = dir.join("journal");
+    let (tx, rx) = std::sync::mpsc::channel();
+    let res = results.clone();
+    std::thread::spawn(move || {
+        let mut app = App::open(&journal).unwrap();
+        app.set_durable(false);
+        let m = command(&mut app, &format!("import results {}", res.display()));
+        let stale = app.stale_results();
+        let _ = tx.send((m, stale));
+    });
+    let (m, stale) = rx
+        .recv_timeout(std::time::Duration::from_secs(20))
+        .expect("the memex was still reading after 20 s");
+    assert!(m.starts_with("imported the results"), "{m}");
+    let marked: Vec<String> = stale.values().flatten().cloned().collect();
+    assert!(marked.iter().any(|p| p.ends_with("pipe")), "{marked:?}");
+    assert!(marked.iter().any(|p| p == "/dev/zero"), "{marked:?}");
+}
