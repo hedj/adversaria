@@ -2,8 +2,8 @@
 
 How the documentation and the code are to be arranged so that no part asks
 a reader to hold more than four things in mind at once. Proposed
-12 November 2026; the measure, the baseline and one module are built, the
-rest is not.
+12 November 2026. Built so far: the measure, the baseline, the
+documentation's structure and one module of code.
 
 ## The measure
 
@@ -43,6 +43,19 @@ restructured (commit 33d19b4):
 | Prolog predicates | 6 of 93 | 10, `term_cells/6` | |
 | Markdown sections | 20 of 158 | 12 | 10 with over 4 children; 22 refer forward |
 
+After the documents were restructured (commit 129f016):
+
+| Units | Over 4 | Largest | Other |
+| --- | --- | --- | --- |
+| Markdown sections | 0 of 235; 1 counting each term apart | 4 | none with over 4 children; 16 refer forward |
+
+The one section over 4 counting each term apart is the log's Milestone 1
+entry (7); its terms come from sections that each define at most four,
+and count as one chunk per section. The 16 forward references are listed
+at the end of `make interactivity`; 8 are in the guide (6 of them in part 2,
+where the screen, keys and commands each mention the others), 4 in the
+design and 4 in the plan.
+
 Most of the load is in three files: `app.rs` (59 functions over 4),
 `ui.rs` (23) and `view.rs` (13). The documents' widest nodes are the
 design (25 sections at one level), the tutorial (21 steps and parts) and
@@ -50,8 +63,9 @@ the guide (16 sections).
 
 ## The documentation's structure
 
-A tree of four at every level, read top down. A section cites only its
-ancestors or what comes before it, so reading in order needs no cycle.
+A tree of four at every level, read top down. The aim is that a section
+cites only its ancestors or what comes before it, so that reading in
+order needs no cycle; 16 sections do not yet meet it (above).
 
 ```
 README
@@ -69,6 +83,7 @@ README
 │   ├── Purpose: purpose, user story, glossary, decisions
 │   ├── The record: journal, format, seals, input that could act
 │   ├── Reasoning: dataflow, claims and beliefs, testing claims, the translator
+│   │   (docs/translator.md: aims, the model, conversation, reasoning with it)
 │   └── Interface: outline model, quasimodes, views and diagrams, the PC prototype
 └── Record: plan, log, this document
     ├── The plan: stage A milestones, in four groups
@@ -76,10 +91,10 @@ README
     └── Structure: this document
 ```
 
-Two kinds of list are left long, as reference to look up, not to hold:
-the table of commands (one row per command, alike in form) and the
-Decisions table. Each still sits under a node of at most four, and is cited
-by name, not read whole.
+Tables are not divided by the measure, which counts sections, not rows.
+The table of commands and the Decisions table are each split into four
+tables by topic; their rows, alike in form, are reference to look up, not
+to hold.
 
 ## The code's structure
 
