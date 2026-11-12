@@ -85,9 +85,27 @@ builtin(G) :- predicate_property(system:G, built_in).
 %   one of the user's fact predicates, not one of this server's own.
 
 %!  safe_call(:Goal) is nondet.
-%   call(Goal), if vet/1 allows it; else a permission error naming what
-%   is not allowed.
-safe_call(G) :- vet(G), call(G).
+%   Goal, if vet/1 allows it; else a permission error naming what is not
+%   allowed. Negation, disjunction, if-then-else, findall and forall are
+%   interpreted here, their subgoals proved by beliefs/1, so a rule works
+%   inside them as it does outside (calling a rule's head directly would
+%   find no such predicate: rules are rule_def facts).
+safe_call(G) :- vet(G), control(G).
+
+control((C -> T ; E)) :- !, ( beliefs(C) -> beliefs(T) ; beliefs(E) ).
+control((C *-> T ; E)) :- !, ( beliefs(C) *-> beliefs(T) ; beliefs(E) ).
+control((A ; B)) :- !, ( beliefs(A) ; beliefs(B) ).
+control((C -> T)) :- !, ( beliefs(C) -> beliefs(T) ).
+control((C *-> T)) :- !, ( beliefs(C) *-> beliefs(T) ).
+control(\+ A) :- !, \+ beliefs(A).
+control(findall(T, G, L)) :- !, findall(T, beliefs(G), L).
+control(findall(T, G, L, R)) :- !, findall(T, beliefs(G), L, R).
+control(forall(C, A)) :- !, forall(beliefs(C), beliefs(A)).
+control(G) :- call(G).
+
+%   The planted check calls built-ins directly: it tests a constraint
+%   against planted facts alone, not against the world's beliefs.
+planted_call(G) :- vet(G), call(G).
 
 %!  vet(+Goal) is det.
 %   Throw error(permission_error(call, not_allowed, What), _) unless Goal
@@ -210,7 +228,7 @@ plant_check(Vars, Body, Result) :-
         (   permutation(Ns, P),
             copy_term(Vs-B, P-Ground),
             literals(Ground, Facts, Builtins),
-            maplist(safe_call, Builtins),
+            maplist(planted_call, Builtins),
             planted_holds(Ground, Facts)
         ->  Result = fires(Facts)
         ;   Result = broken(no_planted_values_make_the_body_true)
@@ -225,7 +243,7 @@ literals(G, [G], []).
 
 %   Run the body with the planted facts as the only beliefs.
 planted_holds((A, B), Fs) :- !, planted_holds(A, Fs), planted_holds(B, Fs).
-planted_holds(G, _) :- builtin(G), !, safe_call(G).
+planted_holds(G, _) :- builtin(G), !, planted_call(G).
 planted_holds(G, Fs) :- memberchk(G, Fs).
 
 

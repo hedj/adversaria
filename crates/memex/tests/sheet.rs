@@ -249,3 +249,28 @@ fn a_rule_is_written_once_and_used_everywhere() {
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn rules_work_under_negation_disjunction_and_findall() {
+    // Catches control constructs that call a rule's head directly, where
+    // only facts are defined, so a rule inside \+, ; or findall raises an
+    // unknown-procedure error or never holds.
+    let dir = temp("rule-control");
+    let mut app = budget(&dir);
+    command(&mut app, "rule big(C) :- cell(C, V), V >= 1000.");
+    tap(&mut app, Key::Enter);
+    typ(&mut app, "small");
+    command(
+        &mut app,
+        "derive Small: {N} where findall(C, (cell(C, _), \\+ big(C)), L), length(L, N)",
+    );
+    shows(&app, "Small: 1 [derived]");
+    tap(&mut app, Key::Enter);
+    typ(&mut app, "either");
+    command(
+        &mut app,
+        "derive Either: {N} where findall(C, (big(C) ; C = none), L), length(L, N)",
+    );
+    shows(&app, "Either: 3 [derived]");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
