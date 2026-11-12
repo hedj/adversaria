@@ -94,12 +94,1485 @@ pub fn channels(mark: &Term) -> Result<(&'static str, Channels), String> {
     Ok((kind, out))
 }
 
+// ---------------------------------------------------------------------
+// Drawing. A view's marks become a figure of characters: a plot (dot, bar,
+// line, rule, text, tick, span), a grid (cell) or a graph (node, edge).
+// The marks choose: any node or edge makes a graph; cells alone, a grid;
+// anything else, a plot.
+
+/// A mark to draw: the term, the seqs of the facts it rests on, and
+/// whether any of them is in a violation (drawn loudly).
+#[derive(Debug, Clone)]
+pub struct Input {
+    pub mark: Term,
+    pub prov: Vec<u64>,
+    pub loud: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ink {
+    Plain,
+    Dim,
+    Loud,
+}
+
+/// A rectangle of the figure and the facts drawn there.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Hit {
+    pub x: usize,
+    pub y: usize,
+    pub w: usize,
+    pub h: usize,
+    pub prov: Vec<u64>,
+}
+
+/// What a view draws: rows of characters, where each mark landed, and
+/// notes (legends, and what could not be drawn).
+#[derive(Debug, Clone, Default)]
+pub struct Figure {
+    pub rows: Vec<Vec<(char, Ink)>>,
+    pub hits: Vec<Hit>,
+    pub notes: Vec<String>,
+}
+
+impl Figure {
+    /// The rows as plain text, trailing spaces removed.
+    pub fn text(&self) -> Vec<String> {
+        self.rows
+            .iter()
+            .map(|r| {
+                r.iter()
+                    .map(|(c, _)| *c)
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
+            .collect()
+    }
+}
+
+/// A value on a channel.
+#[derive(Debug, Clone, PartialEq)]
+enum V {
+    Num(f64),
+    /// A date, as days since 1970-01-01, and its text.
+    Time(f64, String),
+    Cat(String),
+}
+
+impl V {
+    fn of(t: &Term) -> V {
+        match t {
+            Term::Int(n) => V::Num(*n as f64),
+            Term::Float(x) => V::Num(*x),
+            Term::Compound(f, a) if f == "date" && a.len() == 3 => match (&a[0], &a[1], &a[2]) {
+                (Term::Int(y), Term::Int(m), Term::Int(d)) => {
+                    V::Time(days(*y, *m, *d) as f64, format!("{y}-{m:02}-{d:02}"))
+                }
+                _ => V::Cat(label(t)),
+            },
+            _ => V::Cat(label(t)),
+        }
+    }
+    fn num(&self) -> Option<f64> {
+        match self {
+            V::Num(x) | V::Time(x, _) => Some(*x),
+            V::Cat(_) => None,
+        }
+    }
+    fn text(&self) -> String {
+        match self {
+            V::Num(x) => number(*x),
+            V::Time(_, s) | V::Cat(s) => s.clone(),
+        }
+    }
+}
+
+/// A term as a label: atoms and strings as they are, others as written.
+fn label(t: &Term) -> String {
+    match t {
+        Term::Atom(a) => a.clone(),
+        Term::Str(s) => s.clone(),
+        other => crate::reason::show(other),
+    }
+}
+
+fn number(x: f64) -> String {
+    if x.fract() == 0.0 && x.abs() < 1e15 {
+        format!("{}", x as i64)
+    } else {
+        let s = format!("{x:.2}");
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    }
+}
+
+/// Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant's
+/// days_from_civil).
+fn days(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
+}
+
+/// A parsed mark.
+struct M {
+    kind: &'static str,
+    ch: Vec<(String, V)>,
+    prov: Vec<u64>,
+    loud: bool,
+}
+
+impl M {
+    fn get(&self, c: &str) -> Option<&V> {
+        self.ch.iter().find(|(k, _)| k == c).map(|(_, v)| v)
+    }
+    fn ink(&self) -> Ink {
+        if self.loud { Ink::Loud } else { Ink::Plain }
+    }
+}
+
+/// Draw a view's marks in a space `width` wide and, for a plot, `height`
+/// high. A grid or graph takes the height it needs.
+pub fn render(inputs: &[Input], width: usize, height: usize) -> Figure {
+    let mut notes = Vec::new();
+    let mut ms: Vec<M> = Vec::new();
+    for i in inputs {
+        match channels(&i.mark) {
+            Ok((kind, ch)) => {
+                // Identical marks (a constant layer over many solutions) once.
+                let ch: Vec<(String, V)> = ch.into_iter().map(|(k, t)| (k, V::of(&t))).collect();
+                if let Some(m) = ms.iter_mut().find(|m| m.kind == kind && m.ch == ch) {
+                    m.loud |= i.loud;
+                    continue;
+                }
+                ms.push(M {
+                    kind,
+                    ch,
+                    prov: i.prov.clone(),
+                    loud: i.loud,
+                });
+            }
+            Err(e) => notes.push(e),
+        }
+    }
+    let width = width.max(8);
+    let mut fig = if ms.iter().any(|m| matches!(m.kind, "node" | "edge")) {
+        let others = ms
+            .iter()
+            .filter(|m| !matches!(m.kind, "node" | "edge"))
+            .count();
+        if others > 0 {
+            notes.push(format!(
+                "{others} marks not drawn: a graph draws only node and edge"
+            ));
+        }
+        graph(&ms)
+    } else if !ms.is_empty() && ms.iter().all(|m| m.kind == "cell") {
+        grid(&ms, width)
+    } else {
+        let cells = ms.iter().filter(|m| m.kind == "cell").count();
+        if cells > 0 {
+            notes.push(format!(
+                "{cells} cells not drawn: cells make a grid of their own"
+            ));
+        }
+        plot(&ms, width, height.max(4))
+    };
+    fig.notes.splice(0..0, notes);
+    fig
+}
+
+/// A drawing surface with line junctions merged into box-drawing
+/// characters.
+struct Canvas {
+    w: usize,
+    h: usize,
+    cells: Vec<Vec<(char, Ink)>>,
+    /// Line directions at each cell: up 1, down 2, left 4, right 8.
+    lines: Vec<Vec<(u8, Ink)>>,
+    hits: Vec<Hit>,
+}
+
+impl Canvas {
+    fn new(w: usize, h: usize) -> Canvas {
+        Canvas {
+            w,
+            h,
+            cells: vec![vec![(' ', Ink::Plain); w]; h],
+            lines: vec![vec![(0, Ink::Dim); w]; h],
+            hits: vec![],
+        }
+    }
+    fn put(&mut self, x: usize, y: usize, c: char, ink: Ink) {
+        if x < self.w && y < self.h {
+            self.cells[y][x] = (c, ink);
+        }
+    }
+    fn free(&self, x: usize, y: usize, n: usize) -> bool {
+        y < self.h
+            && x + n <= self.w
+            && (x..x + n).all(|i| self.cells[y][i].0 == ' ' && self.lines[y][i].0 == 0)
+    }
+    fn text(&mut self, x: usize, y: usize, s: &str, ink: Ink) {
+        for (i, c) in s.chars().enumerate() {
+            self.put(x + i, y, c, ink);
+        }
+    }
+    fn line(&mut self, x: usize, y: usize, bits: u8, ink: Ink) {
+        if x < self.w && y < self.h {
+            let (b, i) = self.lines[y][x];
+            self.lines[y][x] = (b | bits, if i == Ink::Loud { i } else { ink });
+        }
+    }
+    /// A horizontal line from x0 to x1 on row y.
+    fn hline(&mut self, x0: usize, x1: usize, y: usize, ink: Ink) {
+        let (a, b) = (x0.min(x1), x0.max(x1));
+        for x in a..=b {
+            let mut bits = 0;
+            if x > a {
+                bits |= 4;
+            }
+            if x < b {
+                bits |= 8;
+            }
+            self.line(x, y, bits, ink);
+        }
+    }
+    /// A vertical line from y0 to y1 at column x.
+    fn vline(&mut self, x: usize, y0: usize, y1: usize, ink: Ink) {
+        let (a, b) = (y0.min(y1), y0.max(y1));
+        for y in a..=b {
+            let mut bits = 0;
+            if y > a {
+                bits |= 1;
+            }
+            if y < b {
+                bits |= 2;
+            }
+            self.line(x, y, bits, ink);
+        }
+    }
+    fn hit(&mut self, x: usize, y: usize, w: usize, h: usize, prov: &[u64]) {
+        if !prov.is_empty() && w > 0 && h > 0 {
+            self.hits.push(Hit {
+                x,
+                y,
+                w,
+                h,
+                prov: prov.to_vec(),
+            });
+        }
+    }
+    fn finish(self, notes: Vec<String>) -> Figure {
+        let mut rows = self.cells;
+        for (y, row) in self.lines.iter().enumerate() {
+            for (x, (bits, ink)) in row.iter().enumerate() {
+                if *bits != 0 && rows[y][x].0 == ' ' {
+                    rows[y][x] = (junction(*bits), *ink);
+                }
+            }
+        }
+        Figure {
+            rows,
+            hits: self.hits,
+            notes,
+        }
+    }
+}
+
+fn junction(bits: u8) -> char {
+    match bits {
+        1..=3 => '│',
+        4 | 8 | 12 => '─',
+        10 => '┌',
+        6 => '┐',
+        9 => '└',
+        5 => '┘',
+        11 => '├',
+        7 => '┤',
+        14 => '┬',
+        13 => '┴',
+        _ => '┼',
+    }
+}
+
+fn truncate(s: &str, n: usize) -> String {
+    if s.chars().count() <= n {
+        s.to_string()
+    } else if n == 0 {
+        String::new()
+    } else {
+        let mut t: String = s.chars().take(n - 1).collect();
+        t.push('…');
+        t
+    }
+}
+
+// ---- plots ----------------------------------------------------------
+
+/// A scale: numbers (and dates) onto a line, or categories onto bands.
+#[derive(Debug, Clone)]
+enum Scale {
+    Line { lo: f64, hi: f64, time: bool },
+    Band(Vec<String>),
+    None,
+}
+
+impl Scale {
+    fn train(values: &[&V], zero: bool) -> Scale {
+        if values.is_empty() {
+            return Scale::None;
+        }
+        if values.iter().all(|v| v.num().is_some()) {
+            let xs: Vec<f64> = values.iter().filter_map(|v| v.num()).collect();
+            let (mut lo, mut hi) = xs
+                .iter()
+                .fold((f64::MAX, f64::MIN), |(a, b), x| (a.min(*x), b.max(*x)));
+            if zero {
+                lo = lo.min(0.0);
+                hi = hi.max(0.0);
+            }
+            if lo == hi {
+                lo -= 1.0;
+                hi += 1.0;
+            }
+            let time = values.iter().all(|v| matches!(v, V::Time(..)));
+            Scale::Line { lo, hi, time }
+        } else {
+            let mut cats: Vec<&V> = values.to_vec();
+            cats.sort_by(|a, b| match (a.num(), b.num()) {
+                (Some(x), Some(y)) => x.total_cmp(&y),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                _ => a.text().cmp(&b.text()),
+            });
+            let mut out: Vec<String> = Vec::new();
+            for c in cats {
+                let t = c.text();
+                if !out.contains(&t) {
+                    out.push(t);
+                }
+            }
+            Scale::Band(out)
+        }
+    }
+    /// A value's position in 0..n, as (start, end) of its place: a single
+    /// cell for a line scale, the band for a band scale.
+    fn place(&self, v: &V, n: usize) -> Option<(usize, usize)> {
+        let n = n.max(1);
+        match self {
+            Scale::Line { lo, hi, .. } => {
+                let x = v.num()?;
+                let p = ((x - lo) / (hi - lo) * (n - 1) as f64)
+                    .round()
+                    .clamp(0.0, (n - 1) as f64) as usize;
+                Some((p, p))
+            }
+            Scale::Band(cats) => {
+                let i = cats.iter().position(|c| *c == v.text())?;
+                let a = i * n / cats.len();
+                let b = ((i + 1) * n / cats.len()).max(a + 1) - 1;
+                Some((a, b))
+            }
+            Scale::None => Some((n / 2, n / 2)),
+        }
+    }
+    fn mid(&self, v: &V, n: usize) -> Option<usize> {
+        self.place(v, n).map(|(a, b)| (a + b) / 2)
+    }
+    fn is_band(&self) -> bool {
+        matches!(self, Scale::Band(_))
+    }
+    fn tick_text(&self, x: f64) -> String {
+        match self {
+            Scale::Line { time: true, .. } => {
+                // Back from days to a year, near enough for an axis label.
+                let y = 1970.0 + x / 365.2425;
+                format!("{}", y.floor() as i64)
+            }
+            _ => number(x),
+        }
+    }
+}
+
+fn plot(ms: &[M], width: usize, height: usize) -> Figure {
+    let xv: Vec<&V> = ms
+        .iter()
+        .flat_map(|m| ["x", "x1", "x2"].iter().filter_map(move |c| m.get(c)))
+        .collect();
+    let yv: Vec<&V> = ms.iter().filter_map(|m| m.get("y")).collect();
+    // Bars start at zero, on whichever axis holds their numbers.
+    let bars: Vec<&M> = ms.iter().filter(|m| m.kind == "bar").collect();
+    let horizontal = !bars.is_empty()
+        && bars
+            .iter()
+            .all(|m| m.get("y").is_some_and(|v| v.num().is_none()));
+    let xs = Scale::train(&xv, horizontal);
+    let ys = Scale::train(&yv, !bars.is_empty() && !horizontal);
+    // The left margin holds the y labels; the last two rows the x axis.
+    let ylabels: Vec<String> = match &ys {
+        Scale::Band(c) => c.iter().map(|s| truncate(s, 14)).collect(),
+        Scale::Line { lo, hi, .. } => vec![ys.tick_text(*lo), ys.tick_text(*hi)],
+        Scale::None => vec![],
+    };
+    let left = ylabels
+        .iter()
+        .map(|s| s.chars().count())
+        .max()
+        .map_or(0, |n| n + 1);
+    let pw = width.saturating_sub(left + 1).max(2);
+    let ph = height.saturating_sub(2).max(2);
+    let (x0, y0) = (left + 1, 0);
+    let mut cv = Canvas::new(width, height);
+    // Axes, dim.
+    if !matches!(ys, Scale::None) {
+        cv.vline(left, y0, y0 + ph, Ink::Dim);
+    }
+    cv.hline(left, x0 + pw - 1, y0 + ph, Ink::Dim);
+    // Numbers rise up the page; categories read down it, first at the top.
+    let row = |v: &V| {
+        ys.place(v, ph).map(|(a, b)| {
+            if ys.is_band() {
+                (y0 + a, y0 + b)
+            } else {
+                (y0 + ph - 1 - b, y0 + ph - 1 - a)
+            }
+        })
+    };
+    let col = |v: &V| xs.place(v, pw).map(|(a, b)| (x0 + a, x0 + b));
+    // y labels.
+    match &ys {
+        Scale::Band(c) => {
+            for s in c {
+                if let Some((a, b)) = row(&V::Cat(s.clone())) {
+                    let t = truncate(s, 14);
+                    cv.text(
+                        left.saturating_sub(t.chars().count() + 1),
+                        (a + b) / 2,
+                        &t,
+                        Ink::Dim,
+                    );
+                }
+            }
+        }
+        Scale::Line { lo, hi, .. } => {
+            let (t, b) = (ys.tick_text(*hi), ys.tick_text(*lo));
+            cv.text(left - t.chars().count() - 1, y0, &t, Ink::Dim);
+            cv.text(left - b.chars().count() - 1, y0 + ph - 1, &b, Ink::Dim);
+        }
+        Scale::None => {}
+    }
+    // x labels, on the last row.
+    let ly = y0 + ph + 1;
+    match &xs {
+        Scale::Band(c) => {
+            for s in c {
+                if let Some((a, b)) = col(&V::Cat(s.clone())) {
+                    let t = truncate(s, (b - a).max(1));
+                    let n = t.chars().count();
+                    cv.text((a + b + 1).saturating_sub(n) / 2, ly, &t, Ink::Dim);
+                }
+            }
+        }
+        Scale::Line { lo, hi, .. } => {
+            let (l, r) = (xs.tick_text(*lo), xs.tick_text(*hi));
+            cv.text(x0, ly, &l, Ink::Dim);
+            cv.text(
+                (x0 + pw).saturating_sub(r.chars().count()),
+                ly,
+                &r,
+                Ink::Dim,
+            );
+        }
+        Scale::None => {}
+    }
+    // Rules first, under the other marks.
+    for m in ms.iter().filter(|m| m.kind == "rule") {
+        if let Some(v) = m.get("y") {
+            if let Some((a, b)) = row(v) {
+                cv.hline(
+                    x0,
+                    x0 + pw - 1,
+                    (a + b) / 2,
+                    if m.loud { Ink::Loud } else { Ink::Dim },
+                );
+            }
+        } else if let Some(v) = m.get("x")
+            && let Some((a, b)) = col(v)
+        {
+            cv.vline(
+                (a + b) / 2,
+                y0,
+                y0 + ph - 1,
+                if m.loud { Ink::Loud } else { Ink::Dim },
+            );
+        }
+    }
+    let mut notes = Vec::new();
+    // Bars.
+    for m in &bars {
+        let (Some(xv), Some(yv)) = (m.get("x"), m.get("y")) else {
+            continue;
+        };
+        let label = m
+            .get("text")
+            .map(V::text)
+            .unwrap_or_else(|| if horizontal { xv.text() } else { yv.text() });
+        if horizontal {
+            let (Some((ra, rb)), Some((c0, _)), Some((c1, _))) =
+                (row(yv), col(&V::Num(0.0)), col(xv))
+            else {
+                continue;
+            };
+            let r = (ra + rb) / 2;
+            let (a, b) = (c0.min(c1), c0.max(c1));
+            for x in a..=b {
+                cv.put(x, r, '█', m.ink());
+            }
+            cv.text(b + 2, r, &label, m.ink());
+            cv.hit(a, r, b - a + 1, 1, &m.prov);
+        } else {
+            let (Some((ca, cb)), Some((r0, _)), Some((r1, _))) =
+                (col(xv), row(&V::Num(0.0)), row(yv))
+            else {
+                continue;
+            };
+            let w = (cb - ca + 1).saturating_sub(2).clamp(1, 8);
+            let cx = (ca + cb).div_ceil(2) - w / 2;
+            let (a, b) = (r0.min(r1), r0.max(r1));
+            for y in a..=b {
+                for x in cx..cx + w {
+                    cv.put(x, y, '█', m.ink());
+                }
+            }
+            if a > y0 {
+                let n = label.chars().count();
+                cv.text((cx + w / 2).saturating_sub(n / 2), a - 1, &label, m.ink());
+            }
+            cv.hit(cx, a, w, b - a + 1, &m.prov);
+        }
+    }
+    // Lines, one per series, joined in order of x.
+    let mut series: Vec<String> = Vec::new();
+    for m in ms.iter().filter(|m| m.kind == "line") {
+        let s = m.get("series").map(V::text).unwrap_or_default();
+        if !series.contains(&s) {
+            series.push(s);
+        }
+    }
+    const POINTS: [char; 6] = ['●', '○', '■', '□', '◆', '◇'];
+    for (k, s) in series.iter().enumerate() {
+        let p = POINTS[k % POINTS.len()];
+        let mut pts: Vec<(usize, usize, &M)> = ms
+            .iter()
+            .filter(|m| m.kind == "line" && m.get("series").map(V::text).unwrap_or_default() == *s)
+            .filter_map(|m| {
+                let (a, b) = col(m.get("x")?)?;
+                let (c, d) = row(m.get("y")?)?;
+                Some(((a + b) / 2, (c + d) / 2, m))
+            })
+            .collect();
+        pts.sort_by_key(|(x, _, _)| *x);
+        for w in pts.windows(2) {
+            let ((xa, ya, _), (xb, yb, _)) = (w[0], w[1]);
+            let n = xb.abs_diff(xa).max(ya.abs_diff(yb)).max(1);
+            for i in 1..n {
+                let x = xa as f64 + (xb as f64 - xa as f64) * i as f64 / n as f64;
+                let y = ya as f64 + (yb as f64 - ya as f64) * i as f64 / n as f64;
+                let (x, y) = (x.round() as usize, y.round() as usize);
+                if cv.cells[y][x].0 == ' ' {
+                    cv.put(x, y, '·', Ink::Plain);
+                }
+            }
+        }
+        for (x, y, m) in &pts {
+            cv.put(*x, *y, p, m.ink());
+            cv.hit(*x, *y, 1, 1, &m.prov);
+        }
+        if series.len() > 1 || !s.is_empty() {
+            notes.push(format!("{p} {s}"));
+        }
+    }
+    // Spans: intervals on lanes.
+    for m in ms.iter().filter(|m| m.kind == "span") {
+        let (Some(a), Some(b)) = (m.get("x1").and_then(col), m.get("x2").and_then(col)) else {
+            continue;
+        };
+        let r = match m.get("y") {
+            Some(v) => row(v).map(|(c, d)| (c + d) / 2),
+            None => Some(y0 + ph / 2),
+        };
+        let Some(r) = r else { continue };
+        let (a, b) = (a.0.min(b.0), a.0.max(b.0));
+        for x in a..=b {
+            cv.put(x, r, '━', m.ink());
+        }
+        if let Some(t) = m.get("text").map(V::text) {
+            let n = t.chars().count();
+            if n + 2 <= b - a + 1 {
+                cv.text(a + 1, r, &t, m.ink());
+            } else {
+                cv.text(b + 2, r, &t, m.ink());
+            }
+        }
+        cv.hit(a, r, b - a + 1, 1, &m.prov);
+    }
+    // Dots and texts.
+    for m in ms.iter().filter(|m| matches!(m.kind, "dot" | "text")) {
+        let (Some(xv), Some(yv)) = (m.get("x"), m.get("y")) else {
+            continue;
+        };
+        let (Some(x), Some(y)) = (
+            xs.mid(xv, pw).map(|p| x0 + p),
+            row(yv).map(|(c, d)| (c + d) / 2),
+        ) else {
+            continue;
+        };
+        if m.kind == "dot" {
+            cv.put(x, y, '●', m.ink());
+            if let Some(t) = m.get("text").map(V::text) {
+                cv.text(x + 2, y, &t, m.ink());
+            }
+            cv.hit(x, y, 1, 1, &m.prov);
+        } else {
+            let t = m.get("text").map(V::text).unwrap_or_default();
+            cv.text(x, y, &t, m.ink());
+            cv.hit(x, y, t.chars().count(), 1, &m.prov);
+        }
+    }
+    // Ticks: on a lane if they have y; else on the x axis, labels stacked
+    // above it, each on the lowest row where it fits.
+    let mut ticks: Vec<&M> = ms.iter().filter(|m| m.kind == "tick").collect();
+    ticks.sort_by(|a, b| {
+        let (p, q) = (a.get("x").and_then(V::num), b.get("x").and_then(V::num));
+        p.unwrap_or(0.0).total_cmp(&q.unwrap_or(0.0))
+    });
+    for m in ticks {
+        let Some(x) = m.get("x").and_then(|v| xs.mid(v, pw)).map(|p| x0 + p) else {
+            continue;
+        };
+        let t = m
+            .get("text")
+            .map(V::text)
+            .unwrap_or_else(|| m.get("x").map(V::text).unwrap_or_default());
+        if let Some(yv) = m.get("y") {
+            let Some(y) = row(yv).map(|(c, d)| (c + d) / 2) else {
+                continue;
+            };
+            cv.put(x, y, '◆', m.ink());
+            cv.text(x + 2, y, &t, m.ink());
+            cv.hit(x, y, 1, 1, &m.prov);
+            continue;
+        }
+        let axis = y0 + ph;
+        cv.put(x, axis, '┴', m.ink());
+        let n = t.chars().count() + 1;
+        let start = x.min(width.saturating_sub(n));
+        let mut placed = false;
+        for y in (y0..axis).rev() {
+            if cv.free(start, y, n) {
+                cv.text(start, y, &t, m.ink());
+                for r in y + 1..axis {
+                    if cv.cells[r][x].0 == ' ' {
+                        cv.put(x, r, '│', Ink::Dim);
+                    }
+                }
+                cv.hit(start, y, n - 1, axis - y + 1, &m.prov);
+                placed = true;
+                break;
+            }
+        }
+        if !placed {
+            notes.push(format!("no room for the label {t}"));
+        }
+    }
+    cv.finish(notes)
+}
+
+// ---- grids ----------------------------------------------------------
+
+fn grid(ms: &[M], width: usize) -> Figure {
+    let xs = Scale::train(
+        &ms.iter().filter_map(|m| m.get("x")).collect::<Vec<_>>(),
+        false,
+    );
+    let ys = Scale::train(
+        &ms.iter().filter_map(|m| m.get("y")).collect::<Vec<_>>(),
+        false,
+    );
+    let names = |s: &Scale| match s {
+        Scale::Band(c) => c.clone(),
+        Scale::Line { .. } | Scale::None => vec![],
+    };
+    // A numeric axis still lists its values, in order: rows 1, 2, 3.
+    let distinct = |c: &str| {
+        let mut v: Vec<&V> = ms.iter().filter_map(|m| m.get(c)).collect();
+        v.sort_by(|a, b| {
+            a.num()
+                .unwrap_or(0.0)
+                .total_cmp(&b.num().unwrap_or(0.0))
+                .then(a.text().cmp(&b.text()))
+        });
+        let mut out: Vec<String> = Vec::new();
+        for x in v {
+            if !out.contains(&x.text()) {
+                out.push(x.text());
+            }
+        }
+        out
+    };
+    let cols = if xs.is_band() {
+        names(&xs)
+    } else {
+        distinct("x")
+    };
+    let rows = if ys.is_band() {
+        names(&ys)
+    } else {
+        distinct("y")
+    };
+    // Each cell's text, and whether any mark there is loud.
+    // Each cell: its text, whether loud, the facts under it, whether a number.
+    type Cell = (String, bool, Vec<u64>, bool);
+    let mut at: Vec<Vec<Cell>> =
+        vec![vec![(String::new(), false, vec![], false); cols.len()]; rows.len()];
+    for m in ms {
+        let (Some(x), Some(y)) = (m.get("x"), m.get("y")) else {
+            continue;
+        };
+        let (Some(i), Some(j)) = (
+            cols.iter().position(|c| *c == x.text()),
+            rows.iter().position(|r| *r == y.text()),
+        ) else {
+            continue;
+        };
+        let cell = &mut at[j][i];
+        let t = m.get("text").map(V::text).unwrap_or_else(|| "■".into());
+        if !cell.0.is_empty() {
+            cell.0.push_str(", ");
+        }
+        cell.0.push_str(&t);
+        cell.1 |= m.loud;
+        cell.2.extend(&m.prov);
+        cell.3 = m.get("text").is_some_and(|v| v.num().is_some());
+    }
+    let head = rows
+        .iter()
+        .map(|r| r.chars().count())
+        .max()
+        .unwrap_or(0)
+        .min(16);
+    let mut widths: Vec<usize> = cols
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let content = at
+                .iter()
+                .map(|r| r[i].0.chars().count() + usize::from(r[i].1))
+                .max()
+                .unwrap_or(0);
+            content.max(c.chars().count()).clamp(1, 20)
+        })
+        .collect();
+    // Narrow the widest columns until the grid fits.
+    let total = |w: &[usize]| head + w.iter().map(|x| x + 3).sum::<usize>();
+    while total(&widths) > width {
+        let Some(i) = (0..widths.len()).max_by_key(|i| widths[*i]) else {
+            break;
+        };
+        if widths[i] <= 3 {
+            break;
+        }
+        widths[i] -= 1;
+    }
+    let w = total(&widths).min(width.max(1));
+    let h = rows.len() + 2;
+    let mut cv = Canvas::new(w.max(1), h);
+    let xpos: Vec<usize> = (0..cols.len())
+        .map(|i| head + 3 + widths[..i].iter().map(|x| x + 3).sum::<usize>())
+        .collect();
+    for (i, c) in cols.iter().enumerate() {
+        cv.text(xpos[i], 0, &truncate(c, widths[i]), Ink::Dim);
+    }
+    cv.hline(0, w.saturating_sub(1), 1, Ink::Dim);
+    for (i, _) in cols.iter().enumerate() {
+        cv.vline(xpos[i] - 2, 0, h - 1, Ink::Dim);
+    }
+    for (j, r) in rows.iter().enumerate() {
+        let y = j + 2;
+        cv.text(0, y, &truncate(r, head), Ink::Dim);
+        for (i, (t, loud, prov, num)) in at[j].iter().enumerate() {
+            let mut t = truncate(t, widths[i] - usize::from(*loud));
+            if *loud {
+                t.push('!');
+            }
+            let n = t.chars().count();
+            let x = if *num {
+                xpos[i] + widths[i] - n
+            } else {
+                xpos[i]
+            };
+            cv.text(x, y, &t, if *loud { Ink::Loud } else { Ink::Plain });
+            cv.hit(xpos[i], y, widths[i], 1, prov);
+        }
+    }
+    cv.finish(vec![])
+}
+
+// ---- graphs ---------------------------------------------------------
+
+fn graph(ms: &[M]) -> Figure {
+    // Nodes, by key, in order of first appearance; edges between keys.
+    struct N {
+        key: String,
+        text: String,
+        shape: String,
+        loud: bool,
+        prov: Vec<u64>,
+        dummy: bool,
+    }
+    let mut nodes: Vec<N> = Vec::new();
+    let find = |nodes: &mut Vec<N>, key: &str| -> usize {
+        if let Some(i) = nodes.iter().position(|n| n.key == key) {
+            return i;
+        }
+        nodes.push(N {
+            key: key.into(),
+            text: key.into(),
+            shape: "box".into(),
+            loud: false,
+            prov: vec![],
+            dummy: false,
+        });
+        nodes.len() - 1
+    };
+    for m in ms.iter().filter(|m| m.kind == "node") {
+        let key = m.get("id").map(V::text).unwrap_or_default();
+        let i = find(&mut nodes, &key);
+        if let Some(t) = m.get("text") {
+            nodes[i].text = t.text();
+        }
+        if let Some(s) = m.get("shape") {
+            nodes[i].shape = s.text();
+        }
+        nodes[i].loud |= m.loud;
+        nodes[i].prov.extend(&m.prov);
+    }
+    // (from, to, text, loud, reversed)
+    let mut edges: Vec<(usize, usize, String, bool, bool)> = Vec::new();
+    for m in ms.iter().filter(|m| m.kind == "edge") {
+        let (Some(a), Some(b)) = (m.get("from"), m.get("to")) else {
+            continue;
+        };
+        let a = find(&mut nodes, &a.text());
+        let b = find(&mut nodes, &b.text());
+        let t = m.get("text").map(V::text).unwrap_or_default();
+        if a != b {
+            edges.push((a, b, t, m.loud, false));
+        }
+    }
+    let mut notes = Vec::new();
+    // Break cycles: an edge back to a node on the current depth-first path
+    // is laid out reversed, and drawn with its arrow at the top.
+    let n0 = nodes.len();
+    let mut state = vec![0u8; n0];
+    fn dfs(v: usize, edges: &mut [(usize, usize, String, bool, bool)], state: &mut [u8]) {
+        state[v] = 1;
+        for k in 0..edges.len() {
+            if edges[k].0 != v || edges[k].4 {
+                continue;
+            }
+            let w = edges[k].1;
+            match state[w] {
+                0 => dfs(w, edges, state),
+                1 => {
+                    edges[k].4 = true;
+                }
+                _ => {}
+            }
+        }
+        state[v] = 2;
+    }
+    for v in 0..n0 {
+        if state[v] == 0 {
+            dfs(v, &mut edges, &mut state);
+        }
+    }
+    let dir = |e: &(usize, usize, String, bool, bool)| if e.4 { (e.1, e.0) } else { (e.0, e.1) };
+    // Layers: the longest path from a source.
+    let mut layer = vec![0usize; n0];
+    for _ in 0..n0 {
+        let mut changed = false;
+        for e in &edges {
+            let (a, b) = dir(e);
+            if layer[b] < layer[a] + 1 {
+                layer[b] = layer[a] + 1;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    // Long edges pass through dummy nodes, one per layer crossed.
+    // segs: (from, to, edge index, last segment of its edge)
+    let mut segs: Vec<(usize, usize, usize, bool)> = Vec::new();
+    for (k, e) in edges.iter().enumerate() {
+        let (a, b) = dir(e);
+        let mut prev = a;
+        for l in layer[a] + 1..layer[b] {
+            nodes.push(N {
+                key: String::new(),
+                text: String::new(),
+                shape: String::new(),
+                loud: false,
+                prov: vec![],
+                dummy: true,
+            });
+            layer.push(l);
+            segs.push((prev, nodes.len() - 1, k, false));
+            prev = nodes.len() - 1;
+        }
+        segs.push((prev, b, k, true));
+    }
+    let depth = layer.iter().copied().max().map_or(0, |d| d + 1);
+    let mut order: Vec<Vec<usize>> = vec![vec![]; depth];
+    for (i, l) in layer.iter().enumerate() {
+        order[*l].push(i);
+    }
+    // Fewer crossings: sweep down and up, ordering each layer by the mean
+    // position of its neighbours in the layer before (barycentre).
+    for sweep in 0..4 {
+        let down = sweep % 2 == 0;
+        let range: Vec<usize> = if down {
+            (1..depth).collect()
+        } else {
+            (0..depth.saturating_sub(1)).rev().collect()
+        };
+        for l in range {
+            let other = if down { l - 1 } else { l + 1 };
+            let pos = |v: usize| order[other].iter().position(|x| *x == v);
+            let mut keyed: Vec<(f64, usize, usize)> = order[l]
+                .iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    let ns: Vec<usize> = segs
+                        .iter()
+                        .filter_map(|(a, b, _, _)| {
+                            if down && *b == *v {
+                                pos(*a)
+                            } else if !down && *a == *v {
+                                pos(*b)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    let bc = if ns.is_empty() {
+                        i as f64
+                    } else {
+                        ns.iter().sum::<usize>() as f64 / ns.len() as f64
+                    };
+                    (bc, i, *v)
+                })
+                .collect();
+            keyed.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            order[l] = keyed.into_iter().map(|(_, _, v)| v).collect();
+        }
+    }
+    // Geometry: boxes three rows high, three rows between layers.
+    let bw = |n: &N| {
+        if n.dummy {
+            1
+        } else {
+            n.text.chars().count().clamp(1, 22) + 4
+        }
+    };
+    let widths: Vec<usize> = order
+        .iter()
+        .map(|o| {
+            o.iter()
+                .map(|v| bw(&nodes[*v]) + 3)
+                .sum::<usize>()
+                .saturating_sub(3)
+        })
+        .collect();
+    let reversed = edges.iter().filter(|e| e.4).count();
+    let body = widths.iter().copied().max().unwrap_or(1).max(1);
+    // Edges drawn upward loop round the right side, one column each.
+    let w = body + if reversed > 0 { 1 + 2 * reversed } else { 0 };
+    let h = (depth * 6).saturating_sub(3).max(1);
+    let mut x = vec![0usize; nodes.len()];
+    for (l, o) in order.iter().enumerate() {
+        let mut at = (body - widths[l]) / 2;
+        for v in o {
+            x[*v] = at;
+            at += bw(&nodes[*v]) + 3;
+        }
+    }
+    let centre = |v: usize| x[v] + bw(&nodes[v]) / 2;
+    // Ports: where each segment leaves its source and enters its target,
+    // spread along the box in the order of the other ends, so edges into
+    // or out of one node stay apart and do not cross there.
+    let forward: Vec<usize> = (0..segs.len()).filter(|i| !edges[segs[*i].2].4).collect();
+    let spread = |v: usize, mut ss: Vec<(usize, usize)>| -> Vec<(usize, usize)> {
+        ss.sort();
+        let n = ss.len();
+        let inner = bw(&nodes[v]).saturating_sub(2);
+        ss.into_iter()
+            .enumerate()
+            .map(|(k, (_, seg))| {
+                let px = if nodes[v].dummy || n == 1 {
+                    centre(v)
+                } else {
+                    x[v] + 1 + (k + 1) * inner / (n + 1)
+                };
+                (seg, px)
+            })
+            .collect()
+    };
+    let mut out_port = vec![0usize; segs.len()];
+    let mut in_port = vec![0usize; segs.len()];
+    for v in 0..nodes.len() {
+        let outs: Vec<(usize, usize)> = forward
+            .iter()
+            .filter(|i| segs[**i].0 == v)
+            .map(|i| (centre(segs[*i].1), *i))
+            .collect();
+        for (seg, px) in spread(v, outs) {
+            out_port[seg] = px;
+        }
+        let ins: Vec<(usize, usize)> = forward
+            .iter()
+            .filter(|i| segs[**i].1 == v)
+            .map(|i| (centre(segs[*i].0), *i))
+            .collect();
+        for (seg, px) in spread(v, ins) {
+            in_port[seg] = px;
+        }
+    }
+    let mut cv = Canvas::new(w, h);
+    // Edges, under the boxes; their labels after all the lines.
+    let mut labels: Vec<(usize, usize, usize, usize, String, Ink)> = Vec::new();
+    let mut loop_col = body + 1;
+    for (k, e) in edges.iter().enumerate().filter(|(_, e)| e.4) {
+        // From the right side of the true source (below) up to the right
+        // side of the true target (above), with the arrow at the target.
+        let ink = if e.3 { Ink::Loud } else { Ink::Dim };
+        let (src, dst) = (e.0, e.1);
+        let (sy, ty) = (layer[src] * 6 + 1, layer[dst] * 6 + 1);
+        let (sx, tx) = (x[src] + bw(&nodes[src]), x[dst] + bw(&nodes[dst]));
+        cv.hline(sx, loop_col, sy, ink);
+        cv.vline(loop_col, ty, sy, ink);
+        cv.hline(tx, loop_col, ty, ink);
+        cv.put(tx, ty, '◀', ink);
+        if !e.2.is_empty() {
+            labels.push((loop_col + 1, (sy + ty) / 2, sx, sy, e.2.clone(), ink));
+        }
+        let _ = k;
+        loop_col += 2;
+    }
+    for (si, (a, b, k, last)) in segs.iter().enumerate() {
+        let (_, _, _, loud, rev) = &edges[*k];
+        if *rev {
+            continue;
+        }
+        let ink = if *loud { Ink::Loud } else { Ink::Dim };
+        let (sx, tx) = (out_port[si], in_port[si]);
+        let top = layer[*a] * 6;
+        let (sy, ty) = (if nodes[*a].dummy { top } else { top + 2 }, layer[*b] * 6);
+        let mid = top + 4;
+        cv.vline(sx, sy, mid, ink);
+        cv.hline(sx, tx, mid, ink);
+        cv.vline(tx, mid, ty.saturating_sub(1), ink);
+        if nodes[*b].dummy {
+            cv.vline(tx, ty, ty + 2, ink);
+        }
+        if *last {
+            cv.put(tx, ty.saturating_sub(1), '▼', ink);
+        }
+        // A label goes beside the arrow, where the edge is its own; else
+        // on its horizontal run.
+        let t = &edges[*k].2;
+        if !t.is_empty() && *last {
+            labels.push((
+                tx + 2,
+                ty.saturating_sub(1),
+                sx.max(tx) + 2,
+                mid,
+                t.clone(),
+                ink,
+            ));
+        }
+    }
+    for (lx, ly, ax, ay, t, ink) in labels {
+        let n = t.chars().count();
+        if cv.free(lx, ly, n) {
+            cv.text(lx, ly, &t, ink);
+        } else if cv.free(ax, ay, n) {
+            cv.text(ax, ay, &t, ink);
+        }
+    }
+    // Boxes.
+    for (v, n) in nodes.iter().enumerate() {
+        if n.dummy {
+            continue;
+        }
+        let (bx, by, ww) = (x[v], layer[v] * 6, bw(n));
+        let ink = if n.loud { Ink::Loud } else { Ink::Plain };
+        let (tl, tr, bl, br, side_l, side_r, horiz) = match n.shape.as_str() {
+            "round" => ('╭', '╮', '╰', '╯', '│', '│', '─'),
+            "decision" => ('╱', '╲', '╲', '╱', '<', '>', '─'),
+            _ => ('┌', '┐', '└', '┘', '│', '│', '─'),
+        };
+        cv.put(bx, by, tl, ink);
+        cv.put(bx + ww - 1, by, tr, ink);
+        cv.put(bx, by + 2, bl, ink);
+        cv.put(bx + ww - 1, by + 2, br, ink);
+        for i in 1..ww - 1 {
+            cv.put(bx + i, by, horiz, ink);
+            cv.put(bx + i, by + 2, horiz, ink);
+        }
+        cv.put(bx, by + 1, side_l, ink);
+        cv.put(bx + ww - 1, by + 1, side_r, ink);
+        for i in 1..ww - 1 {
+            cv.put(bx + i, by + 1, ' ', ink);
+        }
+        cv.text(bx + 2, by + 1, &truncate(&n.text, ww - 4), ink);
+        // Ports where edges leave and arrive.
+        for &i in &forward {
+            if segs[i].0 == v {
+                cv.put(out_port[i], by + 2, '┬', ink);
+            }
+            if segs[i].1 == v && by > 0 {
+                cv.put(in_port[i], by, '┴', ink);
+            }
+        }
+        cv.hit(bx, by, ww, 3, &n.prov);
+    }
+    if reversed > 0 {
+        notes.push(format!(
+            "{reversed} edge{} back up, round the right, to close a cycle",
+            if reversed == 1 { "" } else { "s" }
+        ));
+    }
+    cv.finish(notes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn t(f: &str, a: Vec<Term>) -> Term {
         Term::Compound(f.into(), a)
+    }
+
+    /// A mark from text such as "bar x:food y:400": channels as name:value,
+    /// a value that parses as a number is one; date:1988-11-15 a date.
+    fn mk(spec: &str) -> Input {
+        let mut words = spec.split_whitespace();
+        let kind = words.next().unwrap();
+        let args = words
+            .map(|w| {
+                let (k, v) = w.split_once(':').unwrap();
+                let v = v.replace('_', " ");
+                let val = if let Ok(n) = v.parse::<i64>() {
+                    Term::Int(n)
+                } else if let Some(d) = v.strip_prefix("date") {
+                    let p: Vec<i64> = d
+                        .split('-')
+                        .filter(|x| !x.is_empty())
+                        .map(|x| x.parse().unwrap())
+                        .collect();
+                    t("date", p.into_iter().map(Term::Int).collect())
+                } else {
+                    Term::Atom(v)
+                };
+                t(k, vec![val])
+            })
+            .collect();
+        Input {
+            mark: t(kind, args),
+            prov: vec![1],
+            loud: false,
+        }
+    }
+
+    fn draw(specs: &[&str], w: usize, h: usize) -> Vec<String> {
+        let ins: Vec<Input> = specs.iter().map(|s| mk(s)).collect();
+        let f = render(&ins, w, h);
+        let mut out = f.text();
+        out.extend(f.notes.iter().map(|n| format!("note: {n}")));
+        out
+    }
+
+    /// Column of the first occurrence of text in a row, and the row.
+    fn at(lines: &[String], text: &str) -> (usize, usize) {
+        for (y, l) in lines.iter().enumerate() {
+            if let Some(b) = l.find(text) {
+                return (l[..b].chars().count(), y);
+            }
+        }
+        panic!("no {text:?} in\n{}", lines.join("\n"))
+    }
+
+    /// How many cells of column x hold c.
+    fn count(lines: &[String], x: usize, c: char) -> usize {
+        lines.iter().filter(|l| l.chars().nth(x) == Some(c)).count()
+    }
+
+    #[test]
+    fn bars_rise_with_their_values_over_categories_in_order() {
+        // Catches bars of the wrong height, categories out of order, a
+        // reference rule not drawn, or a value label lost.
+        let l = draw(
+            &[
+                "bar x:income y:2000",
+                "bar x:rent y:1200",
+                "bar x:food y:400",
+                "rule y:1500",
+            ],
+            40,
+            10,
+        );
+        let (f, fy) = at(&l, "food");
+        let (i, _) = at(&l, "income");
+        let (r, _) = at(&l, "rent");
+        assert!(f < i && i < r, "categories in order:\n{}", l.join("\n"));
+        assert_eq!(fy, l.len() - 1, "labels on the last row");
+        let h = |x: usize| count(&l, x + 1, '█');
+        assert!(
+            h(i) > h(r) && h(r) > h(f) && h(f) > 0,
+            "{} {} {}",
+            h(i),
+            h(r),
+            h(f)
+        );
+        assert!(l.iter().any(|x| x.contains("────────────")), "the rule");
+        assert!(l.iter().any(|x| x.contains("400")), "a value label");
+    }
+
+    #[test]
+    fn horizontal_bars_read_down_the_page() {
+        // Catches category bands drawn bottom up, or bar lengths unordered.
+        let l = draw(
+            &[
+                "bar y:income x:2000",
+                "bar y:rent x:1200",
+                "bar y:food x:400",
+            ],
+            40,
+            6,
+        );
+        let (_, yf) = at(&l, "food");
+        let (_, yi) = at(&l, "income");
+        let (_, yr) = at(&l, "rent");
+        assert!(
+            yf < yi && yi < yr,
+            "first category at the top:\n{}",
+            l.join("\n")
+        );
+        let len = |y: usize| l[y].matches('█').count();
+        assert!(len(yi) > len(yr) && len(yr) > len(yf));
+    }
+
+    #[test]
+    fn lines_join_points_in_order_with_a_legend_per_series() {
+        // Catches series mixed together, or a legend missing.
+        let l = draw(
+            &[
+                "line x:1 y:3 series:a",
+                "line x:2 y:5 series:a",
+                "line x:3 y:4 series:a",
+                "line x:1 y:1 series:b",
+                "line x:3 y:6 series:b",
+            ],
+            30,
+            8,
+        );
+        assert!(
+            l.contains(&"note: ● a".to_string()) && l.contains(&"note: ○ b".to_string()),
+            "{l:?}"
+        );
+        assert_eq!(
+            l.iter().map(|x| x.matches('●').count()).sum::<usize>(),
+            3 + 1,
+            "3 points, and the legend"
+        );
+    }
+
+    #[test]
+    fn a_timeline_places_every_label_in_time_order() {
+        // Catches labels dropped when two dates are close, or out of order.
+        let l = draw(
+            &[
+                "tick x:date1987-05-15 text:Energia",
+                "tick x:date1988-11-15 text:Buran_flight",
+                "tick x:date1993-06-30 text:Cancelled",
+                "tick x:date1988-12-01 text:Close_one",
+            ],
+            50,
+            6,
+        );
+        let xs: Vec<usize> = ["Energia", "Buran flight", "Cancelled"]
+            .iter()
+            .map(|t| at(&l, t).0)
+            .collect();
+        assert!(xs[0] < xs[1] && xs[1] < xs[2], "{}", l.join("\n"));
+        at(&l, "Close one");
+        assert!(
+            !l.iter().any(|x| x.starts_with("note")),
+            "nothing lost: {l:?}"
+        );
+        at(&l, "1987");
+        at(&l, "1993");
+    }
+
+    #[test]
+    fn spans_lie_on_lanes_between_their_ends() {
+        // Catches lanes out of order, or a span not starting at its x1.
+        let l = draw(
+            &[
+                "span y:design x1:1 x2:4 text:design",
+                "span y:build x1:3 x2:9 text:build",
+                "span y:test x1:8 x2:10 text:test",
+            ],
+            40,
+            6,
+        );
+        let (_, yb) = at(&l, "build │");
+        let (_, yd) = at(&l, "design │");
+        let (_, yt) = at(&l, "test │");
+        assert!(yb < yd && yd < yt, "{}", l.join("\n"));
+        let start = |y: usize| l[y].chars().position(|c| c == '━').unwrap();
+        assert!(start(yd) < start(yb) && start(yb) < start(yt));
+    }
+
+    #[test]
+    fn cells_make_a_grid() {
+        // Catches a grid with rows or columns misplaced, or numbers not
+        // aligned right.
+        let l = draw(
+            &[
+                "cell x:a y:1 text:income",
+                "cell x:b y:1 text:2000",
+                "cell x:a y:2 text:rent",
+                "cell x:b y:2 text:1200",
+                "cell x:a y:3 text:left",
+                "cell x:b y:3 text:400",
+            ],
+            40,
+            10,
+        );
+        assert_eq!(
+            l,
+            [
+                "  │ a      │ b",
+                "──┼────────┼─────",
+                "1 │ income │ 2000",
+                "2 │ rent   │ 1200",
+                "3 │ left   │  400"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_flowchart_flows_down_with_labels_and_a_cycle() {
+        // Catches layers out of order, an arrow missing or doubled, an edge
+        // label away from its edge, or a cycle drawn as a forward edge.
+        let l = draw(
+            &[
+                "node id:start text:Start shape:round",
+                "node id:ask text:Is_it_late? shape:decision",
+                "node id:go text:Go_home",
+                "node id:stay text:Keep_working",
+                "edge from:start to:ask",
+                "edge from:ask to:go text:yes",
+                "edge from:ask to:stay text:no",
+                "edge from:stay to:ask",
+            ],
+            60,
+            0,
+        );
+        let (_, ys) = at(&l, "Start");
+        let (_, ya) = at(&l, "Is it late?");
+        let (xg, yg) = at(&l, "Go home");
+        assert!(ys < ya && ya < yg, "{}", l.join("\n"));
+        assert_eq!(l.iter().map(|x| x.matches('▼').count()).sum::<usize>(), 3);
+        assert_eq!(l.iter().map(|x| x.matches('◀').count()).sum::<usize>(), 1);
+        let (xy, yy) = at(&l, "yes");
+        assert_eq!(yy, yg - 2, "beside the arrow into Go home");
+        assert!(xy < xg + 8);
+        assert!(
+            l.iter().any(|x| x.contains("< Is it late? >")),
+            "a decision's shape"
+        );
+        assert!(l.iter().any(|x| x.contains("╭───────╮")), "a round shape");
+        assert!(l.last().unwrap().contains("back up"));
+    }
+
+    #[test]
+    fn a_long_edge_goes_round_the_boxes_between() {
+        // Catches an edge over two layers drawn through the box between.
+        let l = draw(
+            &["edge from:a to:b", "edge from:b to:c", "edge from:a to:c"],
+            40,
+            0,
+        );
+        let (_, yb) = at(&l, "│ b │");
+        let (_, yc) = at(&l, "│ c │");
+        assert_eq!(
+            l.iter().map(|x| x.matches('▼').count()).sum::<usize>(),
+            3,
+            "{}",
+            l.join("\n")
+        );
+        assert!(
+            l[yb].matches('│').count() >= 3,
+            "the long edge beside b:\n{}",
+            l.join("\n")
+        );
+        assert!(yc > yb);
+    }
+
+    #[test]
+    fn loud_marks_and_where_marks_landed() {
+        // Catches a mark on a violated fact drawn quietly, or a click region
+        // that misses its mark.
+        let mut a = mk("bar x:a y:5");
+        a.loud = true;
+        a.prov = vec![7];
+        let f = render(&[a, mk("bar x:b y:3")], 20, 8);
+        let loud: usize = f
+            .rows
+            .iter()
+            .flatten()
+            .filter(|(c, i)| *c == '█' && *i == Ink::Loud)
+            .count();
+        assert!(loud > 0);
+        let h = f.hits.iter().find(|h| h.prov == [7]).unwrap();
+        assert_eq!(f.rows[h.y][h.x].0, '█');
+        let mut c = mk("cell x:a y:1 text:9");
+        c.loud = true;
+        let g = render(&[c], 20, 0);
+        assert!(g.text()[2].contains("9!"), "{:?}", g.text());
+    }
+
+    #[test]
+    fn marks_that_do_not_fit_the_frame_are_named() {
+        // Catches marks silently dropped when kinds are mixed.
+        let l = draw(&["node id:a", "bar x:a y:1"], 30, 6);
+        assert!(
+            l.iter()
+                .any(|x| x == "note: 1 marks not drawn: a graph draws only node and edge"),
+            "{l:?}"
+        );
+        let l = draw(&["cell x:a y:1", "bar x:a y:1"], 30, 6);
+        assert!(l.iter().any(|x| x.contains("cells not drawn")), "{l:?}");
     }
 
     #[test]
