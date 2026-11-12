@@ -1,5 +1,5 @@
 # One command runs every test (docs/plan.md § Layout).
-.PHONY: test test-spikes test-prolog test-rust test-pty spike-scasp run measures
+.PHONY: test test-spikes test-prolog test-rust test-pty spike-scasp run measures interactivity
 
 test: test-spikes test-prolog test-rust test-pty
 
@@ -45,3 +45,9 @@ spike-scasp:
 # during the month of use, and log the output in docs/log.md.
 measures:
 	cargo run -q --release -p tools --bin measures -- "$(JOURNAL)"
+
+# How many things each unit of code and documentation refers to; every unit
+# over 4 listed (crates/tools/src/interactivity.rs says what is counted).
+# INTERACTIVITY_DETAIL=1 lists each unit's referents.
+interactivity:
+	cargo run -q -p tools --bin interactivity -- .

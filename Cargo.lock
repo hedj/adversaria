@@ -1759,6 +1759,7 @@ version = "0.1.0"
 dependencies = [
  "format",
  "serde_json",
+ "syn 3.0.10",
 ]
 
 [[package]]
