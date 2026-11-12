@@ -232,3 +232,44 @@ fn a_long_list_decodes_without_deep_recursion() {
         .unwrap();
     assert_eq!(len, n);
 }
+
+/// Cells for f(f(...f([])...)), `depth` compounds deep.
+fn nested(depth: usize, a: &Atoms) -> Vec<u32> {
+    let f = a.number("f").unwrap();
+    let mut cells = vec![cell(STRUCT, (1 << 21) | f); depth];
+    cells.push(cell(ATOM, 0));
+    cells
+}
+
+#[test]
+fn nesting_is_limited_and_refused_without_recursing_to_overflow() {
+    // Catches a decoder that recurses until the stack runs out on a deeply
+    // nested term from Prolog (found: depth 1,000 aborted a test thread),
+    // and a limit that also counts a list's spine, so long lists fail.
+    let a = atoms_for_tests();
+    let r = std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(move || {
+            let ok = decode(&nested(MAX_DEPTH, &a), &a).is_ok();
+            let over = decode(&nested(MAX_DEPTH + 1, &a), &a).unwrap_err().0;
+            let far = decode(&nested(1_000_000, &a), &a).unwrap_err().0;
+            // A list of 10,000 lists of one element: spine not counted.
+            let mut cells = Vec::new();
+            for _ in 0..10_000 {
+                cells.push(cell(STRUCT, (2 << 21) | 1));
+                cells.extend([cell(STRUCT, (2 << 21) | 1), cell(INT, 7), cell(ATOM, 0)]);
+            }
+            cells.push(cell(ATOM, 0));
+            let t = decode(&cells, &a);
+            let lists = t.is_ok();
+            std::mem::forget(t); // a long list's drop recurses (a known limit)
+            (ok, over, far, lists)
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+    assert!(r.0, "depth {MAX_DEPTH} is allowed");
+    assert!(r.1.contains("nested deeper than 256"), "{}", r.1);
+    assert!(r.2.contains("nested deeper than 256"), "{}", r.2);
+    assert!(r.3, "a long list of short lists decodes");
+}

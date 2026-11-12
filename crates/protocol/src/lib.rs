@@ -32,6 +32,12 @@ impl Kind {
 }
 
 /// DONE's status.
+/// The deepest a term may nest, in compounds: each argument is one level
+/// below its compound, and a list's elements one level below the list,
+/// however long the list. Deeper terms are refused at both ends, so a
+/// decoder never recurses further than this.
+pub const MAX_DEPTH: usize = 256;
+
 pub const DONE_OK: i64 = 0;
 pub const DONE_ERROR: i64 = 1;
 pub const DONE_CANCELLED: i64 = 2;
@@ -280,7 +286,7 @@ pub fn decode(cells: &[u32], atoms: &Atoms) -> Result<Vec<Term>, ProtoError> {
     let mut terms = Vec::new();
     let mut seen = 0u64;
     while pos < cells.len() {
-        terms.push(decode_term(cells, &mut pos, atoms, &mut seen)?);
+        terms.push(decode_term(cells, &mut pos, atoms, &mut seen, 0)?);
     }
     Ok(terms)
 }
@@ -290,6 +296,7 @@ fn decode_term(
     pos: &mut usize,
     atoms: &Atoms,
     seen: &mut u64,
+    depth: usize,
 ) -> Result<Term, ProtoError> {
     let Some(&c) = cells.get(*pos) else {
         return err("term is cut short");
@@ -324,20 +331,23 @@ fn decode_term(
             if arity == 0 {
                 return err("a struct of arity 0");
             }
+            if depth >= MAX_DEPTH {
+                return err(format!("a term nested deeper than {MAX_DEPTH}"));
+            }
             let fno = v & ((1 << 21) - 1);
             if arity == 2 && fno == 1 {
                 // A list: walk its spine in a loop, so a long list does not
                 // recurse once per element.
-                let mut heads = vec![decode_term(cells, pos, atoms, seen)?];
+                let mut heads = vec![decode_term(cells, pos, atoms, seen, depth + 1)?];
                 while let Some(&c) = cells.get(*pos) {
                     if c >> 29 == STRUCT && (c & VALUE) >> 21 == 2 && c & ((1 << 21) - 1) == 1 {
                         *pos += 1;
-                        heads.push(decode_term(cells, pos, atoms, seen)?);
+                        heads.push(decode_term(cells, pos, atoms, seen, depth + 1)?);
                     } else {
                         break;
                     }
                 }
-                let tail = decode_term(cells, pos, atoms, seen)?;
+                let tail = decode_term(cells, pos, atoms, seen, depth)?;
                 return Ok(heads
                     .into_iter()
                     .rev()
@@ -345,7 +355,7 @@ fn decode_term(
             }
             let f = name(fno)?;
             let args = (0..arity)
-                .map(|_| decode_term(cells, pos, atoms, seen))
+                .map(|_| decode_term(cells, pos, atoms, seen, depth + 1))
                 .collect::<Result<_, _>>()?;
             Term::Compound(f, args)
         }

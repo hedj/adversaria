@@ -637,6 +637,7 @@ Milestone 2 fixed what the text above left open. `prolog/protocol.pl` and `crate
 | Errors | a well-framed but wrong request gets DONE 1 with the error, and the server carries on; an error term it cannot encode goes back as its printed text. A garbled or cut header means the stream is out of step and nothing after it can be trusted, so the receiving side dies: the server says why and exits with status 1; the client kills the server, and every later call fails with the reason. Nothing restarts it. A clean end of input ends the server with status 0 |
 | Output | the server sends the protocol on its standard output; goals that print, to the current output or to `user_output`, go to standard error instead |
 | Rust's limits | Rust holds integers in 64 bits, and refuses wider ones from Prolog |
+| Depth | a term nests at most 256 compounds deep: an argument is one level below its compound, a list's elements one level below the list however long it is. The server refuses to send a deeper term (DONE 1, `nested_deeper_than(256)`), and the client refuses to decode one. Added 12 November 2026, after a term 1,000 deep from the server overflowed the client's stack; the journal's JSON reader already stops near 60 term levels |
 
 ## Decisions
 

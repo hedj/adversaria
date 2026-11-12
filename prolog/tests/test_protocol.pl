@@ -65,6 +65,19 @@ test(refused, [forall(refused_term(T)), throws(protocol_error(_))]) :-
     % Catches terms that would clash with lists, or have no cell form.
     terms_cells([T], _, _, _).
 
+nested(0, x) :- !.
+nested(N, f(T)) :- N1 is N - 1, nested(N1, T).
+
+test(nesting_limited) :-
+    % Catches a term deeper than the protocol allows sent anyway, which the
+    % client would refuse, and a limit that counts a list's spine.
+    nested(256, T256), terms_cells([T256], _, _, _),
+    nested(257, T257),
+    catch(terms_cells([T257], _, _, _), E, true),
+    assertion(E == protocol_error(nested_deeper_than(256))),
+    numlist(1, 100000, L), terms_cells([L], _, _, _),
+    findall([I], between(1, 1000, I), LL), terms_cells([LL], _, _, _).
+
 test(new_atoms_reported) :-
     % Catches an atom used before the client is told its name.
     terms_cells([zz_new_atom(zz_other)], _, _, New),
