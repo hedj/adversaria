@@ -485,6 +485,18 @@ Checked: `make test` passes here (SWI-Prolog 9.0.4) and in `nix develop -i` (SWI
 
 Not checked: the tutorial's `make run` and `check` steps, and every key in a real terminal. The quasimode defaults are still provisional; the configuration is how to change them after trying them.
 
+## The mouse (12 November 2026)
+
+The memex had no mouse support, though the plan asks for adopt and retract "with one click" (milestone 4) and the design for suggestions adopted by a click. The milestone 4 entry above called that milestone done without noting the gap.
+
+* `[mouse] enabled` in the configuration, default false; `--mouse` and `--no-mouse` override it for one run, and both together are refused.
+* When on, a left click on an item's line moves the cursor there; on the interrogation hint's two halves, runs adopt or unadopt; on a suggestion, accepts it. A click does nothing while a quasimode or confirmation is open. A click is journaled as the keyboard action it stands for, so replay agrees.
+* Where things were drawn comes from the drawing itself (`ui::Hits`). Wrapped suggestion heights use ratatui's `Paragraph::line_count`, behind its `unstable-rendered-line-info` feature: an API ratatui may change.
+
+Checked: `make test` passes (147 Rust tests, 18 Prolog tests, 21 pseudo-terminal checks). The pseudo-terminal script sends a real SGR mouse click to the binary. Each new test was broken on purpose once and failed.
+
+Not done: the wheel, dragging, right clicks, clicks in the worlds and revision views, and diagrams (not built). Not checked: any real terminal, or whether text selection with Shift works while the memex has the mouse.
+
 ## Stage A: where it stands (12 November 2026)
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

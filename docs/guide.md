@@ -89,7 +89,7 @@ make run JOURNAL=$HOME/notes KEY=$HOME/.notes.key
 Or run the memex alone, on a journal directory, which it makes if needed:
 
 ```bash
-cargo run -q --release -p memex -- [--config FILE] <journal directory>
+cargo run -q --release -p memex -- [--config FILE] [--mouse | --no-mouse] <journal directory>
 ```
 
 Without the sealer, entries are written but not sealed until a sealer runs.
@@ -181,6 +181,29 @@ Two commands ask before acting, at the foot of the screen:
   retracts; Esc keeps it.
 - Suppose offers readings of your statement: `Do you mean: …`. Enter
   accepts; Tab shows the next reading; Esc supposes nothing.
+
+### The mouse
+
+The mouse is off unless you turn it on, with `enabled = true` under
+`[mouse]` in the configuration (§ 13), or with `--mouse` for one run.
+`--no-mouse` turns it off for one run whatever the file says. Giving both
+flags is an error.
+
+With it on, a left click:
+
+- on an item's line in an outline pane moves the cursor there (and focus
+  to that pane), as the arrow keys would;
+- on `F3 adopts` or `F4 retracts an adoption` under an interrogation runs
+  `adopt` or `unadopt` (the hint names whichever keys you have bound);
+- on a suggestion, anywhere in its lines, runs `accept` for it.
+
+A click does nothing while a quasimode or a confirmation is open, and
+nothing on a mark line, a heading or empty space. Other buttons, dragging
+and the wheel do nothing. A click is recorded in the journal as the
+keyboard action it stands for.
+
+While the memex has the mouse, the terminal's own text selection usually
+needs Shift held (recalled, not tested). That is why it is off by default.
 
 ## 5. Commands
 
@@ -423,7 +446,7 @@ All run from the repository with `cargo run -q -p <crate> --`, or from
 | `wikidata` | `wikidata --items Q2548,Q15180 --out FILE` | writes those items of Wikidata as Prolog facts |
 | | `wikidata --min-sitelinks K --limit N --out FILE` | the same for up to N items with at least K site links |
 | `measures` | `measures DIR` | the measures report for the experiment, from the journal alone |
-| `memex` | `memex [--config FILE] DIR` | the notebook |
+| `memex` | `memex [--config FILE] [--mouse \| --no-mouse] DIR` | the notebook; the flags override the configuration's `[mouse]` |
 | | `memex --print-config` | writes the default configuration |
 
 `make measures JOURNAL=…` runs the measures report on a journal. The
@@ -451,7 +474,7 @@ cargo run -q -p memex -- --print-config > ~/.config/adversaria/config.toml
 
 The same file is in the repository as docs/config.example.toml.
 
-It has two sections. Anything you leave out keeps its default.
+It has three sections. Anything you leave out keeps its default.
 
 ```toml
 [quasimodes]
@@ -468,6 +491,9 @@ F3 = "adopt"
 F4 = "unadopt"
 F6 = "switch"
 F10 = "quit"
+
+[mouse]
+enabled = false
 ```
 
 **`[quasimodes]`** gives each quasimode a list of keys (or one key, as a
@@ -477,6 +503,9 @@ one.
 **`[keys]`** binds a key to a command line, exactly as you would type it in
 Command, such as `"pane suggestions"` or `"export draft.md"`; or to
 `"palette"`. A key named here replaces its default; `""` unbinds it.
+
+**`[mouse]`** has one setting, `enabled`: `true` or `false` (the default).
+See § 4, The mouse.
 
 **Key names:**
 
@@ -493,8 +522,9 @@ End), Shift and printable characters cannot be configured.
 
 The memex refuses to start on a file it would have to guess at, and says
 which file and why: a section, quasimode, key or command it does not know,
-an editing key, a quasimode with no keys, or one key given two jobs. To move a key from a binding to
-a quasimode, unbind it as well:
+an editing key, a quasimode with no keys, one key given two jobs, or a
+`[mouse]` setting other than `enabled = true` or `false`. To move a key
+from a binding to a quasimode, unbind it as well:
 
 ```toml
 [quasimodes]

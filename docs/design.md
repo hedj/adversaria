@@ -701,6 +701,7 @@ Milestone 2 fixed what the text above left open. `prolog/protocol.pl` and `crate
 | The translator is English ↔ Prolog only | the memex's facts, rules and queries are Prolog |
 | "What if" works by counterfactual revision in Worlds, with s(CASP) run with `--forall=sasp` | its default algorithm has an open bug, s(CASP) issue #13 (github.com/SWI-Prolog/sCASP/issues/13), reproduced in the translator document's trial |
 | Keys are configured in a TOML file; a name given replaces its default, and a file the memex would have to guess at is refused | the author asked to adjust key bindings (12 November 2026); TOML is a standard format with a maintained Rust parser, and refusing a wrong file is safer than starting with keys the user did not choose |
+| The mouse is off by default, on by `[mouse] enabled = true` or `--mouse`; `--no-mouse` overrides the file | the author's decision (12 November 2026); while a terminal program has the mouse, the terminal's own text selection usually needs Shift held |
 
 ## Open questions
 
