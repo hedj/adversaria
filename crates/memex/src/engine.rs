@@ -200,7 +200,7 @@ impl Engine {
                     other => crate::reason::show(other),
                 };
                 Err(format!(
-                    "{what} is not allowed: a definition may only read facts, compare and compute (docs/guide.md, § 7)"
+                    "{what} is not allowed: a definition may only read facts, compare and compute (docs/guide.md, § 3.1)"
                 ))
             }
             Err(e) => Err(e.to_string()),

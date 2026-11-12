@@ -31,7 +31,7 @@ fn every_command_has_a_row() {
 fn the_guide_lists_no_command_that_does_not_exist() {
     // Catches a row left behind when a command is removed or renamed.
     let section = GUIDE
-        .split("## 5. Commands")
+        .split("### 2.4 Commands and addresses")
         .nth(1)
         .unwrap()
         .split("\n## ")
@@ -111,7 +111,7 @@ fn the_guide_names_every_builtin_a_definition_may_call() {
         .split("**What a definition may call.**")
         .nth(1)
         .unwrap()
-        .split("## 8.")
+        .split("### 3.2 Worlds")
         .next()
         .unwrap();
     let mut p = memex::prolog::Prolog::start().unwrap();

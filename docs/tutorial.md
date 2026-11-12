@@ -323,7 +323,7 @@ table, rows in order:
     income │  2000
 
 A spreadsheet is the same idea with more columns, and with boxes whose
-values come from rules (docs/guide.md, § 9).
+values come from rules (docs/guide.md, § 3.3).
 
 ### 15. A timeline from part A
 
@@ -337,7 +337,7 @@ Each event is a tick on a line of years, labelled from its `label` fact:
 notes' 1989 is not drawn: it is a claim, not a belief, and a view draws
 beliefs.
 
-docs/guide.md, § 9 has more: line charts, Gantt charts, flowcharts, and
+docs/guide.md, § 3.3 has more: line charts, Gantt charts, flowcharts, and
 your own outline drawn as a tree.
 
 ### 16. Leave
