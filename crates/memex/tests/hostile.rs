@@ -88,3 +88,77 @@ fn an_imported_document_cannot_include_local_files() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// One item holding `text`, exported to `file`; the file's bytes.
+fn export_one(name: &str, text: &str, file: &str) -> Vec<u8> {
+    let dir = temp(name);
+    let mut app = open(&dir);
+    typ(&mut app, text);
+    app.flush();
+    let out = dir.join(file);
+    let m = command(&mut app, &format!("export {}", out.display()));
+    let bytes = std::fs::read(&out).unwrap_or_else(|e| panic!("no export ({m}): {e}"));
+    std::fs::remove_dir_all(&dir).unwrap();
+    bytes
+}
+
+#[test]
+fn exported_html_runs_no_script_from_text() {
+    // Text that came in as words (a Word paragraph reading "<script>…") must
+    // leave as words. Catches item text passed to Pandoc as raw HTML.
+    let html = String::from_utf8(export_one(
+        "script",
+        "Note <script>alert(1)</script> done.",
+        "out.html",
+    ))
+    .unwrap();
+    assert!(!html.contains("<script>alert"), "{html}");
+    assert!(html.contains("done."), "{html}");
+}
+
+#[test]
+fn exported_html_has_no_javascript_links() {
+    // Catches a link whose target is a script, kept from imported text.
+    let html = String::from_utf8(export_one(
+        "jslink",
+        "See [this](javascript:alert(2)) and [that](https://example.org/).",
+        "out.html",
+    ))
+    .unwrap();
+    assert!(!html.contains("javascript:"), "{html}");
+    assert!(
+        html.contains("https://example.org/"),
+        "ordinary links are kept: {html}"
+    );
+}
+
+#[test]
+fn exported_latex_holds_no_raw_tex_from_text() {
+    // Catches text exported as LaTeX commands, which read files when the
+    // .tex is compiled.
+    let tex = String::from_utf8(export_one(
+        "rawtex",
+        "Here \\input{/etc/hostname} ends.",
+        "out.tex",
+    ))
+    .unwrap();
+    assert!(!tex.contains("\\input{/etc/hostname}"), "{tex}");
+}
+
+#[test]
+fn an_exported_word_file_embeds_no_local_file() {
+    // Markdown image syntax in text would make Pandoc embed that file in the
+    // .docx. Catches an export that carries a local file out.
+    let dir = temp("img-secret");
+    let secret = dir.join("secret.txt");
+    std::fs::write(&secret, SECRET).unwrap();
+    let docx = export_one(
+        "img",
+        &format!("Look ![x]({}) here.", secret.display()),
+        "out.docx",
+    );
+    let has = |needle: &[u8]| docx.windows(needle.len()).any(|w| w == needle);
+    assert!(!has(b"word/media/"), "the .docx carries a media file");
+    assert!(has(b"word/document.xml"), "it is a Word file");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

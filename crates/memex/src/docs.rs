@@ -477,17 +477,61 @@ pub fn write(markdown: &str, path: &Path, sources: &[String]) -> Result<(), Stri
             .join("\n")
     );
     let doc = format!("{meta}{markdown}");
+    // Two steps. First the Markdown becomes Pandoc's tree, sandboxed; then
+    // what could act beyond words is taken out (see `inert`); then the tree
+    // is written. The second step is not sandboxed, because Pandoc 3.1.3's
+    // sandbox cannot find its own data files for Word and OpenDocument
+    // output; with no images left in the tree, it has nothing to read.
+    let tree = pandoc(&["-f", "markdown", "-t", "json"], Some(doc.as_bytes()))?;
+    let mut tree: Value =
+        serde_json::from_slice(&tree).map_err(|e| format!("pandoc gave no JSON tree: {e}"))?;
+    inert(&mut tree);
+    let tree = serde_json::to_vec(&tree).map_err(|e| e.to_string())?;
     let p = path_arg(path);
-    let mut args = vec!["-f", "markdown", "-o", &p, "--standalone"];
-    if fmt != "markdown" {
-        args.extend(["-t", fmt]);
-    } else {
-        args.extend(["-t", "markdown"]);
-    }
-    // Not sandboxed: Pandoc 3.1.3's sandbox cannot find its own data files
-    // for Word and OpenDocument output (see docs/log.md).
-    pandoc_run(false, &args, Some(doc.as_bytes()))?;
+    let mut args = vec!["-f", "json", "-o", &p, "--standalone"];
+    args.extend(["-t", fmt]);
+    pandoc_run(false, &args, Some(&tree))?;
     Ok(())
+}
+
+/// Take out of a Pandoc tree what an exported document would act on
+/// rather than show: images (Pandoc embeds the file or fetches the URL),
+/// raw HTML, LaTeX and other raw blocks (run by whoever opens or compiles
+/// the export), and links whose target is not http, https, mailto, doi or
+/// within the document (a javascript: or file: link keeps its text, as a
+/// span). The outline holds none of these as such: an import counts them
+/// as losses. They can only arrive as text that reads as Markdown.
+pub fn inert(v: &mut Value) {
+    match v {
+        Value::Array(a) => {
+            a.retain(|x| !matches!(x["t"].as_str(), Some("Image" | "RawInline" | "RawBlock")));
+            a.iter_mut().for_each(inert);
+        }
+        Value::Object(o) => {
+            if o.get("t").and_then(Value::as_str) == Some("Link") {
+                let url = o["c"][2][0].as_str().unwrap_or("").to_string();
+                if !safe_link(&url) {
+                    let c = o["c"].as_array().cloned().unwrap_or_default();
+                    o.insert("t".into(), Value::from("Span"));
+                    o.insert("c".into(), Value::Array(c.into_iter().take(2).collect()));
+                }
+            }
+            o.values_mut().for_each(inert);
+        }
+        _ => {}
+    }
+}
+
+/// A link target an exported document may keep.
+fn safe_link(url: &str) -> bool {
+    let u = url.trim().to_ascii_lowercase();
+    match u.split_once(':') {
+        // No scheme before the first "/", "?" or "#": a relative link.
+        Some((scheme, _)) if !scheme.contains(['/', '?', '#']) => {
+            matches!(scheme, "http" | "https" | "mailto" | "doi")
+        }
+        _ => true,
+    }
 }
 
 /// The longest common subsequence of two lists, as matched index pairs.
@@ -534,6 +578,38 @@ pub fn normal(s: &str) -> String {
         .filter(|c| !c.is_whitespace() && !matches!(c, '-' | '‐' | '‑' | '–' | '—'))
         .flat_map(char::to_lowercase)
         .collect()
+}
+
+#[cfg(test)]
+mod inert_tests {
+    use super::*;
+
+    #[test]
+    fn link_schemes() {
+        // Catches a scheme let through by case or spacing, or a relative
+        // link taken for a scheme.
+        for u in [
+            "javascript:alert(1)",
+            " JavaScript:x",
+            "data:text/html,x",
+            "file:///etc/passwd",
+            "vbscript:x",
+        ] {
+            assert!(!safe_link(u), "{u}");
+        }
+        for u in [
+            "https://example.org/a:b",
+            "http://x",
+            "mailto:a@b",
+            "doi:10.1/x",
+            "#sec",
+            "../a.html",
+            "a/b:c",
+            "?q=a:b",
+        ] {
+            assert!(safe_link(u), "{u}");
+        }
+    }
 }
 
 /// A document's plain text, through Pandoc, for the quote check.
