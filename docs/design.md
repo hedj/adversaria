@@ -320,7 +320,7 @@ Large Monte Carlo runs belong in the analysis tools, whose samples are then impo
 
 ## Sources and references
 
-Reference management needs no tool of its own: a source is an item, and what is known of it is facts. Wikidata already describes tens of millions of scholarly works (its WikiCite effort; recalled, not counted), with properties that serve as the schema. The property numbers below are recalled and not checked.
+Reference management needs no tool of its own: a source is an item, and what is known of it is facts. Wikidata already describes tens of millions of scholarly works (its WikiCite effort; recalled, not counted), with properties that serve as the schema. The property numbers below were checked against Wikidata's own labels on 12 November 2026.
 
 | Need | Facts |
 | --- | --- |
@@ -330,6 +330,23 @@ Reference management needs no tool of its own: a source is an item, and what is 
 | The file | a PDF in `blobs/`, named by its hash, linked from the source's item |
 
 This makes questions about sources ordinary queries: which claims rest on a single source; which cite a retracted work; which sources of a section cite each other. The constraint “a claim cites a retracted source” is the one the user story already shows. Sources the knowledge base lacks come in by DOI from Wikidata or Crossref over the network, or from a library in BibTeX or CSL-JSON, each as an import with provenance. For a paper, the memex writes CSL-JSON, which Pandoc and the common reference managers read. The translator's model also suggests references for a claim in its pane of suggestions, choosing only among works already in the store, so it cannot invent one; each suggestion shows why it was offered (see the translator document). The Wikidata subsets may leave out scholarly works to save space; which subset keeps them is an open question.
+
+### As built (milestone 5)
+
+* **The subset** is made by `crates/tools`' `wikidata` program, from the query service: each item's truthy statements without external identifiers, English labels, and its properties' constraints from P2302, as Prolog facts `wd/3`, `wd_label/2`, `wd_constraint/2`. `import wikidata <file>` copies the file into `blobs/` under its hash and writes an `import` entry with its provenance (derived from Wikidata, CC0, made by the tool). The memex loads it into each world whose path holds the entry.
+* **Wikidata's statements are claims.** A user predicate is read against Wikidata through two adopted facts: `same_as(Entity, Q)` and `wd_property(Predicate, P)`. Then `P(E, Y)` is Wikidata's claim when Q's property P has value Y (for a date, its year). Constraints see these claims like any other, so a disagreement names "Wikidata" as its source.
+* **Suggestions without a model**, from `prolog/dataflow.pl`:
+  * entity links, from the label index: the whole name, or one word of it, ranked by Wikidata's dates near the user's;
+  * property mappings, where a linked entity's Wikidata date sits beside the user's;
+  * Wikidata's single-value constraints, for mapped properties, tried against a planted violation before they are kept;
+  * rules mined from the beliefs, `Q(X, Y) :- P(X, Y)`, with support of at least 2 and confidence of at least 0.8, shown with their exceptions; an adopted rule is a `rule_def` fact the reasoner uses;
+  * references, chosen only among works in the store (entities linked to a scholarly article), by main subject (P921) and citations (P2860) among stored works.
+* **The pane's rules**:
+  * it never takes the keyboard: `accept N` and `dismiss N`;
+  * it shows at most five, ranked by score;
+  * while it has focus, suggestions that remain keep their order and new ones go last;
+  * a dismissal is a journal entry, and the suggestion returns only if its evidence changes.
+* **Found on Wikidata**: P606 (first flight) has no single-value constraint; P619 (UTC date of spacecraft launch) has one. No scholarly article in Wikidata has the Buran spaceplane or programme as its main subject.
 
 ## Documents in and out
 
@@ -598,6 +615,8 @@ Milestone 2 fixed what the text above left open. `prolog/protocol.pl` and `crate
 | Constraints are matched against beliefs and claims together; a solution resting on a claim is a disagreement, shown dimmed, apart from violations | made when milestone 4 was built (12 November 2026), as § Claims and beliefs asks |
 | A supposition sets aside, in its world only, the beliefs that break a constraint together with it | made when milestone 4 was built; the supposition is the more entrenched, after the translator document's revision loop |
 | Without APE, Suppose reads English through the world's own facts and offers readings to choose with Tab | made when milestone 4 was built; the plan makes APE's restatement optional here |
+| Wikidata's statements are claims read through adopted links (`same_as`) and property mappings (`wd_property`); the subset is a blob imported with its provenance | made when milestone 5 was built (12 November 2026), as § Claims and beliefs asks |
+| Suggestions are ranked by a score from their evidence; a suggestion is known, for dismissal, by what it proposes and its evidence, and, for its place in the pane, by what it proposes alone | made when milestone 5 was built; a dismissed suggestion returns only if its evidence changes, and one never moves under the pointer as its evidence grows |
 | Query protocol version 1: big-endian words, tags and message types numbered, BLOBs typed by their first byte, ATOM\_IS naming atoms, answers as one term per variable, DONE with a status; queries as SWI-Prolog engines | made precise when milestone 2 was built (12 November 2026); the design left these open, and ATOM\_IS could not name an atom the server introduced |
 | Journal bodies carry facts as `"facts"`; a retract names its target; a world's store is its path's facts less those retracted | made precise when milestone 2 was built (12 November 2026), so that facts replay from the journal |
 | Format version 1 is fixed in detail: seals name the entry's hash `entry_hash`; an entry's hash leaves out its body, which `body_hash` stands for; one root per journal; purge bodies, key records and the key file as § The journal format states | made precise when milestone 1 was built (12 November 2026); the design named two fields of a seal `hash`, and left the rest open |

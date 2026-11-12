@@ -25,6 +25,8 @@ impl Prov {
 pub struct Solution {
     pub values: Vec<Term>,
     pub prov: Vec<Prov>,
+    /// The fact each provenance rests on, in the same order.
+    pub facts: Vec<Term>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +53,117 @@ pub struct WorldEval {
 impl WorldEval {
     pub fn fact(&self, seq: u64) -> Option<&Term> {
         self.facts.iter().find(|(s, _)| *s == seq).map(|(_, t)| t)
+    }
+}
+
+/// A suggestion without a model: what it proposes, the facts adopting it
+/// adds, its evidence, and a score by which suggestions are ranked.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Suggestion {
+    /// link, mapping, constraint(Name, Vars, Body), rule(Head, Body) or
+    /// reference(Entity, Work).
+    pub kind: Term,
+    pub facts: Vec<Term>,
+    pub evidence: String,
+    pub score: i64,
+}
+
+impl Suggestion {
+    pub fn from_term(t: &Term) -> Option<Suggestion> {
+        // Variables are numbered within the whole answer; number them from 0
+        // within this suggestion, so its key does not depend on its place.
+        let mut seen: Vec<u64> = Vec::new();
+        fn renumber(t: &Term, seen: &mut Vec<u64>) -> Term {
+            match t {
+                Term::Var(v) => {
+                    let i = seen.iter().position(|x| x == v).unwrap_or_else(|| {
+                        seen.push(*v);
+                        seen.len() - 1
+                    });
+                    Term::Var(i as u64)
+                }
+                Term::Compound(f, a) => {
+                    Term::Compound(f.clone(), a.iter().map(|x| renumber(x, seen)).collect())
+                }
+                t => t.clone(),
+            }
+        }
+        let t = &renumber(t, &mut seen);
+        match t {
+            Term::Compound(f, a) if f == "suggestion" && a.len() == 4 => Some(Suggestion {
+                kind: a[0].clone(),
+                facts: list(&a[1]),
+                evidence: match &a[2] {
+                    Term::Str(s) => s.clone(),
+                    t => show(t),
+                },
+                score: match &a[3] {
+                    Term::Int(n) => *n,
+                    _ => 0,
+                },
+            }),
+            _ => None,
+        }
+    }
+
+    /// Known by what it proposes and its evidence: a dismissed suggestion
+    /// comes back only if its evidence changes.
+    pub fn key(&self) -> String {
+        format!(
+            "{} | {} | {}",
+            show(&self.kind),
+            self.facts.iter().map(show).collect::<Vec<_>>().join(", "),
+            self.evidence
+        )
+    }
+
+    /// What it proposes, without its evidence: its place in a frozen list
+    /// holds while its evidence grows.
+    pub fn identity(&self) -> String {
+        format!(
+            "{} | {}",
+            show(&self.kind),
+            self.facts.iter().map(show).collect::<Vec<_>>().join(", ")
+        )
+    }
+
+    pub fn kind_name(&self) -> &str {
+        match &self.kind {
+            Term::Atom(a) => a,
+            Term::Compound(f, _) => f,
+            _ => "?",
+        }
+    }
+
+    /// The suggestion in words.
+    pub fn describe(&self) -> String {
+        let arg = |t: &Term, i: usize| match t {
+            Term::Compound(_, x) => x.get(i).map(show).unwrap_or_default(),
+            _ => String::new(),
+        };
+        let fact = self
+            .facts
+            .first()
+            .cloned()
+            .unwrap_or(Term::Atom("[]".into()));
+        match (self.kind_name(), &self.kind) {
+            ("link", _) => format!("{} is Wikidata {}", arg(&fact, 0), arg(&fact, 1)),
+            ("mapping", _) => format!("{} is Wikidata's {}", arg(&fact, 0), arg(&fact, 1)),
+            ("constraint", Term::Compound(_, x)) if x.len() == 3 => {
+                let name = match &x[0] {
+                    Term::Str(n) | Term::Atom(n) => n.clone(),
+                    t => show(t),
+                };
+                format!("constraint {name}: false :- {}", show(&x[2]))
+            }
+            ("rule", _) => format!("rule {} :- {}", arg(&self.kind, 0), arg(&self.kind, 1)),
+            ("reference", _) => format!(
+                "cite {} for the claims about {}",
+                arg(&self.kind, 1),
+                arg(&self.kind, 0)
+            ),
+            _ => show(&self.kind),
+        }
     }
 }
 
@@ -88,38 +201,47 @@ pub fn solutions(v: &Term) -> Vec<Solution> {
         if f != "-" || a.len() != 2 {
             continue;
         }
-        let prov: Vec<Prov> = list(&a[1])
+        // belief(Seq, Fact) or claim(Source, Seq, Fact).
+        let parsed: Vec<(Prov, Term)> = list(&a[1])
             .iter()
             .filter_map(|p| match p {
-                Term::Compound(f, x) if f == "belief" => match &x[0] {
-                    Term::Int(s) => Some(Prov::Belief(*s as u64)),
+                Term::Compound(f, x) if f == "belief" && x.len() == 2 => match &x[0] {
+                    Term::Int(s) => Some((Prov::Belief(*s as u64), x[1].clone())),
                     _ => None,
                 },
-                Term::Compound(f, x) if f == "claim" => match (&x[0], &x[1]) {
-                    (Term::Str(src), Term::Int(s)) => Some(Prov::Claim(src.clone(), *s as u64)),
-                    (Term::Atom(src), Term::Int(s)) => Some(Prov::Claim(src.clone(), *s as u64)),
+                Term::Compound(f, x) if f == "claim" && x.len() == 3 => match (&x[0], &x[1]) {
+                    (Term::Str(src) | Term::Atom(src), Term::Int(s)) => {
+                        Some((Prov::Claim(src.clone(), *s as u64), x[2].clone()))
+                    }
                     _ => None,
                 },
                 _ => None,
             })
             .collect();
-        let mut key: Vec<u64> = prov.iter().map(Prov::seq).collect();
-        key.sort();
-        key.dedup();
-        if key.len() < 2 && prov.len() >= 2 {
-            continue; // one fact matched twice: not two facts disagreeing
-        }
-        if out.iter().any(|s| {
-            let mut k: Vec<u64> = s.prov.iter().map(Prov::seq).collect();
+        let prov: Vec<Prov> = parsed.iter().map(|p| p.0.clone()).collect();
+        let facts: Vec<Term> = parsed.into_iter().map(|p| p.1).collect();
+        // A solution is known by the facts it rests on.
+        let key = |prov: &[Prov], facts: &[Term]| {
+            let mut k: Vec<String> = prov
+                .iter()
+                .zip(facts)
+                .map(|(p, f)| format!("{}:{}", p.seq(), show(f)))
+                .collect();
             k.sort();
             k.dedup();
-            k == key
-        }) {
+            k
+        };
+        let k = key(&prov, &facts);
+        if k.len() < 2 && prov.len() >= 2 {
+            continue; // one fact matched twice: not two facts disagreeing
+        }
+        if out.iter().any(|s| key(&s.prov, &s.facts) == k) {
             continue;
         }
         out.push(Solution {
             values: list(&a[0]),
             prov,
+            facts,
         });
     }
     out
@@ -137,6 +259,18 @@ pub fn show(t: &Term) -> String {
             "[{}]",
             list(t).iter().map(show).collect::<Vec<_>>().join(", ")
         ),
+        Term::Compound(f, a) if f == "," && a.len() == 2 => {
+            format!("{}, {}", show(&a[0]), show(&a[1]))
+        }
+        Term::Compound(f, a)
+            if a.len() == 2
+                && [
+                    "\\=", "=", "is", "<", ">", "=<", ">=", "+", "-", "*", "/", ":-",
+                ]
+                .contains(&f.as_str()) =>
+        {
+            format!("{} {f} {}", show(&a[0]), show(&a[1]))
+        }
         Term::Compound(f, a) => {
             format!("{f}({})", a.iter().map(show).collect::<Vec<_>>().join(", "))
         }
@@ -357,8 +491,13 @@ mod tests {
         let p = |a: Term, b: Term| {
             Term::Compound("-".into(), vec![make_list(vec![]), make_list(vec![a, b])])
         };
-        let b = |s| Term::Compound("belief".into(), vec![Term::Int(s)]);
-        let c = |s| Term::Compound("claim".into(), vec![Term::Str("talk".into()), Term::Int(s)]);
+        let b = |s| Term::Compound("belief".into(), vec![Term::Int(s), date("x", 1)]);
+        let c = |s| {
+            Term::Compound(
+                "claim".into(),
+                vec![Term::Str("talk".into()), Term::Int(s), date("x", 2)],
+            )
+        };
         let v = make_list(vec![p(b(2), c(4)), p(c(4), b(2)), p(b(2), b(2))]);
         let s = solutions(&v);
         assert_eq!(s.len(), 1);

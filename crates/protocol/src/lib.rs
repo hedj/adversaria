@@ -324,7 +324,26 @@ fn decode_term(
             if arity == 0 {
                 return err("a struct of arity 0");
             }
-            let f = name(v & ((1 << 21) - 1))?;
+            let fno = v & ((1 << 21) - 1);
+            if arity == 2 && fno == 1 {
+                // A list: walk its spine in a loop, so a long list does not
+                // recurse once per element.
+                let mut heads = vec![decode_term(cells, pos, atoms, seen)?];
+                while let Some(&c) = cells.get(*pos) {
+                    if c >> 29 == STRUCT && (c & VALUE) >> 21 == 2 && c & ((1 << 21) - 1) == 1 {
+                        *pos += 1;
+                        heads.push(decode_term(cells, pos, atoms, seen)?);
+                    } else {
+                        break;
+                    }
+                }
+                let tail = decode_term(cells, pos, atoms, seen)?;
+                return Ok(heads
+                    .into_iter()
+                    .rev()
+                    .fold(tail, |t, h| Term::Compound(".".into(), vec![h, t])));
+            }
+            let f = name(fno)?;
             let args = (0..arity)
                 .map(|_| decode_term(cells, pos, atoms, seen))
                 .collect::<Result<_, _>>()?;

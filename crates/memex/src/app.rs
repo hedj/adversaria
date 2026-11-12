@@ -17,7 +17,7 @@
 use crate::engine::{Engine, variables};
 use crate::journal::{Error as JournalError, Journal};
 use crate::outline::{Outline, Span, TOP, span_json};
-use crate::reason::{self, ConstraintEval, Prov, WorldEval, solutions};
+use crate::reason::{self, ConstraintEval, Prov, Suggestion, WorldEval, solutions};
 use format::record::Entry;
 use format::terms::{self, Term};
 use serde_json::{Value, json};
@@ -95,6 +95,7 @@ impl Event {
 pub enum PaneKind {
     Outline,
     Links,
+    Suggestions,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,12 +148,10 @@ impl Default for View {
 
 impl View {
     fn to_json(&self, op: &str, extra: Value) -> Value {
-        let kind = |k: PaneKind| {
-            if k == PaneKind::Outline {
-                "outline"
-            } else {
-                "links"
-            }
+        let kind = |k: PaneKind| match k {
+            PaneKind::Outline => "outline",
+            PaneKind::Links => "links",
+            PaneKind::Suggestions => "suggestions",
         };
         let scope = match self.scope {
             ScopeLevel::Word => "word",
@@ -173,10 +172,10 @@ impl View {
     fn restore(&mut self, b: &Value) {
         if let Some(ps) = b.get("panes").and_then(|p| p.as_array()) {
             for (i, p) in ps.iter().take(2).enumerate() {
-                self.panes[i].kind = if p["kind"] == "links" {
-                    PaneKind::Links
-                } else {
-                    PaneKind::Outline
+                self.panes[i].kind = match p["kind"].as_str() {
+                    Some("links") => PaneKind::Links,
+                    Some("suggestions") => PaneKind::Suggestions,
+                    _ => PaneKind::Outline,
                 };
                 self.panes[i].cursor = p["cursor"].as_u64().unwrap_or(TOP);
             }
@@ -268,6 +267,14 @@ pub struct App {
     pub eval: [Option<WorldEval>; 2],
     /// Interrogation's preview of adopting a claim: violations it would raise.
     pub preview: Option<String>,
+    /// Suggestions for the current world, best evidence first, less those
+    /// dismissed.
+    pub suggestions: Vec<Suggestion>,
+    /// Keys of dismissed suggestions, from the journal.
+    pub dismissed: BTreeSet<String>,
+    /// While the suggestion pane has focus, its order is kept: a suggestion
+    /// never moves under the pointer. Not journaled, like a held key.
+    frozen: Option<Vec<String>>,
 }
 
 const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
@@ -286,6 +293,11 @@ pub struct Command {
 }
 
 pub const COMMANDS: &[Command] = &[
+    Command {
+        name: "accept",
+        slots: &[("suggestion", Slot::Word)],
+        help: "adopt the nth suggestion shown, with its evidence",
+    },
     Command {
         name: "adopt",
         slots: &[],
@@ -327,6 +339,11 @@ pub const COMMANDS: &[Command] = &[
         help: "hide the target's branch",
     },
     Command {
+        name: "dismiss",
+        slots: &[("suggestion", Slot::Word)],
+        help: "dismiss the nth suggestion shown; it returns only if its evidence changes",
+    },
+    Command {
         name: "derive",
         slots: &[("text", Slot::Text)],
         help: "the target shows a computed text: a template with {Var}, then where and a Prolog goal",
@@ -345,6 +362,11 @@ pub const COMMANDS: &[Command] = &[
         name: "help",
         slots: &[],
         help: "list every command",
+    },
+    Command {
+        name: "import",
+        slots: &[("from", Slot::Text)],
+        help: "import wikidata and a file of facts made by the wikidata tool: claims whose source is Wikidata",
     },
     Command {
         name: "indent",
@@ -464,6 +486,9 @@ impl App {
             engines: [None, None, None],
             eval: [None, None],
             preview: None,
+            suggestions: vec![],
+            dismissed: BTreeSet::new(),
+            frozen: None,
         };
         if app.journal.entries().is_empty() {
             let e = app.journal.append("edit", json!({"op": "init"}))?;
@@ -518,6 +543,11 @@ impl App {
                     }
                     if b["op"] == "world" {
                         self.supposition = None;
+                    }
+                    if b["op"] == "dismiss"
+                        && let Some(k) = b["key"].as_str()
+                    {
+                        self.dismissed.insert(k.to_string());
                     }
                 }
                 self.tip = e.seq;
@@ -1208,8 +1238,12 @@ impl App {
                 self.eval[k] = Some(eval);
                 continue;
             }
+            let import = self.import_on(head);
             let engine = self.engine(k)?;
             engine.sync(&facts).map_err(|e| e.to_string())?;
+            engine
+                .wikidata(import.as_ref().map(|(s, f)| (*s, f.as_path())))
+                .map_err(|e| e.to_string())?;
             for (seq, c) in &outline.constraints {
                 if !facts.iter().any(|(s, _)| s == seq) {
                     continue; // retracted in this world
@@ -1233,6 +1267,16 @@ impl App {
             }
             self.eval[k] = Some(eval);
         }
+        self.suggestions = match &self.engines[0] {
+            Some(_) if self.eval[0].as_ref().is_some_and(|e| !e.facts.is_empty()) => {
+                let all = self.engine(0)?.suggestions().map_err(|e| e.to_string())?;
+                all.into_iter()
+                    .filter(|s| !self.dismissed.contains(&s.key()))
+                    .collect()
+            }
+            _ => vec![],
+        };
+        self.update_frozen();
         self.preview = None;
         if let Some(item) = self.view.interrogate {
             self.preview = Some(self.preview_adoption(item)?);
@@ -1286,6 +1330,144 @@ impl App {
         })
     }
 
+    /// The Wikidata import in a world: the last import entry on its path,
+    /// not retracted, and the file its blob is in.
+    fn import_on(&self, head: u64) -> Option<(u64, std::path::PathBuf)> {
+        let path = self.path(head);
+        let retracted: HashSet<u64> = path
+            .iter()
+            .filter(|e| e.kind == "retract")
+            .filter_map(|e| e.body.as_ref().and_then(|b| b["target"].as_u64()))
+            .collect();
+        path.iter()
+            .rev()
+            .filter(|e| e.kind == "import" && !retracted.contains(&e.seq))
+            .find_map(|e| {
+                let b = e.body.as_ref()?;
+                let blob = b["blob"].as_str()?;
+                (b["source"] == "Wikidata").then(|| {
+                    (
+                        e.seq,
+                        self.journal.dir().join(format::record::BLOBS).join(blob),
+                    )
+                })
+            })
+    }
+
+    /// The suggestions in the order shown: while the suggestion pane has
+    /// focus, those already shown keep their places and new ones go last.
+    pub fn shown_suggestions(&self) -> Vec<&Suggestion> {
+        let mut out: Vec<&Suggestion> = Vec::new();
+        if let Some(order) = &self.frozen {
+            for k in order {
+                if let Some(s) = self.suggestions.iter().find(|s| &s.identity() == k) {
+                    out.push(s);
+                }
+            }
+        }
+        for s in &self.suggestions {
+            if !out.iter().any(|o| o.identity() == s.identity()) {
+                out.push(s);
+            }
+        }
+        out.truncate(5); // few in view
+        out
+    }
+
+    /// Keep the suggestion pane's order while it has focus.
+    fn update_frozen(&mut self) {
+        let focused = self.view.panes[self.view.focus].kind == PaneKind::Suggestions;
+        self.frozen = match (focused, self.frozen.take()) {
+            (true, Some(f)) => Some(f),
+            (true, None) => Some(
+                self.shown_suggestions()
+                    .iter()
+                    .map(|s| s.identity())
+                    .collect(),
+            ),
+            (false, _) => None,
+        };
+    }
+
+    /// The items whose facts are about an entity: facts with it first.
+    fn items_about(&self, entity: &Term) -> Vec<u64> {
+        let facts = crate::store::facts(self.journal.entries(), self.tip).unwrap_or_default();
+        let mut out: Vec<u64> = facts
+            .iter()
+            .filter(|(_, f)| matches!(f, Term::Compound(_, a) if a.first() == Some(entity)))
+            .filter_map(|(s, _)| self.outline.fact_item.get(s).copied())
+            .collect();
+        out.dedup();
+        out
+    }
+
+    /// Adopt a suggestion: one entry, marked as an adopted suggestion and
+    /// carrying its evidence, so it can be found and retracted later. A
+    /// constraint is tried against a planted violation first.
+    fn accept(&mut self, s: &Suggestion) -> Result<(), String> {
+        let mark = json!({"kind": reason::show(&s.kind), "evidence": s.evidence, "score": s.score});
+        let enc = |t: &Term| terms::encode(t).map_err(|e| e.0);
+        let seq = self.journal.entries().len() as u64 + 1;
+        let c = |f: &str, args: Vec<Term>| Term::Compound(f.into(), args);
+        match (s.kind_name(), &s.kind) {
+            ("constraint", Term::Compound(_, a)) if a.len() == 3 => {
+                let planted = self
+                    .engine(0)?
+                    .plant(&a[1], &a[2])
+                    .map_err(|e| e.to_string())?;
+                if !matches!(&planted, Term::Compound(n, _) if n == "fires") {
+                    return Err(format!(
+                        "not adopted: tried against a planted violation, it did not fire ({})",
+                        reason::show(&planted)
+                    ));
+                }
+                let name = match &a[0] {
+                    Term::Str(x) | Term::Atom(x) => x.clone(),
+                    t => reason::show(t),
+                };
+                let def = c(
+                    "node_def",
+                    vec![
+                        Term::Int(seq as i64),
+                        c(
+                            "constraint",
+                            vec![Term::Str(name.clone()), a[1].clone(), a[2].clone()],
+                        ),
+                    ],
+                );
+                self.write_here(
+                    "adopt",
+                    json!({"suggestion": mark, "op": "constraint", "name": name, "rule": format!("false :- {}", reason::show(&a[2])), "facts": [enc(&def)?]}),
+                )?;
+            }
+            ("rule", Term::Compound(_, a)) if a.len() == 2 => {
+                let def = c(
+                    "rule_def",
+                    vec![Term::Int(seq as i64), a[0].clone(), a[1].clone()],
+                );
+                self.write_here("adopt", json!({"suggestion": mark, "facts": [enc(&def)?]}))?;
+            }
+            ("reference", Term::Compound(_, a)) if a.len() == 2 => {
+                let from = *self
+                    .items_about(&a[0])
+                    .first()
+                    .ok_or("no item states facts about that entity")?;
+                let to = *self
+                    .items_about(&a[1])
+                    .first()
+                    .ok_or("no item is that work")?;
+                let fact = c("cites", vec![Term::Int(from as i64), Term::Int(to as i64)]);
+                self.write_here("link", json!({"from": from, "to": to, "type": "cites", "facts": [enc(&fact)?], "suggestion": mark}))?;
+            }
+            _ => {
+                let facts: Vec<serde_json::Value> =
+                    s.facts.iter().map(enc).collect::<Result<_, _>>()?;
+                self.write_here("adopt", json!({"suggestion": mark, "facts": facts}))?;
+            }
+        }
+        Ok(())
+    }
+
     /// An item's claims: (entry seq, source, claimed fact).
     pub fn claims_of(&self, item: u64) -> Vec<(u64, String, Term)> {
         let facts = crate::store::facts(self.journal.entries(), self.tip).unwrap_or_default();
@@ -1325,6 +1507,7 @@ impl App {
             }
         };
         self.flush();
+        self.update_frozen();
         mode
     }
 
@@ -1403,6 +1586,9 @@ impl App {
                 | "constraint"
                 | "close"
                 | "commit"
+                | "import"
+                | "accept"
+                | "dismiss"
         );
         if need_target && target == TOP {
             return Err("there is no item to act on".into());
@@ -1430,7 +1616,8 @@ impl App {
                 self.view.panes[other].kind = match words.first().copied() {
                     Some("outline") => PaneKind::Outline,
                     Some("links") => PaneKind::Links,
-                    _ => return Err("pane (shows) outline, or links".into()),
+                    Some("suggestions") => PaneKind::Suggestions,
+                    _ => return Err("pane (shows) outline, links, or suggestions".into()),
                 };
                 self.view.panes[other].cursor = target;
                 self.write_view("pane", json!({}));
@@ -1592,6 +1779,59 @@ impl App {
                 self.set_cursor(to);
                 self.write_view("follow", json!({"to": to}));
             }
+            "import" => {
+                let (what, file) = match words.split_first() {
+                    Some((w, rest)) if *w == "wikidata" && !rest.is_empty() => (*w, rest.join(" ")),
+                    _ => {
+                        return Err(
+                            "import (from) wikidata and a file made by the wikidata tool".into(),
+                        );
+                    }
+                };
+                let bytes = std::fs::read(&file).map_err(|e| format!("{file}: {e}"))?;
+                let hash = format::record::sha256_hex(&bytes);
+                let blobs = self.journal.dir().join(format::record::BLOBS);
+                std::fs::create_dir_all(&blobs).map_err(|e| e.to_string())?;
+                let dest = blobs.join(&hash);
+                if !dest.exists() {
+                    std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
+                }
+                let name = std::path::Path::new(&file)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                // Provenance after W3C PROV: what it was derived from, under
+                // what licence, and the file it came in.
+                self.write_here(
+                    "import",
+                    json!({"blob": hash, "format": "wikidata-subset", "source": "Wikidata", "file": name,
+                           "prov": {"prov:wasDerivedFrom": "https://www.wikidata.org/", "license": "CC0-1.0", "prov:wasGeneratedBy": "crates/tools/src/bin/wikidata.rs"}}),
+                )?;
+                self.message = format!(
+                    "imported {what}: {} bytes, blob {}",
+                    bytes.len(),
+                    &hash[..12]
+                );
+            }
+            "accept" | "dismiss" => {
+                let n: usize = words
+                    .first()
+                    .and_then(|w| w.parse().ok())
+                    .ok_or(format!("{name} (suggestion) a number"))?;
+                let s = self
+                    .shown_suggestions()
+                    .get(n.wrapping_sub(1))
+                    .map(|s| (*s).clone())
+                    .ok_or(format!("there is no suggestion {n}"))?;
+                if name == "dismiss" {
+                    self.write_view("dismiss", json!({"key": s.key()}));
+                    self.message = format!("dismissed: {}", s.describe());
+                } else {
+                    self.accept(&s)?;
+                    self.message = format!("adopted: {}", s.describe());
+                }
+            }
+
             "fact" | "claim" => {
                 let text = words.join(" ");
                 let (fact_text, source) = match (name, text.rfind(" from ")) {

@@ -199,3 +199,36 @@ fn malformed_cells_refused() {
         assert!(decode(&cells, &a).is_err(), "{cells:x?}");
     }
 }
+
+#[test]
+fn a_long_list_decodes_without_deep_recursion() {
+    // Catches a decoder that recurses once per list element: a long list
+    // from Prolog would overflow the stack (found when a few hundred
+    // suggestions overflowed a test thread). Run in a thread with a small
+    // stack so a recursive decoder fails here, not by chance elsewhere.
+    let atoms = Atoms::default();
+    let n = 200_000;
+    let mut cells = Vec::with_capacity(2 * n + 1);
+    for i in 0..n {
+        cells.push(cell(STRUCT, (2 << 21) | 1));
+        cells.push(int_cell(i as i64 % 1000).unwrap());
+    }
+    cells.push(cell(ATOM, 0));
+    let len = std::thread::Builder::new()
+        .stack_size(256 * 1024)
+        .spawn(move || {
+            let t = decode(&cells, &atoms).unwrap();
+            let mut count = 0;
+            let mut at = &t[0];
+            while let Term::Compound(_, a) = at {
+                count += 1;
+                at = &a[1];
+            }
+            std::mem::forget(t); // dropping a long list recurses too (a known limit)
+            count
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+    assert_eq!(len, n);
+}

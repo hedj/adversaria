@@ -395,11 +395,29 @@ impl Outline {
                 true
             }
             ("adopt", _) => {
-                let Some(id) = num("item").filter(|i| self.items.contains_key(i)) else {
-                    return false;
-                };
-                self.fact_item.insert(seq, id);
-                true
+                // An adopted suggestion may be a constraint, or facts with no item.
+                if body.get("op").and_then(|v| v.as_str()) == Some("constraint") {
+                    let name = body
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let rule = body
+                        .get("rule")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    self.constraints.insert(seq, Constraint { name, rule });
+                    return true;
+                }
+                match num("item") {
+                    Some(id) if self.items.contains_key(&id) => {
+                        self.fact_item.insert(seq, id);
+                        true
+                    }
+                    Some(_) => false,
+                    None => true,
+                }
             }
             ("name", _) => {
                 let (Some(n), Some(id)) = (body.get("name").and_then(|v| v.as_str()), num("item"))

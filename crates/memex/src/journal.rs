@@ -65,6 +65,10 @@ impl Journal {
         })
     }
 
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
     pub fn entries(&self) -> &[Entry] {
         &self.entries
     }

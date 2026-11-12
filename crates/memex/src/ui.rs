@@ -39,6 +39,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         match app.view.panes[i].kind {
             PaneKind::Outline => draw_outline(f, app, i, area),
             PaneKind::Links => draw_links(f, app, area),
+            PaneKind::Suggestions => draw_suggestions(f, app, area),
         }
     }
     if let Mode::Quasi(a) = &app.mode
@@ -531,32 +532,23 @@ pub fn item_marks(e: &WorldEval, outline: &Outline, item: u64) -> Vec<(bool, Str
     for c in &e.constraints {
         for (sols, violation) in [(&c.violations, true), (&c.disagreements, false)] {
             for sol in sols {
-                let here: Vec<&Prov> = sol
-                    .prov
-                    .iter()
-                    .filter(|p| outline.fact_item.get(&p.seq()) == Some(&item))
-                    .collect();
-                let Some(h) = here.first() else { continue };
+                let mine = |p: &Prov| outline.fact_item.get(&p.seq()) == Some(&item);
+                let Some(h) = sol.prov.iter().position(mine) else {
+                    continue;
+                };
                 let kind = if violation {
                     "violation"
                 } else {
                     "sources disagree"
                 };
-                for o in sol
-                    .prov
-                    .iter()
-                    .filter(|p| outline.fact_item.get(&p.seq()) != Some(&item))
-                {
-                    let (Some(fh), Some(fo)) = (e.fact(h.seq()), e.fact(o.seq())) else {
-                        continue;
-                    };
-                    let (a, b) = difference(fh, fo);
+                for (o, p) in sol.prov.iter().enumerate().filter(|(_, p)| !mine(p)) {
+                    let (a, b) = difference(&sol.facts[h], &sol.facts[o]);
                     out.push((
                         violation,
                         format!(
                             "{}, {kind}: {a} here, {b} in {}",
                             c.name,
-                            place(outline, o.seq())
+                            where_from(outline, p)
                         ),
                     ));
                 }
@@ -564,6 +556,16 @@ pub fn item_marks(e: &WorldEval, outline: &Outline, item: u64) -> Vec<(bool, Str
         }
     }
     out
+}
+
+/// Where a fact comes from: its item's number; else a claim's source; else
+/// its entry.
+fn where_from(outline: &Outline, p: &Prov) -> String {
+    match (outline.fact_item.get(&p.seq()), p) {
+        (Some(i), _) => outline.number(*i),
+        (None, Prov::Claim(src, _)) => src.clone(),
+        (None, Prov::Belief(s)) => format!("entry {s}"),
+    }
 }
 
 /// What the top bar says of the current world's constraints.
@@ -650,11 +652,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
                 dim(),
             ));
             for sol in sols {
-                let facts: Vec<(u64, &Term)> = sol
-                    .prov
-                    .iter()
-                    .filter_map(|p| e.fact(p.seq()).map(|f| (p.seq(), f)))
-                    .collect();
+                let facts: Vec<(usize, &Term)> = sol.facts.iter().enumerate().collect();
                 let key = match facts.first().map(|(_, f)| inner(f)) {
                     Some(Term::Compound(_, a)) => {
                         let shared: Vec<String> = (0..a.len())
@@ -672,7 +670,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
                             f,
                             facts.iter().find(|(t, _)| t != s).map(|x| x.1).unwrap_or(f),
                         );
-                        format!("{d} ({})", place(&app.outline, *s))
+                        format!("{d} ({})", where_from(&app.outline, &sol.prov[*s]))
                     })
                     .collect();
                 lines.push(Line::styled(format!("{key}: {}", parts.join(" · ")), style));
@@ -762,11 +760,12 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
                 if !sol.prov.iter().any(|q| q.seq() == seq) {
                     continue;
                 }
-                for o in sol.prov.iter().filter(|q| q.seq() != seq) {
-                    if let Some(f) = e.fact(o.seq()) {
+                for (k, o) in sol.prov.iter().enumerate().filter(|(_, q)| q.seq() != seq) {
+                    {
+                        let f = &sol.facts[k];
                         contrary.push(format!(
                             "  {}: {} ({})",
-                            place(&app.outline, o.seq()),
+                            where_from(&app.outline, o),
                             reason::restate(&e.facts, inner(f)),
                             c.name
                         ));
@@ -968,4 +967,32 @@ fn rule_lines(rule: &str) -> Vec<String> {
     }
     out.push(format!("  {}", cur.trim()));
     out
+}
+
+/// The suggestion pane: few in view, ranked by evidence, each with why it
+/// was offered. It never takes the keyboard: accept or dismiss by command.
+fn draw_suggestions(f: &mut Frame, app: &App, area: Rect) {
+    let inner = Rect {
+        x: area.x + 2,
+        width: area.width.saturating_sub(2),
+        ..area
+    };
+    let shown = app.shown_suggestions();
+    let mut lines = vec![
+        Line::styled(
+            format!("SUGGESTIONS · {} OF {}", shown.len(), app.suggestions.len()),
+            dim(),
+        ),
+        Line::raw(""),
+    ];
+    for (i, s) in shown.iter().enumerate() {
+        lines.push(Line::raw(format!("{}. {}", i + 1, s.describe())));
+        lines.push(Line::styled(format!("   {}", s.evidence), dim()));
+    }
+    if shown.is_empty() {
+        lines.push(Line::styled("nothing to suggest", dim()));
+    }
+    lines.push(Line::raw(""));
+    lines.push(Line::styled("accept N adopts · dismiss N dismisses", dim()));
+    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }

@@ -11,6 +11,8 @@ use format::terms::Term;
 pub struct Engine {
     p: Prolog,
     loaded: Vec<(u64, Term)>,
+    /// The import entry whose Wikidata subset is loaded.
+    wikidata: Option<u64>,
 }
 
 fn c(f: &str, args: Vec<Term>) -> Term {
@@ -36,6 +38,7 @@ impl Engine {
         Ok(Engine {
             p: Prolog::start()?,
             loaded: vec![],
+            wikidata: None,
         })
     }
 
@@ -144,6 +147,45 @@ impl Engine {
             .next()
             .and_then(|v| v.last().cloned())
             .ok_or_else(|| Error::Server("plant_check gave nothing".into()))
+    }
+
+    /// Load the Wikidata subset of import entry `seq` from its blob, or
+    /// unload it (None). Does nothing if that one is already loaded.
+    pub fn wikidata(&mut self, import: Option<(u64, &std::path::Path)>) -> Result<(), Error> {
+        if import.map(|i| i.0) == self.wikidata {
+            return Ok(());
+        }
+        match import {
+            Some((seq, file)) => {
+                let goal = c(
+                    "load_wikidata",
+                    vec![
+                        Term::Str(file.to_string_lossy().into_owned()),
+                        Term::Int(seq as i64),
+                    ],
+                );
+                self.p.all(&goal, 1)?;
+            }
+            None => {
+                self.p.all(&Term::Atom("unload_wikidata".into()), 1)?;
+            }
+        }
+        self.wikidata = import.map(|i| i.0);
+        Ok(())
+    }
+
+    /// Suggestions without a model, best evidence first.
+    pub fn suggestions(&mut self) -> Result<Vec<crate::reason::Suggestion>, Error> {
+        let a = self.p.all(&c("suggestions", vec![Term::Var(0)]), 2)?;
+        let list = a
+            .into_iter()
+            .next()
+            .map(|v| v[0].clone())
+            .unwrap_or(Term::Atom("[]".into()));
+        Ok(crate::reason::list(&list)
+            .iter()
+            .filter_map(crate::reason::Suggestion::from_term)
+            .collect())
     }
 
     /// Run any goal; all answers.

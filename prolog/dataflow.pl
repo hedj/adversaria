@@ -53,12 +53,18 @@ holds_all((A, B), P) :- !,
 holds_all(G, []) :- builtin(G), !, call(G).
 holds_all(G, [Who]) :- holds(G, Who).
 
-holds(G, belief(S)) :- fact_ref(S, G, _).
-holds(G, claim(Src, S)) :- fact_ref(S, claims(Src, G), _).
+%   Provenance names the fact too: belief(Seq, Fact), claim(Source, Seq,
+%   Fact). A Wikidata claim is derived from the imported subset, through the
+%   user's links (same_as) and property mappings (wd_property).
+holds(G, belief(S, G)) :- fact_ref(S, G, _).
+holds(G, belief(S, G)) :- fact_ref(S, rule_def(_, G, B), _), beliefs(B).
+holds(G, claim(Src, S, G)) :- fact_ref(S, claims(Src, G), _).
+holds(G, claim("Wikidata", S, G)) :- wd_import(S, _), wd_claim(G).
 
 beliefs((A, B)) :- !, beliefs(A), beliefs(B).
 beliefs(G) :- builtin(G), !, call(G).
 beliefs(G) :- fact_ref(_, G, _).
+beliefs(G) :- fact_ref(_, rule_def(_, G, B), _), beliefs(B).
 
 builtin(G) :- predicate_property(system:G, built_in).
 
@@ -94,3 +100,161 @@ literals(G, [G], []).
 planted_holds((A, B), Fs) :- !, planted_holds(A, Fs), planted_holds(B, Fs).
 planted_holds(G, _) :- builtin(G), !, call(G).
 planted_holds(G, Fs) :- memberchk(G, Fs).
+
+
+		 /*******************************
+		 *          WIKIDATA            *
+		 *******************************/
+
+%   A subset of Wikidata, loaded from a file of facts made by the wikidata
+%   tool: wd(Item, Property, Value), wd_label(Entity, Label) and
+%   wd_constraint(Property, Kind). One import at a time.
+:- dynamic([wd/3, wd_label/2, wd_constraint/2, wd_import/2], [incremental(true)]).
+
+load_wikidata(File, Seq) :-
+    unload_wikidata,
+    setup_call_cleanup(open(File, read, In, [encoding(utf8)]),
+                       load_terms(In),
+                       close(In)),
+    assertz(wd_import(Seq, File)).
+
+load_terms(In) :-
+    read_term(In, T, []),
+    (   T == end_of_file
+    ->  true
+    ;   (   memberchk(T, [wd(_,_,_), wd_label(_,_), wd_constraint(_,_)])
+        ->  assertz(T)
+        ;   throw(error(domain_error(wikidata_fact, T), _))
+        ),
+        load_terms(In)
+    ).
+
+unload_wikidata :-
+    retractall(wd(_,_,_)), retractall(wd_label(_,_)),
+    retractall(wd_constraint(_,_)), retractall(wd_import(_,_)).
+
+%   A user predicate mapped to a Wikidata property: P(E, Y) holds per
+%   Wikidata when E is the same as item Q and Q's property has value Y
+%   (for a date, its year).
+wd_claim(G) :-
+    G =.. [Pred, E, Y],
+    fact_ref(_, wd_property(Pred, P), _),
+    fact_ref(_, same_as(E, Q), _),
+    wd(Q, P, V),
+    wd_value(V, Y).
+
+wd_value(date(Y, _, _), Y) :- !.
+wd_value(V, V).
+
+		 /*******************************
+		 *         SUGGESTIONS          *
+		 *******************************/
+
+%!  suggestion(-S) is nondet.
+%   Suggestions without a model (docs/translator.md § Suggesting facts,
+%   rules and constraints): S is suggestion(Kind, Facts, Evidence, Score),
+%   Facts what adopting it adds, Evidence a string.
+
+:- discontiguous suggestion/1.
+
+suggestion(suggestion(link, [same_as(E, Q)], Ev, Score)) :-
+    entity_name(E, Name),
+    \+ fact_ref(_, same_as(E, _), _),
+    split_string(Name, " _'", " _'", Words0),
+    include([W0]>>(string_length(W0, N0), N0 >= 3), Words0, Words),
+    string_lower(Name, LName),
+    wd_label(Q, L),
+    string_lower(L, LL),
+    (   LL == LName -> Match = 5                         % the whole name
+    ;   member(W, Words), string_lower(W, LL) -> Match = 1   % one word of it
+    ),
+    aggregate_all(count, (wd(Q, _, date(_, _, _))), Dated),
+    (   fact_ref(_, F, _), F =.. [_, E, Y], integer(Y), wd(Q, _, date(Y2, _, _)), abs(Y - Y2) =< 5
+    ->  Near = 10 ; Near = 0
+    ),
+    Score is Match + Dated + Near,
+    (   Near > 0 -> NearText = "; Wikidata dates it within five years of yours" ; NearText = "" ),
+    format(string(Ev), "the label “~w” of ~w names ~w~w", [L, Q, Name, NearText]).
+
+suggestion(suggestion(mapping, [wd_property(Pred, P)], Ev, 5)) :-
+    fact_ref(_, same_as(E, Q), _),
+    fact_ref(_, F, _), F =.. [Pred, E, Y], integer(Y),
+    \+ memberchk(Pred, [same_as, wd_property, label, node_def, rule_def, claims]),
+    \+ fact_ref(_, wd_property(Pred, _), _),
+    wd(Q, P, date(Y2, _, _)),
+    property_name(P, PN),
+    format(string(Ev), "~w’s ~w (~w) is ~w; your ~w gives ~w", [Q, PN, P, Y2, Pred, Y]).
+
+suggestion(suggestion(constraint(Name, [E, A, B], Body), [], Ev, 4)) :-
+    fact_ref(_, wd_property(Pred, P), _),
+    wd_constraint(P, single_value),
+    G1 =.. [Pred, E, A], G2 =.. [Pred, E, B],
+    Body = (G1, G2, A \= B),
+    \+ ( fact_ref(_, node_def(_, constraint(_, _, B0)), _), B0 =@= Body ),
+    property_name(P, PN),
+    format(string(Name), "one ~w per entity (Wikidata ~w)", [Pred, P]),
+    format(string(Ev), "Wikidata gives ~w (~w) a single-value constraint", [P, PN]).
+
+suggestion(suggestion(rule(Head, Body), [], Ev, Score)) :-
+    user_binary(P), user_binary(Q), P \== Q,
+    B =.. [P, X, Y], H =.. [Q, X, Y],
+    aggregate_all(count, (beliefs(B)), NB), NB >= 2,
+    aggregate_all(count, (beliefs(B), beliefs(H)), Support), Support >= 2,
+    Conf is Support / NB, Conf >= 0.8,
+    \+ ( fact_ref(_, rule_def(_, H0, B0), _), H0-B0 =@= H-B ),
+    Exceptions is NB - Support,
+    Head = H, Body = B,
+    Score is Support,
+    plural(Exceptions, Pl),
+    format(string(Ev), "support ~w, confidence ~2f, ~w exception~w", [Support, Conf, Exceptions, Pl]).
+
+plural(1, "") :- !.
+plural(_, "s").
+
+%   A reference for the claims about entity E: a work in the store whose
+%   main subject is E's item, or that works in the store cite. The memex
+%   turns E into the items that state facts about it.
+suggestion(suggestion(reference(E, Work), [], Ev, Score)) :-
+    fact_ref(_, same_as(E, Q), _),
+    \+ wd(Q, 'P31', 'Q13442814'),
+    in_store_work(Work, QW),
+    (   wd(QW, 'P921', Q) -> S1 = 3, Why = "its main subject is the same item" ; S1 = 0, Why = "" ),
+    aggregate_all(count, (in_store_work(_, Q2), wd(Q2, 'P2860', QW)), Cited),
+    Score is S1 + Cited,
+    S1 > 0,
+    plural(Cited, Pl),
+    format(string(Ev), "~w (~w); cited by ~w work~w in the store", [Why, QW, Cited, Pl]).
+
+%   A work in the store: an entity the user linked to an item of Wikidata
+%   that is a scholarly article. Only these are ever suggested as references.
+in_store_work(W, QW) :-
+    fact_ref(_, same_as(W, QW), _),
+    wd(QW, 'P31', 'Q13442814').
+
+%   Each user predicate of two arguments, once.
+user_binary(P) :-
+    setof(P0, user_binary_(P0), Ps),
+    member(P, Ps).
+user_binary_(P) :-
+    fact_ref(_, F, _), compound(F), F =.. [P, _, _],
+    \+ memberchk(P, [same_as, wd_property, label, node_def, rule_def, claims, cites]).
+
+entity_name(E, Name) :-
+    fact_ref(_, F, _), compound(F), F =.. [P, E | _], atom(E),
+    \+ memberchk(P, [same_as, wd_property, label, node_def, rule_def, claims]),
+    (   fact_ref(_, label(E, L), _) -> Name = L ; atom_string(E, Name) ).
+
+property_name(P, Name) :- ( wd_label(P, L) -> Name = L ; Name = P ).
+
+%!  suggestions(-L) is det.
+%   Every suggestion, each once, best evidence first.
+suggestions(L) :-
+    findall(S, suggestion(S), L0),
+    variants_once(L0, L1),
+    sort(4, @>=, L1, L).
+
+%   Keep one of each set of suggestions equal up to renaming variables.
+variants_once(L0, L) :-
+    findall(K-S, (member(S, L0), copy_term(S, K), numbervars(K, 0, _)), KS),
+    sort(1, @<, KS, Unique),
+    pairs_values(Unique, L).
