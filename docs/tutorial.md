@@ -1,23 +1,29 @@
 # Tutorial: a first session
 
-This tutorial takes about forty minutes (an estimate). In part 1 you
-will write a short outline, state facts, add a claim from a source, write
-a constraint that catches the conflict, question the claim, adopt it and
-take it back, and try it in a supposed world. Part 1 follows the design's
-user story (docs/design.md, § A user story): notes on the Soviet Buran
-space shuttle. In part 2 you will build a small budget that computes
-itself from boxes and rules, and in part 3 draw it as a chart and a
-table, and part 1's dates as a timeline.
+This tutorial takes about forty minutes (an estimate), in four parts of
+four steps each, in one session:
+
+- A. First notes: an outline, facts, and a sentence computed from them,
+  after the design's user story (docs/design.md, § A user story): notes
+  on the Soviet Buran space shuttle.
+- B. Checking a claim: a claim from a source, a constraint that catches
+  the conflict, and the claim questioned, adopted, taken back and tried
+  in a supposed world.
+- C. Boxes that compute: a small budget, from boxes and rules.
+- D. Views, and leaving: the budget as a chart and a table, part A's
+  dates as a timeline, and how to leave.
 
 A test performs every step below and checks every screen text quoted here
 (`crates/memex/tests/tutorial.rs`). If the memex changes and this tutorial
 does not, that test fails. The test drives the memex directly, not through a
-terminal; see "Limits" at the end.
+terminal; see the limits in the last step.
 
 The key names below are the defaults. If you have changed them (docs/guide.md,
 § Configuration), use yours.
 
-## 1. Start
+## A. First notes
+
+### 1. Start
 
 You need a terminal with the kitty keyboard and graphics protocols: kitty,
 WezTerm or Ghostty. The memex refuses to start in any other, and says which
@@ -40,7 +46,7 @@ right. The outline says:
 
     (empty: type to write the first item)
 
-## 2. Write an outline
+### 2. Write an outline
 
 Type `The programme`, then press Enter for a new item, and type
 `Buran flew once, unmanned, on 15 November 1988.`
@@ -56,7 +62,7 @@ path: the first item under 1 is 1.1, the second 1.2, and so on.
 Everything you type is written to the journal, a second after you stop or
 when you do something else. There is no Save.
 
-## 3. State facts
+### 3. State facts
 
 A fact is a Prolog term that the item states. Facts are what constraints and
 derived values read.
@@ -80,7 +86,7 @@ typed; Esc completes the command name; Backspace erases. A tap of Left Ctrl
 (press and release with nothing typed) latches the quasimode, so you can
 type without holding it; Enter or a second tap runs the command.
 
-## 4. Derive a sentence
+### 4. Derive a sentence
 
 Press Enter and type a placeholder, such as `gap`. Then run this command
 (all one line):
@@ -93,7 +99,9 @@ The item now shows text computed from the facts:
 
 If a date changes, the sentence changes with it.
 
-## 5. A claim, and a constraint
+## B. Checking a claim
+
+### 5. A claim, and a constraint
 
 Press Enter and type `Talk notes: the 1989 flight was the only one.` This is
 what a speaker said, and you have not checked it. Record it as a claim, with
@@ -120,7 +128,7 @@ item is a mark:
 
 It is a disagreement, not a violation, because the 1989 date is only a claim.
 
-## 6. Leap
+### 6. Leap
 
 Leap moves the cursor by searching, not by arrowing. Hold **Right Alt**
 (Leap forward), type `buran`, and release. The cursor goes to the next item
@@ -132,7 +140,7 @@ mark:
 Left Alt leaps backward. Esc completes the pattern; `?` lists every match.
 Tapping the Leap key twice repeats the last Leap.
 
-## 7. Question the claim, adopt it, take it back
+### 7. Question the claim, adopt it, take it back
 
 Leap to `talk`. Press **F2** to interrogate the claim. The right pane
 answers five questions:
@@ -153,7 +161,7 @@ Press **F4** to take the adoption back. The memex says the adoption is
 retracted, and the violation is gone. The adoption and its retraction both
 stay in the journal.
 
-## 8. Suppose
+### 8. Suppose
 
 To see what follows if the speaker were right, without changing what you
 believe, suppose it. Hold **Super** (the Windows or Command key), type
@@ -175,25 +183,7 @@ Run the command `close` to return to the actual world. The supposition
 stays in the journal; the memex says so: `it stays in the journal`.
 (`commit` would instead make the supposed world the actual one.)
 
-## 9. Leave
-
-Press **F10** to quit. What was pending is written first.
-
-The sealer, started by `make run`, signs new entries within a fraction of a
-second (it looks every 200 ms). To check the whole journal, its hash chain,
-signatures and stored files:
-
-```bash
-cargo run -q -p check -- $HOME/adversaria-tutorial
-```
-
-It prints `ok:` with counts of entries, seals, keys and blobs, or the first
-fault it finds.
-
-When you are done, delete `$HOME/adversaria-tutorial` and
-`$HOME/.adversaria-tutorial.key` if you no longer want them.
-
-## Part 2: boxes that compute
+## C. Boxes that compute
 
 The memex has no spreadsheet. But items can hold values, derived text can
 compute from values, and constraints can relate them, and that is most of
@@ -201,12 +191,9 @@ what a spreadsheet does. This part builds a small household budget that
 way. Nothing in it is special to budgets or spreadsheets: `cell` below is
 a name chosen here, not something the memex knows.
 
-Start the memex again in the same journal, with the same `make run`
-command as in step 1. Part 1's outline is still there.
+### 9. Boxes that hold values
 
-## 10. A box that holds a value
-
-Leap to `talk` (the last item of part 1), press Enter for a new item and
+Leap to `talk` (the last item of part B), press Enter for a new item and
 Shift-Tab to bring it to the top level, and type `Budget`. Press Enter,
 type `income`, and press Tab to put it under Budget.
 
@@ -221,8 +208,6 @@ The item now reads:
 
 The text you typed (`income`) stays in the journal; the item shows the
 derived text instead, and will follow the value when it changes.
-
-## 11. More boxes, and one computed from them
 
 Make two more boxes the same way. Press Enter, type `rent`, then:
 
@@ -242,7 +227,7 @@ It reads:
 
     Left over: 400 [derived]
 
-## 12. Rules between the boxes
+### 10. Rules between the boxes
 
 Two constraints. The first says a box holds one value; the second, that
 spending must not exceed income:
@@ -256,7 +241,7 @@ Each is tried against a planted violation before it is kept, as in step
 
     constraint spending within income kept: it fires on a planted violation
 
-## 13. Change a value
+### 11. Change a value
 
 `set` states a fact and takes back the facts it directly contradicts:
 here, because of the rule "one value per cell", the old food value. It
@@ -278,7 +263,7 @@ to you. Put food back within income:
 
 Now `Left over: 300 [derived]`, and the violation is gone.
 
-## 14. What if
+### 12. What if
 
 To see what a change would do without making it, suppose it, as in step
 8. Hold Super, type `rent is 1600`, and release. The memex asks:
@@ -299,14 +284,14 @@ choosing.
 Run `close` to go back; the actual budget still says
 `Left over: 300 [derived]`. (`commit` would have made the new rent real.)
 
-## Part 3: views
+## D. Views, and leaving
 
 A view is an item that draws something, made of layers. A layer is a
 mark, such as a bar or a box, drawn once for each solution of a goal. As
 before, nothing here is a chart type the memex knows: a chart, a table
 and a timeline are marks over your own facts.
 
-## 15. A chart of the boxes
+### 13. A chart of the boxes
 
 Leap to `left over`, press Enter, and Shift-Tab to the top level. Type
 `Spending chart`. Then add two layers to it:
@@ -325,7 +310,7 @@ income, rent and food facts, and so does every bar. Run `set cell(food, 500)` to
 put it back. With the mouse on (docs/guide.md, § The mouse), a click on
 a bar goes to the box that holds its value.
 
-## 16. The same boxes as a grid
+### 14. The same boxes as a grid
 
 Press Enter and type `Budget table`. Then:
 
@@ -340,9 +325,9 @@ table, rows in order:
 A spreadsheet is the same idea with more columns, and with boxes whose
 values come from rules (docs/guide.md, § 9).
 
-## 17. A timeline from part 1
+### 15. A timeline from part A
 
-Part 1's facts are still here. Press Enter, type
+Part A's facts are still here. Press Enter, type
 `Timeline of the programme`, then:
 
 `layer tick(x(Y), text(L)) where date(E, Y), label(E, L)`
@@ -355,21 +340,37 @@ beliefs.
 docs/guide.md, § 9 has more: line charts, Gantt charts, flowcharts, and
 your own outline drawn as a tree.
 
-## What next
+### 16. Leave
 
-docs/guide.md describes every command, the files the memex keeps, the tools
-around it, and how to change the keys.
+Press **F10** to quit. What was pending is written first.
 
-## Limits
+The sealer, started by `make run`, signs new entries within a fraction of a
+second (it looks every 200 ms). To check the whole journal, its hash chain,
+signatures and stored files:
+
+```bash
+cargo run -q -p check -- $HOME/adversaria-tutorial
+```
+
+It prints `ok:` with counts of entries, seals, keys and blobs, or the first
+fault it finds.
+
+When you are done, delete `$HOME/adversaria-tutorial` and
+`$HOME/.adversaria-tutorial.key` if you no longer want them.
+
+docs/guide.md describes every command, the files the memex keeps, the
+tools around it, and how to change the keys.
+
+Limits of this tutorial:
 
 - The test performs these steps through the memex's own key events, not a
   real terminal. A separate test (`tests/memex_in_a_pty.py`) drives the
   program through a pseudo-terminal with kitty's key encoding. Neither is a
   real kitty, WezTerm or Ghostty, and the memex has not yet been run in one.
-- In part 2, the boxes are an outline, not a grid, and only whole numbers
+- In part C, the boxes are an outline, not a grid, and only whole numbers
   can be supposed.
 - Views are drawn in characters, in the terminal; they are not yet images.
-- Step 9's `check` command is not performed by the tutorial test; the
+- The `check` command above is not performed by the tutorial test; the
   acceptance tests check journals made by the memex.
 - Holding Super may be taken by your desktop. If it is, give Suppose another
   key (docs/guide.md, § Configuration).

@@ -204,23 +204,24 @@ fn the_tutorial_works_as_written() {
     assert_eq!(t.app.world, "actual");
     t.shows("The flight came a year after Energia's first launch.");
 
-    // Step 9: quit.
+    // Part C, then part D, in the same session.
+    part_two(&mut t);
+    part_three(&mut t);
+
+    // Step 16: leave. The journal, opened again, replays to the same budget.
     t.key(Key::F(10));
     assert!(t.app.quit);
     t.app.flush();
-
-    // Part 2, in the same journal, started again.
     let mut app = App::open(&dir).unwrap();
     app.set_durable(false);
     app.evaluate().unwrap();
-    let mut t = T { app, dump: t.dump };
-    part_two(&mut t);
-    part_three(&mut t);
+    let t = T { app, dump: t.dump };
+    t.shows("Left over: 300 [derived]");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
 fn part_two(t: &mut T) {
-    // Step 10: a box after the last item of part 1, at the top level.
+    // Step 9: boxes after the last item of part B, at the top level.
     t.hold(Quasi::LeapForward, "talk");
     t.tap(Key::Enter);
     t.tap(Key::BackTab);
@@ -233,7 +234,7 @@ fn part_two(t: &mut T) {
     t.look("income");
     t.shows("Income: 2000 [derived]");
 
-    // Step 11: more boxes, and one computed from them.
+    //         More boxes, and one computed from them.
     t.tap(Key::Enter);
     t.typ("rent");
     t.command("fact cell(rent, 1200)");
@@ -250,12 +251,12 @@ fn part_two(t: &mut T) {
     t.look("left over");
     t.shows("Left over: 400 [derived]");
 
-    // Step 12: rules.
+    // Step 10: rules.
     t.command("constraint one value per cell: false :- cell(C, A), cell(C, B), A \\= B.");
     t.command("constraint spending within income: false :- cell(income, I), cell(rent, R), cell(food, F), R + F > I.");
     t.says("constraint spending within income kept: it fires on a planted violation");
 
-    // Step 13: change a value.
+    // Step 11: change a value.
     t.command("set cell(food, 900)");
     t.look("set 900");
     t.says("set; replaced the fact at 2.3; left for you: 1 violation of spending within income");
@@ -267,7 +268,7 @@ fn part_two(t: &mut T) {
     t.shows("Left over: 300 [derived]");
     t.lacks("constraint violation");
 
-    // Step 14: what if.
+    // Step 12: what if.
     t.hold(Quasi::Suppose, "rent is 1600");
     t.look("suppose rent?");
     t.shows("Do you mean: Suppose that the cell of rent is 1600.  ⏎ yes · Esc no");
@@ -280,7 +281,7 @@ fn part_two(t: &mut T) {
 }
 
 fn part_three(t: &mut T) {
-    // Step 15: a chart of the boxes, with a limit.
+    // Step 13: a chart of the boxes, with a limit.
     t.hold(Quasi::LeapForward, "left over");
     t.tap(Key::Enter);
     t.tap(Key::BackTab);
@@ -322,7 +323,7 @@ fn part_three(t: &mut T) {
     t.command("set cell(food, 500)");
     assert_eq!(loud(t), 0);
 
-    // Step 16: the same boxes as a grid.
+    // Step 14: the same boxes as a grid.
     t.tap(Key::Enter);
     t.typ("Budget table");
     t.command("layer cell(x(value), y(C), text(V)) where cell(C, V)");
@@ -330,7 +331,7 @@ fn part_three(t: &mut T) {
     t.shows("food   │   500");
     t.shows("income │  2000");
 
-    // Step 17: part 1's dates as a timeline.
+    // Step 15: part A's dates as a timeline.
     t.tap(Key::Enter);
     t.typ("Timeline of the programme");
     t.command("layer tick(x(Y), text(L)) where date(E, Y), label(E, L)");

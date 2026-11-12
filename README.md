@@ -66,24 +66,21 @@ In the memex:
   run it.
 - Press F10 to quit.
 
-docs/tutorial.md takes you through a first session step by step.
-
-## Documentation
-
-- docs/tutorial.md: a first session.
-- docs/guide.md: the user guide, covering every command, the files kept,
-  the tools, and how to change keys and enable the mouse.
-- docs/config.example.toml: the default configuration.
-- docs/design.md: the design and the decisions behind it.
-- docs/plan.md: the implementation plan.
-- docs/log.md: what has been built and tested, faults found, and known
-  limits.
-
-## Tests
+To run the tests:
 
 ```bash
 make test
 ```
+
+## Documentation
+
+- Start: docs/tutorial.md, a first session.
+- Use: docs/guide.md, the user guide: every command, the files kept, the
+  tools, and the configuration.
+- Understand: docs/design.md, the design and the decisions behind it.
+- Record: docs/log.md, what has been built and tested, faults found, and
+  known limits; it leads to the plan and to the structure of the code and
+  documents.
 
 ## Licence
 
