@@ -338,18 +338,65 @@ Limits:
 * The memex cannot show seal dates in provenance: the no-key rule forbids its sources to name the seals file. The rule should allow reading it, by a check that the memex opens it read-only. Not done.
 * Every engine is a separate SWI-Prolog process, about 100 ms to start (estimate, not measured).
 
-### Sizes (counted, after milestone 4)
+## Milestone 5: Wikidata and suggestions without a model (12 November 2026, done, with limits below)
+
+Built:
+
+* `crates/tools`, the `wikidata` program. It writes a subset of Wikidata as Prolog facts: the items' truthy statements without external identifiers, English labels, and the properties' constraints. It queries the query service through `curl`, under a generic user agent that names neither the user nor the project.
+* `tests/fixtures/wikidata-buran.pl`: 386 facts of real Wikidata (CC0), made by `wikidata --items Q2548,Q4273185,Q1010251,Q80811` in 2.7 s: Buran the spaceplane, a village also called Buran, the Buran programme, and Sputnik 1.
+* `import wikidata <file>`: the file into `blobs/` under its hash, an `import` entry with its provenance, and loading into each world whose path holds it.
+* In `prolog/dataflow.pl`:
+  * Wikidata's statements become claims through adopted `same_as` and `wd_property` facts;
+  * suggestions of five kinds: entity links, property mappings, Wikidata's single-value constraints, mined rules, and references among stored works;
+  * adopted rules (`rule_def`) take part in reasoning.
+* The suggestion pane: `pane suggestions`, `accept N`, `dismiss N`. An adoption is an entry marked as a suggestion, with its evidence.
+
+Acceptance checks (all in `make test`):
+
+* **A planted wrong date is reported against Wikidata.** The notes say Buran flew in 1989, with the user's constraint one date per event.
+  * After the import, the first suggestion is "buran_flight is Wikidata Q2548" (the spaceplane, not the village), with the evidence "Wikidata dates it within five years of yours".
+  * Accepting it, then "date is Wikidata's P606" (first flight), gives "1 disagreement between sources" and the mark "one date per event, sources disagree: 1989 here, 1988 in Wikidata".
+* **No suggested reference names a work outside the store.** Synthetic works (`QTEST1` to `QTEST3`): `QTEST3`, the obvious answer, is about Buran and cited by both others, but it is not in the store. The only reference suggested is "cite paper_a for the claims about buran_flight", and nothing names `QTEST3`. Accepting it makes a `cites` link from the claim's item to the paper's item.
+* Also:
+  * on real data, Wikidata's single-value constraint on P619 is offered for Sputnik 1's launch, tried against a planted violation, kept, and not offered again;
+  * a mined rule is offered with "support 2, confidence 1.00, 0 exceptions", and once adopted it derives a new fact ("Vostochny is in russia");
+  * the pane never takes the keyboard, shows at most five, ranks by score, keeps the order of those that remain while it has focus, and keeps a dismissal through a replay.
+
+Faults found and fixed:
+
+* **Stack overflow in a test thread.** The protocol's decoder recursed once per list element, and a list of a few hundred suggestions overflowed a 2 MB stack (unoptimised). The decoder now walks a list's spine in a loop. A new test decodes a list of 200,000 elements on a 256 KB stack, and overflows with the old decoder.
+* **Duplicate suggestions with unstable keys.** Each rule was suggested once per fact naming its predicates, with variable numbers depending on its place in the list, so dismissals and the frozen order could not hold. Now: distinct predicates, duplicates removed up to variable renaming, and variables numbered within each suggestion.
+* **Sputnik 1 was linked to Q1393751** ("Sputnik", the programme), not Q80811 ("Sputnik 1"). A label was matched only against single words of the name. It is now matched against the whole name too, which scores higher.
+* **The frozen order broke as evidence grew.** A suggestion's key included its evidence. Its place now uses what it proposes alone; dismissals still use the evidence too.
+* **My pane test was wrong:** it required every shown suggestion to stay, but a rule whose confidence falls below 0.8 rightly leaves. It now checks that those that remain keep their order.
+* **The user agent.** In milestone 5's first probes I sent "adversaria" in the user agent of about six requests to Wikidata and Crossref, against the rule that project details stay private. The tool's user agent is now generic.
+* **Rate limiting.** Wikimedia's API rate-limited this machine (HTTP 429) during a check; I did not retry it, and checked the identifiers through the query service instead.
+
+Deliberate breaks, each made a test fail: any scholarly article counted as in the store; no Wikidata claims; the order never frozen; dismissals ignored; the whole-name label match removed; and, in the protocol, the recursive list decoder.
+
+Checked against Wikidata's own labels (one query to the query service): P31 instance of, P50 author, P356 DOI, P577 publication date, P606 first flight, P619 UTC date of spacecraft launch, P921 main subject, P1433 published in, P2302 property constraint, P2860 cites work, P5824 retracted by, Q13442814 scholarly article, Q19474404 single-value constraint, Q21502410 distinct-values constraint.
+
+Limits:
+
+* **Subset D itself is not built.** The tool can make it (`wikidata --min-sitelinks K --limit 100000 --out …`), but I did not run 100,000 items' worth of queries against the public service from here. K is not yet calibrated to give about 100,000 items, and the query that would count them may time out.
+* Matching is by English labels only. Dates use only the year, and their precision is not kept.
+* One Wikidata import is loaded at a time.
+* The reference test uses synthetic works: Wikidata has no scholarly article about Buran.
+* A long list still recurses when dropped (Rust's default drop), and the other term walkers still recurse. Only the decoder walks lists in a loop.
+
+### Sizes (counted, after milestone 5)
 
 | Part | Lines | Of which tests |
 | --- | --- | --- |
-| `crates/memex` (with its tests) | 6,222 | 1,551 |
+| `crates/memex` (with its tests) | 7,058 | 1,922 |
 | `crates/format` | 1,827 | 860 |
-| `crates/protocol` | 587 | 203 |
+| `crates/protocol` | 639 | 236 |
+| `crates/tools` | 364 | 52 |
 | `crates/sealer` | 384 | 124 |
 | `crates/check` | 234 | 57 |
 | `crates/acceptance` | 835 | 834 |
-| `prolog/` (server, protocol, dataflow) | 573 | 0 |
+| `prolog/` (server, protocol, dataflow) | 737 | 0 |
 | `prolog/tests/` | 141 | 141 |
 | Tests in Python and shell | 189 | 189 |
 
-Tests: 113 Rust tests, 18 Prolog tests, the pseudo-terminal script (7 checks), the tabling spike and the no-key script, in `make test`.
+Tests: 121 Rust tests, 18 Prolog tests, the pseudo-terminal script (7 checks), the tabling spike and the no-key script, in `make test`.
