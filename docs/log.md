@@ -165,10 +165,22 @@ Deliberate breaks, each made a test fail: signature check off; `entry_hash` comp
 
 Gaps, not done:
 
-* **Unicode NFC.** The format says strings are in NFC. Nothing checks or produces NFC yet. It needs a normalisation table (a dependency such as `unicode-normalization`), and a decision: should the writer normalise text, or refuse text that is not NFC?
+* **Unicode NFC.** The format says strings are in NFC. Nothing checks or produces NFC yet. *Closed the same day*: the author chose that the writer normalises text (see below).
 * **Dates are not checked for order.** A seal's date comes from the system clock, which can go backwards; the checker does not compare dates.
 
 Time: the plan estimated 1–2 weeks with Claude; this took one session. It is not comparable to the estimate's assumption of a person reviewing each step.
+
+## Unicode NFC (12 November 2026)
+
+The author chose that the writer normalises text. Now the memex normalises every string and object key of an entry's body to NFC before hashing and writing it, and refuses an object whose keys become equal once normalised. Every record parser refuses a line with a string or key not in NFC, so the checker catches text written otherwise. New dependency: `unicode-normalization` 0.1.26 (Unicode 18.0), in `crates/format`.
+
+Checked:
+
+* Known cases: e with a combining acute to é; the Angstrom sign to Å; Hangul jamo to a syllable; two combining marks put in canonical order, then composed.
+* 10,000 random strings of letters, combining marks and Hangul jamo, against Node's `String.prototype.normalize("NFC")` (ICU 78.3, Unicode 17.0): all agree. 663 of them needed normalising (counted).
+* A line whose hashes are right but whose text is not NFC is refused: "a string is not in Unicode NFC".
+* Four deliberate breaks each made a test fail: the parser's NFC check off; the writer's normalisation removed; normalisation returning text unchanged; colliding keys merged silently.
+* `make test` exits 0, here and in `nix develop -i`.
 
 ### Sizes (counted, after milestone 1)
 
