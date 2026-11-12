@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Enter the development shell with nix-shell, which needs no experimental
+# Nix features. Arguments are passed to nix-shell (for example --run 'make
+# test').
+#
+# nix-shell takes its interactive bash from <nixpkgs> on the Nix search
+# path, outside shell.nix; with no nixpkgs there it prints an error and uses
+# the system's bash. So first resolve the nixpkgs pinned in flake.lock
+# (fetched and checked against its hash, as shell.nix does) and put it on
+# the search path for this run only.
+set -euo pipefail
+cd "$(dirname "$0")"
+nixpkgs=$(nix-instantiate --eval --expr '
+  let l = (builtins.fromJSON (builtins.readFile ./flake.lock)).nodes.nixpkgs.locked;
+  in builtins.toString (builtins.fetchTarball { url = l.url; sha256 = l.narHash; })')
+nixpkgs=${nixpkgs//\"/}
+exec nix-shell -I "nixpkgs=$nixpkgs" "$@"
