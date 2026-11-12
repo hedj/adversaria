@@ -234,19 +234,68 @@ Checked: three new tests (the server's exit status and message for five kinds of
 
 Two faults met on the way: a fake server written as `initialization((Goal1, Goal2), main)` did not run its goal, while the same goal as a named `main` did; I did not find why. And the first fake test waited out its 60-second timeout before failing, because nothing arrived.
 
-### Sizes (counted, after milestone 2)
+## Milestone 3: the outline and the quasimodes (12 November 2026, done, with limits below)
+
+Built, in `crates/memex`:
+
+* `outline.rs`: items in a tree, known by the seq of the entry that made them. Text is appended once and an item's text is a list of spans, so surviving characters keep their addresses, and a span into another item's text is a transclusion, shown in place with its origin. Also links, names, outline numbers ("3.2").
+* `app.rs`: the interface state, apart from the terminal. Key events go in; journal entries come out. Every change of state goes through `apply(entry)`, live and in replay, which is what makes replay reproduce the screen. It holds:
+  * the quasimodes: Leap forward and back, Command, Scope and Suppose, each held or latched by a tap;
+  * Leap's recognition on Escape, `?` lists every match, and "Leap again repeats";
+  * Command's recognition, its guide words (`link 3.2 (to) source 9`) and `?` help, with 20 commands and a palette on F1;
+  * undo and redo along the current branch, an edit after undo starting a new branch;
+  * retraction, which lists the entries that depend on the one retracted and waits for Enter;
+  * two panes: an outline, and the selected item's links.
+* `ui.rs`: drawing, after the scene 1 mock-up. `term.rs` and the `memex` program: the terminal check, the keys, the event loop. A second without keys writes what is pending.
+* `make run` starts the sealer in the background and the memex in the terminal. **Not exercised**: it needs an interactive terminal.
+
+The format gained the `view` kind and the outline's bodies; `docs/design.md` records them, with the provisional keys.
+
+Acceptance checks (all in `make test`):
+
+* **Scene 1 as written.** Hold Leap and type "dra": the Leap box shows "LEAP · 3 MATCHES" and the three matches with their paths, and the guide line reads "release Leap to go to the first match · Esc completes · ? lists every match · Leap again repeats". Nothing is written while Leap is held. Release: the cursor is on DRAKON, the journal has exactly one new entry (a `view` entry, `op` leap, pattern "dra"), and the right pane shows "supports →", "cited by ←" and "transcluded in ←" with their items.
+* **Keystroke to visible change**, on 10,000 items, measured as handling a key and drawing the whole screen into a 160 x 50 test terminal. 39 keystrokes: arrows, typing, a Leap of 11 letters, Enter.
+  * Optimised build: mean 2.0 ms, worst 4.7 ms; the journal of 10,001 entries replays in 0.17 s.
+  * Unoptimised (`make test`): mean 18.8 ms, worst 43 ms; replay 0.9 s.
+  * Writing to a real terminal is not included.
+* **Replay reproduces the screen.** A session of every kind of action (typing, branches, links, a transclusion, a name, a fold, undo, redo, Scope, a word deleted, a retraction, a supposition, a pane switch) replays to the same screen, cell for cell, but for the message line, which is feedback, not state. A second test compares the whole state after each of 17 steps.
+* `tests/memex_in_a_pty.py` runs the real program in a pseudo-terminal, with the script playing the terminal:
+  * Answered as a terminal without the protocols, it refuses to start, names both protocols, and writes nothing.
+  * Answered as kitty, it reads keys in the kitty encoding: typed text reaches the journal, a held Right Alt makes one Leap, ended by its release, and F10 quits with status 0.
+
+Faults found and fixed:
+
+* Replaying 10,000 entries took 16.6 s (unoptimised): `apply` computed the whole outline order before every entry. It now does so only when an item may vanish. 0.9 s.
+* Retracting an item also removed an unrelated item written after it, whose placement named it as its preceding sibling. Now an item whose sibling is gone goes first among its siblings; only a missing parent makes an edit fail.
+* The program panicked on its first frame in a pseudo-terminal, which starts at 0 x 0: an underflow when the pane has no rows. Found by the pseudo-terminal test; a test now draws at six small sizes.
+* Leap's match list printed an empty ". ›" for top-level items; it walked past the top of the outline.
+* The no-key test (milestone 1) matched `ev.key` in Rust code as a key file name; narrowed to a quoted name ending in `.key`, and shown still to fail on one.
+
+Deliberate breaks, each made a test fail: Leap writing no entry; undo's parent wrong; retraction without confirmation; placement failing without its sibling; release not ending a held quasimode; drawing without the row check; Right Alt unmapped (the pseudo-terminal test). One break was not caught at first: typing that did not record the text cursor. The screen comparison cannot see the terminal's cursor, and a later view entry hid the difference. The step-by-step replay test catches it.
+
+Terminals (from kitty's own protocol pages, read by a search agent; not tested here):
+
+* Listed as implementing both the keyboard and the graphics protocol: kitty, WezTerm, Ghostty, iTerm2. Konsole is listed for graphics only, and foot for the keyboard protocol only.
+* No page opened confirms that any terminal but kitty sends key releases, which the quasimodes need. Release events are flag 0b10 of the keyboard protocol.
+
+Limits:
+
+* The quasimode keys are provisional and untried on real keyboards. Right Alt is AltGr on many layouts, and the operating system may take Super.
+* The memex has run only under a script playing a terminal, never in a real kitty, WezTerm or Ghostty.
+* Images (the graphics protocol) are checked for at start but not yet used.
+* Time: the plan estimated 2–3 weeks; this took part of one session, without the author's review of the interface's feel, which the estimate counted.
+
+### Sizes (counted, after milestone 3)
 
 | Part | Lines | Of which tests |
 | --- | --- | --- |
+| `crates/memex` (with its tests) | 4,124 | 1,041 |
 | `crates/format` | 1,827 | 860 |
-| `crates/memex` | 809 | 223 |
 | `crates/protocol` | 587 | 203 |
 | `crates/sealer` | 384 | 124 |
 | `crates/check` | 234 | 57 |
 | `crates/acceptance` | 835 | 834 |
-| `prolog/` (server and protocol) | 467 | 0 |
-| `prolog/tests/` | 141 | 141 |
-| Prolog spikes | 56 | 56 |
-| Shell tests | 41 | 41 |
+| `prolog/` and its tests | 608 | 141 |
+| Tests in Python and shell | 189 | 189 |
 
-Tests: 84 Rust tests and 18 Prolog tests, with the tabling spike and the no-key script, in `make test`; the s(CASP) spike is optional.
+Tests: 103 Rust tests, 18 Prolog tests, the pseudo-terminal script (7 checks), the tabling spike and the no-key script, in `make test`.
