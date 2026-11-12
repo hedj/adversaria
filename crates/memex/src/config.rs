@@ -129,6 +129,19 @@ fn bound_key(name: &str) -> Result<Key, String> {
     Err(format!("no key is called {name}"))
 }
 
+/// A key's name, as the configuration writes it.
+pub fn key_name(k: Key) -> String {
+    match k {
+        Key::F(n) => format!("F{n}"),
+        Key::Special(s) => SPECIALS
+            .iter()
+            .find(|(_, x)| *x == s)
+            .map(|(n, _)| n.to_string())
+            .unwrap_or_default(),
+        other => format!("{other:?}"),
+    }
+}
+
 fn quasi_key(name: &str) -> Result<QuasiKey, String> {
     if let Some(m) = MODIFIERS.iter().find(|m| **m == name) {
         return Ok(QuasiKey::Modifier(m));
@@ -338,6 +351,19 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(example, DEFAULT_TOML);
+    }
+
+    #[test]
+    fn key_names_read_back() {
+        // Catches a key shown to the user under a name the file would refuse.
+        for k in [
+            Key::F(1),
+            Key::F(35),
+            Key::Special(Special::Insert),
+            Key::Special(Special::NumLock),
+        ] {
+            assert_eq!(bound_key(&key_name(k)), Ok(k));
+        }
     }
 
     #[test]

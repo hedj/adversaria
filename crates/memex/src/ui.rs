@@ -812,7 +812,14 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
             .unwrap_or_else(|| "not yet computed".into())
     )));
     lines.push(Line::raw(""));
-    lines.push(Line::styled("F3 adopts · F4 retracts an adoption", dim()));
+    lines.push(Line::styled(
+        format!(
+            "{} adopts · {} retracts an adoption",
+            app.key_for("adopt"),
+            app.key_for("unadopt")
+        ),
+        dim(),
+    ));
     lines
 }
 

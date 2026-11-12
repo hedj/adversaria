@@ -233,6 +233,15 @@ fn interrogation_answers_its_five_questions() {
     s.assert("the source's record");
     s.assert("0 of its claims adopted, 0 of them retracted since");
     s.assert("adopting it would raise 1 violation of one date per event");
+    s.assert("F3 adopts · F4 retracts an adoption");
+    // The hint follows the configuration, not the default keys.
+    app.bindings =
+        memex::config::Config::parse("[keys]\nF3 = \"\"\nInsert = \"adopt\"\nF4 = \"\"\n")
+            .unwrap()
+            .bindings;
+    let s2 = screen(&app);
+    s2.assert("Insert adopts · command unadopt retracts an adoption");
+    app.bindings = memex::config::Config::default().bindings;
     assert_eq!(
         app.journal()
             .entries()

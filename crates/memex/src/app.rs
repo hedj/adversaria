@@ -941,6 +941,14 @@ impl App {
         };
     }
 
+    /// How to run a command by key: its bound key, else by name.
+    pub fn key_for(&self, command: &str) -> String {
+        match self.bindings.iter().find(|(_, c)| c == command) {
+            Some((k, _)) => crate::config::key_name(*k),
+            None => format!("command {command}"),
+        }
+    }
+
     fn normal(&mut self, ev: Event) -> Mode {
         if ev.press == Press::Up {
             return Mode::Normal;
@@ -980,7 +988,7 @@ impl App {
         }
         let f = self.view.focus;
         if self.view.panes[f].kind == PaneKind::Links {
-            self.message = "this pane shows links; run switch to edit".into();
+            self.message = format!("this pane shows links; {} to edit", self.key_for("switch"));
             return Mode::Normal;
         }
         self.message.clear();
