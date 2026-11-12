@@ -203,6 +203,11 @@ impl Config {
                             .iter()
                             .map(|n| quasi_key(n).map_err(|e| format!("[quasimodes] {name}: {e}")))
                             .collect::<Result<Vec<_>, _>>()?;
+                        if ks.is_empty() {
+                            return Err(format!(
+                                "[quasimodes] {name}: a quasimode needs at least one key"
+                            ));
+                        }
                         config.quasimodes.push((q, ks));
                     }
                 }
@@ -427,6 +432,7 @@ mod tests {
             ("[quasimodes]\nscope = \"LeftAlt\"\n", "two jobs"),
             ("[colours]\nx = 1\n", "no section [colours]"),
             ("[keys\n", "TOML parse error"),
+            ("[quasimodes]\nleap_back = []\n", "at least one key"),
         ];
         for (text, why) in cases {
             let e = Config::parse(text).unwrap_err();
