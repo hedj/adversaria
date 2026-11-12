@@ -13,3 +13,4 @@ pub mod replay;
 pub mod store;
 pub mod term;
 pub mod ui;
+pub mod view;

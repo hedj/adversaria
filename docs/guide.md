@@ -240,6 +240,7 @@ the item under the cursor.
 | `import` | `import wikidata FILE`, `import document FILE`, `import results FILE` | imports a Wikidata subset, a document, or an analysis's results (§ 9, § 10) |
 | `indent` | `indent` | makes the target a child of the item above it |
 | `interrogate` | `interrogate` | asks of the target's claim: who else claims it, who claims the contrary, its source, the source's record, and what adopting it would do |
+| `layer` | `layer MARK where GOAL` | adds a layer to the target's view: one mark for each solution of GOAL (§ 8a, Views) |
 | `link` | `link [FROM] to TO [as TYPE]` | links two items; FROM defaults to the target, TYPE to `link`. `cites`, `supports` and `opposes` read well in the links pane |
 | `move` | `move after ADDRESS` | moves the target's branch to follow ADDRESS |
 | `name` | `name WORD` | names the target, so WORD addresses it; the name `title` also heads the outline |

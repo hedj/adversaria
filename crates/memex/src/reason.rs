@@ -46,6 +46,9 @@ pub struct WorldEval {
     pub constraints: Vec<ConstraintEval>,
     /// Each derived item's answers.
     pub derived: BTreeMap<u64, Term>,
+    /// Each layer's marks, by the layer's seq: the mark, and the seqs of
+    /// the facts it rests on.
+    pub layers: BTreeMap<u64, Vec<(Term, Vec<u64>)>>,
     /// The journal's length when this was computed.
     pub at: usize,
 }
@@ -192,6 +195,26 @@ pub fn make_list(items: Vec<Term>) -> Term {
 
 /// A constraint node's value: Vars-Prov pairs. Solutions that rest on the
 /// same facts (the same pair found both ways round) count once.
+/// A layer's value, as (mark, seqs of the facts it rests on) pairs.
+pub fn marks(v: &Term) -> Vec<(Term, Vec<u64>)> {
+    list(v)
+        .into_iter()
+        .filter_map(|p| match p {
+            Term::Compound(f, a) if f == "-" && a.len() == 2 => Some((
+                a[0].clone(),
+                list(&a[1])
+                    .into_iter()
+                    .filter_map(|s| match s {
+                        Term::Int(n) if n > 0 => Some(n as u64),
+                        _ => None,
+                    })
+                    .collect(),
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
 pub fn solutions(v: &Term) -> Vec<Solution> {
     let mut out: Vec<Solution> = Vec::new();
     for pair in list(v) {

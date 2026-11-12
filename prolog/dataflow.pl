@@ -47,6 +47,18 @@ eval(constraint(_Name, Vars, Body), V) :-
 eval(query(Vars, Goal), V) :-
     findall(Vars, beliefs(Goal), V0),
     sort(V0, V).
+%   A layer of a view: each solution's mark, with the seqs of the beliefs
+%   it rests on, through rules (crates/memex/src/view.rs).
+eval(layer(Mark, Goal), V) :-
+    findall(Mark-Seqs, (prove(Goal, P), sort(P, Seqs)), V0),
+    sort(V0, V).
+
+%   Prove a goal from beliefs, as beliefs/1 does, collecting the seqs of
+%   the facts used, looking through rules to the facts under them.
+prove((A, B), P) :- !, prove(A, P1), prove(B, P2), append(P1, P2, P).
+prove(G, []) :- builtin(G), !, safe_call(G).
+prove(G, [S]) :- fact_ref(S, G, _).
+prove(G, P) :- fact_ref(_, rule_def(_, G, B), _), prove(B, P).
 
 %   A literal holds as a belief, or as some source's claim.
 holds_all((A, B), P) :- !,

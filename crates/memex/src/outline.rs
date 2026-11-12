@@ -21,6 +21,8 @@
 //! * edit `{"op":"facts","item":i,"facts":[...],"source":s}`: facts stated by item
 //!   i; with a source, they are claims, `claims(Source, P)`.
 //! * edit `{"op":"constraint","name":n,"rule":text,"facts":[node_def(seq, constraint(...))]}`.
+//! * edit `{"op":"layer","item":i,"mark":m,"goal":g,"facts":[node_def(seq, layer(Mark, Goal))]}`:
+//!   a layer of the view at item i (crate::view).
 //! * edit `{"op":"derive","item":i,"template":t,"names":[...],"facts":[node_def(i, query(...))]}`:
 //!   item i shows a value computed from the beliefs.
 //! * adopt `{"claim":seq,"item":i,"source":s,"facts":[P]}`: a claim made a belief.
@@ -69,6 +71,15 @@ pub struct Derive {
     pub names: Vec<String>,
 }
 
+/// A layer of a view: a mark drawn for each solution of a goal.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Layer {
+    /// The entry that made it; also its dataflow node.
+    pub seq: u64,
+    pub mark: String,
+    pub goal: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Constraint {
     pub name: String,
@@ -82,6 +93,8 @@ pub struct Outline {
     /// The source an item's claims came from.
     pub source: HashMap<u64, String>,
     pub derived: HashMap<u64, Derive>,
+    /// Views: each item's layers, in the order they were made.
+    pub views: BTreeMap<u64, Vec<Layer>>,
     /// Constraints, by the seq of the entry that made each.
     pub constraints: BTreeMap<u64, Constraint>,
     pub items: HashMap<u64, Item>,
@@ -384,6 +397,23 @@ impl Outline {
                     .unwrap_or("")
                     .to_string();
                 self.constraints.insert(seq, Constraint { name, rule });
+                true
+            }
+            ("edit", Some("layer")) => {
+                let Some(id) = num("item").filter(|i| self.items.contains_key(i)) else {
+                    return false;
+                };
+                let text = |k: &str| {
+                    body.get(k)
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string()
+                };
+                self.views.entry(id).or_default().push(Layer {
+                    seq,
+                    mark: text("mark"),
+                    goal: text("goal"),
+                });
                 true
             }
             ("edit", Some("derive")) => {

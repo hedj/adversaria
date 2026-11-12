@@ -425,6 +425,11 @@ pub const COMMANDS: &[Command] = &[
         help: "ask of the target's claim: who else claims it, who disputes it, its source and record",
     },
     Command {
+        name: "layer",
+        slots: &[("mark", Slot::Text)],
+        help: "add a layer to the target's view: a mark, then where and a goal; one mark per solution",
+    },
+    Command {
         name: "link",
         slots: &[("from", Slot::Addr), ("to", Slot::Addr), ("as", Slot::Word)],
         help: "link one item to another; the type defaults to link",
@@ -1451,6 +1456,11 @@ impl App {
             for item in outline.derived.keys() {
                 if let Ok(v) = engine.node(*item) {
                     eval.derived.insert(*item, v);
+                }
+            }
+            for layer in outline.views.values().flatten() {
+                if let Ok(v) = engine.node(layer.seq) {
+                    eval.layers.insert(layer.seq, reason::marks(&v));
                 }
             }
             self.eval[k] = Some(eval);
@@ -2830,6 +2840,61 @@ impl App {
                     "constraint {} kept: it fires on a planted violation",
                     cname.trim()
                 );
+            }
+            "layer" => {
+                let text = words.join(" ");
+                let (mark_text, goal_text) = match text.split_once(" where ") {
+                    Some((m, g)) => (
+                        m.trim().to_string(),
+                        g.trim().trim_end_matches('.').to_string(),
+                    ),
+                    None => (
+                        text.trim().trim_end_matches('.').to_string(),
+                        "true".to_string(),
+                    ),
+                };
+                // One term, so the mark and the goal share their variables.
+                let (t, names) = self
+                    .engine(0)?
+                    .parse(&format!("layer(({mark_text}), ({goal_text}))"))
+                    .map_err(|e| format!("not a mark and a goal: {e}"))?;
+                let Term::Compound(_, a) = &t else {
+                    unreachable!()
+                };
+                let (mark, goal) = (a[0].clone(), a[1].clone());
+                crate::view::channels(&mark).map_err(|e| format!("layer not kept: {e}"))?;
+                let in_goal = variables(&goal);
+                let free: Vec<String> = variables(&mark)
+                    .into_iter()
+                    .filter(|v| !in_goal.contains(v))
+                    .map(|v| {
+                        names
+                            .get(v as usize)
+                            .cloned()
+                            .unwrap_or_else(|| format!("_{v}"))
+                    })
+                    .collect();
+                if !free.is_empty() {
+                    return Err(format!(
+                        "layer not kept: {} in the mark {} not bound by the goal",
+                        free.join(", "),
+                        if free.len() == 1 { "is" } else { "are" }
+                    ));
+                }
+                self.engine(0)?
+                    .check_definition(&goal)
+                    .map_err(|w| format!("layer not kept: {w}"))?;
+                let seq = self.journal.entries().len() as u64 + 1;
+                let def = Term::Compound(
+                    "node_def".into(),
+                    vec![
+                        Term::Int(seq as i64),
+                        Term::Compound("layer".into(), vec![mark, goal]),
+                    ],
+                );
+                let f = terms::encode(&def).map_err(|e| e.0)?;
+                self.write_here("edit", json!({"op": "layer", "item": target, "mark": mark_text, "goal": goal_text, "facts": [f]}))?;
+                self.message = format!("layer kept: {}", mark_text);
             }
             "derive" => {
                 let text = words.join(" ");
