@@ -274,3 +274,40 @@ fn rules_work_under_negation_disjunction_and_findall() {
     shows(&app, "Either: 3 [derived]");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_violation_through_a_rule_rests_on_the_facts_under_it() {
+    // Catches a violation that names the rule, not the facts the user would
+    // change, so marks appear on the rule's item and views drawing those
+    // facts are not drawn loudly.
+    let dir = temp("rule-prov");
+    let mut app = budget(&dir);
+    command(
+        &mut app,
+        "rule spent(S) :- cell(rent, R), cell(food, F), S is R + F.",
+    );
+    let rule = app.journal().entries().last().unwrap().seq;
+    command(
+        &mut app,
+        "constraint within income: false :- spent(S), cell(income, I), S > I.",
+    );
+    command(&mut app, "set cell(food, 900)");
+    let eval = app.eval[0].as_ref().unwrap();
+    let c = eval
+        .constraints
+        .iter()
+        .find(|c| c.name == "within income")
+        .unwrap();
+    assert_eq!(c.violations.len(), 1);
+    let seqs: Vec<u64> = c.violations[0].prov.iter().map(|p| p.seq()).collect();
+    assert!(!seqs.contains(&rule), "not the rule: {seqs:?}");
+    let facts: Vec<String> = seqs
+        .iter()
+        .map(|s| memex::reason::show(&eval.facts.iter().find(|(q, _)| q == s).unwrap().1))
+        .collect();
+    for f in ["cell(rent, 1200)", "cell(food, 900)", "cell(income, 2000)"] {
+        assert!(facts.contains(&f.to_string()), "{f} in {facts:?}");
+    }
+    shows(&app, "within income, violation");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

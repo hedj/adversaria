@@ -67,12 +67,14 @@ holds_all((A, B), P) :- !,
     append(P1, P2, P).
 holds_all(G, []) :- builtin(G), !, safe_call(G).
 holds_all(G, [Who]) :- holds(G, Who).
+%   Through a rule, a solution rests on the facts under it (and their
+%   sources), not on the rule: those are what the user would change.
+holds_all(G, P) :- fact_ref(_, rule_def(_, G, B), _), holds_all(B, P).
 
 %   Provenance names the fact too: belief(Seq, Fact), claim(Source, Seq,
 %   Fact). A Wikidata claim is derived from the imported subset, through the
 %   user's links (same_as) and property mappings (wd_property).
 holds(G, belief(S, G)) :- fact_ref(S, G, _).
-holds(G, belief(S, G)) :- fact_ref(S, rule_def(_, G, B), _), beliefs(B).
 holds(G, claim(Src, S, G)) :- fact_ref(S, claims(Src, G), _).
 holds(G, claim("Wikidata", S, G)) :- wd_import(S, _), wd_claim(G).
 

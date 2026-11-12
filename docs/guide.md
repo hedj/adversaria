@@ -323,8 +323,9 @@ constraint within income: false :- spent(S), cell(income, I), S > I.
 A rule may not be recursive, directly or through other rules (the
 reasoner proves rules by plain recursion, which would not end); every
 variable in its head must be bound by its body; and its body may call
-only what a definition may (below). A violation that rests on a rule
-names the rule's entry.
+only what a definition may (below). A violation found through a rule
+rests on the facts under the rule, so its marks appear on the items you
+would change.
 
 **What a definition may call.** A constraint, a derived goal and an
 adopted rule may only read facts, compare and compute. Besides your facts,
