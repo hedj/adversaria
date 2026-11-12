@@ -2,6 +2,7 @@
 
 pub mod dispatch;
 mod editing;
+mod knowledge;
 mod worlds;
 
 pub use dispatch::{COMMANDS, Command, command_help};

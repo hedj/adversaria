@@ -15,7 +15,7 @@
 //! follow, fold, pane, scope. Counting actions by kind reads these.
 
 use crate::actions::dispatch::{complete_command, in_quotes};
-use crate::engine::{Engine, variables};
+use crate::engine::Engine;
 use crate::journal::{Error as JournalError, Journal};
 use crate::outline::{Outline, Span, TOP, span_json};
 use crate::reason::{self, ConstraintEval, Prov, Suggestion, WorldEval, solutions};
@@ -215,6 +215,12 @@ impl View {
         if p.cursor == TOP {
             p.cursor = from;
         }
+    }
+
+    /// Interrogate a claim item: show it in the links pane.
+    pub(crate) fn show_claim(&mut self, item: u64) {
+        self.interrogate = Some(item);
+        self.panes[1].kind = PaneKind::Links;
     }
 
     /// Whether commands act on the word at the cursor.
@@ -534,7 +540,7 @@ impl App {
     }
 
     /// The entries on the path from the tip back to the root, oldest first.
-    fn path(&self, tip: u64) -> Vec<&Entry> {
+    pub(crate) fn path(&self, tip: u64) -> Vec<&Entry> {
         let mut out = Vec::new();
         let mut at = Some(tip);
         while let Some(s) = at {
@@ -1187,7 +1193,7 @@ impl App {
     /// contradicts (see `direct_conflicts`), by evaluating the world with
     /// it added in the preview engine; retract them; then state the fact on
     /// the item that held the first of them, or on `target` if none.
-    fn set_fact(&mut self, fact: &Term, target: u64) -> Result<(), String> {
+    pub(crate) fn set_fact(&mut self, fact: &Term, target: u64) -> Result<(), String> {
         let mut facts = self.facts_at(self.tip)?;
         facts.extend(outline_facts(&self.outline));
         let next = self.journal.entries().len() as u64 + 1;
@@ -1252,7 +1258,7 @@ impl App {
         }
     }
 
-    fn engine(&mut self, k: usize) -> Result<&mut Engine, String> {
+    pub(crate) fn engine(&mut self, k: usize) -> Result<&mut Engine, String> {
         if self.engines[k].is_none() {
             self.engines[k] =
                 Some(Engine::start().map_err(|e| format!("cannot start Prolog: {e}"))?);
@@ -1520,7 +1526,7 @@ impl App {
     /// Adopt a suggestion: one entry, marked as an adopted suggestion and
     /// carrying its evidence, so it can be found and retracted later. A
     /// constraint is tried against a planted violation first.
-    fn accept(&mut self, s: &Suggestion) -> Result<(), String> {
+    pub(crate) fn accept(&mut self, s: &Suggestion) -> Result<(), String> {
         let mark = json!({"kind": reason::show(&s.kind), "evidence": s.evidence, "score": s.score});
         let enc = |t: &Term| terms::encode(t).map_err(|e| e.0);
         let seq = self.journal.entries().len() as u64 + 1;
@@ -1585,7 +1591,7 @@ impl App {
     }
 
     /// Copy a file into blobs/, named by its SHA-256; return the hash.
-    fn store_blob(&self, bytes: &[u8]) -> Result<String, String> {
+    pub(crate) fn store_blob(&self, bytes: &[u8]) -> Result<String, String> {
         let hash = format::record::sha256_hex(bytes);
         let blobs = self.journal.dir().join(format::record::BLOBS);
         std::fs::create_dir_all(&blobs).map_err(|e| e.to_string())?;
@@ -1643,7 +1649,7 @@ impl App {
     /// Import a document: its blocks become items, its citations facts, and
     /// what the outline cannot hold is listed as losses. Importing a file of
     /// the same name again is a revision: it opens a world (see `revise`).
-    fn import_document(&mut self, file: &str) -> Result<(), String> {
+    pub(crate) fn import_document(&mut self, file: &str) -> Result<(), String> {
         let path = std::path::Path::new(file);
         let (blocks, losses, _) = crate::docs::read(path)?;
         let bytes = std::fs::read(path).map_err(|e| format!("{file}: {e}"))?;
@@ -1846,7 +1852,7 @@ impl App {
     /// Export a section (an item and its branch), or the whole outline, as a
     /// document. Its metadata lists the hashes of the entries its text came
     /// from, so a published text traces back to the record.
-    fn export(&mut self, file: &str, section: Option<u64>) -> Result<(), String> {
+    pub(crate) fn export(&mut self, file: &str, section: Option<u64>) -> Result<(), String> {
         let roots: Vec<u64> = match section {
             Some(s) => vec![s],
             None => self.outline.top.clone(),
@@ -1906,7 +1912,7 @@ impl App {
 
     /// Import results: an exchange file of values with their provenance (W3C
     /// PROV terms), as claims whose source is the analysis.
-    fn import_results(&mut self, file: &str) -> Result<(), String> {
+    pub(crate) fn import_results(&mut self, file: &str) -> Result<(), String> {
         let path = std::path::Path::new(file);
         let bytes = std::fs::read(path).map_err(|e| format!("{file}: {e}"))?;
         let v: serde_json::Value =
@@ -2016,7 +2022,7 @@ impl App {
 
     /// The quote check: does the item's text still appear in the document it
     /// was imported from? Spaces, hyphens and case are ignored.
-    fn check_quote(&mut self, item: u64) -> Result<String, String> {
+    pub(crate) fn check_quote(&mut self, item: u64) -> Result<String, String> {
         let origin = self
             .outline
             .items
@@ -2047,7 +2053,7 @@ impl App {
     /// The source check: fetch the item's DOI from Crossref, never trusting a
     /// copy that came with the claim, and rule: found, misattributed (the
     /// title differs from the one claimed), not_found, unavailable, retracted.
-    fn check_source(&mut self, item: u64) -> Result<String, String> {
+    pub(crate) fn check_source(&mut self, item: u64) -> Result<String, String> {
         let facts = self.facts_at(self.tip)?;
         let mine: Vec<&Term> = facts
             .iter()
@@ -2167,413 +2173,6 @@ impl App {
     // ------------------------------------------------------------------
     // Commands.
 
-    pub(crate) fn cmd_export(&mut self, words: &[&str], _: u64) -> Result<(), String> {
-        let (file, section) = match words.split_last() {
-            Some((last, rest)) if !rest.is_empty() && self.outline.by_number(last).is_some() => {
-                (rest.join(" "), self.outline.by_number(last))
-            }
-            _ => (words.join(" "), None),
-        };
-        if file.is_empty() {
-            return Err("export (to) a file, and an item number for one section".into());
-        }
-        self.export(&file, section)?;
-        Ok(())
-    }
-
-    pub(crate) fn cmd_check(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        let ruling = match words.first().copied() {
-            Some("quote") => self.check_quote(target)?,
-            Some("source") => self.check_source(target)?,
-            _ => return Err("check quote, or check source".into()),
-        };
-        self.message = format!("{} check: {ruling}", words[0]);
-        Ok(())
-    }
-
-    pub(crate) fn cmd_accept(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        self.accept_dismiss("accept", words, target)
-    }
-
-    pub(crate) fn cmd_dismiss(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        self.accept_dismiss("dismiss", words, target)
-    }
-
-    fn accept_dismiss(&mut self, name: &str, words: &[&str], _: u64) -> Result<(), String> {
-        let n: usize = words
-            .first()
-            .and_then(|w| w.parse().ok())
-            .ok_or(format!("{name} (suggestion) a number"))?;
-        let s = self
-            .shown_suggestions()
-            .get(n.wrapping_sub(1))
-            .map(|s| (*s).clone())
-            .ok_or(format!("there is no suggestion {n}"))?;
-        if name == "dismiss" {
-            self.write_view("dismiss", json!({"key": s.key()}));
-            self.message = format!("dismissed: {}", s.describe());
-        } else {
-            self.accept(&s)?;
-            self.message = format!("adopted: {}", s.describe());
-        }
-        Ok(())
-    }
-
-    pub(crate) fn cmd_fact(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        self.fact_claim("fact", words, target)
-    }
-
-    pub(crate) fn cmd_claim(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        self.fact_claim("claim", words, target)
-    }
-
-    fn fact_claim(&mut self, name: &str, words: &[&str], target: u64) -> Result<(), String> {
-        let text = words.join(" ");
-        let (fact_text, source) = match (name, text.rfind(" from ")) {
-            ("claim", Some(i)) => (
-                text[..i].to_string(),
-                Some(text[i + 6..].trim().to_string()),
-            ),
-            ("claim", None) => return Err("claim (that) a fact, from a source".into()),
-            _ => (text, None),
-        };
-        let (t, _) = self
-            .engine(0)?
-            .parse(fact_text.trim_end_matches('.'))
-            .map_err(|e| format!("not a Prolog fact: {e}"))?;
-        if !matches!(t, Term::Atom(_) | Term::Compound(..)) || !variables(&t).is_empty() {
-            return Err("a fact is an atom or a compound term, with no variables".into());
-        }
-        if reserved(&t) {
-            return Err(format!(
-                "{} is reserved: definitions are made by constraint, derive and accept",
-                functor_of(&t)
-            ));
-        }
-        let fact = match &source {
-            Some(src) => Term::Compound("claims".into(), vec![Term::Str(src.clone()), t]),
-            None => t,
-        };
-        let f = terms::encode(&fact).map_err(|e| e.0)?;
-        let mut body = json!({"op": "facts", "item": target, "facts": [f]});
-        if let Some(src) = source {
-            body["source"] = json!(src);
-        }
-        self.write_here("edit", body)?;
-        Ok(())
-    }
-
-    pub(crate) fn cmd_rule(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        let text = words.join(" ");
-        let (t, names) = self
-            .engine(0)?
-            .parse(text.trim().trim_end_matches('.'))
-            .map_err(|e| format!("not a Prolog rule: {e}"))?;
-        let (head, body) = match &t {
-            Term::Compound(n, a) if n == ":-" && a.len() == 2 => (a[0].clone(), a[1].clone()),
-            _ => return Err("rule (that) Head :- Body.".into()),
-        };
-        let pi = functor_of(&head);
-        if reserved(&head)
-            || matches!(&head, Term::Compound(f, _) | Term::Atom(f) if f == "rule_def" || f == "node_def" || f == "claims")
-        {
-            return Err(format!("rule not kept: {pi} is reserved"));
-        }
-        // Every head variable must be bound by the body; name those
-        // that are not. `names` are in order of first appearance.
-        let in_body = variables(&body);
-        let free: Vec<String> = variables(&head)
-            .into_iter()
-            .filter(|v| !in_body.contains(v))
-            .map(|v| {
-                names
-                    .get(v as usize)
-                    .cloned()
-                    .unwrap_or_else(|| format!("_{v}"))
-            })
-            .collect();
-        if !free.is_empty() {
-            return Err(format!(
-                "rule not kept: {} in the head {} not bound by the body",
-                free.join(", "),
-                if free.len() == 1 { "is" } else { "are" }
-            ));
-        }
-        // The check reads the world's rules: bring the engine up to
-        // date first, in case it has not been evaluated since.
-        let facts = self.facts_at(self.tip)?;
-        self.engine(0)?.sync(&facts).map_err(|e| e.to_string())?;
-        self.engine(0)?
-            .check_rule(&head, &body)
-            .map_err(|w| format!("rule not kept: {w}"))?;
-        let seq = self.journal.entries().len() as u64 + 1;
-        let def = Term::Compound("rule_def".into(), vec![Term::Int(seq as i64), head, body]);
-        let f = terms::encode(&def).map_err(|e| e.0)?;
-        let mut b = json!({"op": "facts", "rule": text.trim(), "facts": [f]});
-        if target != TOP {
-            b["item"] = json!(target);
-        }
-        self.write_here("edit", b)?;
-        self.message = format!("rule {pi} kept");
-        Ok(())
-    }
-
-    pub(crate) fn cmd_set(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        let text = words.join(" ");
-        let (t, _) = self
-            .engine(0)?
-            .parse(text.trim_end_matches('.'))
-            .map_err(|e| format!("not a Prolog fact: {e}"))?;
-        if !matches!(t, Term::Atom(_) | Term::Compound(..)) || !variables(&t).is_empty() {
-            return Err("a fact is an atom or a compound term, with no variables".into());
-        }
-        if reserved(&t) {
-            return Err(format!(
-                "{} is reserved: definitions are made by constraint, derive and accept",
-                functor_of(&t)
-            ));
-        }
-        self.set_fact(&t, target)?;
-        Ok(())
-    }
-
-    pub(crate) fn cmd_constraint(&mut self, words: &[&str], _: u64) -> Result<(), String> {
-        let text = words.join(" ");
-        let (cname, rule) = text
-            .split_once(": ")
-            .ok_or("constraint (named) a name: false :- body.")?;
-        let (t, _) = self
-            .engine(0)?
-            .parse(rule.trim().trim_end_matches('.'))
-            .map_err(|e| format!("not a Prolog rule: {e}"))?;
-        let body = match &t {
-            Term::Compound(n, a)
-                if n == ":-" && a.len() == 2 && a[0] == Term::Atom("false".into()) =>
-            {
-                a[1].clone()
-            }
-            _ => return Err("a constraint is a denial: false :- body.".into()),
-        };
-        self.engine(0)?
-            .check_definition(&body)
-            .map_err(|w| format!("constraint not kept: {w}"))?;
-        let vars = reason::make_list(variables(&body).into_iter().map(Term::Var).collect());
-        // Tried against a planted violation before it is kept.
-        let planted = self
-            .engine(0)?
-            .plant(&vars, &body)
-            .map_err(|e| e.to_string())?;
-        if !matches!(&planted, Term::Compound(n, _) if n == "fires") {
-            return Err(format!(
-                "constraint not kept: tried against a planted violation, it did not fire ({})",
-                reason::show(&planted)
-            ));
-        }
-        let seq = self.journal.entries().len() as u64 + 1;
-        let def = Term::Compound(
-            "node_def".into(),
-            vec![
-                Term::Int(seq as i64),
-                Term::Compound(
-                    "constraint".into(),
-                    vec![Term::Str(cname.trim().into()), vars, body],
-                ),
-            ],
-        );
-        let f = terms::encode(&def).map_err(|e| e.0)?;
-        self.write_here(
-            "edit",
-            json!({"op": "constraint", "name": cname.trim(), "rule": rule.trim(), "facts": [f]}),
-        )?;
-        self.message = format!(
-            "constraint {} kept: it fires on a planted violation",
-            cname.trim()
-        );
-        Ok(())
-    }
-
-    pub(crate) fn cmd_layer(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        let text = words.join(" ");
-        let (mark_text, goal_text) = match text.split_once(" where ") {
-            Some((m, g)) => (
-                m.trim().to_string(),
-                g.trim().trim_end_matches('.').to_string(),
-            ),
-            None => (
-                text.trim().trim_end_matches('.').to_string(),
-                "true".to_string(),
-            ),
-        };
-        // One term, so the mark and the goal share their variables.
-        let (t, names) = self
-            .engine(0)?
-            .parse(&format!("layer(({mark_text}), ({goal_text}))"))
-            .map_err(|e| format!("not a mark and a goal: {e}"))?;
-        let Term::Compound(_, a) = &t else {
-            unreachable!()
-        };
-        let (mark, goal) = (a[0].clone(), a[1].clone());
-        crate::view::channels(&mark).map_err(|e| format!("layer not kept: {e}"))?;
-        let in_goal = variables(&goal);
-        let free: Vec<String> = variables(&mark)
-            .into_iter()
-            .filter(|v| !in_goal.contains(v))
-            .map(|v| {
-                names
-                    .get(v as usize)
-                    .cloned()
-                    .unwrap_or_else(|| format!("_{v}"))
-            })
-            .collect();
-        if !free.is_empty() {
-            return Err(format!(
-                "layer not kept: {} in the mark {} not bound by the goal",
-                free.join(", "),
-                if free.len() == 1 { "is" } else { "are" }
-            ));
-        }
-        self.engine(0)?
-            .check_definition(&goal)
-            .map_err(|w| format!("layer not kept: {w}"))?;
-        let seq = self.journal.entries().len() as u64 + 1;
-        let def = Term::Compound(
-            "node_def".into(),
-            vec![
-                Term::Int(seq as i64),
-                Term::Compound("layer".into(), vec![mark, goal]),
-            ],
-        );
-        let f = terms::encode(&def).map_err(|e| e.0)?;
-        self.write_here("edit", json!({"op": "layer", "item": target, "mark": mark_text, "goal": goal_text, "facts": [f]}))?;
-        self.message = format!("layer kept: {}", mark_text);
-        Ok(())
-    }
-
-    pub(crate) fn cmd_derive(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        let text = words.join(" ");
-        let (template, goal) = text
-            .split_once(" where ")
-            .ok_or("derive (text) a template with {Var}, where a goal")?;
-        let (g, names) = self
-            .engine(0)?
-            .parse(goal.trim().trim_end_matches('.'))
-            .map_err(|e| format!("not a Prolog goal: {e}"))?;
-        self.engine(0)?
-            .check_definition(&g)
-            .map_err(|w| format!("not derived: {w}"))?;
-        let vars = reason::make_list(variables(&g).into_iter().map(Term::Var).collect());
-        let def = Term::Compound(
-            "node_def".into(),
-            vec![
-                Term::Int(target as i64),
-                Term::Compound("query".into(), vec![vars, g]),
-            ],
-        );
-        let f = terms::encode(&def).map_err(|e| e.0)?;
-        self.write_here("edit", json!({"op": "derive", "item": target, "template": template.trim(), "names": names, "facts": [f]}))?;
-        Ok(())
-    }
-
-    pub(crate) fn cmd_interrogate(&mut self, _: &[&str], target: u64) -> Result<(), String> {
-        if self.claims_of(target).is_empty() {
-            return Err("the target states no claim".into());
-        }
-        self.view.interrogate = Some(target);
-        self.view.panes[1].kind = PaneKind::Links;
-        self.write_view("interrogate", json!({}));
-        Ok(())
-    }
-
-    pub(crate) fn cmd_adopt(&mut self, _: &[&str], target: u64) -> Result<(), String> {
-        let claims = self.claims_of(target);
-        if claims.is_empty() {
-            return Err("the target states no claim to adopt".into());
-        }
-        if let Some((_, _, p)) = claims.iter().find(|(_, _, p)| reserved(p)) {
-            return Err(format!(
-                "not adopted: the claim is a {}, which is reserved for constraint, derive and accept",
-                functor_of(p)
-            ));
-        }
-        for (seq, src, p) in claims {
-            let f = terms::encode(&p).map_err(|e| e.0)?;
-            self.write_here(
-                "adopt",
-                json!({"claim": seq, "item": target, "source": src, "facts": [f]}),
-            )?;
-        }
-        self.message = "adopted: a belief now, with its source kept".into();
-        Ok(())
-    }
-
-    pub(crate) fn cmd_unadopt(&mut self, _: &[&str], target: u64) -> Result<(), String> {
-        let last = self
-            .path(self.tip)
-            .iter()
-            .rev()
-            .find(|e| {
-                e.kind == "adopt"
-                    && e.body.as_ref().and_then(|b| b["item"].as_u64()) == Some(target)
-            })
-            .map(|e| e.seq)
-            .filter(|s| self.retractable(*s).is_ok())
-            .ok_or("the target has no adoption to retract")?;
-        self.write_here("retract", json!({"target": last}))?;
-        self.message = format!("adoption {last} retracted");
-        Ok(())
-    }
-
-    pub(crate) fn cmd_import(&mut self, words: &[&str], _: u64) -> Result<(), String> {
-        match words.first().copied() {
-            Some("document") => {
-                let file = words[1..].join(" ");
-                self.import_document(&file)?;
-            }
-            Some("results") => {
-                let file = words[1..].join(" ");
-                self.import_results(&file)?;
-            }
-            _ => {
-                let (what, file) = match words.split_first() {
-                    Some((w, rest)) if *w == "wikidata" && !rest.is_empty() => (*w, rest.join(" ")),
-                    _ => {
-                        return Err(
-                            "import (from) wikidata and a file made by the wikidata tool".into(),
-                        );
-                    }
-                };
-                let bytes = std::fs::read(&file).map_err(|e| format!("{file}: {e}"))?;
-                self.engine(0)?
-                    .check_wikidata(std::path::Path::new(&file))
-                    .map_err(|e| format!("{file} is not a Wikidata subset: {e}"))?;
-                let hash = format::record::sha256_hex(&bytes);
-                let blobs = self.journal.dir().join(format::record::BLOBS);
-                std::fs::create_dir_all(&blobs).map_err(|e| e.to_string())?;
-                let dest = blobs.join(&hash);
-                if !dest.exists() {
-                    std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
-                }
-                let name = std::path::Path::new(&file)
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                // Provenance after W3C PROV: what it was derived from, under
-                // what licence, and the file it came in.
-                self.write_here(
-                "import",
-                json!({"blob": hash, "format": "wikidata-subset", "source": "Wikidata", "file": name,
-                       "prov": {"prov:wasDerivedFrom": "https://www.wikidata.org/", "license": "CC0-1.0", "prov:wasGeneratedBy": "crates/tools/src/bin/wikidata.rs"}}),
-            )?;
-                self.message = format!(
-                    "imported {what}: {} bytes, blob {}",
-                    bytes.len(),
-                    &hash[..12]
-                );
-            }
-        }
-        Ok(())
-    }
-
     /// The last entry on the path that changed content: what undo undoes.
     pub(crate) fn content_tip(&self, from: u64) -> Option<u64> {
         let mut at = Some(from);
@@ -2685,20 +2284,6 @@ fn direct_conflicts(constraints: &[reason::ConstraintEval], new: u64) -> (Vec<u6
     direct.sort();
     direct.dedup();
     (direct, left)
-}
-
-/// Facts only constraint, derive and accept may write: definitions the
-/// reasoner runs, checked by those commands (prolog/dataflow.pl, vet/1).
-fn reserved(t: &Term) -> bool {
-    matches!(t, Term::Compound(f, a) if (f == "node_def" && a.len() == 2) || (f == "rule_def" && a.len() == 3))
-}
-
-fn functor_of(t: &Term) -> String {
-    match t {
-        Term::Compound(f, a) => format!("{f}/{}", a.len()),
-        Term::Atom(a) => format!("{a}/0"),
-        _ => "term".into(),
-    }
 }
 
 /// The word around a text position: [start, end).
