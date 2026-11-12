@@ -2,7 +2,7 @@
 
 Each entry says what was built, what was measured, and what failed or was skipped.
 
-## Milestone 0: toolchain and spikes (12 November 2026, in progress)
+## Milestone 0: toolchain and spikes (12 November 2026, done)
 
 ### Tool versions (measured)
 
@@ -15,7 +15,7 @@ Each entry says what was built, what was measured, and what failed or was skippe
 | Pandoc | 3 | 3.1.3 | already installed |
 | Git | any | 2.43.0 | already installed |
 | GNU Make | (for `make test`) | 4.3 | already installed |
-| s(CASP) | optional | not installed | see the s(CASP) spike below |
+| s(CASP) | optional | 1.1.4 (tag `V1.1.4`, commit 51ae396) | cloned from GitHub with the author's permission; loaded from the checkout's `prolog/` directory, because `pack_install` contacts the pack server, which answered `426 Upgrade Required` |
 | APE with Clex | optional | not installed | not attempted; waits for the licence decision |
 
 The session runs in a cloud container that is rebuilt from scratch. SWI-Prolog is not in its base image, so each new session must install it again until the environment's setup script does so.
@@ -56,27 +56,47 @@ Checks of the test itself (break it on purpose):
 
 A fault in the first draft of the test, found and fixed: `flag/3` keys a compound term by its name and arity only, so `r_evals(k1)` and `r_evals(k2)` shared one counter. The keys are now atoms.
 
-### Spike: s(CASP) and issue #13 (skipped: blocked)
+### Spike: s(CASP) and issue #13 (measured, reproduced)
 
-Not run. The current s(CASP) source (2.0.1) requires SWI-Prolog 10; its tag `V1.1.4`, the version the translator trial used, requires SWI-Prolog 9. Installing it from the GitHub source was refused by this session's permission rules, as running code from outside. It needs the author's permission, or SWI-Prolog 10 and the pack from the pack server.
+Test: `tests/spikes/scasp_forall.pl`, run by `make spike-scasp SCASP=<checkout>`. It is not part of `make test`, because s(CASP) is optional before stage B. The program is the case from `docs/translator.md`: `bad :- p(X, Y), q(X, Y).` with the facts `p(a,x)`, `p(b,y)` and `q(a,x)`. `bad` holds, so `?- not bad.` must have no model.
 
-s(CASP) is used only in stage B (falsifiability), so this does not block milestones 1 to 7.
+| `--forall=` | Result | Correct? |
+| --- | --- | --- |
+| `all` (the default) | a model, resting on `not p(a,y)` and `not q(b,y)` | no: the bug |
+| `all_c` | the same model | no |
+| `prev` | No models (0.008 s) | yes |
+| `sasp` | No models (0.009 s) | yes |
+
+The default algorithm checks `not p(a,y)` and not every value of Y, as the translator document says. The workaround `--forall=sasp` works on SWI-Prolog 9.0.4.
+
+Output of `make spike-scasp`:
+
+```
+--forall=all: not bad -> model (expected model)
+--forall=sasp: not bad -> no_model (expected no_model)
+```
+
+The check fails (exit 1) when `q(a, x)` is removed, because `sasp` then finds a model. It will also fail if a later s(CASP) fixes the default algorithm; that is meant, since the workaround could then go.
+
+A fault in my first run, found and fixed: without `-s1` and with standard input open, s(CASP) printed its first answer and waited for input, so `all` and `all_c` looked like a 60-second hang.
 
 ### Disagreement between the plan and the design
 
 The design (§ Query protocol, last paragraph) says the prototype sends the protocol's messages "over a pipe between its client and SWI-Prolog". The plan (milestone 2) says "over a websocket", and asks for SWI-Prolog's websocket library. A browser client cannot open a pipe, so the plan's choice looks right. The design wins under the plan's own rule; this waits for the author.
 
-### Decisions waiting for the author
+### Decisions by the author (12 November 2026)
 
-1. Licence (Clex is GPL-3.0, APE is LGPL-3.0).
-2. Numbers in hashed records: the proposal is to write every non-integer as a decimal string in format version 1. Milestone 1 depends on this.
-3. Which Wikidata subset: the proposal is D, or a few thousand items around the author's field.
+1. **Licence:** GPL-3.0. It allows APE and Clex to ship with the project.
+2. **Numbers in hashed records:** JSON numbers, with RFC 8785's serialisation in full; the plan's proposal of decimal strings is not taken. Milestone 1 must implement RFC 8785's number rules in the server and in the checker, and test them.
+3. **Wikidata subset:** D, the pocket base (about 100K items × 20 facts, about 63 MB; an estimate).
+4. **s(CASP):** installed from source, with permission; spike run above.
 
 ### Sizes (counted)
 
 | Language | Lines | Files |
 | --- | --- | --- |
-| Prolog | 46 | 1 (the spike) |
-| Make | 7 | 1 |
+| Prolog | 56 | 2 (the spikes) |
+| Make | 13 | 1 |
+| Shell | 21 | 1 |
 
-Tests: 1 (the spike, with 10 checks).
+Tests: 2 spikes: incremental tabling (10 checks, in `make test`) and s(CASP) (2 checks, optional).
