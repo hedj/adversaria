@@ -31,7 +31,9 @@
 //!   Macro arguments are parsed as expressions where they are expressions;
 //!   the report counts the macros whose arguments could not be.
 //! * Rust module: each other module of the project, or crate of the
-//!   workspace, that it names.
+//!   workspace, that it names. Items it takes from its parent module
+//!   (`super::f`, `use super::{f, g}`) are one referent, the parent; an
+//!   item taken from the crate's root (`crate::f`) is one, the crate.
 //! * Markdown section: each section or document it cites (by §, by a
 //!   docs/ path), and each backticked term defined in another section. A
 //!   term is defined where it is a heading, the first backticked cell of a
@@ -587,13 +589,29 @@ fn module_unit(name: &str, f: &syn::File, crates: &[String]) -> Unit {
         crates: &'a [String],
         out: BTreeSet<String>,
         children: usize,
+        /// The module `super` names, from the file's path.
+        parent: String,
+    }
+    impl Mods<'_> {
+        /// The module an item of `crate` or `super` belongs to.
+        fn owner(&self, first: &str) -> String {
+            if first == "super" {
+                format!("mod {}", self.parent)
+            } else {
+                "mod crate".into()
+            }
+        }
     }
     impl<'ast> Visit<'ast> for Mods<'_> {
         fn visit_path(&mut self, p: &'ast syn::Path) {
             let s: Vec<String> = p.segments.iter().map(|s| s.ident.to_string()).collect();
             match s.first().map(String::as_str) {
-                Some("crate" | "super") if s.len() > 1 => {
+                Some("crate" | "super") if s.len() > 2 => {
                     self.out.insert(format!("mod {}", s[1]));
+                }
+                Some(first @ ("crate" | "super")) if s.len() == 2 => {
+                    let o = self.owner(first);
+                    self.out.insert(o);
                 }
                 Some(c) if self.crates.iter().any(|x| x == c) && s.len() > 1 => {
                     self.out.insert(format!("crate {c}"));
@@ -608,16 +626,18 @@ fn module_unit(name: &str, f: &syn::File, crates: &[String]) -> Unit {
                 if first == "crate" || first == "super" {
                     if let syn::UseTree::Path(q) = &*p.tree {
                         self.out.insert(format!("mod {}", q.ident));
-                    } else if let syn::UseTree::Name(q) = &*p.tree {
-                        self.out.insert(format!("mod {}", q.ident));
+                    } else if let syn::UseTree::Name(_) = &*p.tree {
+                        let o = self.owner(&first);
+                        self.out.insert(o);
                     } else if let syn::UseTree::Group(g) = &*p.tree {
                         for t in &g.items {
                             match t {
                                 syn::UseTree::Path(q) => {
                                     self.out.insert(format!("mod {}", q.ident));
                                 }
-                                syn::UseTree::Name(q) => {
-                                    self.out.insert(format!("mod {}", q.ident));
+                                syn::UseTree::Name(_) => {
+                                    let o = self.owner(&first);
+                                    self.out.insert(o);
                                 }
                                 _ => {}
                             }
@@ -643,6 +663,7 @@ fn module_unit(name: &str, f: &syn::File, crates: &[String]) -> Unit {
         crates,
         out: BTreeSet::new(),
         children: 0,
+        parent: parent_module(name),
     };
     m.visit_file(f);
     // A file does not refer to itself.
@@ -659,6 +680,24 @@ fn module_unit(name: &str, f: &syn::File, crates: &[String]) -> Unit {
         children: m.children,
         forward: 0,
         strict: None,
+    }
+}
+
+/// The module `super` names in a file: the directory a.rs is in, or for
+/// a/mod.rs the directory above; "crate" where that is src.
+fn parent_module(name: &str) -> String {
+    let p = Path::new(name);
+    let dir = if p.file_stem().is_some_and(|s| s == "mod") {
+        p.parent().and_then(Path::parent)
+    } else {
+        p.parent()
+    };
+    match dir
+        .and_then(Path::file_name)
+        .map(|d| d.to_string_lossy().into_owned())
+    {
+        Some(d) if d != "src" => d,
+        _ => "crate".into(),
     }
 }
 
@@ -948,6 +987,26 @@ mod tests {
                 "type Mode"
             ]
         );
+    }
+
+    #[test]
+    fn items_from_the_parent_module_are_one_referent_the_parent() {
+        // Catches functions imported from super counted as modules, and a
+        // module named in a longer path lost.
+        let src = "use super::{a, b};\nuse crate::x::Y;\nfn f() { super::c(); crate::z::w(); }\n";
+        let (_, mods, _) = measure_rust(&[("src/k/d.rs".into(), src.into())], &[]).unwrap();
+        let r: Vec<&str> = mods[0].referents.iter().map(String::as_str).collect();
+        assert_eq!(r, ["mod k", "mod x", "mod z"]);
+    }
+
+    #[test]
+    fn super_in_a_mod_file_is_the_directory_above() {
+        let parents = [
+            parent_module("src/a/k/mod.rs"),
+            parent_module("src/a/k/d.rs"),
+            parent_module("src/a.rs"),
+        ];
+        assert_eq!(parents, ["a", "k", "crate"]);
     }
 
     #[test]
