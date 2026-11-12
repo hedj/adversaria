@@ -44,18 +44,19 @@ impl Engine {
 
     /// Make the loaded facts equal these, by difference.
     pub fn sync(&mut self, facts: &[(u64, Term)]) -> Result<(), Error> {
-        let gone: Vec<(u64, Term)> = self
-            .loaded
-            .iter()
-            .filter(|f| !facts.contains(f))
-            .cloned()
-            .collect();
-        for (s, f) in &gone {
-            self.p.retract_fact(f, *s)?;
+        // Compared by a key, not by scanning a list, so a world with many
+        // facts (an outline's own, two per item) syncs in linear time.
+        let key = |(s, f): &(u64, Term)| (*s, format!("{f:?}"));
+        let want: std::collections::HashSet<(u64, String)> = facts.iter().map(key).collect();
+        let have: std::collections::HashSet<(u64, String)> = self.loaded.iter().map(key).collect();
+        for f in &self.loaded {
+            if !want.contains(&key(f)) {
+                self.p.retract_fact(&f.1, f.0)?;
+            }
         }
-        for (s, f) in facts {
-            if !self.loaded.contains(&(*s, f.clone())) {
-                self.p.assert_fact(f, *s)?;
+        for f in facts {
+            if !have.contains(&key(f)) {
+                self.p.assert_fact(&f.1, f.0)?;
             }
         }
         self.loaded = facts.to_vec();

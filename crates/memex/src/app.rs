@@ -1335,6 +1335,7 @@ impl App {
     /// the item that held the first of them, or on `target` if none.
     fn set_fact(&mut self, fact: &Term, target: u64) -> Result<(), String> {
         let mut facts = crate::store::facts(self.journal.entries(), self.tip)?;
+        facts.extend(outline_facts(&self.outline));
         let next = self.journal.entries().len() as u64 + 1;
         facts.push((next, fact.clone()));
         let constraints: Vec<(u64, String, String)> = self
@@ -1436,8 +1437,10 @@ impl App {
                 continue;
             }
             let import = self.import_on(head);
+            let mut with_outline = facts.clone();
+            with_outline.extend(outline_facts(&outline));
             let engine = self.engine(k)?;
-            engine.sync(&facts).map_err(|e| e.to_string())?;
+            engine.sync(&with_outline).map_err(|e| e.to_string())?;
             engine
                 .wikidata(import.as_ref().map(|(s, f)| (*s, f.as_path())))
                 .map_err(|e| e.to_string())?;
@@ -3108,6 +3111,28 @@ pub fn encode_doi(doi: &str) -> String {
             _ => format!("%{b:02X}"),
         })
         .collect()
+}
+
+/// The outline as facts, for goals: item_text(Item, Text) and
+/// item_under(Item, Parent), each resting on the entry that created the
+/// item (its number). Computed from the outline, not stated by the user,
+/// so they go to the reasoner but not into the world's stated facts.
+pub fn outline_facts(o: &Outline) -> Vec<(u64, Term)> {
+    let mut out = Vec::new();
+    for id in o.in_order() {
+        let i = Term::Int(id as i64);
+        out.push((
+            id,
+            Term::Compound("item_text".into(), vec![i.clone(), Term::Str(o.text(id))]),
+        ));
+        if let Some(p) = o.parent(id).filter(|p| *p != TOP) {
+            out.push((
+                id,
+                Term::Compound("item_under".into(), vec![i, Term::Int(p as i64)]),
+            ));
+        }
+    }
+    out
 }
 
 /// The beliefs a new fact (entry `new`) directly contradicts, and the

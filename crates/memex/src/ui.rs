@@ -468,9 +468,14 @@ fn figure_lines(fig: &view::Figure, indent: usize) -> Vec<Line<'static>> {
 /// The item a click on a mark goes to: the item stating the first fact
 /// the mark rests on.
 fn hit_item(app: &App, hit: &view::Hit) -> Option<u64> {
-    hit.prov
-        .iter()
-        .find_map(|s| app.outline.fact_item.get(s).copied())
+    hit.prov.iter().find_map(|s| {
+        // A fact from the outline itself rests on the item's own entry.
+        if app.outline.items.contains_key(s) {
+            Some(*s)
+        } else {
+            app.outline.fact_item.get(s).copied()
+        }
+    })
 }
 
 fn inverse(kind: &str) -> String {
