@@ -75,14 +75,16 @@ read_message(In, Type, Req, Body) :-
     N is Len - 1,
     length(Body, N),
     maplist(read_word(In), Body),
-    (   memberchk(end_of_file, [Req|Body]) -> throw(protocol_error(truncated)) ; true ).
+    (   memberchk(end_of_file, [Req|Body]) -> throw(protocol_error(message_cut_short)) ; true ).
 
+%   end_of_file only when input ends before a word starts; a word cut short
+%   is an error.
 read_word(In, W) :-
     get_byte(In, B0),
     (   B0 =:= -1
     ->  W = end_of_file
     ;   get_byte(In, B1), get_byte(In, B2), get_byte(In, B3),
-        (   B3 =:= -1 -> W = end_of_file
+        (   B3 =:= -1 -> throw(protocol_error(word_cut_short))
         ;   W is (B0 << 24) \/ (B1 << 16) \/ (B2 << 8) \/ B3
         )
     ).

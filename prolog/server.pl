@@ -14,7 +14,7 @@ computes an answer only when NEXT asks for one.
 | ATOM           | a name, as a string BLOB      | ATOM_IS: the number and the name   |
 
 DONE carries a status: 0 no more answers (or done), 1 error and the error
-term, 2 cancelled. Before any message that uses an atom new to the client,
+term, 2 cancelled. A garbled header kills the server (exit status 1). Before any message that uses an atom new to the client,
 the server sends ATOM_IS for it, with the same request number.
 */
 
@@ -36,14 +36,20 @@ main :-
     nb_setval(protocol_out, Out),
     serve(user_input, Out).
 
+%   A clean end of input ends the server with status 0. A garbled or cut
+%   header means the stream is out of step and no later message can be
+%   trusted, so the server dies: it says why and exits with status 1. A
+%   well-framed request with a bad body only gets an error reply.
 serve(In, Out) :-
-    (   catch(read_message(In, Type, Req, Body), E, (report(E), fail))
+    (   catch(read_message(In, Type, Req, Body), E, die(E))
     ->  catch(handle(Type, Req, Body, Out), E2, reply_error(Out, Req, E2)),
         serve(In, Out)
     ;   true
     ).
 
-report(E) :- print_message(error, E).
+die(E) :-
+    format(user_error, "prolog/server.pl: dying on a garbled message: ~q~n", [E]),
+    halt(1).
 
 handle(query, Req, Body, _) :-
     cells_terms(Body, Terms, Vars),

@@ -366,18 +366,88 @@ fn wrong_requests_get_an_error_and_the_server_carries_on() {
     assert_eq!(p.all(&a("true"), 1).unwrap().len(), 1);
 }
 
+/// Run the server as a bare process, feed it bytes, close its input, and
+/// return its exit code and what it wrote to stderr.
+fn server_given(bytes: &[u8]) -> (Option<i32>, String) {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let server = concat!(env!("CARGO_MANIFEST_DIR"), "/../../prolog/server.pl");
+    let mut child = Command::new("swipl")
+        .args(["-q", server])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(bytes).unwrap();
+    let out = child.wait_with_output().unwrap();
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
 #[test]
-fn a_bad_header_stops_the_server() {
-    // A bad header means the stream is out of step, so the server stops; the
-    // client must see that, not hang.
+fn the_server_dies_on_a_garbled_header() {
+    // The author's rule: a garbled header is fatal. Catches the server
+    // carrying on, or stopping as if all were well (exit 0).
+    for (what, bytes) in [
+        ("reserved field not zero", vec![7, 1, 0, 1, 0, 0, 0, 0]),
+        ("unknown type", vec![99, 0, 0, 1, 0, 0, 0, 0]),
+        ("no request number", vec![1, 0, 0, 0]),
+        ("cut short", vec![1, 0, 0, 3, 0, 0, 0, 1]),
+        ("header cut short", vec![1, 0]),
+    ] {
+        let (code, err) = server_given(&bytes);
+        assert_eq!(code, Some(1), "{what}: {err}");
+        assert!(err.contains("dying on a garbled message"), "{what}: {err}");
+    }
+    let (code, err) = server_given(&[]);
+    assert_eq!(code, Some(0), "a clean end of input is not an error: {err}");
+}
+
+#[test]
+fn the_client_dies_with_the_server() {
+    // Catches a client that hangs, or keeps calling a dead server, after a
+    // garbled header kills it.
     let mut p = Prolog::start().unwrap();
-    p.send_bytes(&[7, 1, 0, 1, 0, 0, 0, 0]).unwrap(); // reserved field not zero
+    p.send_bytes(&[7, 1, 0, 1, 0, 0, 0, 0]).unwrap();
     let t = Instant::now();
-    assert!(matches!(
-        p.all(&a("true"), 1),
-        Err(Error::Server(_)) | Err(Error::Io(_))
-    ));
+    let e = p.all(&a("true"), 1).unwrap_err();
+    assert!(
+        matches!(&e, Error::Dead(r) if r.contains("stopped")),
+        "{e:?}"
+    );
     assert!(t.elapsed() < Duration::from_secs(10));
+    let again = p.all(&a("true"), 1).unwrap_err();
+    assert_eq!(
+        again.to_string(),
+        e.to_string(),
+        "a later call must fail with the same reason"
+    );
+    assert!(matches!(p.send_bytes(&[0]), Err(Error::Dead(_))));
+}
+
+#[test]
+fn the_client_dies_on_a_garbled_reply() {
+    // Catches a client that reads on past a garbled message from the server.
+    let dir = std::env::temp_dir().join(format!("adversaria-m2-garbled-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let fake = dir.join("server.pl");
+    // A named main: the same goal given inline to initialization/2 did not run (not explained).
+    std::fs::write(
+        &fake,
+        ":- initialization(main, main).\nmain :- format(\"garbage!\"), flush_output, read(_).\n",
+    )
+    .unwrap();
+    let mut p = Prolog::start_with(&fake).unwrap();
+    let e = p.all(&a("true"), 1).unwrap_err();
+    assert!(
+        matches!(&e, Error::Dead(r) if r.contains("garbled message from it")),
+        "{e:?}"
+    );
+    assert!(matches!(p.all(&a("true"), 1), Err(Error::Dead(_))));
+    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]

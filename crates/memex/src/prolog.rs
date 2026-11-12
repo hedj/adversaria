@@ -16,8 +16,12 @@ pub enum Error {
     Protocol(ProtoError),
     /// DONE 1: the error term Prolog raised.
     Prolog(Term),
-    /// The server stopped, or sent what this client did not expect.
+    /// The server sent what this client did not expect.
     Server(String),
+    /// The connection is dead: a garbled message in either direction, or the
+    /// server stopped. The child is killed, and every later call fails with
+    /// this reason. Nothing restarts it.
+    Dead(String),
 }
 
 impl fmt::Display for Error {
@@ -27,6 +31,7 @@ impl fmt::Display for Error {
             Error::Protocol(e) => write!(f, "protocol: {e}"),
             Error::Prolog(t) => write!(f, "Prolog error: {t:?}"),
             Error::Server(m) => f.write_str(m),
+            Error::Dead(m) => write!(f, "the Prolog server is dead: {m}"),
         }
     }
 }
@@ -67,6 +72,7 @@ pub struct Prolog {
     replies: Receiver<io::Result<Message>>,
     atoms: Atoms,
     next_req: u32,
+    dead: Option<String>,
 }
 
 /// prolog/server.pl, unless ADVERSARIA_PROLOG names another directory.
@@ -80,9 +86,14 @@ fn server_path() -> PathBuf {
 impl Prolog {
     /// Start `swipl` with the server; its errors go to this process's stderr.
     pub fn start() -> Result<Prolog, Error> {
+        Prolog::start_with(&server_path())
+    }
+
+    /// Start `swipl` with another server file. For tests.
+    pub fn start_with(server: &std::path::Path) -> Result<Prolog, Error> {
         let mut child = Command::new("swipl")
             .arg("-q")
-            .arg(server_path())
+            .arg(server)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -112,7 +123,28 @@ impl Prolog {
             replies,
             atoms: Atoms::default(),
             next_req: 1,
+            dead: None,
         })
+    }
+
+    /// Kill the child, record why, and return the error every later call gets.
+    fn die(&mut self, reason: String) -> Error {
+        let _ = self.child.kill();
+        let status = self
+            .child
+            .wait()
+            .map(|s| format!(" ({s})"))
+            .unwrap_or_default();
+        let reason = format!("{reason}{status}");
+        self.dead = Some(reason.clone());
+        Error::Dead(reason)
+    }
+
+    fn alive(&self) -> Result<(), Error> {
+        match &self.dead {
+            Some(r) => Err(Error::Dead(r.clone())),
+            None => Ok(()),
+        }
     }
 
     fn new_req(&mut self) -> u32 {
@@ -123,21 +155,33 @@ impl Prolog {
 
     /// Send a message as it is. For tests of the server's handling of bad input.
     pub fn send(&mut self, kind: Kind, req: u32, body: Vec<u32>) -> Result<(), Error> {
-        protocol::write_message(&mut self.stdin, &Message { kind, req, body })?;
-        Ok(())
+        self.alive()?;
+        let m = Message { kind, req, body };
+        if m.body.len() >= 0xffff {
+            return Err(Error::Server(format!(
+                "message of {} cells is too long",
+                m.body.len()
+            )));
+        }
+        protocol::write_message(&mut self.stdin, &m)
+            .map_err(|e| self.die(format!("cannot write to it: {e}")))
     }
 
     /// Send bytes as they are, framed or not. For tests of bad input.
     pub fn send_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
         use std::io::Write;
-        self.stdin.write_all(bytes)?;
-        self.stdin.flush()?;
-        Ok(())
+        self.alive()?;
+        self.stdin
+            .write_all(bytes)
+            .and_then(|_| self.stdin.flush())
+            .map_err(|e| self.die(format!("cannot write to it: {e}")))
     }
 
     /// The next message from the server, waiting at most `timeout`; None if
     /// none came. ATOM_IS is learned here as well as returned.
     pub fn receive(&mut self, timeout: Duration) -> Result<Option<Message>, Error> {
+        // No alive() check: once dead, the channel is closed, and die()
+        // gives the same reason again.
         match self.replies.recv_timeout(timeout) {
             Ok(Ok(m)) => {
                 if m.kind == Kind::AtomIs {
@@ -145,11 +189,9 @@ impl Prolog {
                 }
                 Ok(Some(m))
             }
-            Ok(Err(e)) => Err(e.into()),
+            Ok(Err(e)) => Err(self.die(format!("garbled message from it: {e}"))),
             Err(RecvTimeoutError::Timeout) => Ok(None),
-            Err(RecvTimeoutError::Disconnected) => {
-                Err(Error::Server("the Prolog server stopped".into()))
-            }
+            Err(RecvTimeoutError::Disconnected) => Err(self.die("it stopped".into())),
         }
     }
 
