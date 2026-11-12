@@ -28,7 +28,8 @@
 //!   terms defined together in a small section are (below): its fields
 //!   and its name count once, as the type. A field whose name more than
 //!   one struct has is counted apart, as is each field of a larger
-//!   struct. The report also gives the count with each field apart.
+//!   struct, including each a struct literal or pattern of it names. The
+//!   report also gives the count with each field apart.
 //!   An enum's variants count as their enum (one concept, a closed set of
 //!   values). Resolution is by name, without type inference, so a method
 //!   call whose name is also a common standard-library method (`STD`
@@ -381,6 +382,31 @@ struct Refs<'a> {
 }
 
 impl Refs<'_> {
+    /// The fields a literal or pattern of a struct larger than a chunk
+    /// names: each is a referent (a small struct's are its type's).
+    fn large_struct_fields<'b>(
+        &mut self,
+        path: &syn::Path,
+        members: impl Iterator<Item = &'b syn::Member>,
+    ) {
+        let Some(name) = path.segments.last().map(|s| s.ident.to_string()) else {
+            return;
+        };
+        if self
+            .defs
+            .field_counts
+            .get(&name)
+            .is_none_or(|n| *n <= SMALL)
+        {
+            return;
+        }
+        for m in members {
+            if let syn::Member::Named(id) = m {
+                self.out.insert(format!("field {id}"));
+            }
+        }
+    }
+
     fn path(&mut self, p: &syn::Path, called: bool) {
         let segs: Vec<String> = p.segments.iter().map(|s| s.ident.to_string()).collect();
         // Type::function is one referent, the function, identified by its
@@ -470,10 +496,14 @@ impl<'ast> Visit<'ast> for Refs<'_> {
     }
     fn visit_pat_struct(&mut self, i: &'ast syn::PatStruct) {
         self.path(&i.path, false);
+        let names = i.fields.iter().map(|f| &f.member);
+        self.large_struct_fields(&i.path, names);
         syn::visit::visit_pat_struct(self, i);
     }
     fn visit_expr_struct(&mut self, i: &'ast syn::ExprStruct) {
         self.path(&i.path, false);
+        let names = i.fields.iter().map(|f| &f.member);
+        self.large_struct_fields(&i.path, names);
         syn::visit::visit_expr_struct(self, i);
     }
     fn visit_expr_method_call(&mut self, i: &'ast syn::ExprMethodCall) {
@@ -1104,6 +1134,19 @@ mod tests {
         };
         let s = summary(&[unit(5, None), unit(3, Some(6)), unit(1, None)], 4);
         assert!(s.contains("2 over 4 counting each field apart"), "{s}");
+    }
+
+    #[test]
+    fn a_large_structs_literal_counts_each_field_it_names() {
+        // Catches a literal of a struct larger than a chunk counted as its
+        // type alone.
+        let src = r#"
+            struct L { a: u8, b: u8, c: u8, d: u8, e: u8 }
+            struct P { x: u8, y: u8 }
+            fn f() -> (L, P) { (L { a: 1, b: 2, c: 3, d: 4, e: 5 }, P { x: 1, y: 2 }) }
+        "#;
+        let (fns, _, _) = measure_rust(&[("a.rs".into(), src.into())], &[]).unwrap();
+        assert_eq!(fns[0].load(), 7, "{:?}", fns[0].referents);
     }
 
     #[test]
