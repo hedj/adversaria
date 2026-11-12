@@ -22,6 +22,8 @@
 //! * Rust function: a project function or method it calls; a project
 //!   struct field it reads or writes (each field one referent: each is a
 //!   separate piece of state); a project type, trait or constant it names.
+//!   Type::function is one referent, the function: the type that names it
+//!   is not counted again for it.
 //!   An enum's variants count as their enum (one concept, a closed set of
 //!   values). Resolution is by name, without type inference, so a method
 //!   call whose name is also a common standard-library method (`STD`
@@ -329,8 +331,26 @@ struct Refs<'a> {
 impl Refs<'_> {
     fn path(&mut self, p: &syn::Path, called: bool) {
         let segs: Vec<String> = p.segments.iter().map(|s| s.ident.to_string()).collect();
+        // Type::function is one referent, the function, identified by its
+        // type: the type is not counted again for it.
+        let n = segs.len();
+        let assoc = n >= 2
+            && self.defs.fns.contains(&segs[n - 1])
+            && self.defs.types.contains(&segs[n - 2])
+            && !self
+                .defs
+                .variants
+                .get(&segs[n - 1])
+                .is_some_and(|es| es.contains(&segs[n - 2]));
+        if assoc {
+            self.out
+                .insert(format!("fn {}::{}", segs[n - 2], segs[n - 1]));
+        }
         for (k, s) in segs.iter().enumerate() {
             let last = k + 1 == segs.len();
+            if assoc && k + 2 >= n {
+                continue;
+            }
             // What qualifies this segment: the one before it, if any.
             let qual = k.checked_sub(1).map(|j| segs[j].as_str());
             let qual_project = qual.is_some_and(|q| {
@@ -889,7 +909,11 @@ mod tests {
         let (fns, _, _) = measure_rust(&[("b.rs".into(), src.into())], &[]).unwrap();
         let f = fns.iter().find(|u| u.name == "f").unwrap();
         let r: Vec<&str> = f.referents.iter().map(String::as_str).collect();
-        assert_eq!(r, ["fn new", "type S"]);
+        assert_eq!(
+            r,
+            ["fn S::new"],
+            "S::new is one referent; Vec::new and None none"
+        );
         // Scale::S is the variant, not the struct S.
         let g = fns.iter().find(|u| u.name == "g").unwrap();
         let r: Vec<&str> = g.referents.iter().map(String::as_str).collect();

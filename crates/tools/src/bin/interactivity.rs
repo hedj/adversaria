@@ -131,12 +131,18 @@ fn main() {
                 },
                 if std::env::var_os("INTERACTIVITY_DETAIL").is_some() {
                     format!(
-                        "\n       {}{}",
+                        "\n       {}{}{}",
                         shown.join(", "),
                         if more > 0 {
                             format!(", … {more} more")
                         } else {
                             String::new()
+                        },
+                        if u.ambiguous.is_empty() {
+                            String::new()
+                        } else {
+                            let a: Vec<&str> = u.ambiguous.iter().map(String::as_str).collect();
+                            format!("\n       ambiguous (std or project): {}", a.join(", "))
                         }
                     )
                 } else {
