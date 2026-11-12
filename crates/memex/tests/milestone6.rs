@@ -419,7 +419,13 @@ fn the_source_check() {
         .stderr(std::process::Stdio::null())
         .spawn()
         .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(700));
+    // Wait until the server listens: a fixed pause was too short under the
+    // load of the whole suite (seen in nix develop: "unavailable").
+    let up = (0..200).any(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
+    });
+    assert!(up, "the fake Crossref did not start within 10 s");
     let mut app = open(&dir);
     app.set_crossref(&format!("http://127.0.0.1:{port}/"));
     let rule = |app: &mut App, doi: &str, title: &str| -> String {
