@@ -254,7 +254,7 @@ pub(crate) mod tests {
     /// Run a Node.js script with input on stdin. Node is the oracle: RFC 8785
     /// defines numbers as ECMAScript's Number.prototype.toString. A missing
     /// Node fails the test; it never skips it.
-    fn node(script: &str, input: &str) -> String {
+    pub(crate) fn node(script: &str, input: &str) -> String {
         let mut child = Command::new("node")
             .args(["-e", script])
             .stdin(Stdio::piped())

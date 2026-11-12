@@ -108,6 +108,8 @@ impl Journal {
             }
             Some(p) => Some((p, self.entries[p as usize - 1].hash.clone())),
         };
+        // The format keeps text in Unicode NFC, so the writer normalises it.
+        let body = record::nfc(&body).map_err(Error::Refused)?;
         let e = Entry::new(
             seq,
             parent.as_ref().map(|(p, h)| (*p, h.as_str())),
@@ -192,6 +194,32 @@ mod tests {
         assert_eq!((c.seq, c.parent), (3, Some(1)));
         let j2 = Journal::open(&d).unwrap();
         assert_eq!(j2.entries(), j.entries());
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn writer_normalises_text() {
+        // Catches text written as typed instead of in Unicode NFC.
+        let d = temp_dir("nfc");
+        let mut j = Journal::open(&d).unwrap();
+        let e = j
+            .append(
+                "edit",
+                json!({"t": "Bure\u{301}", "e\u{301}": ["a\u{30a}"]}),
+            )
+            .unwrap();
+        assert_eq!(
+            e.body.unwrap(),
+            json!({"t": "Bur\u{e9}", "\u{e9}": ["\u{e5}"]})
+        );
+        let text = fs::read_to_string(d.join(JOURNAL)).unwrap();
+        assert!(!text.contains('\u{301}') && !text.contains('\u{30a}'));
+        assert!(
+            j.append("edit", json!({"\u{e9}": 1, "e\u{301}": 2}))
+                .is_err()
+        );
+        let p = j.purge(1, "Bure\u{301}").unwrap();
+        assert_eq!(p.body.unwrap()["reason"], json!("Bur\u{e9}"));
         fs::remove_dir_all(&d).unwrap();
     }
 

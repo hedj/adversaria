@@ -12,6 +12,7 @@
 use crate::jcs;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
+use unicode_normalization::{UnicodeNormalization, is_nfc};
 
 pub const JOURNAL: &str = "journal.jsonl";
 pub const SEALS: &str = "seals.jsonl";
@@ -75,12 +76,46 @@ pub fn body_hash(body: &Value) -> Result<String, String> {
     Ok(sha256_hex(&jcs::canonical_bytes(body).map_err(|e| e.0)?))
 }
 
+/// The value with every string and object key in Unicode NFC, as the
+/// format requires. Refuses an object whose keys become equal once
+/// normalised, rather than drop one of them.
+pub fn nfc(v: &Value) -> Result<Value, String> {
+    Ok(match v {
+        Value::String(s) => Value::String(s.nfc().collect()),
+        Value::Array(a) => Value::Array(a.iter().map(nfc).collect::<Result<_, _>>()?),
+        Value::Object(m) => {
+            let mut out = Map::new();
+            for (k, x) in m {
+                let k2: String = k.nfc().collect();
+                if out.insert(k2.clone(), nfc(x)?).is_some() {
+                    return Err(format!("two keys are both {k2:?} in Unicode NFC"));
+                }
+            }
+            Value::Object(out)
+        }
+        other => other.clone(),
+    })
+}
+
+/// Whether every string and object key in the value is in Unicode NFC.
+pub fn all_nfc(v: &Value) -> bool {
+    match v {
+        Value::String(s) => is_nfc(s),
+        Value::Array(a) => a.iter().all(all_nfc),
+        Value::Object(m) => m.iter().all(|(k, x)| is_nfc(k) && all_nfc(x)),
+        _ => true,
+    }
+}
+
 /// Parse one line, which must be the canonical JSON of an object.
 fn canonical_object(line: &str) -> Result<Map<String, Value>, String> {
     let v: Value = serde_json::from_str(line).map_err(|e| format!("not JSON: {e}"))?;
     let canon = jcs::dumps(&v).map_err(|e| e.0)?;
     if canon != line {
         return Err("not canonical JSON (RFC 8785), or a key is repeated".into());
+    }
+    if !all_nfc(&v) {
+        return Err("a string is not in Unicode NFC".into());
     }
     match v {
         Value::Object(m) => Ok(m),
@@ -150,6 +185,11 @@ impl Entry {
         }
         if !body.is_object() {
             return Err("a body must be a JSON object".into());
+        }
+        if !all_nfc(&body) {
+            return Err(
+                "a string in the body is not in Unicode NFC; normalise it with record::nfc".into(),
+            );
         }
         let body_hash = body_hash(&body)?;
         let mut m = Map::new();
@@ -487,6 +527,97 @@ mod tests {
         assert!(Entry::new(1, None, "edit", json!([1])).is_err());
         assert!(Entry::new(1, None, "edit", json!(null)).is_err());
         assert!(Entry::new(1, Some((1, &"ab".repeat(32))), "edit", json!({})).is_err());
+    }
+
+    #[test]
+    fn nfc_known_cases() {
+        // Catches text left decomposed, or composed wrongly.
+        let cases = [
+            ("e\u{301}", "\u{e9}"),                 // e + acute -> é
+            ("\u{212b}", "\u{c5}"),                 // Angstrom sign -> Å (a singleton)
+            ("\u{1100}\u{1161}", "\u{ac00}"),       // Hangul jamo -> syllable
+            ("a\u{307}\u{323}", "\u{1ea1}\u{307}"), // marks reordered, then composed
+            ("plain ASCII", "plain ASCII"),
+            ("", ""),
+        ];
+        for (from, want) in cases {
+            assert_eq!(nfc(&json!(from)).unwrap(), json!(want), "{from:?}");
+            assert!(all_nfc(&json!(want)));
+        }
+        assert!(!all_nfc(&json!({"a": ["e\u{301}"]})));
+        assert!(!all_nfc(&json!({"e\u{301}": 1})));
+    }
+
+    #[test]
+    fn nfc_agrees_with_node() {
+        // Catches any difference from an independent NFC (Node's ICU, Unicode
+        // 17.0; the crate has 18.0) over 10,000 strings of letters, combining
+        // marks and Hangul jamo.
+        let mut rng = crate::jcs::tests::Rng(15);
+        let pools: [(u32, u32); 5] = [
+            (0x41, 0x7a),
+            (0x300, 0x36f),
+            (0x1100, 0x11ff),
+            (0xc0, 0x24f),
+            (0x1e00, 0x1eff),
+        ];
+        let strings: Vec<String> = (0..10_000)
+            .map(|_| {
+                (0..1 + rng.below(6))
+                    .filter_map(|_| {
+                        let (lo, hi) = pools[rng.below(5) as usize];
+                        char::from_u32(lo + rng.below((hi - lo + 1) as u64) as u32)
+                    })
+                    .collect()
+            })
+            .collect();
+        let want: Vec<String> = serde_json::from_str(&crate::jcs::tests::node(
+            "const s=JSON.parse(require('fs').readFileSync(0,'utf8'));\
+             process.stdout.write(JSON.stringify(s.map(x=>x.normalize('NFC'))))",
+            &serde_json::to_string(&strings).unwrap(),
+        ))
+        .unwrap();
+        let changed = strings.iter().zip(&want).filter(|(s, w)| s != w).count();
+        // 663 of the 10,000 need normalising (counted); the floor keeps the sample meaningful.
+        assert!(
+            changed > 500,
+            "too few strings needed normalising: {changed}"
+        );
+        for (s, w) in strings.iter().zip(&want) {
+            assert_eq!(nfc(&json!(s)).unwrap(), json!(w), "{s:?}");
+            assert_eq!(all_nfc(&json!(s)), s == w, "{s:?}");
+        }
+    }
+
+    #[test]
+    fn colliding_keys_refused() {
+        // Catches two keys merged silently when they normalise to one.
+        assert!(nfc(&json!({"\u{e9}": 1, "e\u{301}": 2})).is_err());
+    }
+
+    #[test]
+    fn non_nfc_line_refused() {
+        // Catches a line accepted with text not in NFC, though its hashes are right.
+        assert!(Entry::new(1, None, "edit", json!({"t": "e\u{301}"})).is_err());
+        let body = json!({"t": "e\u{301}"});
+        let mut m = Map::new();
+        m.insert("seq".into(), json!(1));
+        m.insert("parent".into(), Value::Null);
+        m.insert("prev".into(), Value::Null);
+        m.insert("kind".into(), json!("edit"));
+        m.insert("body_hash".into(), json!(body_hash(&body).unwrap()));
+        let h = record_hash(&m, true);
+        m.insert("body".into(), body);
+        m.insert("hash".into(), json!(h));
+        let line = jcs::dumps(&Value::Object(m)).unwrap();
+        assert_eq!(
+            Entry::parse(&line).unwrap_err(),
+            "a string is not in Unicode NFC"
+        );
+        assert!(
+            Entry::parse(&line.replace("e\u{301}", "\u{e9}")).is_err(),
+            "hash still covers the text"
+        );
     }
 
     #[test]
