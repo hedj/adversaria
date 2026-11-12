@@ -508,7 +508,7 @@ Limits:
 - Quasimodes need key-down and key-up events. Most terminals send only key presses; the kitty keyboard protocol adds releases, so the memex requires a terminal that supports it, and refuses to start in one that does not. The operating system and the terminal still take some keys.
 - The zooming interface of THE and Archy is not adopted; Archy's prototype "did not include code for zooming".
 
-As built (milestone 3, provisional): Leap forward is Right Alt and Leap back Left Alt, the keys nearest the thumbs on most keyboards; Command is Left Ctrl, Scope Right Ctrl, Suppose Super (which the operating system may take). A press and release with no other key between them latches the quasimode: it stays until Enter or a second tap, and a second tap of an empty latched Leap repeats the last Leap. Scope widens on Space. F1 opens the command palette; F6 switches panes; F10 quits. The keys are checked only through a script playing a kitty terminal, not on real keyboards.
+As built (milestone 3, provisional): Leap forward is Right Alt and Leap back Left Alt, the keys nearest the thumbs on most keyboards; Command is Left Ctrl, Scope Right Ctrl, Suppose Super (which the operating system may take). A press and release with no other key between them latches the quasimode: it stays until Enter or a second tap, and a second tap of an empty latched Leap repeats the last Leap. Scope widens on Space. F1 opens the command palette; F6 switches panes; F10 quits. The keys are checked only through a script playing a kitty terminal, not on real keyboards. These are the defaults: a configuration file can move any quasimode or binding (docs/guide.md, § Configuration).
 
 Conventional shortcuts sit beside the quasimodes, for laptops without thumb keys and for accessibility: each quasimode can be latched by tapping its key instead of holding it, and a command palette offers every command by name with recognition. Holding remains the fast path; nothing needs it.
 
@@ -700,6 +700,7 @@ Milestone 2 fixed what the text above left open. `prolog/protocol.pl` and `crate
 | The translator's model is a late fallback | its value depends on how much free English the cheaper methods miss |
 | The translator is English ↔ Prolog only | the memex's facts, rules and queries are Prolog |
 | "What if" works by counterfactual revision in Worlds, with s(CASP) run with `--forall=sasp` | its default algorithm has an open bug, s(CASP) issue #13 (github.com/SWI-Prolog/sCASP/issues/13), reproduced in the translator document's trial |
+| Keys are configured in a TOML file; a name given replaces its default, and a file the memex would have to guess at is refused | the author asked to adjust key bindings (12 November 2026); TOML is a standard format with a maintained Rust parser, and refusing a wrong file is safer than starting with keys the user did not choose |
 
 ## Open questions
 

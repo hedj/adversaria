@@ -464,6 +464,27 @@ Deliberate breaks, each made a test fail: corrections counted in any world; ever
 * Subset D is not built (see milestone 5). The month can start with the import of a small subset, or none.
 * The kinds of action are this report's own classification, written in `measures.rs`; the design names them (searching, following links, transforming, writing, deciding) but does not define them.
 
+## Manual and key configuration (12 November 2026)
+
+The author asked where the user manual was. There was none. Now:
+
+* **Configuration** (`crates/memex/src/config.rs`). A TOML file names the keys of each quasimode and binds keys to command lines. It is read from `--config FILE`, `$ADVERSARIA_CONFIG`, `$XDG_CONFIG_HOME/adversaria/config.toml` or `~/.config/adversaria/config.toml`; a missing file means the defaults, which are the keys used so far. A named entry replaces its default; `""` unbinds a key. `memex --print-config` writes the defaults; `docs/config.example.toml` is that output, and a test keeps them equal. A file with an unknown section, quasimode, key or command, an editing key, an empty key list or one key with two jobs is refused, naming the file and the reason, before the terminal is touched. Insert, PageUp, PageDown, Menu, Pause and the lock keys can now be bound. Dependency: `toml` 1.2.1.
+* **Tutorial** (`docs/tutorial.md`): the design's Buran story as a first session. `crates/memex/tests/tutorial.rs` performs it and checks each screen text it quotes, and that each command and text it uses appears in the tutorial.
+* **Guide** (`docs/guide.md`). `crates/memex/tests/guide.rs` checks that it has a row for every command and no others, lists exactly the key names the configuration knows, and gives examples the configuration accepts.
+* **README.md** points to these.
+
+Faults found and fixed on the way:
+
+* The F-key path discarded the mode a command set, so a bound `retract` would have lost its confirmation. A bound key now keeps it.
+* Hints named fixed keys ("F3 adopts · F4 retracts an adoption"; "switch (F6) to edit") that a configuration can move. They now name the bound key, or "command adopt" when none is bound.
+* A configuration giving only `[quasimodes]` first dropped every default binding; a configuration test caught it before commit.
+* An empty key list left a quasimode unreachable; it is now refused.
+* Two help texts were stale (suppose, import).
+
+Checked: `make test` passes here (SWI-Prolog 9.0.4) and in `nix develop -i` (SWI-Prolog 9.2.9): 143 Rust tests, 18 Prolog tests (12 and 6 sub-tests), 14 pseudo-terminal checks. The pseudo-terminal script now also runs the binary with a configuration that makes F12 Leap forward, unbinds F10 and binds Insert to quit, and with a wrong file (exit status 2, nothing written). Each new test was broken on purpose once and failed.
+
+Not checked: the tutorial's `make run` and `check` steps, and every key in a real terminal. The quasimode defaults are still provisional; the configuration is how to change them after trying them.
+
 ## Stage A: where it stands (12 November 2026)
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
