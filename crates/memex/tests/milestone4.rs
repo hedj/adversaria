@@ -517,3 +517,20 @@ fn ending_a_world_records_whether_it_was_closed_or_committed() {
     assert_eq!((closed, ended_by(&app)), ("close", "commit"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn an_item_with_no_claim_cannot_be_adopted() {
+    // Catches adopt writing nothing, silently, for an item that states a
+    // belief but no claim.
+    let dir = temp("adopt-none");
+    let mut app = App::open(&dir).unwrap();
+    item(&mut app, "the sky");
+    command(&mut app, "fact colour(sky, blue)");
+    let before = app.journal().entries().len();
+    command(&mut app, "adopt");
+    assert_eq!(
+        (app.message.as_str(), app.journal().entries().len()),
+        ("the target states no claim to adopt", before)
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
