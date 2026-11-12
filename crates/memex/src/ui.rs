@@ -2,7 +2,8 @@
 //! story, scene 1). Drawing reads the state and changes nothing, so the same
 //! state always draws the same screen.
 
-use crate::app::{App, Click, Mode, PaneKind, Quasi, ScopeLevel, command_help};
+use crate::actions::command_help;
+use crate::app::{App, Click, Mode, PaneKind, Quasi, ScopeLevel};
 use crate::outline::{Outline, TOP};
 use crate::reason::{self, Prov, WorldEval};
 use crate::view;

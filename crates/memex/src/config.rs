@@ -8,7 +8,8 @@
 //! know, or gives one key two jobs, is refused with the reason: the memex
 //! does not start on a configuration it would have to guess at.
 
-use crate::app::{COMMANDS, Key, Quasi, Special};
+use crate::actions::COMMANDS;
+use crate::app::{Key, Quasi, Special};
 use std::path::{Path, PathBuf};
 
 /// The defaults, as a file: what `memex --print-config` writes, and

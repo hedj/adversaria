@@ -2,7 +2,7 @@
 //! configurable key name is listed, and the guide's configuration examples
 //! are files the memex accepts.
 
-use memex::app::COMMANDS;
+use memex::actions::COMMANDS;
 use memex::config::Config;
 
 const GUIDE: &str = include_str!("../../../docs/guide.md");
