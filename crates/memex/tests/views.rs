@@ -197,3 +197,113 @@ fn a_layer_that_could_not_be_drawn_or_would_act_is_refused() {
     assert!(!app.outline.views.contains_key(&find(&app, "chart")));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// The screen, its text and its click regions, as the terminal would draw it.
+fn screen(app: &App) -> (Vec<String>, memex::ui::Hits, ratatui::buffer::Buffer) {
+    use ratatui::{Terminal, backend::TestBackend};
+    let (w, h) = (160, 60);
+    let mut t = Terminal::new(TestBackend::new(w, h)).unwrap();
+    let mut hits = memex::ui::Hits::default();
+    t.draw(|f| hits = memex::ui::draw_hits(f, app)).unwrap();
+    let buf = t.backend().buffer().clone();
+    let lines = (0..h)
+        .map(|y| {
+            (0..w)
+                .map(|x| buf[(x, y)].symbol().to_string())
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+        })
+        .collect();
+    (lines, hits, buf)
+}
+
+fn at(lines: &[String], text: &str) -> (u16, u16) {
+    below(lines, text, 0)
+}
+
+/// Where text first appears on or after row `from`.
+fn below(lines: &[String], text: &str, from: u16) -> (u16, u16) {
+    for (y, l) in lines.iter().enumerate().skip(from as usize) {
+        if let Some(b) = l.find(text) {
+            return (l[..b].chars().count() as u16, y as u16);
+        }
+    }
+    panic!("no {text:?} on screen:\n{}", lines.join("\n"))
+}
+
+#[test]
+fn a_view_is_drawn_under_its_item_and_its_marks_lead_to_their_facts() {
+    // Catches a view not drawn, drawn away from its item, a click on a mark
+    // that goes nowhere or to the wrong item, a mark on a violated fact
+    // drawn quietly, and a view missing from a supposition's two worlds.
+    let dir = temp("screen");
+    let mut app = budget(&dir);
+    command(
+        &mut app,
+        "constraint spending within income: false :- cell(income, I), cell(rent, R), cell(food, F), R + F > I.",
+    );
+    item(&mut app, "Budget chart");
+    command(&mut app, "layer bar(x(C), y(V)) where cell(C, V)");
+    command(&mut app, "layer rule(y(I)) where cell(income, I)");
+    let (s, hits, _) = screen(&app);
+    let (_, title) = at(&s, "Budget chart");
+    let (fx, fy) = below(&s, " food ", title + 1);
+    assert!(
+        fy > title && fy < title + 15,
+        "the chart under its item:\n{}",
+        s.join("\n")
+    );
+    at(&s, "VIEW · 2 LAYERS");
+    at(&s, "layer bar(x(C), y(V)) where cell(C, V)");
+    // Click on the food bar: the column above its label.
+    let bar_y = (title + 1..fy)
+        .rev()
+        .find(|y| s[*y as usize].chars().nth(fx as usize + 2) == Some('█'))
+        .unwrap();
+    let c = hits
+        .at(fx + 2, bar_y)
+        .cloned()
+        .expect("the bar is clickable");
+    app.click(&c);
+    assert_eq!(
+        app.outline.text(app.cursor()),
+        "food",
+        "the item stating cell(food, 400)"
+    );
+    // Break the rule: the bars on the facts in the violation are drawn bold.
+    command(&mut app, "set cell(food, 900)");
+    let (s, _, buf) = screen(&app);
+    let (_, title) = at(&s, "Budget chart");
+    let (fx, fy) = below(&s, " food ", title + 1);
+    let y = (0..fy)
+        .rev()
+        .find(|y| s[*y as usize].chars().nth(fx as usize + 2) == Some('█'))
+        .unwrap();
+    assert!(
+        buf[(fx + 2, y)]
+            .modifier
+            .contains(ratatui::style::Modifier::BOLD),
+        "loud bar"
+    );
+    // A supposition: the view in both worlds, each from its own facts.
+    command(&mut app, "set cell(food, 500)");
+    app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
+    typ(&mut app, "rent is 1600");
+    app.handle(Event::up(Key::Quasi(Quasi::Suppose)));
+    tap(&mut app, Key::Enter);
+    app.evaluate().unwrap();
+    let (s, _, _) = screen(&app);
+    let both = s
+        .iter()
+        .filter(|l| l.matches("Budget chart").count() == 2)
+        .count()
+        + s.iter().filter(|l| l.contains("Budget chart")).count();
+    assert!(both >= 2, "the view in each world:\n{}", s.join("\n"));
+    assert!(
+        s.iter().any(|l| l.contains("1200")) && s.iter().any(|l| l.contains("1600")),
+        "rent before and after:\n{}",
+        s.join("\n")
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}

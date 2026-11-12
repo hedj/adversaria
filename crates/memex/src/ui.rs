@@ -5,6 +5,7 @@
 use crate::app::{App, Click, Mode, PaneKind, Quasi, ScopeLevel, command_help};
 use crate::outline::{Outline, TOP};
 use crate::reason::{self, Prov, WorldEval};
+use crate::view;
 use format::terms::Term;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
@@ -127,6 +128,48 @@ fn draw_top(f: &mut Frame, app: &App, area: Rect) {
     }
 }
 
+/// The right pane for a view: its layers, each with its goal and how many
+/// marks it gives, and the view's notes.
+fn view_panel(app: &App, id: u64, layers: &[crate::outline::Layer]) -> Vec<Line<'static>> {
+    let mut lines = vec![
+        Line::styled(
+            format!(
+                "VIEW · {} LAYER{}",
+                layers.len(),
+                if layers.len() == 1 { "" } else { "S" }
+            ),
+            dim(),
+        ),
+        Line::raw(""),
+    ];
+    for l in layers {
+        let n = app.eval[0]
+            .as_ref()
+            .and_then(|e| e.layers.get(&l.seq))
+            .map_or(0, |m| m.len());
+        lines.push(Line::raw(format!("layer {} where {}", l.mark, l.goal)));
+        lines.push(Line::styled(
+            format!(
+                "  entry {} · {n} mark{}",
+                l.seq,
+                if n == 1 { "" } else { "s" }
+            ),
+            dim(),
+        ));
+    }
+    let fig = view_figure(app, 0, id, 60, 12);
+    if !fig.notes.is_empty() {
+        lines.push(Line::raw(""));
+        lines.extend(fig.notes.into_iter().map(|n| Line::styled(n, dim())));
+    }
+    lines.push(Line::raw(""));
+    lines.push(Line::styled(
+        "a click on a mark goes to the item that states its fact",
+        dim(),
+    ));
+    lines
+}
+
 /// The citations of an item, shown dimmed after its text.
 fn cites(app: &App, id: u64) -> String {
     let (out, _) = app.outline.links_of(id);
@@ -203,25 +246,32 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
     f.render_widget(Paragraph::new(Span::styled(title(app), dim())), head);
     let rows = app.visible();
     let cursor = app.view.panes[pane].cursor;
-    let at = rows.iter().position(|(id, _)| *id == cursor).unwrap_or(0);
     let h = rows_area.height as usize;
-    let offset = (at + 3).saturating_sub(h);
     let focused = app.view.focus == pane && matches!(app.mode, Mode::Normal | Mode::Quasi(_));
-    let mut lines = Vec::new();
-    // The drawn line the cursor's item is on: items above it may have mark
-    // lines, so it is not the item's index.
+    // Every line of the outline, then the window onto them: items, their
+    // marks and their views are lines of different heights, so the window
+    // is chosen by line, keeping the cursor's line in view.
+    let mut lines: Vec<Line> = Vec::new();
+    // Clickable places: (line, column, width, what).
+    let mut places: Vec<(usize, usize, usize, Click)> = Vec::new();
     let mut cursor_line = None;
-    for (id, depth) in rows.iter().skip(offset).take(h) {
+    let mut cursor_depth = 0;
+    // Each item takes at least a line, so only the items within a screen's
+    // height of the cursor's can be in the window: build those alone (a long
+    // outline would otherwise be drawn whole on every keystroke).
+    let at_item = rows.iter().position(|(id, _)| *id == cursor).unwrap_or(0);
+    let first = at_item.saturating_sub(h);
+    for (id, depth) in rows.iter().skip(first).take(2 * h + 1) {
         if *id == cursor {
             cursor_line = Some(lines.len());
+            cursor_depth = *depth;
         }
-        // The item's own line; its marks, below it, are not part of it.
-        let y = rows_area.y.saturating_add(lines.len() as u16);
-        hits.add(
-            rows_area,
-            Rect::new(rows_area.x, y, rows_area.width, 1),
+        places.push((
+            lines.len(),
+            0,
+            rows_area.width as usize,
             Click::Item { pane, id: *id },
-        );
+        ));
         let kids = app.outline.children(*id).len();
         let folded = app.view.folded.contains(id);
         let mark = match (kids, folded) {
@@ -272,37 +322,155 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
                 style,
             ));
         }
+        // A view, drawn under its item.
+        if app.outline.views.contains_key(id) {
+            let indent = 2 * depth + 2;
+            let width = (rows_area.width as usize).saturating_sub(indent + 1);
+            let fig = view_figure(app, 0, *id, width, 12);
+            let top = lines.len();
+            lines.extend(figure_lines(&fig, indent));
+            for hit in &fig.hits {
+                if let Some(item) = hit_item(app, hit) {
+                    for dy in 0..hit.h {
+                        places.push((
+                            top + hit.y + dy,
+                            indent + hit.x,
+                            hit.w,
+                            Click::Item { pane, id: item },
+                        ));
+                    }
+                }
+            }
+        }
     }
     if rows.is_empty() {
         lines.push(Line::styled("(empty: type to write the first item)", dim()));
     }
-    f.render_widget(Paragraph::new(lines), rows_area);
+    let at = cursor_line.unwrap_or(0);
+    let offset = (at + 3)
+        .saturating_sub(h)
+        .min(lines.len().saturating_sub(1));
+    let shown: Vec<Line> = lines.into_iter().skip(offset).take(h).collect();
+    f.render_widget(Paragraph::new(shown), rows_area);
+    for (l, x, w, click) in places {
+        if l >= offset && l < offset + h {
+            let y = rows_area.y + (l - offset) as u16;
+            hits.add(
+                rows_area,
+                Rect::new(rows_area.x + x as u16, y, w as u16, 1),
+                click,
+            );
+        }
+    }
     // The text cursor, in the focused outline pane.
     if app.view.focus == pane
         && matches!(app.mode, Mode::Normal)
         && cursor != TOP
-        && let Some(&(_, depth)) = rows.get(at)
+        && let Some(r) = cursor_line
+            .and_then(|l| l.checked_sub(offset))
+            .filter(|r| *r < h)
     {
-        let num = if depth == 0 {
+        let num = if cursor_depth == 0 {
             app.outline.number(cursor).len() + 2
         } else {
             0
         };
-        let x = rows_area.x as usize + 2 * depth + 2 + num + app.view.pos;
-        // The cursor's row may be off screen when the pane has fewer rows
-        // than the offset assumes (a terminal a few lines high), or when the
-        // mark lines above it fill the pane.
-        let shown = cursor_line.filter(|r| *r < h);
-        if let Some(r) = shown
-            && x < (rows_area.x + rows_area.width) as usize
-        {
-            let y = rows_area.y as usize + r;
+        let x = rows_area.x as usize + 2 * cursor_depth + 2 + num + app.view.pos;
+        if x < (rows_area.x + rows_area.width) as usize {
             f.set_cursor_position(Position {
                 x: x as u16,
-                y: y as u16,
+                y: (rows_area.y as usize + r) as u16,
             });
         }
     }
+}
+
+/// The facts in violations in world k, by seq: marks resting on them are
+/// drawn loudly.
+fn violated(app: &App, k: usize) -> std::collections::BTreeSet<u64> {
+    app.eval[k]
+        .as_ref()
+        .map(|e| {
+            e.constraints
+                .iter()
+                .flat_map(|c| &c.violations)
+                .flat_map(|v| v.prov.iter().map(|p| p.seq()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The view at an item, drawn as world k computes it.
+pub fn view_figure(app: &App, k: usize, item: u64, width: usize, height: usize) -> view::Figure {
+    let Some(layers) = app.outline.views.get(&item) else {
+        return view::Figure::default();
+    };
+    let bad = violated(app, k);
+    let inputs: Vec<view::Input> = app.eval[k]
+        .as_ref()
+        .map(|e| {
+            layers
+                .iter()
+                .flat_map(|l| e.layers.get(&l.seq).cloned().unwrap_or_default())
+                .map(|(mark, prov)| view::Input {
+                    loud: prov.iter().any(|s| bad.contains(s)),
+                    mark,
+                    prov,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if inputs.is_empty() {
+        return view::Figure {
+            notes: vec!["(no marks: no solutions yet)".into()],
+            ..Default::default()
+        };
+    }
+    view::render(&inputs, width, height)
+}
+
+/// A figure as lines, indented; notes after it, dim.
+fn figure_lines(fig: &view::Figure, indent: usize) -> Vec<Line<'static>> {
+    let mut out: Vec<Line<'static>> = fig
+        .rows
+        .iter()
+        .map(|row| {
+            let mut spans = vec![Span::raw(" ".repeat(indent))];
+            let mut run = String::new();
+            let mut ink = view::Ink::Plain;
+            let style = |i: view::Ink| match i {
+                view::Ink::Plain => Style::default(),
+                view::Ink::Dim => dim(),
+                view::Ink::Loud => bold(),
+            };
+            for (c, i) in row {
+                if *i != ink && !run.is_empty() {
+                    spans.push(Span::styled(std::mem::take(&mut run), style(ink)));
+                }
+                ink = *i;
+                run.push(*c);
+            }
+            let run = run.trim_end().to_string();
+            if !run.is_empty() {
+                spans.push(Span::styled(run, style(ink)));
+            }
+            Line::from(spans)
+        })
+        .collect();
+    out.extend(
+        fig.notes
+            .iter()
+            .map(|n| Line::styled(format!("{}{n}", " ".repeat(indent)), dim())),
+    );
+    out
+}
+
+/// The item a click on a mark goes to: the item stating the first fact
+/// the mark rests on.
+fn hit_item(app: &App, hit: &view::Hit) -> Option<u64> {
+    hit.prov
+        .iter()
+        .find_map(|s| app.outline.fact_item.get(s).copied())
 }
 
 fn inverse(kind: &str) -> String {
@@ -348,6 +516,13 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
                 Click::Command("unadopt".into()),
             );
         }
+        return;
+    }
+    if let Some(layers) = app.outline.views.get(&id) {
+        f.render_widget(
+            Paragraph::new(view_panel(app, id, layers)).wrap(Wrap { trim: false }),
+            inner,
+        );
         return;
     }
     if let Some(e) = app.eval[0].as_ref()
@@ -1005,6 +1180,20 @@ fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
                 }
                 lines.push(Line::raw(t));
             }
+        }
+        // Each view, drawn from this world's facts: the left column is
+        // the actual world (eval[1]), the right the supposed one (eval[0]).
+        let views: Vec<u64> = o
+            .in_order()
+            .into_iter()
+            .filter(|i| app.outline.views.contains_key(i))
+            .collect();
+        for i in views {
+            lines.push(Line::raw(""));
+            lines.push(Line::raw(o.text(i)));
+            let width = (area.width as usize).saturating_sub(4);
+            let fig = view_figure(app, 1 - k, i, width, 8);
+            lines.extend(figure_lines(&fig, 2));
         }
         f.render_widget(
             Paragraph::new(lines).block(Block::default().borders(if k == 0 {
