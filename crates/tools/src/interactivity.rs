@@ -38,7 +38,8 @@
 //!   table row, or a bold lead-in (`**term**` at the start of a line).
 //!   Concepts named in plain words are not detected: an undercount.
 //!   Terms are defined only in the documents that define vocabulary (not
-//!   the log or the plan, records whose tables are data).
+//!   the log or the plan, records whose tables are data); a term a section
+//!   introduces itself is not a referent of that section.
 //!   Terms defined together, in a section that defines at most four, are
 //!   one chunk (learned together, and small enough to hold); the report
 //!   also gives the count with each term apart.
@@ -712,33 +713,44 @@ pub fn measure_markdown(docs: &[(String, String)]) -> Vec<Unit> {
             .filter(|t| !t.is_empty())
             .collect()
     };
-    let mut defined: BTreeMap<String, usize> = BTreeMap::new();
-    // Records (the log, the plan) use terms; they do not define them: a
-    // table of sizes or timings is data, not a glossary.
-    let defines_terms = |f: &str| !f.ends_with("docs/log.md") && !f.ends_with("docs/plan.md");
-    for (i, s) in secs
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| defines_terms(&s.file))
-    {
-        for t in ticked(&s.title) {
-            defined.entry(t).or_insert(i);
-        }
+    // The terms each section introduces itself: in its heading, as the
+    // first backticked cell of a table row, or as a bold lead-in.
+    let introduces = |s: &Sec| -> Vec<String> {
+        let mut out = ticked(&s.title);
         for l in &s.body {
             let l = l.trim_start();
             if let Some(rest) = l.strip_prefix("| `")
                 && let Some(t) = rest.split('`').next()
             {
-                defined.entry(t.trim().to_string()).or_insert(i);
+                out.push(t.trim().to_string());
             }
             if let Some(rest) = l.strip_prefix("**")
                 && let Some(t) = rest.split("**").next()
             {
                 let t = t.trim_matches(['`', '.', ':', ' ']).to_string();
                 if !t.is_empty() && t.len() < 40 {
-                    defined.entry(t).or_insert(i);
+                    out.push(t);
                 }
             }
+        }
+        out
+    };
+    let local: Vec<BTreeSet<String>> = secs
+        .iter()
+        .map(|s| introduces(s).into_iter().collect())
+        .collect();
+    // Where each term is defined, for other sections. Records (the log,
+    // the plan) introduce terms locally but define none for others: a
+    // table of sizes or timings is data, not a glossary.
+    let defines_terms = |f: &str| !f.ends_with("docs/log.md") && !f.ends_with("docs/plan.md");
+    let mut defined: BTreeMap<String, usize> = BTreeMap::new();
+    for (i, s) in secs
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| defines_terms(&s.file))
+    {
+        for t in introduces(s) {
+            defined.entry(t).or_insert(i);
         }
     }
     // How many terms each section defines.
@@ -756,6 +768,7 @@ pub fn measure_markdown(docs: &[(String, String)]) -> Vec<Unit> {
                 for t in ticked(l) {
                     if let Some(&d) = defined.get(&t)
                         && d != i
+                        && !local[i].contains(&t)
                     {
                         // Terms defined together in a section of at most four
                         // are learned together: one chunk. Else each counts.
@@ -948,6 +961,29 @@ mod tests {
         let big = "# S\n\n| `a` |\n| `b` |\n| `c` |\n| `d` |\n| `e` |\n\n# U\n\nuses `a` and `b`\n";
         let u = measure_markdown(&[("x.md".into(), big.into())]);
         assert_eq!(u[1].load(), 2, "{:?}", u[1].referents);
+    }
+
+    #[test]
+    fn a_term_a_section_introduces_itself_is_not_its_referent() {
+        // Catches a log's own table counted as referring to a homonym
+        // defined elsewhere, or a log defining terms for others.
+        let guide = "# G\n\n| `prev` | the hash of the entry before |\n";
+        let log = "# L\n\n| `prev` | 0.008 s |\n\nuses `prev`\n\n# M\n\nuses `prev`\n";
+        let u = measure_markdown(&[
+            ("docs/guide.md".into(), guide.into()),
+            ("docs/log.md".into(), log.into()),
+        ]);
+        assert_eq!(u[1].load(), 0, "introduced here: {:?}", u[1].referents);
+        assert_eq!(
+            u[2].load(),
+            1,
+            "from the guide, not the log: {:?}",
+            u[2].referents
+        );
+        assert!(
+            u[2].referents.iter().next().unwrap().contains("(G)")
+                || u[2].referents.contains("chunk G")
+        );
     }
 
     #[test]
