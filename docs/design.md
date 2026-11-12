@@ -243,6 +243,18 @@ A claim is tested by the cheapest check that could refute it. These checks come 
 
 The rulings are facts about claims, so they are queried, shown and compared like any others, and each records the hash of what it examined. Uncertain values follow the Uncertainty section, which keeps a bound and a standard deviation apart as Popper's judges do.
 
+As built (milestone 6), two checks of the table above:
+
+* **The quote check** (`check quote`): an imported item's text, as plain text, must appear in the plain text of the document it came from, ignoring spaces, hyphens and case. It rules `quoted` or `misquoted`.
+* **The source check** (`check source`): the DOI an item states (`doi(E, "10.…")`) is fetched from Crossref by the memex itself. It rules:
+  * `not_found` for a 404;
+  * `unavailable` when nothing usable came back;
+  * `retracted` when Crossref lists a retraction in `updated-by`;
+  * `misattributed` when the item states a title (`title(E, "…")`) that differs, beyond spaces, hyphens and case;
+  * else `found`.
+
+Each ruling is a fact `ruling(Item, Check, Ruling, Hash)`, with the hash of what was examined.
+
 ### Falsifiability of formal claims
 
 A claim written in Prolog, by hand or through APE, can be measured for how it could be refuted, after Popper's *Logic of Scientific Discovery*. This section is written for an implementer. The measures are proposed; none is built or measured.
@@ -297,6 +309,8 @@ The memex is not a tool for analysing data; Python, R and Julia are. It takes th
 5. **Reproducible by construction.** The provenance record holds what is needed to run the analysis again; the memex marks a result whose inputs no longer match their hashes.
 
 The helper writes the file where the memex reads it.
+
+As built (milestone 6): `helpers/python/memex_results.py` writes the exchange file (`format: memex-results`). It holds results as name, value, standard uncertainty and unit, and provenance as W3C PROV terms: the script, its commit, the command, the Python version, and the SHA-256 of each input file. `import results` makes an item for the run and one per result, each stating `claims("script@commit", result(Name, measured(Value, Uncertainty, Unit)))`. A result whose input file no longer matches its recorded hash is marked "input changed since".
 
 ## Uncertainty
 
@@ -360,6 +374,19 @@ A scientist's work arrives as documents and leaves as documents: drafts from co-
 6. **Read-only pages for colleagues.** A trail, an argument map or a section exports as plain HTML, with the hashes of its entries, for readers who do not run the memex; they can read it, and check it against a shared bundle, but not change it.
 
 Round trips lose what the outline does not hold: page layout, fonts, and a journal's template. These belong to the export's style, not to the record.
+
+### As built (milestone 6)
+
+* **The mapping**:
+  * a heading is an item at its level;
+  * a paragraph, list item, block quote, code block, display formula (kept as LaTeX) or table is an item with that style;
+  * a table's body rows are items under it, their cells joined by " | ";
+  * an item's text is Markdown for its inline content, so emphasis, links, inline mathematics and citations survive;
+  * a citation `[@key]` is also a `cites(Item, key)` fact. Keys are read from the text too, so citations survive Word, which carries them as text.
+* **Losses are counted, not hidden**: each kind the outline does not hold (footnote, image, figure, raw block, definition list, and an identifier or attribute Pandoc would not make again) is counted, reported on import, and kept in the import entry.
+* **Export** writes Markdown from the outline and runs Pandoc for the format asked. The document's metadata lists `source-entries`, the hashes of the entries its text came from.
+* **Re-import** of a file already imported aligns its blocks with the items of the earlier imports (longest common subsequence on style and text). It writes the changes in a supposed world, one entry each: changed text, added items, deleted items. The world shows the table of changes; `retract N` drops one, and `commit` makes the rest real.
+* In the format: a create body may carry `style` and `import` (the import entry that made the item). An `import` body names its `blob`, `format` (`document`, `memex-results`, `wikidata-subset`), source, provenance, and for a document its `losses`.
 
 ## Mail, calendars and the web
 
@@ -617,6 +644,8 @@ Milestone 2 fixed what the text above left open. `prolog/protocol.pl` and `crate
 | Without APE, Suppose reads English through the world's own facts and offers readings to choose with Tab | made when milestone 4 was built; the plan makes APE's restatement optional here |
 | Wikidata's statements are claims read through adopted links (`same_as`) and property mappings (`wd_property`); the subset is a blob imported with its provenance | made when milestone 5 was built (12 November 2026), as § Claims and beliefs asks |
 | Suggestions are ranked by a score from their evidence; a suggestion is known, for dismissal, by what it proposes and its evidence, and, for its place in the pane, by what it proposes alone | made when milestone 5 was built; a dismissed suggestion returns only if its evidence changes, and one never moves under the pointer as its evidence grows |
+| Documents map onto the outline by style, with Markdown for inline content; losses are counted by kind and kept in the import entry; a re-import is a world of changes | made when milestone 6 was built (12 November 2026), as § Documents in and out asks |
+| Results arrive as an exchange file with W3C PROV provenance and input hashes, written by a Python helper; values are claims of the analysis | made when milestone 6 was built, as § Importing results asks |
 | Query protocol version 1: big-endian words, tags and message types numbered, BLOBs typed by their first byte, ATOM\_IS naming atoms, answers as one term per variable, DONE with a status; queries as SWI-Prolog engines | made precise when milestone 2 was built (12 November 2026); the design left these open, and ATOM\_IS could not name an atom the server introduced |
 | Journal bodies carry facts as `"facts"`; a retract names its target; a world's store is its path's facts less those retracted | made precise when milestone 2 was built (12 November 2026), so that facts replay from the journal |
 | Format version 1 is fixed in detail: seals name the entry's hash `entry_hash`; an entry's hash leaves out its body, which `body_hash` stands for; one root per journal; purge bodies, key records and the key file as § The journal format states | made precise when milestone 1 was built (12 November 2026); the design named two fields of a seal `hash`, and left the rest open |

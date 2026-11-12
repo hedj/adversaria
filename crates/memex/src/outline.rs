@@ -48,6 +48,11 @@ pub struct Item {
     pub parent: u64,
     pub children: Vec<u64>,
     pub spans: Vec<Span>,
+    /// What kind of block it is in a document: heading, para, bullet, ...
+    /// (empty for the user's own items).
+    pub style: String,
+    /// The import entry that made it, if any.
+    pub origin: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -262,6 +267,12 @@ impl Outline {
                 if !self.spans_valid(&spans) {
                     return false;
                 }
+                let style = body
+                    .get("style")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let origin = body.get("import").and_then(|v| v.as_u64());
                 self.items.insert(
                     seq,
                     Item {
@@ -269,6 +280,8 @@ impl Outline {
                         parent: under,
                         children: vec![],
                         spans,
+                        style,
+                        origin,
                     },
                 );
                 if !self.place(seq, under, after(body)) {

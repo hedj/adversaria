@@ -214,7 +214,11 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) {
             });
         }
         lines.push(line);
-        for (violation, m) in marks {
+        let stale = app
+            .stale
+            .get(id)
+            .map(|files| (true, format!("input changed since: {}", files.join(", "))));
+        for (violation, m) in marks.into_iter().chain(stale) {
             let style = if violation {
                 Style::default().add_modifier(Modifier::BOLD)
             } else {
@@ -836,6 +840,10 @@ fn hint(app: &App) -> Option<(String, String)> {
 /// for row. Rows are the items that state facts or show derived values.
 fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
     let Some(sup) = &app.supposition else { return };
+    if sup.name.starts_with("revision of ") {
+        draw_revision(f, app, area);
+        return;
+    }
     let [l, r] =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area);
     let actual = app.outline_at(sup.actual);
@@ -995,4 +1003,29 @@ fn draw_suggestions(f: &mut Frame, app: &App, area: Rect) {
     lines.push(Line::raw(""));
     lines.push(Line::styled("accept N adopts · dismiss N dismisses", dim()));
     f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+/// A document revision's world: each change, one entry each, to keep or
+/// retract (retract N) before the world is committed or closed.
+fn draw_revision(f: &mut Frame, app: &App, area: Rect) {
+    let Some(sup) = &app.supposition else { return };
+    let mut lines = vec![
+        Line::styled(format!("WORLD · {}", sup.name.to_uppercase()), dim()),
+        Line::raw(""),
+    ];
+    let changes = app.revision_changes();
+    for (seq, what, retracted) in &changes {
+        let line = format!("#{seq}  {what}");
+        lines.push(if *retracted {
+            Line::styled(format!("{line}  (retracted)"), dim())
+        } else {
+            Line::raw(line)
+        });
+    }
+    if changes.is_empty() {
+        lines.push(Line::styled("no changes", dim()));
+    }
+    lines.push(Line::raw(""));
+    lines.push(Line::styled("retract N undoes one change here · commit makes the rest real · close leaves the actual world as it was", dim()));
+    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
 }

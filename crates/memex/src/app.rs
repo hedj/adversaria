@@ -21,7 +21,7 @@ use crate::reason::{self, ConstraintEval, Prov, Suggestion, WorldEval, solutions
 use format::record::Entry;
 use format::terms::{self, Term};
 use serde_json::{Value, json};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -275,6 +275,11 @@ pub struct App {
     /// While the suggestion pane has focus, its order is kept: a suggestion
     /// never moves under the pointer. Not journaled, like a held key.
     frozen: Option<Vec<String>>,
+    /// Where the source check asks Crossref: its works API, unless a test
+    /// points it elsewhere.
+    crossref: String,
+    /// Results whose input files changed since: item -> those files.
+    pub stale: BTreeMap<u64, Vec<String>>,
 }
 
 const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
@@ -307,6 +312,11 @@ pub const COMMANDS: &[Command] = &[
         name: "claim",
         slots: &[("that", Slot::Text)],
         help: "the target states a claim: a Prolog fact, then from and its source",
+    },
+    Command {
+        name: "check",
+        slots: &[("which", Slot::Word)],
+        help: "check quote (the text is in its source) or check source (the DOI, through Crossref)",
     },
     Command {
         name: "close",
@@ -347,6 +357,11 @@ pub const COMMANDS: &[Command] = &[
         name: "derive",
         slots: &[("text", Slot::Text)],
         help: "the target shows a computed text: a template with {Var}, then where and a Prolog goal",
+    },
+    Command {
+        name: "export",
+        slots: &[("to", Slot::Text)],
+        help: "export the outline, or one section, as a document (md, docx, odt, tex, html)",
     },
     Command {
         name: "fact",
@@ -489,6 +504,8 @@ impl App {
             suggestions: vec![],
             dismissed: BTreeSet::new(),
             frozen: None,
+            crossref: "https://api.crossref.org/works/".into(),
+            stale: BTreeMap::new(),
         };
         if app.journal.entries().is_empty() {
             let e = app.journal.append("edit", json!({"op": "init"}))?;
@@ -504,6 +521,11 @@ impl App {
 
     pub fn journal(&self) -> &Journal {
         &self.journal
+    }
+
+    /// Point the source check at another Crossref-like service (for tests).
+    pub fn set_crossref(&mut self, base: &str) {
+        self.crossref = base.to_string();
     }
 
     pub fn set_durable(&mut self, d: bool) {
@@ -1277,6 +1299,7 @@ impl App {
             _ => vec![],
         };
         self.update_frozen();
+        self.stale = self.stale_results();
         self.preview = None;
         if let Some(item) = self.view.interrogate {
             self.preview = Some(self.preview_adoption(item)?);
@@ -1468,6 +1491,554 @@ impl App {
         Ok(())
     }
 
+    /// Copy a file into blobs/, named by its SHA-256; return the hash.
+    fn store_blob(&self, bytes: &[u8]) -> Result<String, String> {
+        let hash = format::record::sha256_hex(bytes);
+        let blobs = self.journal.dir().join(format::record::BLOBS);
+        std::fs::create_dir_all(&blobs).map_err(|e| e.to_string())?;
+        let dest = blobs.join(&hash);
+        if !dest.exists() {
+            std::fs::write(&dest, bytes).map_err(|e| e.to_string())?;
+        }
+        Ok(hash)
+    }
+
+    /// The depth of an item in the outline: a top-level item is 0.
+    fn depth_of(&self, id: u64) -> usize {
+        let mut d = 0;
+        let mut at = self.outline.parent(id);
+        while let Some(p) = at.filter(|p| *p != TOP) {
+            d += 1;
+            at = self.outline.parent(p);
+        }
+        d
+    }
+
+    /// Write an item for a document block, with its citations as facts.
+    fn write_block(
+        &mut self,
+        b: &crate::docs::Block,
+        under: u64,
+        after: Option<u64>,
+        import: u64,
+    ) -> Result<u64, String> {
+        let n = b.text.chars().count();
+        let e = self.write_here(
+            "edit",
+            json!({"op": "create", "under": under, "after": after, "add": b.text, "spans": [[0, 0, n]], "style": b.style, "import": import}),
+        )?;
+        if !b.cites.is_empty() {
+            let facts: Vec<serde_json::Value> = b
+                .cites
+                .iter()
+                .map(|k| {
+                    terms::encode(&Term::Compound(
+                        "cites".into(),
+                        vec![Term::Int(e.seq as i64), Term::Atom(k.clone())],
+                    ))
+                    .map_err(|x| x.0)
+                })
+                .collect::<Result<_, _>>()?;
+            self.write_here(
+                "edit",
+                json!({"op": "facts", "item": e.seq, "facts": facts}),
+            )?;
+        }
+        Ok(e.seq)
+    }
+
+    /// Import a document: its blocks become items, its citations facts, and
+    /// what the outline cannot hold is listed as losses. Importing a file of
+    /// the same name again is a revision: it opens a world (see `revise`).
+    fn import_document(&mut self, file: &str) -> Result<(), String> {
+        let path = std::path::Path::new(file);
+        let (blocks, losses, _) = crate::docs::read(path)?;
+        let bytes = std::fs::read(path).map_err(|e| format!("{file}: {e}"))?;
+        let hash = self.store_blob(&bytes)?;
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let earlier: Vec<u64> = self
+            .path(self.tip)
+            .iter()
+            .filter(|e| {
+                e.kind == "import"
+                    && e.body
+                        .as_ref()
+                        .is_some_and(|b| b["format"] == "document" && b["file"] == name.as_str())
+            })
+            .map(|e| e.seq)
+            .collect();
+        let lost: Vec<String> = losses.iter().map(|(k, n)| format!("{k} {n}")).collect();
+        if !earlier.is_empty() {
+            return self.revise(&name, &hash, &blocks, &earlier, &losses);
+        }
+        let imp = self.write_here(
+            "import",
+            json!({"blob": hash, "format": "document", "file": name, "source": name, "losses": losses,
+                   "prov": {"prov:wasDerivedFrom": name, "prov:wasGeneratedBy": "pandoc"}}),
+        )?;
+        let mut last_at: Vec<Option<u64>> = vec![self.outline.top.last().copied()];
+        let mut parents: Vec<u64> = vec![TOP];
+        for b in &blocks {
+            let d = b.depth.min(parents.len() - 1);
+            parents.truncate(d + 1);
+            last_at.truncate(d + 1);
+            if last_at.len() <= d {
+                last_at.resize(d + 1, None);
+            }
+            let under = parents[d];
+            let id = self.write_block(b, under, last_at[d], imp.seq)?;
+            last_at[d] = Some(id);
+            parents.push(id);
+            last_at.push(None);
+        }
+        self.message = format!(
+            "imported {name}: {} items; losses: {}",
+            blocks.len(),
+            if lost.is_empty() {
+                "none".into()
+            } else {
+                lost.join(", ")
+            }
+        );
+        Ok(())
+    }
+
+    /// A revised document: align its blocks with the items of the earlier
+    /// imports, and write the changes in a supposed world, one entry each,
+    /// so each can be kept or retracted before the world is committed.
+    fn revise(
+        &mut self,
+        name: &str,
+        hash: &str,
+        blocks: &[crate::docs::Block],
+        earlier: &[u64],
+        losses: &crate::docs::Losses,
+    ) -> Result<(), String> {
+        let old: Vec<u64> = self
+            .outline
+            .in_order()
+            .into_iter()
+            .filter(|i| {
+                self.outline.items[i]
+                    .origin
+                    .is_some_and(|o| earlier.contains(&o))
+            })
+            .collect();
+        let base = old.iter().map(|i| self.depth_of(*i)).min().unwrap_or(0);
+        let key = |style: &str, text: &str| (style.to_string(), text.to_string());
+        let old_keys: Vec<(String, String)> = old
+            .iter()
+            .map(|i| key(&self.outline.items[i].style, &self.outline.text(*i)))
+            .collect();
+        let new_keys: Vec<(String, String)> =
+            blocks.iter().map(|b| key(&b.style, &b.text)).collect();
+        let matched = crate::docs::align(&old_keys, &new_keys);
+        self.write_here("suppose", json!({"name": format!("revision of {name}")}))?;
+        let imp = self.write_here(
+            "import",
+            json!({"blob": hash, "format": "document", "file": name, "source": name, "losses": losses, "revises": earlier.last(),
+                   "prov": {"prov:wasDerivedFrom": name, "prov:wasGeneratedBy": "pandoc"}}),
+        )?;
+        let mut id_of: Vec<Option<u64>> = vec![None; blocks.len()];
+        let mut deletes = Vec::new();
+        let mut creates = Vec::new();
+        let (mut po, mut pn) = (0, 0);
+        for &(oi, nj) in matched
+            .iter()
+            .chain(std::iter::once(&(old.len(), blocks.len())))
+        {
+            let (olds, news): (Vec<usize>, Vec<usize>) = ((po..oi).collect(), (pn..nj).collect());
+            for k in 0..olds.len().max(news.len()) {
+                match (olds.get(k), news.get(k)) {
+                    (Some(&o), Some(&n)) if old_keys[o].0 == blocks[n].style => {
+                        // Changed text: keep the item, write its new text.
+                        let new_text: Vec<char> = blocks[n].text.chars().collect();
+                        self.write_text(old[o], &new_text)?;
+                        id_of[n] = Some(old[o]);
+                    }
+                    (o, n) => {
+                        if let Some(&o) = o {
+                            deletes.push(old[o]);
+                        }
+                        if let Some(&n) = n {
+                            creates.push(n);
+                        }
+                    }
+                }
+            }
+            if oi < old.len() {
+                id_of[nj] = Some(old[oi]);
+            }
+            (po, pn) = (oi + 1, nj + 1);
+        }
+        for n in creates.iter().copied() {
+            let d = blocks[n].depth;
+            let parent = (0..n)
+                .rev()
+                .find(|j| blocks[*j].depth + 1 == d)
+                .and_then(|j| id_of[j])
+                .unwrap_or(TOP);
+            let after = (0..n)
+                .rev()
+                .take_while(|j| blocks[*j].depth >= d)
+                .filter(|j| blocks[*j].depth == d)
+                .find_map(|j| id_of[j]);
+            let parent = if d == 0 || base > 0 && parent == TOP {
+                self.outline
+                    .parent(old.first().copied().unwrap_or(TOP))
+                    .unwrap_or(TOP)
+            } else {
+                parent
+            };
+            id_of[n] = Some(self.write_block(&blocks[n], parent, after, imp.seq)?);
+        }
+        let kept: HashSet<u64> = id_of.iter().flatten().copied().collect();
+        for o in deletes {
+            if !self.outline.items.contains_key(&o) {
+                continue;
+            }
+            let mut stack = self.outline.children(o).to_vec();
+            let mut keeps_something = false;
+            while let Some(x) = stack.pop() {
+                keeps_something |= kept.contains(&x);
+                stack.extend(self.outline.children(x));
+            }
+            if !keeps_something {
+                self.write_here("edit", json!({"op": "delete", "item": o}))?;
+            }
+        }
+        self.message = format!(
+            "revision of {name}: the changes are in a supposed world; retract any with retract N, then commit or close"
+        );
+        Ok(())
+    }
+
+    /// The changes of a document revision, from the supposition on: (entry
+    /// seq, what it does, retracted).
+    pub fn revision_changes(&self) -> Vec<(u64, String, bool)> {
+        let Some(s) = &self.supposition else {
+            return vec![];
+        };
+        let path = self.path(self.tip);
+        let retracted: HashSet<u64> = path
+            .iter()
+            .filter(|e| e.kind == "retract")
+            .filter_map(|e| e.body.as_ref().and_then(|b| b["target"].as_u64()))
+            .collect();
+        let actual = self.outline_at(s.actual);
+        let mut out = Vec::new();
+        for e in path.iter().filter(|e| e.seq > s.actual && e.kind == "edit") {
+            let Some(b) = &e.body else { continue };
+            let item = b["item"].as_u64().unwrap_or(e.seq);
+            let num = |o: &Outline| o.number(item);
+            let what = match b["op"].as_str() {
+                Some("text") => format!(
+                    "changed {}: “{}” → “{}”",
+                    num(&actual),
+                    actual.text(item),
+                    self.outline_at(e.seq).text(item)
+                ),
+                Some("create") => format!("added: “{}”", b["add"].as_str().unwrap_or("")),
+                Some("delete") => format!("deleted {}: “{}”", num(&actual), actual.text(item)),
+                _ => continue,
+            };
+            out.push((e.seq, what, retracted.contains(&e.seq)));
+        }
+        out
+    }
+
+    /// Export a section (an item and its branch), or the whole outline, as a
+    /// document. Its metadata lists the hashes of the entries its text came
+    /// from, so a published text traces back to the record.
+    fn export(&mut self, file: &str, section: Option<u64>) -> Result<(), String> {
+        let roots: Vec<u64> = match section {
+            Some(s) => vec![s],
+            None => self.outline.top.clone(),
+        };
+        let mut blocks = Vec::new();
+        let mut seqs = std::collections::BTreeSet::new();
+        for r in roots {
+            let base = self.depth_of(r);
+            let mut stack = vec![r];
+            while let Some(id) = stack.pop() {
+                let item = &self.outline.items[&id];
+                let style = if item.style.is_empty() {
+                    if item.children.is_empty() {
+                        "para"
+                    } else {
+                        "heading"
+                    }
+                } else {
+                    item.style.as_str()
+                };
+                let text = self.outline.text(id);
+                blocks.push(crate::docs::Block {
+                    depth: self.depth_of(id) - base,
+                    style: style.into(),
+                    cites: crate::docs::cite_keys(&text),
+                    text,
+                });
+                seqs.extend(item.spans.iter().map(|s| s.seq));
+                seqs.insert(id);
+                stack.extend(item.children.iter().rev());
+            }
+        }
+        let hashes: Vec<String> = seqs
+            .iter()
+            .filter_map(|s| self.entry(*s).map(|e| e.hash.clone()))
+            .collect();
+        crate::docs::write(
+            &crate::docs::markdown(&blocks),
+            std::path::Path::new(file),
+            &hashes,
+        )?;
+        let name = std::path::Path::new(file)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.write_view(
+            "export",
+            json!({"file": name, "items": blocks.len(), "sources": hashes.len()}),
+        );
+        self.message = format!(
+            "exported {} items to {name}, citing {} source entries",
+            blocks.len(),
+            hashes.len()
+        );
+        Ok(())
+    }
+
+    /// Import results: an exchange file of values with their provenance (W3C
+    /// PROV terms), as claims whose source is the analysis.
+    fn import_results(&mut self, file: &str) -> Result<(), String> {
+        let path = std::path::Path::new(file);
+        let bytes = std::fs::read(path).map_err(|e| format!("{file}: {e}"))?;
+        let v: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|e| format!("not a results file: {e}"))?;
+        if v["format"] != "memex-results" {
+            return Err("not a results file: its format is not memex-results".into());
+        }
+        let hash = self.store_blob(&bytes)?;
+        let act = &v["prov"]["activity"];
+        let source = format!(
+            "{}@{}",
+            act["script"].as_str().unwrap_or("analysis"),
+            act["commit"].as_str().unwrap_or("uncommitted")
+        );
+        let base = std::fs::canonicalize(path)
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_string_lossy().into_owned()))
+            .unwrap_or_default();
+        let imp = self.write_here("import", json!({"blob": hash, "format": "memex-results", "source": source, "base": base, "prov": v["prov"]}))?;
+        let head = crate::docs::Block {
+            depth: 0,
+            style: "heading".into(),
+            text: format!("Results of {source}"),
+            cites: vec![],
+        };
+        let top = self.write_block(&head, TOP, self.outline.top.last().copied(), imp.seq)?;
+        let mut after = None;
+        for r in v["results"].as_array().cloned().unwrap_or_default() {
+            let name = r["name"].as_str().ok_or("a result needs a name")?;
+            let num = |k: &str| {
+                r[k].as_f64()
+                    .ok_or(format!("result {name}: {k} must be a number"))
+            };
+            let (value, u) = (num("value")?, num("uncertainty")?);
+            let unit = r["unit"].as_str().unwrap_or("");
+            let text = format!("{name} = {value} ± {u} {unit}");
+            let b = crate::docs::Block {
+                depth: 1,
+                style: "para".into(),
+                text,
+                cites: vec![],
+            };
+            let id = self.write_block(&b, top, after, imp.seq)?;
+            after = Some(id);
+            let c = |f: &str, a: Vec<Term>| Term::Compound(f.into(), a);
+            let fact = c(
+                "claims",
+                vec![
+                    Term::Str(source.clone()),
+                    c(
+                        "result",
+                        vec![
+                            Term::Atom(name.into()),
+                            c(
+                                "measured",
+                                vec![Term::Float(value), Term::Float(u), Term::Str(unit.into())],
+                            ),
+                        ],
+                    ),
+                ],
+            );
+            self.write_here("edit", json!({"op": "facts", "item": id, "source": source, "facts": [terms::encode(&fact).map_err(|e| e.0)?]}))?;
+        }
+        self.message = format!("imported the results of {source}");
+        Ok(())
+    }
+
+    /// Items whose results rest on input files that changed since: each with
+    /// the files that no longer match their recorded hashes.
+    pub fn stale_results(&self) -> BTreeMap<u64, Vec<String>> {
+        let mut out = BTreeMap::new();
+        for e in self.path(self.tip) {
+            let Some(b) = e
+                .body
+                .as_ref()
+                .filter(|b| e.kind == "import" && b["format"] == "memex-results")
+            else {
+                continue;
+            };
+            let base = std::path::Path::new(b["base"].as_str().unwrap_or(""));
+            let mut changed = Vec::new();
+            for input in b["prov"]["used"].as_array().cloned().unwrap_or_default() {
+                let p = input["path"].as_str().unwrap_or("");
+                let now = std::fs::read(base.join(p))
+                    .ok()
+                    .map(|x| format::record::sha256_hex(&x));
+                if now.as_deref() != input["sha256"].as_str() {
+                    changed.push(p.to_string());
+                }
+            }
+            if !changed.is_empty() {
+                for (id, item) in &self.outline.items {
+                    if item.origin == Some(e.seq) {
+                        out.insert(*id, changed.clone());
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// The quote check: does the item's text still appear in the document it
+    /// was imported from? Spaces, hyphens and case are ignored.
+    fn check_quote(&mut self, item: u64) -> Result<String, String> {
+        let origin = self
+            .outline
+            .items
+            .get(&item)
+            .and_then(|i| i.origin)
+            .ok_or("the target was not imported from a document")?;
+        let e = self.entry(origin).ok_or("no import entry")?;
+        let b = e.body.clone().ok_or("the import was purged")?;
+        let file = b["file"].as_str().unwrap_or("");
+        let fmt = crate::docs::format_of(std::path::Path::new(file))
+            .ok_or("the import is not a document")?;
+        let blob = self
+            .journal
+            .dir()
+            .join(format::record::BLOBS)
+            .join(b["blob"].as_str().unwrap_or(""));
+        let source = crate::docs::plain_text(&blob, fmt)?;
+        let span = crate::docs::markdown_to_plain(&self.outline.text(item))?;
+        let ruling = if crate::docs::normal(&source).contains(&crate::docs::normal(&span)) {
+            "quoted"
+        } else {
+            "misquoted"
+        };
+        self.write_ruling(item, "quote", ruling, b["blob"].as_str().unwrap_or(""))?;
+        Ok(ruling.into())
+    }
+
+    /// The source check: fetch the item's DOI from Crossref, never trusting a
+    /// copy that came with the claim, and rule: found, misattributed (the
+    /// title differs from the one claimed), not_found, unavailable, retracted.
+    fn check_source(&mut self, item: u64) -> Result<String, String> {
+        let facts = crate::store::facts(self.journal.entries(), self.tip)?;
+        let mine: Vec<&Term> = facts
+            .iter()
+            .filter(|(s, _)| self.outline.fact_item.get(s) == Some(&item))
+            .map(|(_, f)| f)
+            .collect();
+        let field = |name: &str| {
+            mine.iter().find_map(|f| match f {
+                Term::Compound(n, a) if n == name && a.len() == 2 => match &a[1] {
+                    Term::Str(s) => Some(s.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+        };
+        let doi = field("doi").ok_or("the target states no doi(Entity, \"10.…\") fact")?;
+        let url = format!("{}{doi}", self.crossref);
+        let out = std::process::Command::new("curl")
+            .args([
+                "-sS",
+                "--max-time",
+                "30",
+                "--noproxy",
+                "localhost,127.0.0.1",
+                "-A",
+                "source-check/0.1 (prototype)",
+                "-w",
+                "\n%{http_code}",
+            ])
+            .arg(&url)
+            .output()
+            .map_err(|e| format!("cannot run curl: {e}"))?;
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        let (body, code) = text.rsplit_once('\n').unwrap_or(("", ""));
+        let hash = format::record::sha256_hex(body.as_bytes());
+        let ruling = match code.trim() {
+            "404" => "not_found",
+            "200" => match serde_json::from_str::<serde_json::Value>(body) {
+                Ok(v) => {
+                    let m = &v["message"];
+                    let retracted = m["updated-by"]
+                        .as_array()
+                        .is_some_and(|a| a.iter().any(|u| u["type"] == "retraction"))
+                        || m["relation"]["is-retracted-by"]
+                            .as_array()
+                            .is_some_and(|a| !a.is_empty());
+                    let title = m["title"][0].as_str().unwrap_or("");
+                    if retracted {
+                        "retracted"
+                    } else if field("title")
+                        .is_some_and(|t| crate::docs::normal(&t) != crate::docs::normal(title))
+                    {
+                        "misattributed"
+                    } else {
+                        "found"
+                    }
+                }
+                Err(_) => "unavailable",
+            },
+            _ => "unavailable",
+        };
+        self.write_ruling(item, "source", ruling, &hash)?;
+        Ok(ruling.into())
+    }
+
+    /// A ruling is a fact about the claim, with the hash of what it examined.
+    fn write_ruling(
+        &mut self,
+        item: u64,
+        check: &str,
+        ruling: &str,
+        hash: &str,
+    ) -> Result<(), String> {
+        let c = |f: &str, a: Vec<Term>| Term::Compound(f.into(), a);
+        let fact = c(
+            "ruling",
+            vec![
+                Term::Int(item as i64),
+                Term::Atom(check.into()),
+                Term::Atom(ruling.into()),
+                Term::Str(hash.into()),
+            ],
+        );
+        self.write_here(
+            "edit",
+            json!({"op": "facts", "item": item, "facts": [terms::encode(&fact).map_err(|e| e.0)?]}),
+        )?;
+        Ok(())
+    }
+
     /// An item's claims: (entry seq, source, claimed fact).
     pub fn claims_of(&self, item: u64) -> Vec<(u64, String, Term)> {
         let facts = crate::store::facts(self.journal.entries(), self.tip).unwrap_or_default();
@@ -1589,6 +2160,7 @@ impl App {
                 | "import"
                 | "accept"
                 | "dismiss"
+                | "export"
         );
         if need_target && target == TOP {
             return Err("there is no item to act on".into());
@@ -1779,6 +2351,14 @@ impl App {
                 self.set_cursor(to);
                 self.write_view("follow", json!({"to": to}));
             }
+            "import" if words.first() == Some(&"document") => {
+                let file = words[1..].join(" ");
+                self.import_document(&file)?;
+            }
+            "import" if words.first() == Some(&"results") => {
+                let file = words[1..].join(" ");
+                self.import_results(&file)?;
+            }
             "import" => {
                 let (what, file) = match words.split_first() {
                     Some((w, rest)) if *w == "wikidata" && !rest.is_empty() => (*w, rest.join(" ")),
@@ -1812,6 +2392,28 @@ impl App {
                     bytes.len(),
                     &hash[..12]
                 );
+            }
+            "export" => {
+                let (file, section) = match words.split_last() {
+                    Some((last, rest))
+                        if !rest.is_empty() && self.outline.by_number(last).is_some() =>
+                    {
+                        (rest.join(" "), self.outline.by_number(last))
+                    }
+                    _ => (words.join(" "), None),
+                };
+                if file.is_empty() {
+                    return Err("export (to) a file, and an item number for one section".into());
+                }
+                self.export(&file, section)?;
+            }
+            "check" => {
+                let ruling = match words.first().copied() {
+                    Some("quote") => self.check_quote(target)?,
+                    Some("source") => self.check_source(target)?,
+                    _ => return Err("check quote, or check source".into()),
+                };
+                self.message = format!("{} check: {ruling}", words[0]);
             }
             "accept" | "dismiss" => {
                 let n: usize = words
