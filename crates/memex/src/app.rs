@@ -222,7 +222,7 @@ impl View {
         self.scope == ScopeLevel::Word
     }
 
-    fn to_json(&self, op: &str, extra: Value) -> Value {
+    pub(crate) fn to_json(&self, op: &str, extra: Value) -> Value {
         let kind = |k: PaneKind| match k {
             PaneKind::Outline => "outline",
             PaneKind::Links => "links",
@@ -426,7 +426,7 @@ impl App {
         self.journal.durable = d;
     }
 
-    fn entry(&self, seq: u64) -> Option<&Entry> {
+    pub(crate) fn entry(&self, seq: u64) -> Option<&Entry> {
         self.journal.entries().get((seq as usize).wrapping_sub(1))
     }
 
@@ -617,7 +617,12 @@ impl App {
     // ------------------------------------------------------------------
     // Writing entries.
 
-    fn write(&mut self, parent: Option<u64>, kind: &str, body: Value) -> Result<Entry, String> {
+    pub(crate) fn write(
+        &mut self,
+        parent: Option<u64>,
+        kind: &str,
+        body: Value,
+    ) -> Result<Entry, String> {
         let e = self
             .journal
             .append_after(parent, kind, body)
@@ -651,7 +656,7 @@ impl App {
         }
     }
 
-    fn flush_text(&mut self) {
+    pub(crate) fn flush_text(&mut self) {
         if let Some(p) = self.pending_text.take()
             && let Err(m) = self.write_text(p.item, &p.text)
         {
@@ -2158,39 +2163,6 @@ impl App {
     // ------------------------------------------------------------------
     // Commands.
 
-    pub(crate) fn cmd_undo(&mut self, _: &[&str], _: u64) -> Result<(), String> {
-        let Some(t) = self.content_tip(self.tip).filter(|t| *t > 1) else {
-            return Err("nothing to undo on this branch".into());
-        };
-        let parent = self.entry(t).and_then(|e| e.parent);
-        self.write(parent, "undo", json!({"undoes": t}))?;
-        self.message = format!("undid entry {t}");
-        Ok(())
-    }
-
-    pub(crate) fn cmd_redo(&mut self, _: &[&str], _: u64) -> Result<(), String> {
-        let Some(&t) = self.redo.last() else {
-            return Err("nothing to redo".into());
-        };
-        self.write(Some(t), "redo", json!({"redoes": t}))?;
-        self.message = format!("redid entry {t}");
-        Ok(())
-    }
-
-    pub(crate) fn cmd_retract(&mut self, words: &[&str], _: u64) -> Result<(), String> {
-        let t: u64 = words
-            .first()
-            .and_then(|w| w.trim_start_matches('#').parse().ok())
-            .ok_or("retract (entry) seq")?;
-        let dependents = self.retractable(t)?;
-        self.message.clear();
-        self.mode = Mode::ConfirmRetract {
-            target: t,
-            dependents,
-        };
-        Ok(())
-    }
-
     pub(crate) fn cmd_export(&mut self, words: &[&str], _: u64) -> Result<(), String> {
         let (file, section) = match words.split_last() {
             Some((last, rest)) if !rest.is_empty() && self.outline.by_number(last).is_some() => {
@@ -2547,38 +2519,6 @@ impl App {
         Ok(())
     }
 
-    pub(crate) fn cmd_close(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        self.close_commit("close", words, target)
-    }
-
-    pub(crate) fn cmd_commit(&mut self, words: &[&str], target: u64) -> Result<(), String> {
-        self.close_commit("commit", words, target)
-    }
-
-    fn close_commit(&mut self, name: &str, _: &[&str], _: u64) -> Result<(), String> {
-        let s = self.supposition.clone().ok_or("no supposition is open")?;
-        let parent = if name == "close" { s.actual } else { self.tip };
-        self.view.interrogate = None;
-        self.flush_text();
-        let body = self.view.to_json("world", json!({name: true}));
-        self.write(Some(parent), "view", body)?;
-        self.message = if name == "close" {
-            format!("closed “{}”; it stays in the journal", s.name)
-        } else {
-            format!("“{}” is now the actual world", s.name)
-        };
-        Ok(())
-    }
-
-    pub(crate) fn cmd_suppose(&mut self, words: &[&str], _: u64) -> Result<(), String> {
-        let n = words.join(" ");
-        if n.is_empty() {
-            return Err("suppose (that) a name for the world".into());
-        }
-        self.write_here("suppose", json!({"name": n}))?;
-        Ok(())
-    }
-
     pub(crate) fn cmd_import(&mut self, words: &[&str], _: u64) -> Result<(), String> {
         match words.first().copied() {
             Some("document") => {
@@ -2631,7 +2571,7 @@ impl App {
     }
 
     /// The last entry on the path that changed content: what undo undoes.
-    fn content_tip(&self, from: u64) -> Option<u64> {
+    pub(crate) fn content_tip(&self, from: u64) -> Option<u64> {
         let mut at = Some(from);
         while let Some(s) = at {
             let e = self.entry(s)?;
