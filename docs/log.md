@@ -497,6 +497,24 @@ Checked: `make test` passes (147 Rust tests, 18 Prolog tests, 21 pseudo-terminal
 
 Not done: the wheel, dragging, right clicks, clicks in the worlds and revision views, and diagrams (not built). Not checked: any real terminal, or whether text selection with Shift works while the memex has the mouse.
 
+## Input that could act (12 November 2026)
+
+The author pointed out that imports (Pandoc, Wikidata, Crossref, results files) and the pipe to SWI-Prolog could carry injection or unexpected terms. I audited each by trying it. Found and fixed, each with a test that failed first (`crates/memex/tests/hostile.rs` unless named):
+
+1. **Pandoc read other files.** `import document paper.tex` with `\input{…}` copied the named file into the outline and journal. Fixed with `--sandbox`. (`.rst` `include::` and `.org` `#+INCLUDE` do the same in Pandoc, but the memex does not read those formats.)
+2. **Export turned text into markup.** `<script>` ran in an HTML export, `\input{…}` became raw LaTeX, `javascript:` links were live, and `![x](/path)` embedded a local file in a .docx (seen in `word/media/`). Fixed by filtering Pandoc's tree. Pandoc 3.1.3's `--sandbox` cannot write .docx (it cannot find its own data files); 3.7's can. So the writing step is not sandboxed, and has no images left to read.
+3. **Crossref got patterns.** A DOI with `[1-5]` made five requests (against a local server); `[1-1000000]` would make a million. Fixed by encoding and `--globoff`.
+4. **Wikidata files were loosely checked.** `wd_label(X, "anything")` was accepted; values could be any term. Directives and quasi-quotations were already refused. Fixed: only the tool's ground shapes, checked before the import entry is written.
+5. **Deep terms crashed the memex.** A term 1,000 deep from the server overflowed the client's stack. Fixed by a 256-level limit at both ends (`crates/protocol/src/tests.rs`, `prolog/tests/test_protocol.pl`).
+6. **Definitions could run anything.** Typing `constraint c: false :- date(E, Y), shell('touch …')` ran the command during the planted check, before anything was kept; a `node_def` sent to the server ran it on evaluation; a claimed `node_def` would have run on adoption; a fact `(p :- …)` would have been stored as a rule. Fixed in three layers (reasoner allow-list, server storing only plain user facts, memex refusals).
+7. **A results file could block the memex.** An input that was a named pipe blocked it forever; `/dev/zero` would exhaust memory. Fixed: only regular files are hashed.
+
+Not a hole: Rust builds every Prolog goal as a term, never as source text, and strings cross the pipe as length-prefixed blobs, so no data is ever parsed as code on the way. Results and document imports write only fixed shapes of fact.
+
+Also noticed, not fixed: a fact nested more than about 60 deep is refused with "not JSON: recursion limit exceeded", which is safe but unclear; refusal messages for Wikidata files show the Prolog error term raw.
+
+Checked: `make test` passes (161 Rust tests, 19 Prolog tests, 21 pseudo-terminal checks). Each fix was broken on purpose once and its test failed. Open items are listed in docs/design.md, § Input that could act.
+
 ## Stage A: where it stands (12 November 2026)
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

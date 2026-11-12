@@ -514,6 +514,22 @@ Conventional shortcuts sit beside the quasimodes, for laptops without thumb keys
 
 Sources: [The Humane Interface](https://en.wikipedia.org/wiki/The_Humane_Interface), [Archy](<https://en.wikipedia.org/wiki/Archy_(software)>), [Mode (user interface)](<https://en.wikipedia.org/wiki/Mode_(user_interface)>).
 
+## Input that could act
+
+Everything imported is a claim: data, never instructions. The principle covers more than belief. No imported file, fetched record or fact may make the memex read another file, run a program, make network requests it was not asked to make, or stop. As built (12 November 2026, after an audit that found each hole below by trying it):
+
+| Boundary | Hole found | Rule |
+| --- | --- | --- |
+| Pandoc, reading | a LaTeX `\input` or `\include` copied any readable file, such as the signing key, into the journal | imports run Pandoc with `--sandbox`; a path that starts with `-` is passed as `./-…` |
+| Pandoc, writing | text that read as Markdown became markup: `<script>` ran in HTML, `\input` was raw LaTeX, `![x](/file)` embedded a local file in a .docx | export goes Markdown → tree (sandboxed) → tree without images, raw blocks or links of other schemes than http, https, mailto, doi → the format |
+| Crossref | curl read `[1-5]` and `{a,b}` in a DOI as patterns, one request each | the DOI is percent-encoded; curl runs with `--globoff`, `--proto =http,https`, `--max-filesize` |
+| Wikidata file | any `wd/3`, `wd_label/2`, `wd_constraint/2` term was kept, variables and deep terms included | only ground facts of the shapes the tool writes; checked before the import is written |
+| Query protocol | a term 1,000 deep overflowed the client's stack | terms nest at most 256 deep, refused at both ends (§ Query protocol) |
+| The reasoner | built-ins were called unchecked, so `shell/1` in a constraint ran during the planted check, and a believed `node_def` ran on evaluation | built-ins only from a list that reads and computes, with `\+`, `;`, `->`, `findall` and `forall` checked inside; the server stores only plain facts of the user's own predicates (and `node_def/2`); `fact`, `claim` and `adopt` refuse `node_def` and `rule_def` |
+| Results file | an input path that was a pipe blocked the memex forever | only regular files are hashed |
+
+What stays open: a user's own definition can still run long (arithmetic on huge numbers, `between/3` over a huge range); the results check reads any regular file a results file names, so it reveals whether that file changed; a file checked and then swapped before it is read; and anything not yet built (mail, web pages, exchanged journals) will need the same treatment. Tests: `crates/memex/tests/hostile.rs`.
+
 ## Storage
 
 On a PC the journal's directory and the Wikidata subset are local files.

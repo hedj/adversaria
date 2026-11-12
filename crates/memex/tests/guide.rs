@@ -101,3 +101,30 @@ fn the_guides_examples_are_accepted() {
     );
     Config::parse(&blocks[1]).unwrap();
 }
+
+#[test]
+fn the_guide_names_every_builtin_a_definition_may_call() {
+    // Catches a built-in allowed by the reasoner (prolog/dataflow.pl,
+    // safe_builtin_/2) but missing from the guide's list.
+    use format::terms::Term;
+    let section = GUIDE
+        .split("**What a definition may call.**")
+        .nth(1)
+        .unwrap()
+        .split("## 8.")
+        .next()
+        .unwrap();
+    let mut p = memex::prolog::Prolog::start().unwrap();
+    let goal = Term::Compound("safe_builtin_".into(), vec![Term::Var(0), Term::Var(1)]);
+    let all = p.all(&goal, 100).unwrap();
+    assert!(all.len() > 50, "{}", all.len());
+    for a in all {
+        let name = match &a[0] {
+            Term::Atom(n) => n.clone(),
+            t => panic!("{t:?}"),
+        };
+        let listed =
+            section.contains(&format!("`{name}`")) || section.contains(&format!("`{name}/"));
+        assert!(listed, "the guide does not list {name}/{:?}", a[1]);
+    }
+}

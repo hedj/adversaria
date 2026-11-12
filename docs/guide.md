@@ -302,6 +302,34 @@ derive The flight came {N:years} after Energia's first launch. where date(buran_
 `derive timeline where date(E, Y)` draws a timeline of the solutions, using
 labels where there are any.
 
+**What a definition may call.** A constraint, a derived goal and an
+adopted rule may only read facts, compare and compute. Besides your facts,
+they may use:
+
+- comparison and unification: `=`, `\=`, `==`, `\==`, `@<`, `@>`, `@=<`,
+  `@>=`, `compare/3`, `=@=`, `\=@=`;
+- arithmetic: `is`, `=:=`, `=\=`, `<`, `>`, `=<`, `>=`, `succ/2`, `plus/3`,
+  `between/3`;
+- type tests: `var`, `nonvar`, `atom`, `number`, `integer`, `float`,
+  `string`, `atomic`, `compound`, `callable`, `is_list`, `ground`;
+- terms: `functor/3`, `arg/3`, `=..`, `copy_term/2`;
+- atoms and strings: `atom_length/2`, `atom_concat/3`, `sub_atom/5`,
+  `atom_chars/2`, `atom_codes/2`, `char_code/2`, `atom_number/2`,
+  `atom_string/2`, `number_codes/2`, `number_string/2`, `upcase_atom/2`,
+  `downcase_atom/2`, `atomic_list_concat/2,3`, `string_concat/3`,
+  `string_length/2`, `sub_string/5`, `string_chars/2`, `string_codes/2`,
+  `string_code/3`, `string_lower/2`, `string_upper/2`, `split_string/4`;
+- lists: `length/2`, `msort/2`, `sort/2,4`, `keysort/2`, `memberchk/2`;
+- `true`, `fail`, `false`, and `\+`, `;`, `->`, `*->`, `findall/3,4`,
+  `forall/2` around goals that are themselves allowed.
+
+Anything else, such as `shell/1`, `open/3`, `assertz/1`, `format/2` or
+`call/1`, is refused when the constraint or derived text is defined, with
+what is not allowed. The reasoner checks again each time it calls one, so
+a definition that arrives some other way cannot act either. `fact`,
+`claim` and `adopt` refuse `node_def/2` and `rule_def/3`, the forms
+definitions are stored in.
+
 ## 8. Worlds
 
 Hold Suppose and type a statement in your own words, such as `the flight
@@ -329,7 +357,11 @@ import wikidata subset.pl
 ```
 
 The file is copied into the journal's `blobs/` directory under its hash,
-with its provenance (derived from Wikidata, under CC0).
+with its provenance (derived from Wikidata, under CC0). It must hold only
+the facts the tool writes, with no variables: `wd(Item, Property, Value)`,
+where Value is an atom, a number, a string or `date(Y, M, D)`;
+`wd_label(Entity, "label")`; and `wd_constraint(Property, Kind)`. Any
+other term is refused, named, and nothing is imported.
 
 To tie your facts to Wikidata, two kinds of belief are needed:
 `same_as(Entity, Q)` says your entity is Wikidata's item Q, and
@@ -384,6 +416,13 @@ export section.md 2
 The document's metadata lists the hashes of the journal entries its text
 came from.
 
+An export holds words, structure, mathematics, citations and links, and
+nothing that acts. Text that reads as an image (`![…](…)`), as raw HTML
+or LaTeX (`<script>`, `\input{…}`), is left out, and a link whose target
+is not `http`, `https`, `mailto` or `doi` keeps its text but loses its
+target. Imports are read by Pandoc with `--sandbox`, so a document cannot
+pull in another file (LaTeX `\input`, `\include`).
+
 **Check a quote:** `check quote` on an imported item says whether its text
 still appears in the document it came from, ignoring spaces, hyphens and
 case.
@@ -407,7 +446,9 @@ write_results("results.json",
 Each value arrives as a claim whose source is the analysis, with its
 standard uncertainty, unit and provenance: the script, its commit, the
 command, and a hash of each input file. If an input file changes later,
-the result is marked `input changed since:`.
+the result is marked `input changed since:`. Only regular files are
+read for this; anything else, such as a pipe or a device, counts as
+changed.
 
 ## 11. Files
 
