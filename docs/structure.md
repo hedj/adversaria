@@ -28,10 +28,26 @@ rules, written out at the top of `crates/tools/src/interactivity.rs`:
   else by name. Each count is also reported with each term or field
   apart.
 
-The measure is frozen as of commit a9ed10c. It was changed six times
-during stage 2, each change tested and stated in its commit, but a
-measure changed while it judges the work is hard to trust. It changes
-again only to fix a fault that a failing test shows, stated as such.
+Code has a second count, which is now its measure: what a reader holds
+at each statement of a function, read in order. It is the count the book
+in hedj/bcw3 makes of its blocks, chosen by the user on 13 November 2026
+in place of the count above, which is still reported beside it. Its
+rules are at the top of `crates/tools/src/held.rs`:
+
+- A function is read as its signature, then each statement; a branch or
+  a loop as its head, then each arm and each inner statement.
+- At a statement the reader holds each local and each project thing it
+  names, and each local that an earlier statement named and a later one
+  names again.
+- One field or method of a struct is the struct; two or more are a thing
+  each. A method's own type is its topic and is free, with one piece of
+  it. A local of a declared type is its type's instance, one thing.
+
+Both counts are frozen as of commit 7fb5e2a. The first was changed six
+times during stage 2, each change tested and stated in its commit, but a
+measure changed while it judges the work is hard to trust. A count
+changes again only to fix a fault that a failing test shows, stated as
+such, or by the user's decision.
 
 What the measure cannot see, so its numbers are bounds, not facts:
 method calls are resolved without types, so a call such as `.find()`
@@ -44,12 +60,10 @@ are independent, until the steps are named functions.
 
 ### The target
 
-Documents and the module tree: at most 4 everywhere. Functions: none
-over 8. Between 5 and 8 is accepted where splitting further would only
-add functions that pass their work on, which the measure cannot see as
-a cost: a reader follows each one. This replaces the first target of 4
-for every function, after stage 2 showed what meeting it takes (see
-Where it stands, below).
+At most 4 everywhere: for documents and the module tree by the first
+count, and for code at every statement by the second. Where plain code
+holds more, it is kept plain, listed and reported, not reshaped for the
+count (the book's rule for honest measures).
 
 ## Where it stands
 
@@ -78,6 +92,16 @@ measure at e05909e:
 | Rust functions | 161 of 771 | 70 | 41, `draw_outline` |
 | Rust test functions | 122 of 227 | 67 | 25 |
 | Prolog predicates | 6 of 93 | 1 | 10, `term_cells/6` |
+
+By the second count, at commit 7fb5e2a, before any work towards it:
+
+| Units | Hold more than 4 at a statement | Highest |
+| --- | --- | --- |
+| Rust functions | 304 of 859; upper bound 321 | 33, `plot` in `view.rs` |
+| Rust test functions | 124 of 227 | 14 |
+
+By crate: memex 221, tools 50, format 27, protocol 10, sealer 7,
+check 6.
 
 What stage 2 did: the commands dispatch through their table, and each
 of the 33 handlers, in `actions/`, is at most 4 (`App::command` had 83).
@@ -152,19 +176,20 @@ workspace
 └── tools: wikidata, measures, interactivity; acceptance tests
 ```
 
-The rules that keep each function within the target:
+How the code is to be written, after the book in hedj/bcw3
+(`next/book/framework.rst`), from the bottom up: the record, the
+outline, reasoning, then the screen.
 
-1. A long function becomes a short tree of named steps (the steps are
-   named for what they do), but not a chain of steps that only pass
-   their work on.
-2. A dispatch is a table, not a long match: `App::command`, with 83
-   referents, becomes a lookup in the table of commands, each command's
-   handler a function in its group under actions.
-3. State lives in the smallest part that needs it, and a method lives on
-   the part whose fields it uses, so it reads its own fields, not many.
-   Nesting parts only to group fields does not help: App's 25 fields in
-   four nested parts measured worse, and the split was reverted.
-4. A test checks one thing, through helpers named for the question they
+1. Shapes are small first: a struct has about four fields, an enum about
+   four cases. The functions follow from the shapes.
+2. An operation lives on the struct that owns the data it changes, and
+   touches one or two of its fields.
+3. A step only chooses: one line for each case, each a call to a named
+   operation. A dispatch over many cases is a table.
+4. A function binds few names and uses each soon after binding it.
+5. What has no present use goes; no helper for fewer than three uses,
+   and no function that only passes its work on.
+6. A test checks one thing, through helpers named for the question they
    ask, as `quasi(config, "RightAlt")`.
 
 The proof so far: `config.rs` was restructured by these rules (commit
