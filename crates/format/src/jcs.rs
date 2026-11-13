@@ -5,7 +5,7 @@
 //!   cannot be held exactly, so it is refused, not rounded.
 //! * NaN and the infinities have no JSON form, so they are refused.
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::fmt;
 
 pub const MAX_SAFE_INTEGER: i64 = (1 << 53) - 1;
@@ -45,80 +45,145 @@ pub fn number(x: f64) -> Result<String, CanonicalError> {
     if x < 0.0 {
         return Ok(format!("-{}", number(-x)?));
     }
-    // Rust's {:e} gives the shortest digits that read back to x, as d.ddde±n.
-    // x = digits × 10^(n - k), with no trailing zeros in digits.
-    let sci = format!("{x:e}");
-    let (mantissa, exp) = sci.split_once('e').expect("{:e} always writes an exponent");
-    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
-    let mut digits = digits.trim_end_matches('0').to_string();
-    let mut n = exp.parse::<i32>().expect("exponent is an integer") + 1;
-    if let Some((even, even_n)) = even_on_tie(x, &digits) {
-        (digits, n) = (even, even_n);
-    }
-    let digits = digits.as_str();
-    let k = digits.len() as i32;
-    Ok(if k <= n && n <= 21 {
-        format!("{digits}{}", "0".repeat((n - k) as usize))
-    } else if 0 < n && n <= 21 {
-        format!("{}.{}", &digits[..n as usize], &digits[n as usize..])
-    } else if -6 < n && n <= 0 {
-        format!("0.{}{digits}", "0".repeat(-n as usize))
-    } else {
-        let e = n - 1;
-        let sign = if e >= 0 { '+' } else { '-' };
-        let head = if k > 1 {
-            format!("{}.{}", &digits[..1], &digits[1..])
-        } else {
-            digits.to_string()
-        };
-        format!("{head}e{sign}{}", e.abs())
-    })
+    Ok(Decimal::of(x).text())
 }
 
-/// ECMAScript breaks a tie between two shortest digit strings, equally near
-/// x, by taking the even one (Number::toString, step 5); Rust's shortest
-/// formatting does not. A tie means x's exact decimal value has one digit
-/// more than the shortest form, and that digit is 5. Returns the even
-/// candidate and its decimal-point position, if it differs and reads back to x.
-fn even_on_tie(x: f64, shortest: &str) -> Option<(String, i32)> {
-    // 800 places exceeds the longest exact expansion of a double, so this
-    // text is exact, with no rounding.
-    let exact = format!("{x:.800e}");
-    let (mantissa, exp) = exact.split_once('e')?;
-    let exact_digits: String = mantissa.chars().filter(|c| *c != '.').collect();
-    let exact_digits = exact_digits.trim_end_matches('0');
-    let k = shortest.len();
-    if exact_digits.len() != k + 1 || !exact_digits.ends_with('5') {
-        return None;
-    }
-    let n = exp.parse::<i32>().ok()? + 1;
-    let lo = &exact_digits[..k];
-    let (hi, hi_n) = increment(lo, n);
-    let lo_even = (lo.as_bytes()[k - 1] - b'0').is_multiple_of(2);
-    let (even, even_n) = if lo_even {
-        (lo.to_string(), n)
-    } else {
-        (hi, hi_n)
-    };
-    let even = even.trim_end_matches('0').to_string();
-    let reads_back = format!("0.{even}e{even_n}").parse::<f64>().ok()? == x;
-    (even != shortest && reads_back).then_some((even, even_n))
+/// A positive decimal number, 0.digits × 10^point: its significant
+/// digits, and where the decimal point stands after the first of them.
+#[derive(Debug, Clone, PartialEq)]
+struct Decimal {
+    digits: String,
+    point: i32,
 }
 
-/// Add one in the last place of a digit string; a carry out of the first
-/// digit moves the decimal point one place right.
-fn increment(digits: &str, n: i32) -> (String, i32) {
-    let mut d: Vec<u8> = digits.bytes().collect();
-    for i in (0..d.len()).rev() {
-        if d[i] == b'9' {
-            d[i] = b'0';
+impl Decimal {
+    /// The decimal ECMAScript writes for a double: the shortest that reads
+    /// back to it, or on a tie the even one of the two shortest.
+    fn of(x: f64) -> Decimal {
+        // Rust's {:e} gives the shortest digits that read back to x.
+        let shortest = Decimal::parse(&format!("{x:e}"));
+        shortest.even_on_tie(x).unwrap_or(shortest)
+    }
+
+    /// Read Rust's d.ddde±n; trailing zeros are not significant.
+    fn parse(scientific: &str) -> Decimal {
+        let (mantissa, exp) = scientific.split_once('e').expect("{:e} writes an exponent");
+        let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
+        let point = exp.parse::<i32>().expect("exponent is an integer") + 1;
+        Decimal { digits, point }.trimmed()
+    }
+
+    fn trimmed(self) -> Decimal {
+        let digits = self.digits.trim_end_matches('0').to_string();
+        Decimal { digits, ..self }
+    }
+
+    /// The double this decimal reads as.
+    fn value(&self) -> Option<f64> {
+        format!("0.{}e{}", self.digits, self.point).parse().ok()
+    }
+
+    // The tie.
+
+    /// ECMAScript breaks a tie between two shortest digit strings, equally
+    /// near x, by taking the even one (Number::toString, step 5); Rust's
+    /// shortest formatting does not. The even one, if it differs from this
+    /// shortest one and reads back to x.
+    fn even_on_tie(&self, x: f64) -> Option<Decimal> {
+        let even = self.tie(x)?.into_even().trimmed();
+        (even != *self && even.value() == Some(x)).then_some(even)
+    }
+
+    /// The lower of the two decimals x lies midway between, if it lies
+    /// so: its exact value has one digit more than this shortest form,
+    /// and that digit is 5.
+    fn tie(&self, x: f64) -> Option<Decimal> {
+        // 800 places exceeds the longest exact expansion of a double, so
+        // this text is exact, with no rounding.
+        let exact = Decimal::parse(&format!("{x:.800e}"));
+        let (lower, last) = exact.digits.split_at_checked(self.digits.len())?;
+        (last == "5").then(|| Decimal {
+            digits: lower.to_string(),
+            point: exact.point,
+        })
+    }
+
+    /// This decimal if its last digit is even, else the next one up.
+    fn into_even(self) -> Decimal {
+        let last = self.digits.as_bytes().last().copied().unwrap_or(b'0');
+        if (last - b'0').is_multiple_of(2) {
+            self
         } else {
-            d[i] += 1;
-            return (String::from_utf8(d).unwrap(), n);
+            self.increment()
         }
     }
-    d.insert(0, b'1');
-    (String::from_utf8(d).unwrap(), n + 1)
+
+    /// Add one in the last place; a carry out of the first digit moves the
+    /// decimal point one place right.
+    fn increment(self) -> Decimal {
+        let mut d = self.digits.into_bytes();
+        let nines = d.iter().rev().take_while(|c| **c == b'9').count();
+        let kept = d.len() - nines;
+        d[kept..].fill(b'0');
+        let point = match kept.checked_sub(1) {
+            Some(i) => {
+                d[i] += 1;
+                self.point
+            }
+            None => {
+                d.insert(0, b'1');
+                self.point + 1
+            }
+        };
+        let digits = String::from_utf8(d).expect("digits are ASCII");
+        Decimal { digits, point }
+    }
+
+    // The text.
+
+    /// As ECMAScript lays a number out: an integer, a fraction, a small
+    /// fraction with leading zeros, or with an exponent.
+    fn text(&self) -> String {
+        let (k, n) = (self.digits.len() as i32, self.point);
+        if k <= n && n <= 21 {
+            self.integer_text()
+        } else if 0 < n && n <= 21 {
+            self.fraction_text()
+        } else if -6 < n && n <= 0 {
+            self.small_text()
+        } else {
+            self.exponent_text()
+        }
+    }
+
+    fn integer_text(&self) -> String {
+        let zeros = self.point as usize - self.digits.len();
+        format!("{}{}", self.digits, "0".repeat(zeros))
+    }
+
+    fn fraction_text(&self) -> String {
+        let (whole, part) = self.digits.split_at(self.point as usize);
+        format!("{whole}.{part}")
+    }
+
+    fn small_text(&self) -> String {
+        let zeros = "0".repeat(-self.point as usize);
+        format!("0.{zeros}{}", self.digits)
+    }
+
+    fn exponent_text(&self) -> String {
+        let e = self.point - 1;
+        let sign = if e >= 0 { '+' } else { '-' };
+        format!("{}e{sign}{}", self.mantissa(), e.abs())
+    }
+
+    /// The digits with a point after the first, if there are more.
+    fn mantissa(&self) -> String {
+        match self.digits.split_at(1) {
+            (first, "") => first.to_string(),
+            (first, rest) => format!("{first}.{rest}"),
+        }
+    }
 }
 
 /// Serialise a string: escape only what JSON requires; keep the rest.
@@ -159,44 +224,57 @@ fn write(value: &Value, out: &mut String) -> Result<(), CanonicalError> {
         Value::Null => out.push_str("null"),
         Value::Bool(true) => out.push_str("true"),
         Value::Bool(false) => out.push_str("false"),
-        Value::Number(num) => {
-            let text = if let Some(i) = num.as_i64() {
-                integer(i.into())?
-            } else if let Some(u) = num.as_u64() {
-                integer(u.into())?
-            } else {
-                number(num.as_f64().expect("a JSON number is i64, u64 or f64"))?
-            };
-            out.push_str(&text);
-        }
+        Value::Number(num) => out.push_str(&number_text(num)?),
         Value::String(s) => out.push_str(&string(s)),
-        Value::Array(items) => {
-            out.push('[');
-            for (i, v) in items.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                write(v, out)?;
-            }
-            out.push(']');
-        }
-        Value::Object(map) => {
-            // RFC 8785 § 3.2.3: sort keys by UTF-16 code units.
-            let mut keys: Vec<&String> = map.keys().collect();
-            keys.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
-            out.push('{');
-            for (i, k) in keys.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                out.push_str(&string(k));
-                out.push(':');
-                write(&map[k.as_str()], out)?;
-            }
-            out.push('}');
-        }
+        Value::Array(items) => write_array(items, out)?,
+        Value::Object(map) => write_object(map, out)?,
     }
     Ok(())
+}
+
+/// A JSON number: as an integer if it is one, else as a double.
+fn number_text(num: &serde_json::Number) -> Result<String, CanonicalError> {
+    if let Some(i) = num.as_i64() {
+        return integer(i.into());
+    }
+    if let Some(u) = num.as_u64() {
+        return integer(u.into());
+    }
+    number(num.as_f64().expect("a JSON number is i64, u64 or f64"))
+}
+
+fn write_array(items: &[Value], out: &mut String) -> Result<(), CanonicalError> {
+    out.push('[');
+    for (i, v) in items.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        write(v, out)?;
+    }
+    out.push(']');
+    Ok(())
+}
+
+fn write_object(map: &Map<String, Value>, out: &mut String) -> Result<(), CanonicalError> {
+    out.push('{');
+    for (i, k) in sorted_keys(map).into_iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push_str(&string(k));
+        out.push(':');
+        write(&map[k], out)?;
+    }
+    out.push('}');
+    Ok(())
+}
+
+/// An object's keys, in the order of their UTF-16 code units (RFC 8785
+/// § 3.2.3).
+fn sorted_keys(map: &Map<String, Value>) -> Vec<&String> {
+    let mut keys: Vec<&String> = map.keys().collect();
+    keys.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
+    keys
 }
 
 #[cfg(test)]
@@ -205,6 +283,13 @@ pub(crate) mod tests {
     use serde_json::json;
     use std::io::Write;
     use std::process::{Command, Stdio};
+
+    /// A digit string with its point, one more in the last place.
+    fn increment(digits: &str, point: i32) -> (String, i32) {
+        let digits = digits.to_string();
+        let next = Decimal { digits, point }.increment();
+        (next.digits, next.point)
+    }
 
     /// RFC 8785 Appendix B: IEEE 754 bit pattern -> canonical text. All 24
     /// finite rows, checked against the RFC's text (rfc-editor.org,
