@@ -139,6 +139,52 @@ fn parse_spans(v: &Value, seq: u64) -> Option<Vec<Span>> {
         .collect()
 }
 
+/// An entry's body, read by key. A value that is missing, or of another
+/// type, reads as none; as text it reads as empty.
+struct Body<'a>(&'a Value);
+
+impl<'a> Body<'a> {
+    fn num(&self, key: &str) -> Option<u64> {
+        self.0.get(key).and_then(Value::as_u64)
+    }
+
+    fn opt(&self, key: &str) -> Option<&'a str> {
+        self.0.get(key).and_then(Value::as_str)
+    }
+
+    fn text(&self, key: &str) -> &'a str {
+        self.opt(key).unwrap_or("")
+    }
+
+    /// A list's texts.
+    fn texts(&self, key: &str) -> Vec<String> {
+        let list = self.0.get(key).and_then(Value::as_array);
+        list.into_iter()
+            .flatten()
+            .filter_map(|n| n.as_str().map(String::from))
+            .collect()
+    }
+
+    /// The spans the body gives for an item's text.
+    fn spans(&self, seq: u64) -> Option<Vec<Span>> {
+        parse_spans(&self.0["spans"], seq)
+    }
+}
+
+impl Item {
+    /// A new item under another, with the style and origin its entry gives.
+    fn new(id: u64, parent: u64, spans: Vec<Span>, b: &Body) -> Item {
+        Item {
+            id,
+            parent,
+            children: vec![],
+            spans,
+            style: b.text("style").to_string(),
+            origin: b.num("import"),
+        }
+    }
+}
+
 impl Outline {
     pub fn contains(&self, id: u64) -> bool {
         id == TOP || self.items.contains_key(&id)
@@ -221,12 +267,13 @@ impl Outline {
     /// Put an item under a parent, after a sibling. If that sibling is gone
     /// (retracted, say), the item goes first: its place depended on the
     /// sibling, but the item does not.
-    fn place(&mut self, id: u64, under: u64, after: Option<u64>) -> bool {
+    /// Put an item among another's children: after the one named, or
+    /// first if none is named or the one named is not among them.
+    fn place(&mut self, id: u64, under: u64, after: Option<u64>) {
         let pos = after
             .and_then(|s| self.children(under).iter().position(|c| *c == s))
             .map_or(0, |p| p + 1);
         self.children_mut(under).insert(pos, id);
-        true
     }
 
     fn unplace(&mut self, id: u64) {
@@ -254,227 +301,171 @@ impl Outline {
         })
     }
 
-    /// Apply one entry's change. Returns false if the entry changed nothing
-    /// because what it names is not in the outline.
+    /// Apply an entry to the outline; false if it does not apply, as when
+    /// it names an item that is not there. Each kind of entry, and each
+    /// kind of edit, is one method below.
     pub fn apply(&mut self, seq: u64, kind: &str, body: &Value) -> bool {
-        let num = |k: &str| body.get(k).and_then(|v| v.as_u64());
-        let after = |b: &Value| b.get("after").and_then(|v| v.as_u64());
-        match (kind, body.get("op").and_then(|v| v.as_str())) {
-            ("edit", Some("init")) => true,
-            ("edit", Some("create")) => {
-                let Some(under) = num("under") else {
-                    return false;
-                };
-                if !self.contains(under) {
-                    return false;
-                }
-                let add: Vec<char> = body
-                    .get("add")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .chars()
-                    .collect();
-                self.added.insert(seq, add);
-                self.owner.insert(seq, seq);
-                let spans = parse_spans(&body["spans"], seq).unwrap_or_default();
-                if !self.spans_valid(&spans) {
-                    return false;
-                }
-                let style = body
-                    .get("style")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let origin = body.get("import").and_then(|v| v.as_u64());
-                self.items.insert(
-                    seq,
-                    Item {
-                        id: seq,
-                        parent: under,
-                        children: vec![],
-                        spans,
-                        style,
-                        origin,
-                    },
-                );
-                if !self.place(seq, under, after(body)) {
-                    self.items.remove(&seq);
-                    return false;
-                }
-                true
-            }
-            ("edit", Some("text")) => {
-                let Some(id) = num("item").filter(|i| self.items.contains_key(i)) else {
-                    return false;
-                };
-                let add: Vec<char> = body
-                    .get("add")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .chars()
-                    .collect();
-                self.added.insert(seq, add);
-                self.owner.insert(seq, id);
-                let Some(spans) = parse_spans(&body["spans"], seq).filter(|s| self.spans_valid(s))
-                else {
-                    return false;
-                };
-                self.items.get_mut(&id).unwrap().spans = spans;
-                true
-            }
-            ("edit", Some("move")) => {
-                let (Some(id), Some(under)) = (num("item"), num("under")) else {
-                    return false;
-                };
-                if !self.items.contains_key(&id)
-                    || !self.contains(under)
-                    || self.is_within(under, id) && under != TOP
-                {
-                    return false;
-                }
-                if after(body).is_some_and(|s| s == id) {
-                    return false;
-                }
-                let old = (
-                    self.items[&id].parent,
-                    self.children(self.items[&id].parent).to_vec(),
-                );
-                self.unplace(id);
-                if !self.place(id, under, after(body)) {
-                    *self.children_mut(old.0) = old.1;
-                    return false;
-                }
-                self.items.get_mut(&id).unwrap().parent = under;
-                true
-            }
-            ("edit", Some("delete")) => {
-                let Some(id) = num("item").filter(|i| self.items.contains_key(i)) else {
-                    return false;
-                };
-                self.unplace(id);
-                self.remove_branch(id);
-                true
-            }
-            ("link", _) => {
-                let (Some(from), Some(to)) = (num("from"), num("to")) else {
-                    return false;
-                };
-                let kind = body
-                    .get("type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("link")
-                    .to_string();
-                if !self.items.contains_key(&from) || !self.items.contains_key(&to) {
-                    return false;
-                }
-                self.links.push(Link {
-                    seq,
-                    from,
-                    to,
-                    kind,
-                });
-                true
-            }
-            ("edit", Some("facts")) => {
-                let Some(id) = num("item").filter(|i| self.items.contains_key(i)) else {
-                    return false;
-                };
-                self.fact_item.insert(seq, id);
-                if let Some(src) = body.get("source").and_then(|v| v.as_str()) {
-                    self.source.insert(id, src.to_string());
-                }
-                true
-            }
-            ("edit", Some("constraint")) => {
-                let name = body
-                    .get("name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let rule = body
-                    .get("rule")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                self.constraints.insert(seq, Constraint { name, rule });
-                true
-            }
-            ("edit", Some("layer")) => {
-                let Some(id) = num("item").filter(|i| self.items.contains_key(i)) else {
-                    return false;
-                };
-                let text = |k: &str| {
-                    body.get(k)
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string()
-                };
-                self.views.entry(id).or_default().push(Layer {
-                    seq,
-                    mark: text("mark"),
-                    goal: text("goal"),
-                });
-                true
-            }
-            ("edit", Some("derive")) => {
-                let Some(id) = num("item").filter(|i| self.items.contains_key(i)) else {
-                    return false;
-                };
-                let template = body
-                    .get("template")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let names = body
-                    .get("names")
-                    .and_then(|v| v.as_array())
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|n| n.as_str().map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                self.derived.insert(id, Derive { template, names });
-                true
-            }
-            ("adopt", _) => {
-                // An adopted suggestion may be a constraint, or facts with no item.
-                if body.get("op").and_then(|v| v.as_str()) == Some("constraint") {
-                    let name = body
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let rule = body
-                        .get("rule")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    self.constraints.insert(seq, Constraint { name, rule });
-                    return true;
-                }
-                match num("item") {
-                    Some(id) if self.items.contains_key(&id) => {
-                        self.fact_item.insert(seq, id);
-                        true
-                    }
-                    Some(_) => false,
-                    None => true,
-                }
-            }
-            ("name", _) => {
-                let (Some(n), Some(id)) = (body.get("name").and_then(|v| v.as_str()), num("item"))
-                else {
-                    return false;
-                };
-                if !self.items.contains_key(&id) {
-                    return false;
-                }
-                self.names.insert(n.to_string(), id);
-                true
-            }
-            _ => false,
+        let b = Body(body);
+        let done = match kind {
+            "edit" => self.edit(seq, &b),
+            "adopt" => self.adopt(seq, &b),
+            "link" => self.link(seq, &b),
+            "name" => self.name(&b),
+            _ => None,
+        };
+        done.is_some()
+    }
+
+    /// An edit of the items: their text and their places.
+    fn edit(&mut self, seq: u64, b: &Body) -> Option<()> {
+        match b.text("op") {
+            "init" => Some(()),
+            "create" => self.create(seq, b),
+            "text" => self.retext(seq, b),
+            "move" => self.move_item(b),
+            "delete" => self.delete(b),
+            _ => self.annotate(seq, b),
         }
+    }
+
+    /// An edit of what an item states or shows.
+    fn annotate(&mut self, seq: u64, b: &Body) -> Option<()> {
+        match b.text("op") {
+            "facts" => self.state_facts(seq, b),
+            "constraint" => self.keep_constraint(seq, b),
+            "layer" => self.add_layer(seq, b),
+            "derive" => self.set_derived(b),
+            _ => None,
+        }
+    }
+
+    /// The item a body names, if it is in the outline.
+    fn item_in(&self, b: &Body) -> Option<u64> {
+        b.num("item").filter(|i| self.items.contains_key(i))
+    }
+
+    // Items: their text and their places.
+
+    fn create(&mut self, seq: u64, b: &Body) -> Option<()> {
+        let under = b.num("under").filter(|u| self.contains(*u))?;
+        self.record_text(seq, seq, b);
+        let spans = b.spans(seq).unwrap_or_default();
+        if !self.spans_valid(&spans) {
+            return None;
+        }
+        self.items.insert(seq, Item::new(seq, under, spans, b));
+        self.place(seq, under, b.num("after"));
+        Some(())
+    }
+
+    fn retext(&mut self, seq: u64, b: &Body) -> Option<()> {
+        let id = self.item_in(b)?;
+        self.record_text(seq, id, b);
+        let spans = b.spans(seq).filter(|s| self.spans_valid(s))?;
+        self.items.get_mut(&id)?.spans = spans;
+        Some(())
+    }
+
+    /// Keep the characters an entry adds, written for an item.
+    fn record_text(&mut self, seq: u64, item: u64, b: &Body) {
+        self.added.insert(seq, b.text("add").chars().collect());
+        self.owner.insert(seq, item);
+    }
+
+    fn move_item(&mut self, b: &Body) -> Option<()> {
+        let (id, under, after) = (self.item_in(b)?, b.num("under")?, b.num("after"));
+        if !self.can_move(id, under, after) {
+            return None;
+        }
+        self.unplace(id);
+        self.place(id, under, after);
+        self.items.get_mut(&id)?.parent = under;
+        Some(())
+    }
+
+    /// An item can move under another that exists and is not in its own
+    /// branch, and not to follow itself.
+    fn can_move(&self, id: u64, under: u64, after: Option<u64>) -> bool {
+        let into_itself = self.is_within(under, id) && under != TOP;
+        self.contains(under) && !into_itself && after != Some(id)
+    }
+
+    fn delete(&mut self, b: &Body) -> Option<()> {
+        let id = self.item_in(b)?;
+        self.unplace(id);
+        self.remove_branch(id);
+        Some(())
+    }
+
+    // What an item states or shows.
+
+    fn state_facts(&mut self, seq: u64, b: &Body) -> Option<()> {
+        let id = self.item_in(b)?;
+        self.fact_item.insert(seq, id);
+        if let Some(src) = b.opt("source") {
+            self.source.insert(id, src.to_string());
+        }
+        Some(())
+    }
+
+    fn keep_constraint(&mut self, seq: u64, b: &Body) -> Option<()> {
+        let (name, rule) = (b.text("name").into(), b.text("rule").into());
+        self.constraints.insert(seq, Constraint { name, rule });
+        Some(())
+    }
+
+    fn add_layer(&mut self, seq: u64, b: &Body) -> Option<()> {
+        let id = self.item_in(b)?;
+        let (mark, goal) = (b.text("mark").into(), b.text("goal").into());
+        self.views
+            .entry(id)
+            .or_default()
+            .push(Layer { seq, mark, goal });
+        Some(())
+    }
+
+    fn set_derived(&mut self, b: &Body) -> Option<()> {
+        let id = self.item_in(b)?;
+        let (template, names) = (b.text("template").into(), b.texts("names"));
+        self.derived.insert(id, Derive { template, names });
+        Some(())
+    }
+
+    // The other kinds of entry.
+
+    /// An adoption: of a suggested constraint, or of facts, which belong to
+    /// an item if the entry names one.
+    fn adopt(&mut self, seq: u64, b: &Body) -> Option<()> {
+        if b.text("op") == "constraint" {
+            return self.keep_constraint(seq, b);
+        }
+        if b.num("item").is_some() {
+            let id = self.item_in(b)?;
+            self.fact_item.insert(seq, id);
+        }
+        Some(())
+    }
+
+    fn link(&mut self, seq: u64, b: &Body) -> Option<()> {
+        let (from, to) = (b.num("from")?, b.num("to")?);
+        if !self.items.contains_key(&from) || !self.items.contains_key(&to) {
+            return None;
+        }
+        let kind = b.opt("type").unwrap_or("link").to_string();
+        self.links.push(Link {
+            seq,
+            from,
+            to,
+            kind,
+        });
+        Some(())
+    }
+
+    fn name(&mut self, b: &Body) -> Option<()> {
+        let name = b.opt("name")?;
+        let id = self.item_in(b)?;
+        self.names.insert(name.to_string(), id);
+        Some(())
     }
 
     /// Links that leave or reach an item and its target or source still exist.
