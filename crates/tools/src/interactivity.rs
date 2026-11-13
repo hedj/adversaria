@@ -242,6 +242,9 @@ pub struct Unit {
     /// For a section: the load counting each term apart, without chunks
     /// (see measure_markdown), reported beside the load.
     pub strict: Option<usize>,
+    /// For a function: the most its reader holds at one statement
+    /// (held.rs).
+    pub held: Option<crate::held::Held>,
 }
 
 impl Unit {
@@ -283,6 +286,8 @@ pub struct Defs {
     /// Each struct field's declared type, where it is a named type:
     /// (struct, field) -> the type's last path segment.
     pub field_types: BTreeMap<(String, String), String>,
+    /// Each method, with the type whose impl defines it: (type, method).
+    pub methods: BTreeSet<(String, String)>,
 }
 
 /// The struct a field is a chunk of: its one owner, if that has at most
@@ -300,6 +305,18 @@ impl Defs {
 struct DefCollector<'a>(&'a mut Defs);
 
 impl<'ast> Visit<'ast> for DefCollector<'_> {
+    fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
+        if let Some(owner) = named_type(&i.self_ty) {
+            for item in &i.items {
+                if let syn::ImplItem::Fn(f) = item {
+                    self.0
+                        .methods
+                        .insert((owner.clone(), f.sig.ident.to_string()));
+                }
+            }
+        }
+        syn::visit::visit_item_impl(self, i);
+    }
     fn visit_item_fn(&mut self, i: &'ast syn::ItemFn) {
         self.0.fns.insert(i.sig.ident.to_string());
         syn::visit::visit_item_fn(self, i);
@@ -372,6 +389,81 @@ impl<'ast> Visit<'ast> for DefCollector<'_> {
     }
 }
 
+/// What a path names in the project: its types, constants and functions.
+pub(crate) fn path_labels(defs: &Defs, p: &syn::Path, called: bool) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let segs: Vec<String> = p.segments.iter().map(|s| s.ident.to_string()).collect();
+    // Type::function is one referent, the function, identified by its
+    // type: the type is not counted again for it.
+    let n = segs.len();
+    let assoc = n >= 2
+        && defs.fns.contains(&segs[n - 1])
+        && defs.types.contains(&segs[n - 2])
+        && !defs
+            .variants
+            .get(&segs[n - 1])
+            .is_some_and(|es| es.contains(&segs[n - 2]));
+    if assoc {
+        out.insert(format!("fn {}::{}", segs[n - 2], segs[n - 1]));
+    }
+    for (k, s) in segs.iter().enumerate() {
+        let last = k + 1 == segs.len();
+        if assoc && k + 2 >= n {
+            continue;
+        }
+        // What qualifies this segment: the one before it, if any.
+        let qual = k.checked_sub(1).map(|j| segs[j].as_str());
+        let qual_project = qual.is_some_and(|q| {
+            defs.types.contains(q)
+                || matches!(q, "Self" | "crate" | "super" | "self")
+                || defs.modules.contains(q)
+        });
+        // A variant only as Enum::Variant (a bare None or Ok is std's),
+        // and as a variant even where a type has the same name.
+        let variant = defs.variants.get(s).and_then(|es| {
+            es.iter()
+                .find(|e| qual == Some(e.as_str()))
+                .or_else(|| (qual == Some("Self")).then(|| es.iter().next()).flatten())
+        });
+        if let Some(e) = variant {
+            out.insert(format!("type {e}"));
+        } else if defs.types.contains(s) {
+            out.insert(format!("type {s}"));
+        } else if defs.consts.contains(s) {
+            out.insert(format!("const {s}"));
+        } else if last && defs.fns.contains(s) && ((called && segs.len() == 1) || qual_project) {
+            // T::f only when T is the project's (not Vec::new).
+            out.insert(format!("fn {s}"));
+        }
+    }
+    out
+}
+
+/// The declared type of an expression that is a local of known type or a
+/// chain of fields from one.
+pub(crate) fn type_of(
+    defs: &Defs,
+    locals: &BTreeMap<String, String>,
+    e: &syn::Expr,
+) -> Option<String> {
+    match e {
+        syn::Expr::Path(p) => p
+            .path
+            .get_ident()
+            .and_then(|i| locals.get(&i.to_string()).cloned()),
+        syn::Expr::Field(f) => {
+            let syn::Member::Named(id) = &f.member else {
+                return None;
+            };
+            let t = type_of(defs, locals, &f.base)?;
+            defs.field_types.get(&(t, id.to_string())).cloned()
+        }
+        syn::Expr::Paren(p) => type_of(defs, locals, &p.expr),
+        syn::Expr::Reference(r) => type_of(defs, locals, &r.expr),
+        _ => None,
+    }
+}
+
 /// Collects one function's referents.
 struct Refs<'a> {
     defs: &'a Defs,
@@ -391,25 +483,8 @@ struct Refs<'a> {
 }
 
 impl Refs<'_> {
-    /// The declared type of an expression that is a local of known type
-    /// or a chain of fields from one.
     fn type_of(&self, e: &syn::Expr) -> Option<String> {
-        match e {
-            syn::Expr::Path(p) => p
-                .path
-                .get_ident()
-                .and_then(|i| self.locals.get(&i.to_string()).cloned()),
-            syn::Expr::Field(f) => {
-                let syn::Member::Named(id) = &f.member else {
-                    return None;
-                };
-                let t = self.type_of(&f.base)?;
-                self.defs.field_types.get(&(t, id.to_string())).cloned()
-            }
-            syn::Expr::Paren(p) => self.type_of(&p.expr),
-            syn::Expr::Reference(r) => self.type_of(&r.expr),
-            _ => None,
-        }
+        type_of(self.defs, &self.locals, e)
     }
 
     /// What `base.f` counts as in chunks, if base's type is known and has
@@ -485,55 +560,7 @@ impl Refs<'_> {
     }
 
     fn path(&mut self, p: &syn::Path, called: bool) {
-        let segs: Vec<String> = p.segments.iter().map(|s| s.ident.to_string()).collect();
-        // Type::function is one referent, the function, identified by its
-        // type: the type is not counted again for it.
-        let n = segs.len();
-        let assoc = n >= 2
-            && self.defs.fns.contains(&segs[n - 1])
-            && self.defs.types.contains(&segs[n - 2])
-            && !self
-                .defs
-                .variants
-                .get(&segs[n - 1])
-                .is_some_and(|es| es.contains(&segs[n - 2]));
-        if assoc {
-            self.out
-                .insert(format!("fn {}::{}", segs[n - 2], segs[n - 1]));
-        }
-        for (k, s) in segs.iter().enumerate() {
-            let last = k + 1 == segs.len();
-            if assoc && k + 2 >= n {
-                continue;
-            }
-            // What qualifies this segment: the one before it, if any.
-            let qual = k.checked_sub(1).map(|j| segs[j].as_str());
-            let qual_project = qual.is_some_and(|q| {
-                self.defs.types.contains(q)
-                    || matches!(q, "Self" | "crate" | "super" | "self")
-                    || self.defs.modules.contains(q)
-            });
-            // A variant only as Enum::Variant (a bare None or Ok is std's),
-            // and as a variant even where a type has the same name.
-            let variant = self.defs.variants.get(s).and_then(|es| {
-                es.iter()
-                    .find(|e| qual == Some(e.as_str()))
-                    .or_else(|| (qual == Some("Self")).then(|| es.iter().next()).flatten())
-            });
-            if let Some(e) = variant {
-                self.out.insert(format!("type {e}"));
-            } else if self.defs.types.contains(s) {
-                self.out.insert(format!("type {s}"));
-            } else if self.defs.consts.contains(s) {
-                self.out.insert(format!("const {s}"));
-            } else if last
-                && self.defs.fns.contains(s)
-                && ((called && segs.len() == 1) || qual_project)
-            {
-                // T::f only when T is the project's (not Vec::new).
-                self.out.insert(format!("fn {s}"));
-            }
-        }
+        self.out.extend(path_labels(self.defs, p, called));
     }
     fn macro_args(&mut self, m: &syn::Macro) {
         use syn::parse::Parser;
@@ -633,7 +660,7 @@ fn named_type(t: &syn::Type) -> Option<String> {
 
 /// self's type and each parameter's declared type, by name, less any name
 /// a let or a closure in the body binds again.
-fn typed_locals(
+pub(crate) fn typed_locals(
     owner: Option<&str>,
     sig: &syn::Signature,
     block: &syn::Block,
@@ -708,6 +735,12 @@ impl FnCollector<'_> {
             ambiguous,
             children: 0,
             forward: 0,
+            held: Some(crate::held::held(
+                self.defs,
+                self.owner.last().map(String::as_str),
+                sig,
+                block,
+            )),
         });
     }
 }
@@ -898,6 +931,7 @@ fn module_unit(name: &str, f: &syn::File, crates: &[String], names: &BTreeSet<St
         children: m.children,
         forward: 0,
         strict: None,
+        held: None,
     }
 }
 
@@ -1115,6 +1149,7 @@ pub fn measure_markdown(docs: &[(String, String)]) -> Vec<Unit> {
                 children: s.children,
                 forward: forward.len(),
                 strict: Some(strict.len()),
+                held: None,
             }
         })
         .collect()
@@ -1140,6 +1175,7 @@ pub fn parse_xref(out: &str) -> Vec<Unit> {
                 children: 0,
                 forward: 0,
                 strict: None,
+                held: None,
             })
         })
         .collect()
@@ -1269,6 +1305,7 @@ mod tests {
             children: 0,
             forward: 0,
             strict,
+            held: None,
         };
         let s = summary(&[unit(5, None), unit(3, Some(6)), unit(1, None)], 4);
         assert!(s.contains("2 over 4 counting each field apart"), "{s}");

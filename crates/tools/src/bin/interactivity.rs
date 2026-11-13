@@ -4,6 +4,7 @@
 //! Exit status 0 always: this reports; it does not judge.
 
 use std::path::Path;
+use tools::held;
 use tools::interactivity::*;
 
 const LIMIT: usize = 4;
@@ -80,6 +81,15 @@ fn main() {
     .collect();
     let sections = measure_markdown(&docs);
 
+    println!("Held at a statement: what a function's reader holds, read in order (limit {LIMIT}).");
+    println!("Rules: crates/tools/src/held.rs. This is the measure for code.");
+    println!();
+    println!("Rust functions (src): {}", held::summary(&src_fns, LIMIT));
+    println!(
+        "Rust functions (tests): {}",
+        held::summary(&test_fns, LIMIT)
+    );
+    println!();
     println!("Interactivity: distinct project referents per unit (limit {LIMIT}).");
     println!(
         "Rules: crates/tools/src/interactivity.rs. Language and standard libraries are assumed known."
@@ -98,12 +108,12 @@ fn main() {
         "Ambiguous: {} method calls by names both std and project (in the upper bounds only). Not seen: {} macros whose arguments were not expressions.",
         blind.std_calls_skipped, blind.macros_unparsed
     );
+    report_held("Rust functions (src)", &src_fns);
+    report_held("Rust functions (tests)", &test_fns);
     for (title, units) in [
-        ("Rust functions (src)", &src_fns),
         ("Rust modules (src files)", &src_modules),
         ("Prolog predicates", &preds),
         ("Markdown sections", &sections),
-        ("Rust functions (tests)", &test_fns),
     ] {
         let mut over: Vec<&Unit> = units
             .iter()
@@ -153,6 +163,43 @@ fn main() {
         }
     }
     report_sections(&sections);
+}
+
+/// The functions that hold more than the limit at some statement, the
+/// highest first: the peak (to its upper bound), where, and the count of
+/// the function's distinct referents.
+fn report_held(title: &str, units: &[Unit]) {
+    let mut over: Vec<&Unit> = units.iter().filter(|u| held::upper(u) > LIMIT).collect();
+    over.sort_by_key(|u| std::cmp::Reverse(held::lower(u)));
+    println!();
+    println!("== {title}: hold more than {LIMIT} at a statement, highest first");
+    for u in over {
+        println!("{}", held_row(u));
+    }
+}
+
+fn held_row(u: &Unit) -> String {
+    let Some(h) = &u.held else {
+        return String::new();
+    };
+    let peak = h.things.len();
+    let range = if h.upper > peak {
+        format!("{peak}–{}", h.upper)
+    } else {
+        peak.to_string()
+    };
+    let row = format!(
+        "{range:>5}  {}  {}  (statement {}; {} referents in all)",
+        u.file,
+        u.name,
+        h.at,
+        u.load()
+    );
+    if std::env::var_os("INTERACTIVITY_DETAIL").is_none() {
+        return row;
+    }
+    let things: Vec<&str> = h.things.iter().map(String::as_str).collect();
+    format!("{row}\n       {}", things.join(", "))
 }
 
 /// The Markdown sections that refer forward, or that are over the limit
