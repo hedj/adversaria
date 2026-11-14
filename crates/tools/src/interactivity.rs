@@ -411,52 +411,98 @@ impl<'ast> Visit<'ast> for DefCollector<'_> {
 
 /// What a path names in the project: its types, constants and functions.
 pub(crate) fn path_labels(defs: &Defs, p: &syn::Path, called: bool) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
     let segs: Vec<String> = p.segments.iter().map(|s| s.ident.to_string()).collect();
-    // Type::function is one referent, the function, identified by its
-    // type: the type is not counted again for it.
-    let n = segs.len();
-    let assoc = n >= 2
-        && defs.fns.contains(&segs[n - 1])
-        && defs.types.contains(&segs[n - 2])
-        && !defs
-            .variants
-            .get(&segs[n - 1])
-            .is_some_and(|es| es.contains(&segs[n - 2]));
-    if assoc {
-        out.insert(format!("fn {}::{}", segs[n - 2], segs[n - 1]));
-    }
-    for (k, s) in segs.iter().enumerate() {
-        let last = k + 1 == segs.len();
-        if assoc && k + 2 >= n {
-            continue;
+    PathNames { defs, segs, called }.labels()
+}
+
+/// A path's segments, read against the project's definitions; and
+/// whether the path is called.
+struct PathNames<'a> {
+    defs: &'a Defs,
+    segs: Vec<String>,
+    called: bool,
+}
+
+impl PathNames<'_> {
+    fn labels(&self) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        out.extend(self.assoc());
+        let plain = if out.is_empty() {
+            self.segs.len()
+        } else {
+            self.segs.len() - 2
+        };
+        for k in 0..plain {
+            out.extend(self.label(k));
         }
-        // What qualifies this segment: the one before it, if any.
-        let qual = k.checked_sub(1).map(|j| segs[j].as_str());
-        let qual_project = qual.is_some_and(|q| {
-            defs.types.contains(q)
-                || matches!(q, "Self" | "crate" | "super" | "self")
-                || defs.modules.contains(q)
-        });
-        // A variant only as Enum::Variant (a bare None or Ok is std's),
-        // and as a variant even where a type has the same name.
-        let variant = defs.variants.get(s).and_then(|es| {
-            es.iter()
-                .find(|e| qual == Some(e.as_str()))
-                .or_else(|| (qual == Some("Self")).then(|| es.iter().next()).flatten())
-        });
-        if let Some(e) = variant {
-            out.insert(format!("type {e}"));
-        } else if defs.types.contains(s) {
-            out.insert(format!("type {s}"));
-        } else if defs.consts.contains(s) {
-            out.insert(format!("const {s}"));
-        } else if last && defs.fns.contains(s) && ((called && segs.len() == 1) || qual_project) {
-            // T::f only when T is the project's (not Vec::new).
-            out.insert(format!("fn {s}"));
-        }
+        out
     }
-    out
+
+    /// Type::function is one referent, the function, identified by its
+    /// type: the type is not counted again for it.
+    fn assoc(&self) -> Option<String> {
+        let [.., t, f] = self.segs.as_slice() else {
+            return None;
+        };
+        let is_variant = self.defs.variants.get(f).is_some_and(|es| es.contains(t));
+        let is_assoc = self.defs.fns.contains(f) && self.defs.types.contains(t) && !is_variant;
+        is_assoc.then(|| format!("fn {t}::{f}"))
+    }
+
+    /// What segment k names: a variant's enum, a type, a constant, or the
+    /// function a path ends in.
+    fn label(&self, k: usize) -> Option<String> {
+        let (s, qual) = (&self.segs[k], self.qualifier(k));
+        if let Some(e) = self.defs.variant_of(s, qual) {
+            return Some(format!("type {e}"));
+        }
+        let last = k + 1 == self.segs.len();
+        let function = || last.then(|| self.function(s, qual)).flatten();
+        self.defs.label_of(s).or_else(function)
+    }
+
+    /// What qualifies segment k: the one before it, if any.
+    fn qualifier(&self, k: usize) -> Option<&str> {
+        k.checked_sub(1).map(|j| self.segs[j].as_str())
+    }
+
+    /// The function a path ends in, if it is the project's and the path
+    /// reaches it.
+    fn function(&self, s: &str, qual: Option<&str>) -> Option<String> {
+        (self.defs.fns.contains(s) && self.reached(qual)).then(|| format!("fn {s}"))
+    }
+
+    /// A function called by its name alone, or as T::f only when T is the
+    /// project's (not Vec::new).
+    fn reached(&self, qual: Option<&str>) -> bool {
+        let alone = self.called && self.segs.len() == 1;
+        alone || qual.is_some_and(|q| self.defs.qualifies(q))
+    }
+}
+
+impl Defs {
+    /// A variant only as Enum::Variant (a bare None or Ok is std's), and
+    /// as a variant even where a type has the same name.
+    fn variant_of(&self, s: &str, qual: Option<&str>) -> Option<&String> {
+        let es = self.variants.get(s)?;
+        let named = es.iter().find(|e| qual == Some(e.as_str()));
+        named.or_else(|| (qual == Some("Self")).then(|| es.iter().next()).flatten())
+    }
+
+    /// A type or a constant of the project, by its name.
+    fn label_of(&self, s: &str) -> Option<String> {
+        if self.types.contains(s) {
+            return Some(format!("type {s}"));
+        }
+        self.consts.contains(s).then(|| format!("const {s}"))
+    }
+
+    /// Whether a qualifier is the project's: a type, a module, or a
+    /// keyword of the project's paths.
+    fn qualifies(&self, q: &str) -> bool {
+        let keyword = matches!(q, "Self" | "crate" | "super" | "self");
+        self.types.contains(q) || keyword || self.modules.contains(q)
+    }
 }
 
 /// The declared type of an expression that is a local of known type or a
@@ -497,19 +543,63 @@ fn field_type(
 /// Collects one function's referents.
 struct Refs<'a> {
     defs: &'a Defs,
-    out: BTreeSet<String>,
-    ambiguous: BTreeSet<String>,
     blind: &'a mut Blind,
     /// The type whose method this is.
     owner: Option<String>,
     /// The declared type of self and of each parameter not rebound.
     locals: BTreeMap<String, String>,
+    seen: Seen,
+}
+
+/// What a function's reader has met so far.
+#[derive(Default)]
+struct Seen {
+    out: BTreeSet<String>,
+    ambiguous: BTreeSet<String>,
     /// For each field referent, what each resolved read of it counts as
     /// in chunks: its small struct's type, the field itself (a large
     /// struct's), or nothing (the method's own small struct's).
     resolved: BTreeMap<String, BTreeSet<String>>,
     /// Field referents with a read that could not be resolved by type.
     by_name: BTreeSet<String>,
+}
+
+impl<'a> Refs<'a> {
+    fn new(
+        defs: &'a Defs,
+        blind: &'a mut Blind,
+        owner: Option<String>,
+        locals: BTreeMap<String, String>,
+    ) -> Refs<'a> {
+        let seen = Seen::default();
+        Refs {
+            defs,
+            blind,
+            owner,
+            locals,
+            seen,
+        }
+    }
+
+    /// What was found. A method's own type is the context it is read in,
+    /// not a referent.
+    fn found(self, own: Option<&String>) -> Found {
+        let mut out = self.chunked();
+        let mut strict = self.seen.out;
+        let ambiguous = self.seen.ambiguous.difference(&strict).cloned().collect();
+        if let Some(o) = own {
+            for set in [&mut out, &mut strict] {
+                set.remove(&format!("type {o}"));
+                set.remove("type Self");
+            }
+        }
+        let strict = (strict.len() != out.len()).then_some(strict.len());
+        Found {
+            out,
+            strict,
+            ambiguous,
+        }
+    }
 }
 
 impl Refs<'_> {
@@ -541,15 +631,15 @@ impl Refs<'_> {
     /// reads resolved to, or by name where a read was not resolved.
     fn chunked(&self) -> BTreeSet<String> {
         let mut out = BTreeSet::new();
-        for r in &self.out {
+        for r in &self.seen.out {
             let Some(f) = r.strip_prefix("field ") else {
                 out.insert(r.clone());
                 continue;
             };
-            if let Some(labels) = self.resolved.get(r) {
+            if let Some(labels) = self.seen.resolved.get(r) {
                 out.extend(labels.iter().filter(|l| !l.is_empty()).cloned());
             }
-            if self.by_name.contains(r) {
+            if self.seen.by_name.contains(r) {
                 out.insert(match self.defs.chunk_of(f) {
                     Some(st) => format!("type {st}"),
                     None => r.clone(),
@@ -580,17 +670,18 @@ impl Refs<'_> {
         for m in members {
             if let syn::Member::Named(id) = m {
                 let r = format!("field {id}");
-                self.resolved
+                self.seen
+                    .resolved
                     .entry(r.clone())
                     .or_default()
                     .insert(r.clone());
-                self.out.insert(r);
+                self.seen.out.insert(r);
             }
         }
     }
 
     fn path(&mut self, p: &syn::Path, called: bool) {
-        self.out.extend(path_labels(self.defs, p, called));
+        self.seen.out.extend(path_labels(self.defs, p, called));
     }
     fn macro_args(&mut self, m: &syn::Macro) {
         use syn::parse::Parser;
@@ -645,9 +736,9 @@ impl<'ast> Visit<'ast> for Refs<'_> {
         if self.defs.fns.contains(&m) {
             if STD.contains(&m.as_str()) {
                 self.blind.std_calls_skipped += 1;
-                self.ambiguous.insert(format!("fn {m}"));
+                self.seen.ambiguous.insert(format!("fn {m}"));
             } else {
-                self.out.insert(format!("fn {m}"));
+                self.seen.out.insert(format!("fn {m}"));
             }
         }
         syn::visit::visit_expr_method_call(self, i);
@@ -659,13 +750,13 @@ impl<'ast> Visit<'ast> for Refs<'_> {
                 let r = format!("field {f}");
                 match self.field_chunk(&i.base, &f) {
                     Some(c) => {
-                        self.resolved.entry(r.clone()).or_default().insert(c);
+                        self.seen.resolved.entry(r.clone()).or_default().insert(c);
                     }
                     None => {
-                        self.by_name.insert(r.clone());
+                        self.seen.by_name.insert(r.clone());
                     }
                 }
-                self.out.insert(r);
+                self.seen.out.insert(r);
             }
         }
         syn::visit::visit_expr_field(self, i);
@@ -752,44 +843,55 @@ impl<'a> FnCollector<'a> {
     }
 
     fn measure(&mut self, name: String, block: &syn::Block, sig: &syn::Signature) {
+        let found = self.referents(sig, block);
+        let held = self.held(sig, block);
+        self.units.push(found.into_unit(&self.file, &name, held));
+    }
+
+    /// What a function's reader holds at each statement.
+    fn held(&self, sig: &syn::Signature, block: &syn::Block) -> crate::held::Held {
+        let owner = self.owner.last().map(String::as_str);
+        crate::held::held(self.defs, owner, sig, block)
+    }
+
+    /// What a function refers to, chunked and apart, with the calls that
+    /// may be std's.
+    fn referents(&mut self, sig: &syn::Signature, block: &syn::Block) -> Found {
         let owner = self.owner.last().cloned();
-        let mut r = Refs {
-            defs: self.defs,
-            out: BTreeSet::new(),
-            ambiguous: BTreeSet::new(),
-            blind: self.blind,
-            locals: typed_locals(owner.as_deref(), sig, block),
-            owner,
-            resolved: BTreeMap::new(),
-            by_name: BTreeSet::new(),
-        };
+        let mut r = self.refs(owner.clone(), sig, block);
         r.visit_signature(sig);
         r.visit_block(block);
-        let mut out = r.chunked();
-        let mut strict = r.out;
-        let ambiguous: BTreeSet<String> = r.ambiguous.difference(&strict).cloned().collect();
-        // A method's own type is the context it is read in, not a referent.
-        if let Some(o) = self.owner.last() {
-            for set in [&mut out, &mut strict] {
-                set.remove(&format!("type {o}"));
-                set.remove("type Self");
-            }
-        }
-        self.units.push(Unit {
-            file: self.file.clone(),
-            name,
-            strict: (strict.len() != out.len()).then_some(strict.len()),
-            referents: out,
-            ambiguous,
-            children: 0,
-            forward: 0,
-            held: Some(crate::held::held(
-                self.defs,
-                self.owner.last().map(String::as_str),
-                sig,
-                block,
-            )),
-        });
+        r.found(owner.as_ref())
+    }
+
+    /// A reader of a function of a type, which knows its typed locals.
+    fn refs(
+        &mut self,
+        owner: Option<String>,
+        sig: &syn::Signature,
+        block: &syn::Block,
+    ) -> Refs<'_> {
+        let locals = typed_locals(owner.as_deref(), sig, block);
+        Refs::new(self.defs, self.blind, owner, locals)
+    }
+}
+
+/// What a function refers to: chunked, apart where that differs, and the
+/// calls by a name that may be std's.
+struct Found {
+    out: BTreeSet<String>,
+    strict: Option<usize>,
+    ambiguous: BTreeSet<String>,
+}
+
+impl Found {
+    /// The function as a unit of a file, with what its reader holds.
+    fn into_unit(self, file: &str, name: &str, held: crate::held::Held) -> Unit {
+        let mut unit = Unit::new(file, name, self.out);
+        unit.strict = self.strict;
+        unit.ambiguous = self.ambiguous;
+        unit.held = Some(held);
+        unit
     }
 }
 
@@ -1443,10 +1545,42 @@ fn xref_unit(l: &str) -> Option<Unit> {
 /// A summary of units' loads: how many, how many over the limit, the
 /// largest, and the counts at each load.
 pub fn summary(units: &[Unit], limit: usize) -> String {
-    let n = units.len();
+    let mut s = format!("{} units; {}", units.len(), over_part(units, limit));
+    s += &strict_part(units, limit);
+    s += &format!(
+        "; median {}; largest {}",
+        median_load(units),
+        largest_load(units)
+    );
+    s += &format!("; {} with more than {limit} children", wide(units, limit));
+    s + &forward_part(units)
+}
+
+/// k of n, as a whole percentage.
+fn pct(k: usize, n: usize) -> usize {
+    (k * 100).checked_div(n).unwrap_or(0)
+}
+
+/// How many units are over the limit, and how many by the upper bound if
+/// that is more.
+fn over_part(units: &[Unit], limit: usize) -> String {
     let over = units.iter().filter(|u| u.load() > limit).count();
-    let wide = units.iter().filter(|u| u.children > limit).count();
-    let fwd = units.iter().filter(|u| u.forward > 0).count();
+    let over_up = units.iter().filter(|u| u.upper() > limit).count();
+    let upper = format!(" (upper bound {over_up}, {}%)", pct(over_up, units.len()));
+    let upper = if over_up != over {
+        upper
+    } else {
+        String::new()
+    };
+    format!("{over} over {limit} ({}%){upper}", pct(over, units.len()))
+}
+
+/// How many are over the limit counting each field or term apart, where
+/// the units have that count.
+fn strict_part(units: &[Unit], limit: usize) -> String {
+    if !units.iter().any(|u| u.strict.is_some()) {
+        return String::new();
+    }
     let strict = units
         .iter()
         .filter(|u| u.strict.unwrap_or(u.load()) > limit)
@@ -1456,31 +1590,31 @@ pub fn summary(units: &[Unit], limit: usize) -> String {
     } else {
         "term"
     };
-    let strict = if units.iter().any(|u| u.strict.is_some()) {
-        format!("; {strict} over {limit} counting each {part} apart")
-    } else {
-        String::new()
-    };
-    let max = units.iter().map(Unit::load).max().unwrap_or(0);
-    let over_up = units.iter().filter(|u| u.upper() > limit).count();
+    format!("; {strict} over {limit} counting each {part} apart")
+}
+
+fn median_load(units: &[Unit]) -> usize {
     let mut loads: Vec<usize> = units.iter().map(Unit::load).collect();
     loads.sort();
-    let median = loads.get(n / 2).copied().unwrap_or(0);
-    let pct = |k: usize| (k * 100).checked_div(n).unwrap_or(0);
-    let upper = if over_up != over {
-        format!(" (upper bound {over_up}, {}%)", pct(over_up))
-    } else {
-        String::new()
-    };
-    format!(
-        "{n} units; {over} over {limit} ({}%){upper}{strict}; median {median}; largest {max}; {wide} with more than {limit} children{}",
-        pct(over),
-        if fwd > 0 {
-            format!("; {fwd} with forward references")
-        } else {
-            String::new()
-        }
-    )
+    loads.get(units.len() / 2).copied().unwrap_or(0)
+}
+
+fn largest_load(units: &[Unit]) -> usize {
+    units.iter().map(Unit::load).max().unwrap_or(0)
+}
+
+/// How many units have more children than the limit.
+fn wide(units: &[Unit], limit: usize) -> usize {
+    units.iter().filter(|u| u.children > limit).count()
+}
+
+/// How many units refer forward, if any do.
+fn forward_part(units: &[Unit]) -> String {
+    let fwd = units.iter().filter(|u| u.forward > 0).count();
+    if fwd == 0 {
+        return String::new();
+    }
+    format!("; {fwd} with forward references")
 }
 
 #[cfg(test)]
