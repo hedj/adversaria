@@ -202,8 +202,7 @@ pub fn seal_pending(
         return Ok(0);
     };
     author.check_listed(&journal.keys)?;
-    let sealed = journal.seals(dir)?;
-    let lines = author.seal_after(&sealed, &journal.entries)?;
+    let lines = author.seal_each(journal.unsealed(dir)?)?;
     append(&dir.join(SEALS), &lines.concat())?;
     Ok(lines.len())
 }
@@ -237,6 +236,21 @@ impl Checked {
         let text = fs::read_to_string(&path)?;
         Ok(check::check_seals(&text, &self.entries, &self.keys)?)
     }
+
+    /// The entries not yet sealed, after the last seal.
+    fn unsealed(&self, dir: &Path) -> Result<Unsealed<'_>, Error> {
+        let sealed = self.seals(dir)?;
+        let prev = sealed.last().map(|s| s.hash.clone());
+        let entries = &self.entries[sealed.len()..];
+        Ok(Unsealed { prev, entries })
+    }
+}
+
+/// The entries of a journal not yet sealed, and the hash of the last seal,
+/// which the first of their seals follows.
+struct Unsealed<'a> {
+    prev: Option<String>,
+    entries: &'a [Entry],
 }
 
 /// A text up to its last newline: a last line without one is still being
@@ -267,17 +281,22 @@ impl<'a> Author<'a> {
         ))
     }
 
-    /// A seal's line for each entry after those sealed, each seal
-    /// following the one before it.
-    fn seal_after(&self, sealed: &[Seal], entries: &[Entry]) -> Result<Vec<String>, Error> {
-        let mut prev = sealed.last().map(|s| s.hash.clone());
+    /// A seal's line for each entry not yet sealed, each seal following
+    /// the one before it.
+    fn seal_each(&self, unsealed: Unsealed) -> Result<Vec<String>, Error> {
+        let mut prev = unsealed.prev;
         let mut lines = Vec::new();
-        for e in &entries[sealed.len()..] {
-            let seal = Seal::new(e.id(), self.stamp(&e.hash), prev.as_deref())?;
+        for e in unsealed.entries {
+            let seal = self.seal(e, prev.as_deref())?;
             lines.push(seal.to_line()? + "\n");
             prev = Some(seal.hash);
         }
         Ok(lines)
+    }
+
+    /// An entry's seal, following the seal with this hash.
+    fn seal(&self, e: &Entry, prev: Option<&str>) -> Result<Seal, Error> {
+        Ok(Seal::new(e.id(), self.stamp(&e.hash), prev)?)
     }
 
     /// The stamp for an entry's hash: this author's signature of it, and
