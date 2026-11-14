@@ -2261,9 +2261,11 @@ mod tests {
     }
 
     #[test]
-    fn an_edges_label_goes_on_its_run_if_the_arrow_has_no_room() {
-        // Catches a label drawn over another, or past the edge of the figure. Both labels here are dropped, without a note: the figure is only as wide as its boxes. The picture is what
-        // the code drew before graph was restructured.
+    fn labels_with_no_room_beside_the_arrow_or_on_the_run_are_dropped() {
+        // Catches a label drawn over another, or past the edge of the
+        // figure. Both labels here are dropped, without a note: the figure
+        // is only as wide as its boxes. The picture is what the code drew
+        // before graph was restructured.
         let want = [
             "┌───┐   ┌───┐",
             "│ a │   │ c │",
@@ -2326,9 +2328,10 @@ mod tests {
     }
 
     #[test]
-    fn an_edge_back_up_is_labelled_beside_its_loop() {
-        // Catches the label of an edge back up lost. The picture is what
-        // the code drew before graph was restructured.
+    fn a_label_with_no_room_beside_its_loop_is_dropped() {
+        // Catches a label drawn past the edge of the figure: there is one
+        // column right of the loop, and "back" is dropped, without a note.
+        // The picture is what the code drew before graph was restructured.
         let want = [
             "┌───┐",
             "│ a │◀┐",
@@ -2348,9 +2351,11 @@ mod tests {
     }
 
     #[test]
-    fn each_layer_is_ordered_to_cross_less() {
-        // Catches a layer left in the order the nodes came, crossing more. The picture is what
-        // the code drew before graph was restructured.
+    fn edges_from_two_boxes_to_four_and_into_one_are_laid_out_apart() {
+        // Catches ports or runs drawn over each other. The layers stay in
+        // the order the nodes came: a_layer_is_reordered_so_its_edges_cross_less
+        // tests the reordering. The picture is what the code drew before
+        // graph was restructured.
         let want = [
             "        ┌───┐   ┌───┐",
             "        │ a │   │ b │",
@@ -2546,5 +2551,75 @@ mod tests {
             (inks(&f), f.hits),
             (want.map(String::from).to_vec(), vec![place(0), place(6)])
         );
+    }
+
+    #[test]
+    fn a_layer_is_reordered_so_its_edges_cross_less() {
+        // Catches a layer left in the order the nodes came: y before x,
+        // whose edges would cross. The picture is what the code drew
+        // before graph was restructured.
+        let want = [
+            "┌───┐   ┌───┐",
+            "│ a │   │ b │",
+            "└─┬─┘   └─┬─┘",
+            "  │       │",
+            "  │       │",
+            "  ▼       ▼",
+            "┌─┴─┐   ┌─┴─┐",
+            "│ x │   │ y │",
+            "└───┘   └───┘",
+        ];
+        let specs = [
+            "node id:y",
+            "node id:x",
+            "edge from:a to:x",
+            "edge from:b to:y",
+        ];
+        assert_eq!(draw(&specs, 40, 0), want);
+    }
+
+    #[test]
+    fn a_short_label_goes_beside_its_loop() {
+        // Catches the column right of the loops lost, which holds the
+        // label. The picture is what the code drew before graph was
+        // restructured.
+        let want = [
+            "┌───┐",
+            "│ a │◀┐",
+            "└─┬─┘ │",
+            "  │   │",
+            "  │   │x",
+            "  ▼   │",
+            "┌─┴─┐ │",
+            "│ b │─┘",
+            "└───┘",
+            "note: 1 edge back up, round the right, to close a cycle",
+        ];
+        let specs = ["edge from:a to:b", "edge from:b to:a text:x"];
+        assert_eq!(draw(&specs, 40, 0), want);
+    }
+
+    #[test]
+    fn a_label_goes_on_its_run_when_another_is_beside_the_arrow() {
+        // Catches the second place for a label lost: "one" is beside the
+        // arrows into b, so "two" goes on its run. The picture is what the
+        // code drew before graph was restructured.
+        let want = [
+            "┌───┐   ┌───┐   ┌────────────────────┐",
+            "│ a │   │ c │   │ a much longer name │",
+            "└─┬─┘   └─┬─┘   └──────────┬─────────┘",
+            "  │       │                │",
+            "  └───────┴───┬┐ two  ┌────┘",
+            "              ▼▼one   ▼",
+            "            ┌─┴┴┐   ┌─┴─┐",
+            "            │ b │   │ e │",
+            "            └───┘   └───┘",
+        ];
+        let specs = [
+            "edge from:a to:b text:one",
+            "edge from:c to:b text:two",
+            "edge from:a_much_longer_name to:e",
+        ];
+        assert_eq!(draw(&specs, 60, 0), want);
     }
 }
