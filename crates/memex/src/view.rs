@@ -176,6 +176,88 @@ impl Rect {
     fn row(x: usize, y: usize, w: usize) -> Rect {
         Rect { x, y, w, h: 1 }
     }
+
+    /// A rectangle by its corner and size.
+    fn new(x: usize, y: usize, w: usize, h: usize) -> Rect {
+        Rect { x, y, w, h }
+    }
+
+    /// The column just right of it.
+    fn right(&self) -> usize {
+        self.x + self.w
+    }
+
+    /// Its middle column.
+    fn mid_x(&self) -> usize {
+        self.x + self.w / 2
+    }
+
+    /// The rectangle stretched down to end at a row.
+    fn down_to(&self, row: usize) -> Rect {
+        Rect {
+            h: row - self.y + 1,
+            ..*self
+        }
+    }
+
+    /// The rectangle of some columns and some rows.
+    fn of(cols: Run, rows: Run) -> Rect {
+        let (x, y) = (cols.lo, rows.lo);
+        Rect {
+            x,
+            y,
+            w: cols.len(),
+            h: rows.len(),
+        }
+    }
+}
+
+/// The cells a value takes along an axis: from lo to hi, both taken.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Run {
+    lo: usize,
+    hi: usize,
+}
+
+impl Run {
+    /// One cell.
+    fn at(n: usize) -> Run {
+        Run { lo: n, hi: n }
+    }
+
+    /// The cells from one end to another, in either order.
+    fn of(a: usize, b: usize) -> Run {
+        Run {
+            lo: a.min(b),
+            hi: a.max(b),
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.hi - self.lo + 1
+    }
+
+    fn mid(&self) -> usize {
+        (self.lo + self.hi) / 2
+    }
+
+    /// The run moved along by d cells.
+    fn shift(&self, d: usize) -> Run {
+        Run::of(self.lo + d, self.hi + d)
+    }
+
+    /// The run counted from the other end of n cells.
+    fn flip(&self, n: usize) -> Run {
+        Run::of(n - 1 - self.hi, n - 1 - self.lo)
+    }
+
+    /// The cells of a bar up these columns: one in from each side, from
+    /// 1 to 8 wide, centred, rounding to the right.
+    fn bar(&self) -> Run {
+        let w = self.len().saturating_sub(2).clamp(1, 8);
+        let lo = (self.lo + self.hi).div_ceil(2) - w / 2;
+        Run { lo, hi: lo + w - 1 }
+    }
 }
 
 /// What a view draws: rows of characters, where each mark landed, and
@@ -188,6 +270,12 @@ pub struct Figure {
 }
 
 impl Figure {
+    /// The figure with these notes before its own.
+    fn noted_first(mut self, notes: Vec<String>) -> Figure {
+        self.notes.splice(0..0, notes);
+        self
+    }
+
     /// The rows as plain text, trailing spaces removed.
     pub fn text(&self) -> Vec<String> {
         self.rows
@@ -226,6 +314,22 @@ impl V {
             _ => V::Cat(label(t)),
         }
     }
+    /// The order of values on an axis: numbers first, in order, then
+    /// the rest by their text.
+    fn axis_order(&self, other: &V) -> std::cmp::Ordering {
+        use std::cmp::Ordering::{Greater, Less};
+        match (self.num(), other.num()) {
+            (Some(x), Some(y)) => x.total_cmp(&y),
+            (Some(_), None) => Less,
+            (None, Some(_)) => Greater,
+            _ => self.text().cmp(&other.text()),
+        }
+    }
+
+    fn is_time(&self) -> bool {
+        matches!(self, V::Time(..))
+    }
+
     fn num(&self) -> Option<f64> {
         match self {
             V::Num(x) | V::Time(x, _) => Some(*x),
@@ -296,9 +400,23 @@ impl M {
     fn ink(&self) -> Ink {
         if self.loud { Ink::Loud } else { Ink::Plain }
     }
+    /// Whether a channel holds a category, not a number.
+    fn has_category(&self, c: &str) -> bool {
+        self.get(c).is_some_and(|v| v.num().is_none())
+    }
+    /// The same mark: the same kind, with the same channels.
+    fn same_as(&self, other: &M) -> bool {
+        self.kind == other.kind && self.ch == other.ch
+    }
+    fn outside_graph(&self) -> bool {
+        !self.in_graph()
+    }
     /// A node or an edge: a mark of a graph.
     fn in_graph(&self) -> bool {
         matches!(self.kind, "node" | "edge")
+    }
+    fn is_bar(&self) -> bool {
+        self.kind == "bar"
     }
     fn is_cell(&self) -> bool {
         self.kind == "cell"
@@ -320,7 +438,7 @@ fn read_marks(inputs: &[Input]) -> (Vec<M>, Vec<String>) {
 /// Identical marks (a constant layer over many solutions) are drawn once,
 /// loudly if any of them is loud.
 fn add_once(marks: &mut Vec<M>, m: M) {
-    match marks.iter_mut().find(|x| x.kind == m.kind && x.ch == m.ch) {
+    match marks.iter_mut().find(|x| x.same_as(&m)) {
         Some(same) => same.loud |= m.loud,
         None => marks.push(m),
     }
@@ -335,22 +453,26 @@ fn not_drawn(ms: &[M], left_out: fn(&M) -> bool, what: &str) -> Option<String> {
 /// Draw a view's marks in a space `width` wide and, for a plot, `height`
 /// high. A grid or graph takes the height it needs.
 pub fn render(inputs: &[Input], width: usize, height: usize) -> Figure {
-    let (ms, mut notes) = read_marks(inputs);
-    let width = width.max(8);
-    let mut fig = if ms.iter().any(M::in_graph) {
-        let others = "marks not drawn: a graph draws only node and edge";
-        notes.extend(not_drawn(&ms, |m| !m.in_graph(), others));
-        graph(&ms)
-    } else if !ms.is_empty() && ms.iter().all(M::is_cell) {
-        grid(&ms, width)
-    } else {
-        let cells = "cells not drawn: cells make a grid of their own";
-        notes.extend(not_drawn(&ms, M::is_cell, cells));
-        plot(&ms, width, height.max(4))
-    };
-    fig.notes.splice(0..0, notes);
-    fig
+    let (ms, notes) = read_marks(inputs);
+    figure_of(&ms, width.max(8), height).noted_first(notes)
 }
+
+/// The figure the marks make: a graph if any are nodes or edges, a grid
+/// if all are cells, else a plot.
+fn figure_of(ms: &[M], width: usize, height: usize) -> Figure {
+    if ms.iter().any(M::in_graph) {
+        return graph(ms);
+    }
+    if !ms.is_empty() && ms.iter().all(M::is_cell) {
+        return grid(ms, width);
+    }
+    plot(ms, (width, height.max(4)))
+}
+
+/// What a graph does not draw.
+const NOT_IN_GRAPH: &str = "marks not drawn: a graph draws only node and edge";
+/// What a plot does not draw.
+const NOT_IN_PLOT: &str = "cells not drawn: cells make a grid of their own";
 
 /// A drawing surface with line junctions merged into box-drawing
 /// characters.
@@ -378,35 +500,51 @@ impl Canvas {
             self.cells[y][x] = (c, ink);
         }
     }
-    fn free(&self, x: usize, y: usize, n: usize) -> bool {
-        y < self.h
-            && x + n <= self.w
-            && (x..x + n).all(|i| self.cells[y][i].0 == ' ' && self.lines[y][i].0 == 0)
+    /// A character where nothing is drawn yet.
+    fn put_if_free(&mut self, x: usize, y: usize, c: char, ink: Ink) {
+        if self.cells[y][x].0 == ' ' {
+            self.put(x, y, c, ink);
+        }
     }
-    /// A box, of three rows of characters as frame_of gives them: each
-    /// row its left end, what fills it, and its right end.
+    /// Whether n cells from x along row y are on the canvas, with nothing
+    /// drawn on them.
+    fn free(&self, x: usize, y: usize, n: usize) -> bool {
+        let on = y < self.h && x + n <= self.w;
+        on && (x..x + n).all(|i| self.blank(i, y))
+    }
+    /// Where a label goes: on the lowest row above `below` with room for
+    /// it and a space after, as near x as the right edge allows.
+    fn label_place(&self, x: usize, t: &str, below: usize) -> Option<Rect> {
+        let n = t.chars().count() + 1;
+        let start = x.min(self.w.saturating_sub(n));
+        let y = (0..below).rev().find(|y| self.free(start, *y, n))?;
+        Some(Rect::row(start, y, n - 1))
+    }
+    fn blank(&self, x: usize, y: usize) -> bool {
+        self.cells[y][x].0 == ' ' && self.lines[y][x].0 == 0
+    }
+    /// A box, of three rows of characters as frame_of gives them.
     fn frame(&mut self, b: Rect, rows: [[char; 3]; 3], ink: Ink) {
-        for (i, [left, fill, right]) in rows.into_iter().enumerate() {
-            let middle = fill.to_string().repeat(b.w - 2);
-            self.text(b.x, b.y + i, &format!("{left}{middle}{right}"), ink);
+        for (y, row) in (b.y..).zip(rows) {
+            self.text(b.x, y, &frame_row(row, b.w), ink);
         }
     }
 
     /// A line from a point to a column on its right, up or down that
     /// column, and back left to another point, with an arrow there.
     fn round_right(&mut self, from: (usize, usize), to: (usize, usize), column: usize, ink: Ink) {
-        self.hline(from.0, column, from.1, ink);
-        self.vline(column, to.1, from.1, ink);
-        self.hline(to.0, column, to.1, ink);
+        self.hline(Run::of(from.0, column), from.1, ink);
+        self.vline(column, Run::of(to.1, from.1), ink);
+        self.hline(Run::of(to.0, column), to.1, ink);
         self.put(to.0, to.1, '◀', ink);
     }
 
     /// A line down from a point to a row, across, and down to another
     /// point.
     fn elbow(&mut self, from: (usize, usize), row: usize, to: (usize, usize), ink: Ink) {
-        self.vline(from.0, from.1, row, ink);
-        self.hline(from.0, to.0, row, ink);
-        self.vline(to.0, row, to.1, ink);
+        self.vline(from.0, Run::of(from.1, row), ink);
+        self.hline(Run::of(from.0, to.0), row, ink);
+        self.vline(to.0, Run::of(row, to.1), ink);
     }
 
     /// A rectangle of one character.
@@ -417,43 +555,36 @@ impl Canvas {
             }
         }
     }
+    /// Text at the top left of a rectangle.
+    fn text_in(&mut self, r: Rect, s: &str, ink: Ink) {
+        self.text(r.x, r.y, s, ink);
+    }
     fn text(&mut self, x: usize, y: usize, s: &str, ink: Ink) {
         for (i, c) in s.chars().enumerate() {
             self.put(x + i, y, c, ink);
         }
     }
+    /// Line directions at a cell, added to those there; a loud line
+    /// stays loud.
     fn line(&mut self, x: usize, y: usize, bits: u8, ink: Ink) {
         if x < self.w && y < self.h {
-            let (b, i) = self.lines[y][x];
-            self.lines[y][x] = (b | bits, if i == Ink::Loud { i } else { ink });
+            let cell = &mut self.lines[y][x];
+            cell.0 |= bits;
+            if cell.1 != Ink::Loud {
+                cell.1 = ink;
+            }
         }
     }
-    /// A horizontal line from x0 to x1 on row y.
-    fn hline(&mut self, x0: usize, x1: usize, y: usize, ink: Ink) {
-        let (a, b) = (x0.min(x1), x0.max(x1));
-        for x in a..=b {
-            let mut bits = 0;
-            if x > a {
-                bits |= 4;
-            }
-            if x < b {
-                bits |= 8;
-            }
-            self.line(x, y, bits, ink);
+    /// A horizontal line along some columns of row y.
+    fn hline(&mut self, cols: Run, y: usize, ink: Ink) {
+        for x in cols.lo..=cols.hi {
+            self.line(x, y, joins(x, cols, 4, 8), ink);
         }
     }
-    /// A vertical line from y0 to y1 at column x.
-    fn vline(&mut self, x: usize, y0: usize, y1: usize, ink: Ink) {
-        let (a, b) = (y0.min(y1), y0.max(y1));
-        for y in a..=b {
-            let mut bits = 0;
-            if y > a {
-                bits |= 1;
-            }
-            if y < b {
-                bits |= 2;
-            }
-            self.line(x, y, bits, ink);
+    /// A vertical line down some rows of column x.
+    fn vline(&mut self, x: usize, rows: Run, ink: Ink) {
+        for y in rows.lo..=rows.hi {
+            self.line(x, y, joins(y, rows, 1, 2), ink);
         }
     }
     fn hit(&mut self, area: Rect, prov: &[u64]) {
@@ -463,20 +594,38 @@ impl Canvas {
         }
     }
     fn finish(self, notes: Vec<String>) -> Figure {
-        let mut rows = self.cells;
-        for (y, row) in self.lines.iter().enumerate() {
-            for (x, (bits, ink)) in row.iter().enumerate() {
-                if *bits != 0 && rows[y][x].0 == ' ' {
-                    rows[y][x] = (junction(*bits), *ink);
-                }
+        let Canvas {
+            cells, lines, hits, ..
+        } = self;
+        let rows = with_lines(cells, &lines);
+        Figure { rows, hits, notes }
+    }
+}
+
+/// A row of a box: its left end, what fills it, and its right end, w
+/// characters in all.
+fn frame_row([left, fill, right]: [char; 3], w: usize) -> String {
+    let middle = fill.to_string().repeat(w - 2);
+    format!("{left}{middle}{right}")
+}
+
+/// The directions a cell of a line joins: back (towards lo) and on
+/// (towards hi), except at its ends.
+fn joins(at: usize, run: Run, back: u8, on: u8) -> u8 {
+    let b = if at > run.lo { back } else { 0 };
+    b | if at < run.hi { on } else { 0 }
+}
+
+/// Each blank cell where lines meet, drawn as their junction.
+fn with_lines(mut rows: Vec<Vec<(char, Ink)>>, lines: &[Vec<(u8, Ink)>]) -> Vec<Vec<(char, Ink)>> {
+    for (row, line_row) in rows.iter_mut().zip(lines) {
+        for (cell, (bits, ink)) in row.iter_mut().zip(line_row) {
+            if *bits != 0 && cell.0 == ' ' {
+                *cell = (junction(*bits), *ink);
             }
         }
-        Figure {
-            rows,
-            hits: self.hits,
-            notes,
-        }
     }
+    rows
 }
 
 fn junction(bits: u8) -> char {
@@ -518,66 +667,54 @@ enum Scale {
 }
 
 impl Scale {
+    /// The scale of the marks' values on some channels, reaching zero if
+    /// asked.
+    fn of(ms: &[M], channels: &[&str], zero: bool) -> Scale {
+        let values = ms.iter().flat_map(|m| channels.iter().map(|c| m.get(c)));
+        Scale::train(&values.flatten().collect::<Vec<&V>>(), zero)
+    }
+
+    /// A line scale if every value is a number, else a band scale; none if
+    /// there are no values. With zero, a line scale reaches 0.
     fn train(values: &[&V], zero: bool) -> Scale {
         if values.is_empty() {
             return Scale::None;
         }
         if values.iter().all(|v| v.num().is_some()) {
-            let xs: Vec<f64> = values.iter().filter_map(|v| v.num()).collect();
-            let (mut lo, mut hi) = xs
-                .iter()
-                .fold((f64::MAX, f64::MIN), |(a, b), x| (a.min(*x), b.max(*x)));
-            if zero {
-                lo = lo.min(0.0);
-                hi = hi.max(0.0);
-            }
-            if lo == hi {
-                lo -= 1.0;
-                hi += 1.0;
-            }
-            let time = values.iter().all(|v| matches!(v, V::Time(..)));
-            Scale::Line { lo, hi, time }
-        } else {
-            let mut cats: Vec<&V> = values.to_vec();
-            cats.sort_by(|a, b| match (a.num(), b.num()) {
-                (Some(x), Some(y)) => x.total_cmp(&y),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                _ => a.text().cmp(&b.text()),
-            });
-            let mut out: Vec<String> = Vec::new();
-            for c in cats {
-                let t = c.text();
-                if !out.contains(&t) {
-                    out.push(t);
-                }
-            }
-            Scale::Band(out)
+            return Scale::line(values, zero);
         }
+        Scale::band(values)
     }
-    /// A value's position in 0..n, as (start, end) of its place: a single
-    /// cell for a line scale, the band for a band scale.
-    fn place(&self, v: &V, n: usize) -> Option<(usize, usize)> {
+
+    fn line(values: &[&V], zero: bool) -> Scale {
+        let (lo, hi) = extent(values, zero);
+        let time = values.iter().all(|v| v.is_time());
+        Scale::Line { lo, hi, time }
+    }
+
+    /// The categories, in order on an axis, each once.
+    fn band(values: &[&V]) -> Scale {
+        let mut cats: Vec<&V> = values.to_vec();
+        cats.sort_by(|a, b| a.axis_order(b));
+        let mut out: Vec<String> = Vec::new();
+        for c in cats {
+            let t = c.text();
+            if !out.contains(&t) {
+                out.push(t);
+            }
+        }
+        Scale::Band(out)
+    }
+
+    /// A value's place in 0..n: a single cell for a line scale, the band
+    /// for a band scale.
+    fn place(&self, v: &V, n: usize) -> Option<Run> {
         let n = n.max(1);
         match self {
-            Scale::Line { lo, hi, .. } => {
-                let x = v.num()?;
-                let p = ((x - lo) / (hi - lo) * (n - 1) as f64)
-                    .round()
-                    .clamp(0.0, (n - 1) as f64) as usize;
-                Some((p, p))
-            }
-            Scale::Band(cats) => {
-                let i = cats.iter().position(|c| *c == v.text())?;
-                let a = i * n / cats.len();
-                let b = ((i + 1) * n / cats.len()).max(a + 1) - 1;
-                Some((a, b))
-            }
-            Scale::None => Some((n / 2, n / 2)),
+            Scale::Line { lo, hi, .. } => Some(Run::at(on_line(v.num()?, (*lo, *hi), n))),
+            Scale::Band(cats) => band_of(cats, &v.text(), n),
+            Scale::None => Some(Run::at(n / 2)),
         }
-    }
-    fn mid(&self, v: &V, n: usize) -> Option<usize> {
-        self.place(v, n).map(|(a, b)| (a + b) / 2)
     }
     fn is_band(&self) -> bool {
         matches!(self, Scale::Band(_))
@@ -594,13 +731,9 @@ impl Scale {
     }
 }
 
-fn plot(ms: &[M], width: usize, height: usize) -> Figure {
-    let frame = Frame::train(ms, width, height);
-    let mut p = Plot {
-        cv: Canvas::new(width, height),
-        frame,
-        notes: Vec::new(),
-    };
+fn plot(ms: &[M], space: (usize, usize)) -> Figure {
+    let mut p = Plot::new(Frame::train(ms, space), space);
+    p.notes.extend(not_drawn(ms, M::is_cell, NOT_IN_PLOT));
     p.axes();
     p.y_labels();
     p.x_labels();
@@ -616,9 +749,15 @@ fn plot(ms: &[M], width: usize, height: usize) -> Figure {
 
 /// Whether a plot's bars lie along the x axis: all have a category for y.
 fn horizontal_bars(ms: &[M]) -> bool {
-    let mut bars = ms.iter().filter(|m| m.kind == "bar").peekable();
-    let categorical = |m: &M| m.get("y").is_some_and(|v| v.num().is_none());
-    bars.peek().is_some() && bars.all(categorical)
+    let mut bars = ms.iter().filter(|m| m.is_bar()).peekable();
+    bars.peek().is_some() && bars.all(|m| m.has_category("y"))
+}
+
+/// Whether the x scale and the y scale reach zero: bars start at zero, on
+/// whichever axis holds their numbers.
+fn zero_axes(ms: &[M]) -> (bool, bool) {
+    let horizontal = horizontal_bars(ms);
+    (horizontal, !horizontal && ms.iter().any(M::is_bar))
 }
 
 /// Where a plot draws: its scales, the width of the margin that holds the
@@ -629,36 +768,21 @@ struct Frame {
     left: usize,
     /// The plotting area's width and height.
     size: (usize, usize),
-    /// Bars lie along the x axis.
-    horizontal: bool,
 }
 
 impl Frame {
-    /// The scales that hold the marks' values, and the area left for them.
-    fn train(ms: &[M], width: usize, height: usize) -> Frame {
-        let horizontal = horizontal_bars(ms);
-        let any_bars = ms.iter().any(|m| m.kind == "bar");
-        let xv: Vec<&V> = ms
-            .iter()
-            .flat_map(|m| ["x", "x1", "x2"].map(|c| m.get(c)))
-            .flatten()
-            .collect();
-        let yv: Vec<&V> = ms.iter().filter_map(|m| m.get("y")).collect();
-        // Bars start at zero, on whichever axis holds their numbers.
-        let xs = Scale::train(&xv, horizontal);
-        let ys = Scale::train(&yv, any_bars && !horizontal);
+    /// The scales that hold the marks' values, and the area left for them
+    /// in a space of a width and a height.
+    fn train(ms: &[M], space: (usize, usize)) -> Frame {
+        let (x_zero, y_zero) = zero_axes(ms);
+        let xs = Scale::of(ms, &["x", "x1", "x2"], x_zero);
+        let ys = Scale::of(ms, &["y"], y_zero);
         let left = margin(&ys);
         let size = (
-            width.saturating_sub(left + 1).max(2),
-            height.saturating_sub(2).max(2),
+            space.0.saturating_sub(left + 1).max(2),
+            space.1.saturating_sub(2).max(2),
         );
-        Frame {
-            xs,
-            ys,
-            left,
-            size,
-            horizontal,
-        }
+        Frame { xs, ys, left, size }
     }
 
     /// The first column of the plotting area.
@@ -666,53 +790,127 @@ impl Frame {
         self.left + 1
     }
 
+    /// The columns of the plotting area.
+    fn columns(&self) -> Run {
+        Run::of(self.x0(), self.x0() + self.size.0 - 1)
+    }
+
+    /// The row of the x axis, below the plotting area.
+    fn axis_row(&self) -> usize {
+        self.size.1
+    }
+
     /// The rows a value takes. Numbers rise up the page; categories read
     /// down it, first at the top.
-    fn row(&self, v: &V) -> Option<(usize, usize)> {
-        let ph = self.size.1;
-        let (a, b) = self.ys.place(v, ph)?;
+    fn row(&self, v: &V) -> Option<Run> {
+        let run = self.ys.place(v, self.size.1)?;
         Some(if self.ys.is_band() {
-            (a, b)
+            run
         } else {
-            (ph - 1 - b, ph - 1 - a)
+            run.flip(self.size.1)
         })
     }
 
     /// The middle row of a value's rows.
     fn mid_row(&self, v: &V) -> Option<usize> {
-        self.row(v).map(|(c, d)| (c + d) / 2)
+        self.row(v).map(|r| r.mid())
     }
 
     /// The columns a value takes.
-    fn col(&self, v: &V) -> Option<(usize, usize)> {
-        let x0 = self.x0();
-        self.xs.place(v, self.size.0).map(|(a, b)| (x0 + a, x0 + b))
+    fn col(&self, v: &V) -> Option<Run> {
+        let run = self.xs.place(v, self.size.0)?;
+        Some(run.shift(self.x0()))
     }
 
     /// The middle column of a value's columns.
     fn mid_col(&self, v: &V) -> Option<usize> {
-        self.xs.mid(v, self.size.0).map(|p| self.x0() + p)
+        self.col(v).map(|r| r.mid())
+    }
+
+    /// Where a mark of an x and a y lands.
+    fn point_of(&self, m: &M) -> Option<(usize, usize)> {
+        Some((self.mid_col(m.get("x")?)?, self.mid_row(m.get("y")?)?))
+    }
+
+    /// A span's columns, from x1 to x2, and its row: that of its y, or the
+    /// middle one if it has none.
+    fn span_of(&self, m: &M) -> Option<(Run, usize)> {
+        let (a, b) = (self.col(m.get("x1")?)?, self.col(m.get("x2")?)?);
+        let row = match m.get("y") {
+            Some(v) => self.mid_row(v)?,
+            None => self.size.1 / 2,
+        };
+        Some((Run::of(a.lo, b.lo), row))
+    }
+
+    /// The columns from zero to an x.
+    fn cols_from_zero(&self, x: &V) -> Option<Run> {
+        Some(Run::of(self.col(&V::Num(0.0))?.lo, self.col(x)?.lo))
+    }
+
+    /// The rows from zero to a y.
+    fn rows_from_zero(&self, y: &V) -> Option<Run> {
+        Some(Run::of(self.row(&V::Num(0.0))?.lo, self.row(y)?.lo))
     }
 
     /// A bar along the middle row of a y, from zero to an x.
     fn bar_across(&self, x: &V, y: &V) -> Option<Rect> {
-        let r = self.mid_row(y)?;
-        let ((c0, _), (c1, _)) = (self.col(&V::Num(0.0))?, self.col(x)?);
-        Some(Rect::row(c0.min(c1), r, c0.abs_diff(c1) + 1))
+        let row = Run::at(self.mid_row(y)?);
+        Some(Rect::of(self.cols_from_zero(x)?, row))
     }
 
-    /// A bar up the columns of an x, from zero to a y: as wide as the
-    /// columns less one on each side, from 1 to 8, and centred on them.
+    /// A bar up the columns of an x, from zero to a y.
     fn bar_up(&self, x: &V, y: &V) -> Option<Rect> {
-        let (ca, cb) = self.col(x)?;
-        let ((r0, _), (r1, _)) = (self.row(&V::Num(0.0))?, self.row(y)?);
-        let w = (cb - ca + 1).saturating_sub(2).clamp(1, 8);
-        Some(Rect {
-            x: (ca + cb).div_ceil(2) - w / 2,
-            y: r0.min(r1),
-            w,
-            h: r0.abs_diff(r1) + 1,
-        })
+        Some(Rect::of(self.col(x)?.bar(), self.rows_from_zero(y)?))
+    }
+
+    /// Each y label and its row: every category at its middle, or a line
+    /// scale's ends at the top and the bottom.
+    fn y_label_places(&self) -> Vec<(String, usize)> {
+        match &self.ys {
+            Scale::Band(c) => c.iter().filter_map(|s| self.band_row_label(s)).collect(),
+            Scale::Line { lo, hi, .. } => {
+                let bottom = self.size.1 - 1;
+                vec![
+                    (self.ys.tick_text(*hi), 0),
+                    (self.ys.tick_text(*lo), bottom),
+                ]
+            }
+            Scale::None => vec![],
+        }
+    }
+
+    /// A category's label on the y axis, cut to 14, and its row.
+    fn band_row_label(&self, s: &str) -> Option<(String, usize)> {
+        let y = self.mid_row(&V::Cat(s.to_string()))?;
+        Some((truncate(s, 14), y))
+    }
+
+    /// Each x label and its column: each category centred in its band, or
+    /// a line scale's ends at the two ends of the axis.
+    fn x_label_places(&self) -> Vec<(usize, String)> {
+        match &self.xs {
+            Scale::Band(c) => c.iter().filter_map(|s| self.band_col_label(s)).collect(),
+            Scale::Line { lo, hi, .. } => self.line_ends(*lo, *hi),
+            Scale::None => vec![],
+        }
+    }
+
+    /// A category's label on the x axis, centred in its band and cut to
+    /// fit it.
+    fn band_col_label(&self, s: &str) -> Option<(usize, String)> {
+        let cols = self.col(&V::Cat(s.to_string()))?;
+        let t = truncate(s, (cols.hi - cols.lo).max(1));
+        let x = (cols.lo + cols.hi + 1).saturating_sub(t.chars().count()) / 2;
+        Some((x, t))
+    }
+
+    /// A line scale's two ends on the x axis: the low at its start, the
+    /// high ending at its end.
+    fn line_ends(&self, lo: f64, hi: f64) -> Vec<(usize, String)> {
+        let high = self.xs.tick_text(hi);
+        let right = (self.columns().hi + 1).saturating_sub(high.chars().count());
+        vec![(self.x0(), self.xs.tick_text(lo)), (right, high)]
     }
 }
 
@@ -728,8 +926,47 @@ fn margin(ys: &Scale) -> usize {
     longest.map_or(0, |n| n + 1)
 }
 
-/// The legend's points, one for each series of lines.
-const POINTS: [char; 6] = ['●', '○', '■', '□', '◆', '◇'];
+/// The lowest and highest of some numbers, from zero if asked; one either
+/// side if they are all one number.
+fn extent(values: &[&V], zero: bool) -> (f64, f64) {
+    let (lo, hi) = range_of(values);
+    let (lo, hi) = if zero {
+        (lo.min(0.0), hi.max(0.0))
+    } else {
+        (lo, hi)
+    };
+    if lo == hi {
+        (lo - 1.0, hi + 1.0)
+    } else {
+        (lo, hi)
+    }
+}
+
+/// The lowest and highest of the values' numbers.
+fn range_of(values: &[&V]) -> (f64, f64) {
+    let xs = values.iter().filter_map(|v| v.num());
+    xs.fold((f64::MAX, f64::MIN), |(a, b), x| (a.min(x), b.max(x)))
+}
+
+/// A number's cell of n along a line from lo to hi.
+fn on_line(x: f64, (lo, hi): (f64, f64), n: usize) -> usize {
+    let at = (x - lo) / (hi - lo) * (n - 1) as f64;
+    at.round().clamp(0.0, (n - 1) as f64) as usize
+}
+
+/// A category's band of n cells, shared out among the categories.
+fn band_of(cats: &[String], cat: &str, n: usize) -> Option<Run> {
+    let i = cats.iter().position(|c| c == cat)?;
+    let lo = i * n / cats.len();
+    let hi = ((i + 1) * n / cats.len()).max(lo + 1) - 1;
+    Some(Run { lo, hi })
+}
+
+/// The legend's point for series k, in turn.
+fn point_of_series(k: usize) -> char {
+    const POINTS: [char; 6] = ['●', '○', '■', '□', '◆', '◇'];
+    POINTS[k % POINTS.len()]
+}
 
 /// A plot being drawn: its canvas, its frame, and its notes so far.
 struct Plot {
@@ -739,59 +976,38 @@ struct Plot {
 }
 
 impl Plot {
+    fn new(frame: Frame, (width, height): (usize, usize)) -> Plot {
+        let cv = Canvas::new(width, height);
+        Plot {
+            cv,
+            frame,
+            notes: Vec::new(),
+        }
+    }
+
     /// The axes, dim: the y axis only if there is a y scale.
     fn axes(&mut self) {
-        let (left, (pw, ph)) = (self.frame.left, self.frame.size);
+        let (left, axis) = (self.frame.left, self.frame.axis_row());
         if !matches!(self.frame.ys, Scale::None) {
-            self.cv.vline(left, 0, ph, Ink::Dim);
+            self.cv.vline(left, Run::of(0, axis), Ink::Dim);
         }
-        self.cv.hline(left, self.frame.x0() + pw - 1, ph, Ink::Dim);
+        let cols = Run::of(left, self.frame.columns().hi);
+        self.cv.hline(cols, axis, Ink::Dim);
     }
 
     /// The y labels, right-aligned in the margin.
     fn y_labels(&mut self) {
-        for (text, y) in self.y_label_places() {
+        for (text, y) in self.frame.y_label_places() {
             let x = self.frame.left.saturating_sub(text.chars().count() + 1);
             self.cv.text(x, y, &text, Ink::Dim);
         }
     }
 
-    /// Each y label and its row: every category at its middle, or a line
-    /// scale's ends at the top and the bottom.
-    fn y_label_places(&self) -> Vec<(String, usize)> {
-        let f = &self.frame;
-        match &f.ys {
-            Scale::Band(c) => {
-                let place =
-                    |s: &String| f.mid_row(&V::Cat(s.clone())).map(|y| (truncate(s, 14), y));
-                c.iter().filter_map(place).collect()
-            }
-            Scale::Line { lo, hi, .. } => {
-                vec![
-                    (f.ys.tick_text(*hi), 0),
-                    (f.ys.tick_text(*lo), f.size.1 - 1),
-                ]
-            }
-            Scale::None => vec![],
-        }
-    }
-
-    /// The x labels, on the last row: each category centred in its band,
-    /// or a line scale's ends at the two ends of the axis.
+    /// The x labels, on the last row.
     fn x_labels(&mut self) {
-        let f = &self.frame;
-        let (x0, (pw, ly)) = (f.x0(), (f.size.0, f.size.1 + 1));
-        let labels: Vec<(usize, String)> = match &f.xs {
-            Scale::Band(c) => c.iter().filter_map(|s| band_label(f, s)).collect(),
-            Scale::Line { lo, hi, .. } => {
-                let r = f.xs.tick_text(*hi);
-                let right = (x0 + pw).saturating_sub(r.chars().count());
-                vec![(x0, f.xs.tick_text(*lo)), (right, r)]
-            }
-            Scale::None => vec![],
-        };
-        for (x, text) in labels {
-            self.cv.text(x, ly, &text, Ink::Dim);
+        let row = self.frame.axis_row() + 1;
+        for (x, text) in self.frame.x_label_places() {
+            self.cv.text(x, row, &text, Ink::Dim);
         }
     }
 
@@ -809,25 +1025,26 @@ impl Plot {
 
     fn rule_across(&mut self, v: &V, ink: Ink) {
         if let Some(y) = self.frame.mid_row(v) {
-            let x0 = self.frame.x0();
-            self.cv.hline(x0, x0 + self.frame.size.0 - 1, y, ink);
+            self.cv.hline(self.frame.columns(), y, ink);
         }
     }
 
     fn rule_down(&mut self, v: &V, ink: Ink) {
-        if let Some((a, b)) = self.frame.col(v) {
-            self.cv.vline((a + b) / 2, 0, self.frame.size.1 - 1, ink);
+        if let Some(x) = self.frame.mid_col(v) {
+            let rows = Run::of(0, self.frame.axis_row() - 1);
+            self.cv.vline(x, rows, ink);
         }
     }
 
     /// Bars from zero, along whichever axis holds their numbers, each
     /// labelled with its text or its number.
     fn bars(&mut self, ms: &[M]) {
-        for m in ms.iter().filter(|m| m.kind == "bar") {
+        let horizontal = horizontal_bars(ms);
+        for m in ms.iter().filter(|m| m.is_bar()) {
             let (Some(x), Some(y)) = (m.get("x"), m.get("y")) else {
                 continue;
             };
-            if self.frame.horizontal {
+            if horizontal {
                 self.bar_across(m, x, y);
             } else {
                 self.bar_up(m, x, y);
@@ -841,8 +1058,7 @@ impl Plot {
             return;
         };
         self.cv.fill(bar, '█', m.ink());
-        self.cv
-            .text(bar.x + bar.w + 1, bar.y, &bar_label(m, x), m.ink());
+        self.label_after(&bar, &bar_label(m, x), m.ink());
         self.cv.hit(bar, &m.prov);
     }
 
@@ -854,18 +1070,27 @@ impl Plot {
         };
         self.cv.fill(bar, '█', m.ink());
         if bar.y > 0 {
-            let label = bar_label(m, y);
-            let left = (bar.x + bar.w / 2).saturating_sub(label.chars().count() / 2);
-            self.cv.text(left, bar.y - 1, &label, m.ink());
+            self.label_above(&bar, &bar_label(m, y), m.ink());
         }
         self.cv.hit(bar, &m.prov);
+    }
+
+    /// A label after a bar, a space from its end.
+    fn label_after(&mut self, bar: &Rect, label: &str, ink: Ink) {
+        self.cv.text(bar.right() + 1, bar.y, label, ink);
+    }
+
+    /// A label centred over a bar, on the row above it.
+    fn label_above(&mut self, bar: &Rect, label: &str, ink: Ink) {
+        let left = bar.mid_x().saturating_sub(label.chars().count() / 2);
+        self.cv.text(left, bar.y - 1, label, ink);
     }
 
     /// Lines, one for each series, each joining its points in order of x.
     fn lines(&mut self, ms: &[M]) {
         let named = series_names(ms);
         for (k, s) in named.iter().enumerate() {
-            let p = POINTS[k % POINTS.len()];
+            let p = point_of_series(k);
             let pts = self.series_points(ms, s);
             self.join(&pts);
             self.points_of(&pts, p);
@@ -876,32 +1101,25 @@ impl Plot {
     }
 
     /// Where a series' marks land, in order of x.
-    fn series_points<'a>(&self, ms: &'a [M], s: &str) -> Vec<(usize, usize, &'a M)> {
-        let f = &self.frame;
-        let at = |m: &'a M| {
-            let (a, b) = f.col(m.get("x")?)?;
-            Some(((a + b) / 2, f.mid_row(m.get("y")?)?, m))
-        };
+    fn series_points<'a>(&self, ms: &'a [M], s: &str) -> Vec<((usize, usize), &'a M)> {
         let of_series = ms.iter().filter(|m| m.kind == "line" && series_of(m) == s);
-        let mut pts: Vec<(usize, usize, &M)> = of_series.filter_map(at).collect();
-        pts.sort_by_key(|(x, _, _)| *x);
+        let landed = of_series.filter_map(|m| Some((self.frame.point_of(m)?, m)));
+        let mut pts: Vec<((usize, usize), &M)> = landed.collect();
+        pts.sort_by_key(|(p, _)| p.0);
         pts
     }
 
     /// Dotted lines between points in turn, where nothing is drawn yet.
-    fn join(&mut self, pts: &[(usize, usize, &M)]) {
+    fn join(&mut self, pts: &[((usize, usize), &M)]) {
         for w in pts.windows(2) {
-            let ((xa, ya, _), (xb, yb, _)) = (w[0], w[1]);
-            for (x, y) in between((xa, ya), (xb, yb)) {
-                if self.cv.cells[y][x].0 == ' ' {
-                    self.cv.put(x, y, '·', Ink::Plain);
-                }
+            for (x, y) in between(w[0].0, w[1].0) {
+                self.cv.put_if_free(x, y, '·', Ink::Plain);
             }
         }
     }
 
-    fn points_of(&mut self, pts: &[(usize, usize, &M)], p: char) {
-        for (x, y, m) in pts {
+    fn points_of(&mut self, pts: &[((usize, usize), &M)], p: char) {
+        for ((x, y), m) in pts {
             self.cv.put(*x, *y, p, m.ink());
             self.cv.hit(Rect::cell(*x, *y), &m.prov);
         }
@@ -911,55 +1129,38 @@ impl Plot {
     /// middle, labelled inside if the label fits, else after.
     fn spans(&mut self, ms: &[M]) {
         for m in ms.iter().filter(|m| m.kind == "span") {
-            let f = &self.frame;
-            let (Some(a), Some(b)) = (
-                m.get("x1").and_then(|v| f.col(v)),
-                m.get("x2").and_then(|v| f.col(v)),
-            ) else {
-                continue;
-            };
-            let r = match m.get("y") {
-                Some(v) => f.mid_row(v),
-                None => Some(f.size.1 / 2),
-            };
-            if let Some(r) = r {
-                self.span(m, (a.0.min(b.0), a.0.max(b.0)), r);
+            if let Some((cols, row)) = self.frame.span_of(m) {
+                self.span(m, cols, row);
             }
         }
     }
 
-    fn span(&mut self, m: &M, (a, b): (usize, usize), r: usize) {
-        for x in a..=b {
-            self.cv.put(x, r, '━', m.ink());
-        }
+    fn span(&mut self, m: &M, cols: Run, row: usize) {
+        self.cv.text(cols.lo, row, &"━".repeat(cols.len()), m.ink());
         if let Some(t) = m.get("text").map(V::text) {
-            let inside = t.chars().count() + 2 <= b - a + 1;
-            self.cv
-                .text(if inside { a + 1 } else { b + 2 }, r, &t, m.ink());
+            let inside = t.chars().count() + 2 <= cols.len();
+            let x = if inside { cols.lo + 1 } else { cols.hi + 2 };
+            self.cv.text(x, row, &t, m.ink());
         }
-        self.cv.hit(Rect::row(a, r, b - a + 1), &m.prov);
+        self.cv.hit(Rect::of(cols, Run::at(row)), &m.prov);
     }
 
     /// Dots and texts, each at its point.
     fn points(&mut self, ms: &[M]) {
         for m in ms.iter().filter(|m| matches!(m.kind, "dot" | "text")) {
-            let f = &self.frame;
-            let (Some(xv), Some(yv)) = (m.get("x"), m.get("y")) else {
-                continue;
-            };
-            let (Some(x), Some(y)) = (f.mid_col(xv), f.mid_row(yv)) else {
+            let Some(p) = self.frame.point_of(m) else {
                 continue;
             };
             if m.kind == "dot" {
-                self.dot(m, x, y);
+                self.dot(m, p);
             } else {
-                self.text_mark(m, x, y);
+                self.text_mark(m, p);
             }
         }
     }
 
     /// A dot, labelled with its text if it has one.
-    fn dot(&mut self, m: &M, x: usize, y: usize) {
+    fn dot(&mut self, m: &M, (x, y): (usize, usize)) {
         self.cv.put(x, y, '●', m.ink());
         if let Some(t) = m.get("text").map(V::text) {
             self.cv.text(x + 2, y, &t, m.ink());
@@ -967,10 +1168,11 @@ impl Plot {
         self.cv.hit(Rect::cell(x, y), &m.prov);
     }
 
-    fn text_mark(&mut self, m: &M, x: usize, y: usize) {
+    fn text_mark(&mut self, m: &M, (x, y): (usize, usize)) {
         let t = m.get("text").map(V::text).unwrap_or_default();
-        self.cv.text(x, y, &t, m.ink());
-        self.cv.hit(Rect::row(x, y, t.chars().count()), &m.prov);
+        let at = Rect::row(x, y, t.chars().count());
+        self.cv.text_in(at, &t, m.ink());
+        self.cv.hit(at, &m.prov);
     }
 
     /// Ticks, in order of x: on a lane if they have y; else on the x axis,
@@ -1004,42 +1206,29 @@ impl Plot {
     /// A tick on the axis, and its label on the lowest free row above,
     /// with a stem down to the axis; a note if no row has room.
     fn tick_on_axis(&mut self, m: &M, x: usize, t: &str) {
-        let axis = self.frame.size.1;
+        let axis = self.frame.axis_row();
         self.cv.put(x, axis, '┴', m.ink());
-        let n = t.chars().count() + 1;
-        let start = x.min(self.cv.w.saturating_sub(n));
-        let Some(y) = (0..axis).rev().find(|y| self.cv.free(start, *y, n)) else {
-            self.notes.push(format!("no room for the label {t}"));
-            return;
-        };
-        self.cv.text(start, y, t, m.ink());
-        self.stem(x, y + 1, axis);
-        let label = Rect {
-            x: start,
-            y,
-            w: n - 1,
-            h: axis - y + 1,
-        };
-        self.cv.hit(label, &m.prov);
-    }
-
-    /// A dim line down column x, from row `from` to the row above `to`,
-    /// where nothing is drawn yet.
-    fn stem(&mut self, x: usize, from: usize, to: usize) {
-        for r in from..to {
-            if self.cv.cells[r][x].0 == ' ' {
-                self.cv.put(x, r, '│', Ink::Dim);
-            }
+        match self.cv.label_place(x, t, axis) {
+            Some(label) => self.label_over_tick(m, x, label.down_to(axis), t),
+            None => self.notes.push(format!("no room for the label {t}")),
         }
     }
-}
 
-/// A category's label, centred in its band and cut to fit it.
-fn band_label(f: &Frame, s: &str) -> Option<(usize, String)> {
-    let (a, b) = f.col(&V::Cat(s.to_string()))?;
-    let t = truncate(s, (b - a).max(1));
-    let x = (a + b + 1).saturating_sub(t.chars().count()) / 2;
-    Some((x, t))
+    /// A tick's label at the top of its place, and a stem from it down
+    /// the place's column x to the tick at its foot.
+    fn label_over_tick(&mut self, m: &M, x: usize, place: Rect, t: &str) {
+        self.cv.text_in(place, t, m.ink());
+        self.stem_below(x, place);
+        self.cv.hit(place, &m.prov);
+    }
+
+    /// A dim line down column x, from the row below the top of a place to
+    /// the row above its foot, where nothing is drawn yet.
+    fn stem_below(&mut self, x: usize, place: Rect) {
+        for r in place.y + 1..place.y + place.h - 1 {
+            self.cv.put_if_free(x, r, '│', Ink::Dim);
+        }
+    }
 }
 
 /// A bar's label: its text, or the number it shows.
@@ -1063,12 +1252,20 @@ fn series_names(ms: &[M]) -> Vec<String> {
 }
 
 /// The cells strictly between two points, along a straight line.
-fn between((xa, ya): (usize, usize), (xb, yb): (usize, usize)) -> Vec<(usize, usize)> {
-    let n = xb.abs_diff(xa).max(ya.abs_diff(yb)).max(1);
-    let step = |a: usize, b: usize, i: usize| {
-        (a as f64 + (b as f64 - a as f64) * i as f64 / n as f64).round() as usize
-    };
-    (1..n).map(|i| (step(xa, xb, i), step(ya, yb, i))).collect()
+fn between(p: (usize, usize), q: (usize, usize)) -> Vec<(usize, usize)> {
+    let n = p.0.abs_diff(q.0).max(p.1.abs_diff(q.1)).max(1);
+    (1..n).map(|i| step(p, q, i, n)).collect()
+}
+
+/// The point i of n steps along the line from p to q.
+fn step(p: (usize, usize), q: (usize, usize), i: usize, n: usize) -> (usize, usize) {
+    let t = i as f64 / n as f64;
+    (lerp(p.0, q.0, t), lerp(p.1, q.1, t))
+}
+
+/// The cell a fraction t of the way from a to b.
+fn lerp(a: usize, b: usize, t: f64) -> usize {
+    (a as f64 + (b as f64 - a as f64) * t).round() as usize
 }
 
 /// A plot's ticks, in order of x; a tick without a number for x first.
@@ -1212,9 +1409,9 @@ impl Table {
         for (i, name) in self.cols.iter().enumerate() {
             cv.text(c.at[i], 0, &truncate(name, c.widths[i]), Ink::Dim);
         }
-        cv.hline(0, w.saturating_sub(1), 1, Ink::Dim);
+        cv.hline(Run::of(0, w.saturating_sub(1)), 1, Ink::Dim);
         for x in &c.at {
-            cv.vline(x - 2, 0, cv.h - 1, Ink::Dim);
+            cv.vline(x - 2, Run::of(0, cv.h - 1), Ink::Dim);
         }
     }
 
@@ -1298,7 +1495,14 @@ fn graph(ms: &[M]) -> Figure {
     let labels = d.lines();
     d.labels(labels);
     d.boxes();
-    d.cv.finish(g.cycle_note().into_iter().collect())
+    d.cv.finish(graph_notes(ms, &g))
+}
+
+/// A graph's notes: the marks it leaves out, and the edges it draws back
+/// up.
+fn graph_notes(ms: &[M], g: &Graph) -> Vec<String> {
+    let left_out = not_drawn(ms, M::outside_graph, NOT_IN_GRAPH);
+    left_out.into_iter().chain(g.cycle_note()).collect()
 }
 
 /// A box of a graph: its key, its text and shape, and whether loud, with
@@ -1623,12 +1827,7 @@ impl Layout {
 
     /// A vertex's box: three rows high, at the top of its layer.
     fn box_of(&self, v: usize) -> Rect {
-        Rect {
-            x: self.x[v],
-            y: self.top(v),
-            w: self.width[v],
-            h: 3,
-        }
+        Rect::new(self.x[v], self.top(v), self.width[v], 3)
     }
 
     /// The middle of a vertex's right side, just outside it.
