@@ -2022,4 +2022,102 @@ mod tests {
         ];
         assert_eq!(draw(&["tick x:1 text:a", "tick x:5 text:b"], 24, 5), want);
     }
+
+    #[test]
+    fn marks_in_one_cell_are_listed_with_commas() {
+        // Catches two marks in one cell run together, or one of them lost. The picture is what the code
+        // drew before grid was restructured.
+        let want = ["  │ a", "──┼─────", "1 │ p, q"];
+        assert_eq!(
+            draw(&["cell x:a y:1 text:p", "cell x:a y:1 text:q"], 30, 4),
+            want
+        );
+    }
+
+    #[test]
+    fn columns_narrow_to_fit_the_width() {
+        // Catches columns left as wide as their texts when the grid does not fit. The picture is what the code
+        // drew before grid was restructured.
+        let want = [
+            "  │ a        │ b",
+            "──┼──────────┼────────",
+            "1 │ aaaaaaa… │ bbbbbb…",
+        ];
+        assert_eq!(
+            draw(
+                &[
+                    "cell x:a y:1 text:aaaaaaaaaaaaaaa",
+                    "cell x:b y:1 text:bbbbbbbbbbbb"
+                ],
+                22,
+                4
+            ),
+            want
+        );
+    }
+
+    #[test]
+    fn no_column_narrows_below_three() {
+        // Catches a column narrowed past three characters. The picture is what the code
+        // drew before grid was restructured.
+        let want = ["  │ a   │ b", "──┼─────┼───", "1 │ xx… │ xx"];
+        assert_eq!(
+            draw(
+                &[
+                    "cell x:a y:1 text:xxxxxx",
+                    "cell x:b y:1 text:xxxxxx",
+                    "cell x:c y:1 text:xxxxxx"
+                ],
+                12,
+                4
+            ),
+            want
+        );
+    }
+
+    #[test]
+    fn a_rows_name_is_cut_at_sixteen() {
+        // Catches a long row's name given all the width it asks. The picture is what the code
+        // drew before grid was restructured.
+        let want = [
+            "                 │ a",
+            "─────────────────┼──",
+            "a very long row… │ 1",
+        ];
+        assert_eq!(
+            draw(&["cell x:a y:a_very_long_row_name_indeed text:1"], 60, 4),
+            want
+        );
+    }
+
+    #[test]
+    fn a_column_is_at_most_twenty_wide() {
+        // Catches a column as wide as its longest text, past twenty. The picture is what the code
+        // drew before grid was restructured.
+        let want = [
+            "  │ a",
+            "──┼─────────────────────",
+            "1 │ twenty five charact…",
+        ];
+        assert_eq!(
+            draw(&["cell x:a y:1 text:twenty_five_characters_long"], 80, 4),
+            want
+        );
+    }
+
+    #[test]
+    fn each_cell_knows_where_its_facts_lie() {
+        // Catches a grid whose cells cannot be clicked, or are found in the
+        // wrong place. The places are what the code gave before grid was
+        // restructured.
+        let f = render(&[mk("cell x:a y:1"), mk("cell x:b y:2")], 30, 0);
+        let hit = |x, y| Hit {
+            x,
+            y,
+            w: 1,
+            h: 1,
+            prov: vec![1],
+        };
+        assert_eq!(f.hits, [hit(4, 2), hit(8, 3)]);
+    }
 }
