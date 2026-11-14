@@ -388,22 +388,30 @@ pub(crate) mod tests {
         // Catches any difference from ECMAScript over random bit patterns:
         // 10,000 by default, or JCS_SAMPLES for a longer run.
         let samples: usize = std::env::var("JCS_SAMPLES").map_or(10_000, |v| v.parse().unwrap());
-        let mut rng = Rng(8785);
+        let bits = finite_bits(&mut Rng(8785), samples);
+        let want = node_numbers(&bits);
+        let mismatches = disagreements(&bits, &want);
+        assert!(mismatches.is_empty(), "{mismatches:?}");
+    }
+
+    /// The bits of n finite doubles, at random.
+    fn finite_bits(rng: &mut Rng, n: usize) -> Vec<u64> {
         let mut bits = Vec::new();
-        while bits.len() < samples {
+        while bits.len() < n {
             let b = rng.next();
             if f64::from_bits(b).is_finite() {
                 bits.push(b);
             }
         }
-        let want = node_numbers(&bits);
-        let mismatches: Vec<_> = bits
-            .iter()
-            .zip(&want)
-            .filter(|(b, w)| number(f64::from_bits(**b)).unwrap() != **w)
-            .take(5)
-            .collect();
-        assert!(mismatches.is_empty(), "{mismatches:?}");
+        bits
+    }
+
+    /// The first five doubles, by their bits, that this writes otherwise
+    /// than as wanted.
+    fn disagreements<'a>(bits: &'a [u64], want: &'a [String]) -> Vec<(&'a u64, &'a String)> {
+        let pairs = bits.iter().zip(want);
+        let differs = |(b, w): &(&u64, &String)| number(f64::from_bits(**b)).unwrap() != **w;
+        pairs.filter(differs).take(5).collect()
     }
 
     #[test]
