@@ -54,16 +54,53 @@ pub fn channels(mark: &Term) -> Result<(&'static str, Channels), String> {
         Term::Atom(n) => (n.as_str(), &[][..]),
         _ => return Err("a mark is a term such as bar(x(C), y(V))".into()),
     };
-    let Some((kind, required, optional)) = MARKS.iter().find(|(k, _, _)| *k == name) else {
-        let names: Vec<&str> = MARKS.iter().map(|(k, _, _)| *k).collect();
-        return Err(format!(
-            "no mark “{name}”; the marks are {}",
-            names.join(", ")
-        ));
-    };
-    let mut out: Vec<(String, Term)> = Vec::new();
+    let kind = Kind::named(name)?;
+    let mut out = Channels::new();
     for a in args {
-        let Term::Compound(c, v) = a else {
+        let channel = kind.channel(a)?;
+        if out.iter().any(|(k, _)| *k == channel.0) {
+            return Err(format!("{name}: {} is given twice", channel.0));
+        }
+        out.push(channel);
+    }
+    kind.check_complete(&out)?;
+    Ok((kind.name, out))
+}
+
+/// A kind of mark: its name, and the channels it must and may have.
+struct Kind {
+    name: &'static str,
+    required: &'static [&'static str],
+    optional: &'static [&'static str],
+}
+
+impl Kind {
+    fn named(name: &str) -> Result<Kind, String> {
+        let found = MARKS.iter().find(|(k, _, _)| *k == name);
+        let Some(&(name, required, optional)) = found else {
+            let names: Vec<&str> = MARKS.iter().map(|(k, _, _)| *k).collect();
+            return Err(format!(
+                "no mark “{name}”; the marks are {}",
+                names.join(", ")
+            ));
+        };
+        Ok(Kind {
+            name,
+            required,
+            optional,
+        })
+    }
+
+    /// Every channel the kind has, the required first.
+    fn all(&self) -> Vec<&'static str> {
+        let both = self.required.iter().chain(self.optional);
+        both.copied().collect()
+    }
+
+    /// One channel of a mark, written channel(Value).
+    fn channel(&self, arg: &Term) -> Result<(String, Term), String> {
+        let name = self.name;
+        let Term::Compound(c, v) = arg else {
             return Err(format!(
                 "{name}: each channel is written channel(Value), as x(C)"
             ));
@@ -71,27 +108,24 @@ pub fn channels(mark: &Term) -> Result<(&'static str, Channels), String> {
         if v.len() != 1 {
             return Err(format!("{name}: {c} takes one value"));
         }
-        if !required.contains(&c.as_str()) && !optional.contains(&c.as_str()) {
-            let all: Vec<&str> = required.iter().chain(optional.iter()).copied().collect();
-            return Err(format!(
-                "{name} has no channel {c}; its channels are {}",
-                all.join(", ")
-            ));
+        if !self.all().contains(&c.as_str()) {
+            let all = self.all().join(", ");
+            return Err(format!("{name} has no channel {c}; its channels are {all}"));
         }
-        if out.iter().any(|(k, _)| k == c) {
-            return Err(format!("{name}: {c} is given twice"));
+        Ok((c.clone(), v[0].clone()))
+    }
+
+    /// A mark has every channel its kind requires; a rule has one only.
+    fn check_complete(&self, given: &Channels) -> Result<(), String> {
+        let has = |r: &&&str| given.iter().any(|(k, _)| k == **r);
+        if let Some(missing) = self.required.iter().find(|r| !has(r)) {
+            return Err(format!("{} needs {missing}(…)", self.name));
         }
-        out.push((c.clone(), v[0].clone()));
-    }
-    for r in *required {
-        if !out.iter().any(|(k, _)| k == r) {
-            return Err(format!("{name} needs {r}(…)"));
+        if self.name == "rule" && given.len() != 1 {
+            return Err("rule needs exactly one of x(…) or y(…)".into());
         }
+        Ok(())
     }
-    if *kind == "rule" && out.len() != 1 {
-        return Err("rule needs exactly one of x(…) or y(…)".into());
-    }
-    Ok((kind, out))
 }
 
 // ---------------------------------------------------------------------
@@ -227,59 +261,73 @@ struct M {
 }
 
 impl M {
+    fn read(input: &Input) -> Result<M, String> {
+        let (kind, ch) = channels(&input.mark)?;
+        let ch = ch.into_iter().map(|(k, t)| (k, V::of(&t))).collect();
+        let (prov, loud) = (input.prov.clone(), input.loud);
+        Ok(M {
+            kind,
+            ch,
+            prov,
+            loud,
+        })
+    }
     fn get(&self, c: &str) -> Option<&V> {
         self.ch.iter().find(|(k, _)| k == c).map(|(_, v)| v)
     }
     fn ink(&self) -> Ink {
         if self.loud { Ink::Loud } else { Ink::Plain }
     }
+    /// A node or an edge: a mark of a graph.
+    fn in_graph(&self) -> bool {
+        matches!(self.kind, "node" | "edge")
+    }
+    fn is_cell(&self) -> bool {
+        self.kind == "cell"
+    }
+}
+
+/// The marks that can be read, each once, and what is wrong with the rest.
+fn read_marks(inputs: &[Input]) -> (Vec<M>, Vec<String>) {
+    let (mut marks, mut notes) = (Vec::new(), Vec::new());
+    for input in inputs {
+        match M::read(input) {
+            Ok(m) => add_once(&mut marks, m),
+            Err(e) => notes.push(e),
+        }
+    }
+    (marks, notes)
+}
+
+/// Identical marks (a constant layer over many solutions) are drawn once,
+/// loudly if any of them is loud.
+fn add_once(marks: &mut Vec<M>, m: M) {
+    match marks.iter_mut().find(|x| x.kind == m.kind && x.ch == m.ch) {
+        Some(same) => same.loud |= m.loud,
+        None => marks.push(m),
+    }
+}
+
+/// A note of how many marks a frame leaves out, if it leaves any.
+fn not_drawn(ms: &[M], left_out: fn(&M) -> bool, what: &str) -> Option<String> {
+    let n = ms.iter().filter(|m| left_out(m)).count();
+    (n > 0).then(|| format!("{n} {what}"))
 }
 
 /// Draw a view's marks in a space `width` wide and, for a plot, `height`
 /// high. A grid or graph takes the height it needs.
 pub fn render(inputs: &[Input], width: usize, height: usize) -> Figure {
-    let mut notes = Vec::new();
-    let mut ms: Vec<M> = Vec::new();
-    for i in inputs {
-        match channels(&i.mark) {
-            Ok((kind, ch)) => {
-                // Identical marks (a constant layer over many solutions) once.
-                let ch: Vec<(String, V)> = ch.into_iter().map(|(k, t)| (k, V::of(&t))).collect();
-                if let Some(m) = ms.iter_mut().find(|m| m.kind == kind && m.ch == ch) {
-                    m.loud |= i.loud;
-                    continue;
-                }
-                ms.push(M {
-                    kind,
-                    ch,
-                    prov: i.prov.clone(),
-                    loud: i.loud,
-                });
-            }
-            Err(e) => notes.push(e),
-        }
-    }
+    let (ms, mut notes) = read_marks(inputs);
     let width = width.max(8);
-    let mut fig = if ms.iter().any(|m| matches!(m.kind, "node" | "edge")) {
-        let others = ms
-            .iter()
-            .filter(|m| !matches!(m.kind, "node" | "edge"))
-            .count();
-        if others > 0 {
-            notes.push(format!(
-                "{others} marks not drawn: a graph draws only node and edge"
-            ));
-        }
+    let mut fig = if ms.iter().any(M::in_graph) {
+        let others = "marks not drawn: a graph draws only node and edge";
+        notes.extend(not_drawn(&ms, |m| !m.in_graph(), others));
         graph(&ms)
-    } else if !ms.is_empty() && ms.iter().all(|m| m.kind == "cell") {
+    } else if !ms.is_empty() && ms.iter().all(M::is_cell) {
         grid(&ms, width)
     } else {
-        let cells = ms.iter().filter(|m| m.kind == "cell").count();
-        if cells > 0 {
-            notes.push(format!(
-                "{cells} cells not drawn: cells make a grid of their own"
-            ));
-        }
+        let cells = "cells not drawn: cells make a grid of their own";
+        notes.extend(not_drawn(&ms, M::is_cell, cells));
         plot(&ms, width, height.max(4))
     };
     fig.notes.splice(0..0, notes);
