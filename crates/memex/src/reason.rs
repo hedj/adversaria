@@ -612,4 +612,51 @@ mod tests {
             vec![Prov::Belief(2), Prov::Claim("talk".into(), 4)]
         );
     }
+
+    #[test]
+    fn a_suggestions_variables_are_numbered_from_its_own_first() {
+        // Catches a suggestion whose key depends on its place in the answer.
+        let kind = |v| Term::Compound("rule".into(), vec![Term::Var(v), Term::Var(v)]);
+        let args = vec![
+            kind(7),
+            make_list(vec![]),
+            Term::Str("e".into()),
+            Term::Int(1),
+        ];
+        let s = Suggestion::from_term(&Term::Compound("suggestion".into(), args)).unwrap();
+        assert_eq!(s.kind, kind(0));
+    }
+
+    #[test]
+    fn a_reading_two_facts_give_is_offered_once() {
+        // Catches the same reading listed for a belief and for a claim of it.
+        let claim = Term::Compound(
+            "claims".into(),
+            vec![Term::Str("talk".into()), date("flight", 1988)],
+        );
+        let facts = vec![(2, date("flight", 1988)), (3, claim)];
+        assert_eq!(
+            readings(&facts, "the flight was in 1989"),
+            [date("flight", 1989)]
+        );
+    }
+
+    #[test]
+    fn readings_are_ranked_by_the_words_that_name_them() {
+        // Catches readings left in the order of the facts.
+        let facts = vec![(2, date("launch", 1987)), (3, date("buran_flight", 1988))];
+        let r = readings(&facts, "the buran flight or launch, 1990");
+        assert_eq!(r, [date("buran_flight", 1990), date("launch", 1990)]);
+    }
+
+    #[test]
+    fn a_mark_rests_on_entries_only() {
+        // Catches 0, which stands for no entry, kept among a mark's entries.
+        let seqs = make_list(vec![Term::Int(0), Term::Int(3)]);
+        let pair = Term::Compound("-".into(), vec![Term::Atom("dot".into()), seqs]);
+        assert_eq!(
+            marks(&make_list(vec![pair])),
+            [(Term::Atom("dot".into()), vec![3])]
+        );
+    }
 }
