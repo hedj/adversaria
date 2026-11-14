@@ -38,9 +38,9 @@ pub fn line_error(file: &str, line: usize, msg: impl Into<String>) -> LineError 
     LineError { file, line, msg }
 }
 
-/// Split a file into its lines. Every line, the last included, must end in
-/// a newline; a file with no lines has no header.
-pub fn lines<'a>(file: &str, text: &'a str) -> Result<Vec<&'a str>, LineError> {
+/// Split a file into its lines, numbered from 1. Every line, the last
+/// included, must end in a newline; a file with no lines has no header.
+pub fn lines<'a>(file: &'a str, text: &'a str) -> Result<Vec<Line<'a>>, LineError> {
     let mut lines: Vec<&str> = text.split('\n').collect();
     let last = lines.pop();
     if last != Some("") {
@@ -53,27 +53,38 @@ pub fn lines<'a>(file: &str, text: &'a str) -> Result<Vec<&'a str>, LineError> {
     if lines.is_empty() {
         return Err(line_error(file, 1, "the file is empty: it needs a header"));
     }
-    Ok(lines)
+    let numbered = lines.into_iter().zip(1..);
+    Ok(numbered.map(|(text, n)| Line { file, n, text }).collect())
 }
 
 /// The record lines of a file, each with its line number: those after
 /// its header, which must name the format.
-pub fn records<'a>(
-    file: &str,
-    format: &str,
-    text: &'a str,
-) -> Result<Vec<(usize, &'a str)>, LineError> {
-    let lines = lines(file, text)?;
-    record::check_header(lines[0], format).map_err(|m| line_error(file, 1, m))?;
-    let numbered = lines.into_iter().enumerate().skip(1);
-    Ok(numbered.map(|(i, line)| (i + 1, line)).collect())
+pub fn records<'a>(file: &'a str, format: &str, text: &'a str) -> Result<Vec<Line<'a>>, LineError> {
+    let mut lines = lines(file, text)?.into_iter();
+    let header = lines.next().expect("lines gives at least one line");
+    header.read(|h| record::check_header(h, format))?;
+    Ok(lines.collect())
+}
+
+/// A line of a file, by its number.
+pub struct Line<'a> {
+    pub file: &'a str,
+    pub n: usize,
+    pub text: &'a str,
+}
+
+impl Line<'_> {
+    /// What a reading of the line gives; its fault, an error at the line.
+    pub fn read<T>(&self, reading: impl FnOnce(&str) -> Result<T, String>) -> Result<T, LineError> {
+        reading(self.text).map_err(|m| line_error(self.file, self.n, m))
+    }
 }
 
 /// Check the whole journal; return its entries in order.
 pub fn check_journal(text: &str) -> Result<Vec<Entry>, LineError> {
     let mut journal = Journal::default();
-    for (_, line) in records(JOURNAL, JOURNAL_FORMAT, text)? {
-        journal.read(line)?;
+    for line in records(JOURNAL, JOURNAL_FORMAT, text)? {
+        journal.read(line.text)?;
     }
     journal.finish()
 }

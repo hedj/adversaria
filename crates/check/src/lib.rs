@@ -25,10 +25,16 @@ pub struct Report {
     pub blobs: usize,
 }
 
+/// A file of the directory as text.
 fn read(dir: &Path, file: &str) -> Result<String, LineError> {
-    let cannot = |e: io::Error| line_error(file, 0, format!("cannot read: {e}"));
-    let bytes = fs::read(dir.join(file)).map_err(cannot)?;
+    let bytes = read_bytes(dir, file)?;
     String::from_utf8(bytes).map_err(|e| line_error(file, bad_line(&e), "not UTF-8"))
+}
+
+/// A file of the directory; if it cannot be read, an error naming it.
+fn read_bytes(dir: &Path, file: &str) -> Result<Vec<u8>, LineError> {
+    let cannot = |e: io::Error| line_error(file, 0, format!("cannot read: {e}"));
+    fs::read(dir.join(file)).map_err(cannot)
 }
 
 /// The line on which a file stops being UTF-8.
@@ -40,8 +46,8 @@ fn bad_line(e: &FromUtf8Error) -> usize {
 /// Check `keys.jsonl`: a header, then distinct Ed25519 public keys.
 pub fn check_keys(text: &str) -> Result<Vec<Key>, LineError> {
     let mut keys: Vec<Key> = Vec::new();
-    for (n, line) in chain::records(KEYS, KEYS_FORMAT, text)? {
-        let key = new_key(&keys, line).map_err(|m| line_error(KEYS, n, m))?;
+    for line in chain::records(KEYS, KEYS_FORMAT, text)? {
+        let key = line.read(|t| new_key(&keys, t))?;
         keys.push(key);
     }
     Ok(keys)
@@ -61,8 +67,8 @@ fn new_key(keys: &[Key], line: &str) -> Result<Key, String> {
 /// seals entry n.
 pub fn check_seals(text: &str, entries: &[Entry], keys: &[Key]) -> Result<Vec<Seal>, LineError> {
     let mut seals = Seals::new(entries, keys);
-    for (n, line) in chain::records(SEALS, SEALS_FORMAT, text)? {
-        seals.read(line).map_err(|m| line_error(SEALS, n, m))?;
+    for line in chain::records(SEALS, SEALS_FORMAT, text)? {
+        line.read(|t| seals.read(t))?;
     }
     Ok(seals.read)
 }
@@ -179,9 +185,7 @@ fn blob_names(dir: &Path) -> Result<Vec<String>, LineError> {
 
 fn check_blob(dir: &Path, name: &str) -> Result<(), LineError> {
     let file = format!("{BLOBS}/{name}");
-    let cannot = |e: io::Error| line_error(&file, 0, format!("cannot read: {e}"));
-    let bytes = fs::read(dir.join(&file)).map_err(cannot)?;
-    if record::sha256_hex(&bytes) != name {
+    if record::sha256_hex(&read_bytes(dir, &file)?) != name {
         return Err(line_error(
             &file,
             0,
@@ -195,7 +199,8 @@ fn check_blob(dir: &Path, name: &str) -> Result<(), LineError> {
 pub fn check_dir(dir: &Path) -> Result<Report, LineError> {
     let keys = check_keys(&read(dir, KEYS)?)?;
     let entries = chain::check_journal(&read(dir, JOURNAL)?)?;
-    let seals = check_seals(&read(dir, SEALS)?, &entries, &keys)?;
+    let text = read(dir, SEALS)?;
+    let seals = check_seals(&text, &entries, &keys)?;
     all_sealed(&seals, &entries)?;
     let blobs = check_blobs(dir)?;
     Ok(Report {
