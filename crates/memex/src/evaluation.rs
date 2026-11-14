@@ -42,9 +42,10 @@ impl App {
     }
 
     fn world(&self, k: usize, head: u64) -> Result<World, String> {
+        let facts = self.facts_at(head)?;
         let (outline, import) = self.world_parts(k, head);
         Ok(World {
-            facts: self.facts_at(head)?,
+            facts,
             outline,
             import,
             at: self.entry_count(),

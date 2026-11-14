@@ -74,8 +74,7 @@ impl World {
         Ok(WorldEval {
             constraints: self.read_constraints(engine)?,
             nodes: self.read_nodes(engine),
-            facts: self.facts,
-            at: self.at,
+            ..self.unread()
         })
     }
 
