@@ -241,6 +241,16 @@ impl Run {
         (self.lo + self.hi) / 2
     }
 
+    /// A text cut to fit the run, and the cell where it starts.
+    fn fit(&self, text: &str) -> (usize, String) {
+        (self.lo, truncate(text, self.len()))
+    }
+
+    /// The run's cells on one row.
+    fn on_row(&self, y: usize) -> Rect {
+        Rect::of(*self, Run::at(y))
+    }
+
     /// The run moved along by d cells.
     fn shift(&self, d: usize) -> Run {
         Run::of(self.lo + d, self.hi + d)
@@ -1346,6 +1356,25 @@ impl Cell {
         t
     }
 
+    /// The cell on row y of its column, found anywhere in the column.
+    fn draw(&self, cv: &mut Canvas, col: Run, y: usize) {
+        cv.hit(col.on_row(y), &self.prov);
+        let (x, t) = self.placed(col);
+        cv.text(x, y, &t, self.ink());
+    }
+
+    /// The cell's text as shown in a column, and where it starts: a
+    /// number at the right of the column, anything else at the left.
+    fn placed(&self, col: Run) -> (usize, String) {
+        let t = self.shown(col.len());
+        let x = if self.number {
+            col.hi + 1 - t.chars().count()
+        } else {
+            col.lo
+        };
+        (x, t)
+    }
+
     fn ink(&self) -> Ink {
         if self.loud { Ink::Loud } else { Ink::Plain }
     }
@@ -1394,49 +1423,38 @@ impl Table {
     }
 
     fn draw(&self, c: &Columns) -> Figure {
-        let (w, h) = (c.total(), self.rows.len() + 2);
-        let mut cv = Canvas::new(w.max(1), h);
-        self.draw_head(&mut cv, c, w);
-        for j in 0..self.rows.len() {
+        let mut cv = Canvas::new(c.total().max(1), self.rows.len() + 2);
+        self.draw_names(&mut cv, c);
+        c.draw_rules(&mut cv);
+        for (j, name) in self.rows.iter().enumerate() {
+            c.draw_row_name(&mut cv, j + 2, name);
             self.draw_row(&mut cv, c, j);
         }
         cv.finish(vec![])
     }
 
-    /// The columns' names, a rule under them, and a line before each
-    /// column.
-    fn draw_head(&self, cv: &mut Canvas, c: &Columns, w: usize) {
-        for (i, name) in self.cols.iter().enumerate() {
-            cv.text(c.at[i], 0, &truncate(name, c.widths[i]), Ink::Dim);
-        }
-        cv.hline(Run::of(0, w.saturating_sub(1)), 1, Ink::Dim);
-        for x in &c.at {
-            cv.vline(x - 2, Run::of(0, cv.h - 1), Ink::Dim);
+    /// The columns' names, each cut to its column.
+    fn draw_names(&self, cv: &mut Canvas, c: &Columns) {
+        for (name, col) in self.cols.iter().zip(&c.cols) {
+            let (x, t) = col.fit(name);
+            cv.text(x, 0, &t, Ink::Dim);
         }
     }
 
-    /// A row: its name, then each cell, a number to the right of its
-    /// column.
+    /// Row j's cells, each where it can be found in its column.
     fn draw_row(&self, cv: &mut Canvas, c: &Columns, j: usize) {
         let y = j + 2;
-        cv.text(0, y, &truncate(&self.rows[j], c.head), Ink::Dim);
-        for (i, cell) in self.cells[j].iter().enumerate() {
-            let t = cell.shown(c.widths[i]);
-            let right = c.at[i] + c.widths[i] - t.chars().count();
-            let x = if cell.number { right } else { c.at[i] };
-            cv.text(x, y, &t, cell.ink());
-            cv.hit(Rect::row(c.at[i], y, c.widths[i]), &cell.prov);
+        for (cell, col) in self.cells[j].iter().zip(&c.cols) {
+            cell.draw(cv, *col, y);
         }
     }
 }
 
-/// How a grid's columns are laid out: the width of the rows' names, each
-/// column's width, and where each begins.
+/// How a grid's columns are laid out: the width of the rows' names, the
+/// cells of each column, and the width given to the grid.
 struct Columns {
     head: usize,
-    widths: Vec<usize>,
-    at: Vec<usize>,
-    /// The width given to the grid.
+    cols: Vec<Run>,
     width: usize,
 }
 
@@ -1447,21 +1465,39 @@ impl Columns {
         let head = t.head();
         let mut widths: Vec<usize> = (0..t.cols.len()).map(|i| t.column_width(i)).collect();
         while total(head, &widths) > width && narrow(&mut widths) {}
-        let at = (0..widths.len())
-            .map(|i| head + 3 + total(0, &widths[..i]))
-            .collect();
-        Columns {
-            head,
-            widths,
-            at,
-            width,
-        }
+        let cols = laid_out(head, &widths);
+        Columns { head, cols, width }
     }
 
     /// The width the grid takes, at most the width given.
     fn total(&self) -> usize {
-        total(self.head, &self.widths).min(self.width.max(1))
+        let widths: Vec<usize> = self.cols.iter().map(Run::len).collect();
+        total(self.head, &widths).min(self.width.max(1))
     }
+
+    /// The rule under the names, and a line before each column.
+    fn draw_rules(&self, cv: &mut Canvas) {
+        cv.hline(Run::of(0, self.total().saturating_sub(1)), 1, Ink::Dim);
+        for col in &self.cols {
+            cv.vline(col.lo - 2, Run::of(0, cv.h - 1), Ink::Dim);
+        }
+    }
+
+    /// A row's name, cut to the head.
+    fn draw_row_name(&self, cv: &mut Canvas, y: usize, name: &str) {
+        cv.text(0, y, &truncate(name, self.head), Ink::Dim);
+    }
+}
+
+/// Columns of these widths after a head, three characters apart.
+fn laid_out(head: usize, widths: &[usize]) -> Vec<Run> {
+    let mut lo = head + 3;
+    let mut cols = Vec::new();
+    for w in widths {
+        cols.push(Run { lo, hi: lo + w - 1 });
+        lo += w + 3;
+    }
+    cols
 }
 
 /// The width of a grid with a head and columns of these widths, three
