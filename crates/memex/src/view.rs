@@ -2197,4 +2197,354 @@ mod tests {
         };
         assert_eq!(f.hits, [hit(4, 2), hit(8, 3)]);
     }
+
+    #[test]
+    fn boxes_take_the_shape_asked_for() {
+        // Catches a round box or a decision drawn as a plain box. The picture is what
+        // the code drew before graph was restructured.
+        let want = [
+            "╭───╮",
+            "│ a │",
+            "╰─┬─╯",
+            "  │",
+            "  │",
+            "  ▼",
+            "╱─┴─╲",
+            "< b >",
+            "╲─┬─╱",
+            "  │",
+            "  │",
+            "  ▼",
+            "┌─┴─┐",
+            "│ c │",
+            "└───┘",
+        ];
+        assert_eq!(
+            draw(
+                &[
+                    "node id:a shape:round",
+                    "node id:b shape:decision",
+                    "node id:c",
+                    "edge from:a to:b",
+                    "edge from:b to:c"
+                ],
+                40,
+                0
+            ),
+            want
+        );
+    }
+
+    #[test]
+    fn an_edges_label_goes_beside_its_arrow() {
+        // Catches an edge's label lost, or put on its run when there is room by its arrow. The picture is what
+        // the code drew before graph was restructured.
+        let want = [
+            "    ┌───┐",
+            "    │ a │",
+            "    └─┬┬┘",
+            "      ││",
+            "  ┌───┘└──┐",
+            "  ▼ yes   ▼",
+            "┌─┴─┐   ┌─┴─┐",
+            "│ b │   │ c │",
+            "└───┘   └───┘",
+        ];
+        assert_eq!(
+            draw(
+                &["edge from:a to:b text:yes", "edge from:a to:c text:no"],
+                40,
+                0
+            ),
+            want
+        );
+    }
+
+    #[test]
+    fn an_edges_label_goes_on_its_run_if_the_arrow_has_no_room() {
+        // Catches a label drawn over another, or past the edge of the figure. Both labels here are dropped, without a note: the figure is only as wide as its boxes. The picture is what
+        // the code drew before graph was restructured.
+        let want = [
+            "┌───┐   ┌───┐",
+            "│ a │   │ c │",
+            "└─┬─┘   └─┬─┘",
+            "  │       │",
+            "  └───┐┌──┘",
+            "      ▼▼",
+            "    ┌─┴┴┐",
+            "    │ b │",
+            "    └───┘",
+        ];
+        assert_eq!(
+            draw(
+                &[
+                    "edge from:a to:b text:long_label_here",
+                    "edge from:c to:b text:another_label"
+                ],
+                40,
+                0
+            ),
+            want
+        );
+    }
+
+    #[test]
+    fn cycles_are_closed_round_the_right_and_counted() {
+        // Catches an edge back up drawn down, its loops run together, or the note not counted in the plural. The picture is what
+        // the code drew before graph was restructured.
+        let want = [
+            "┌───┐",
+            "│ a │◀┐",
+            "└─┬─┘ │",
+            "  │   │",
+            "  │   │",
+            "  ▼   │",
+            "┌─┴─┐ │",
+            "│ b │◀┴─┐",
+            "└─┬─┘   │",
+            "  │     │",
+            "  │     │",
+            "  ▼     │",
+            "┌─┴─┐   │",
+            "│ c │───┘",
+            "└───┘",
+            "note: 2 edges back up, round the right, to close a cycle",
+        ];
+        assert_eq!(
+            draw(
+                &[
+                    "edge from:a to:b",
+                    "edge from:b to:a",
+                    "edge from:b to:c",
+                    "edge from:c to:b"
+                ],
+                40,
+                0
+            ),
+            want
+        );
+    }
+
+    #[test]
+    fn an_edge_back_up_is_labelled_beside_its_loop() {
+        // Catches the label of an edge back up lost. The picture is what
+        // the code drew before graph was restructured.
+        let want = [
+            "┌───┐",
+            "│ a │◀┐",
+            "└─┬─┘ │",
+            "  │   │",
+            "  │   │",
+            "  ▼   │",
+            "┌─┴─┐ │",
+            "│ b │─┘",
+            "└───┘",
+            "note: 1 edge back up, round the right, to close a cycle",
+        ];
+        assert_eq!(
+            draw(&["edge from:a to:b", "edge from:b to:a text:back"], 40, 0),
+            want
+        );
+    }
+
+    #[test]
+    fn each_layer_is_ordered_to_cross_less() {
+        // Catches a layer left in the order the nodes came, crossing more. The picture is what
+        // the code drew before graph was restructured.
+        let want = [
+            "        ┌───┐   ┌───┐",
+            "        │ a │   │ b │",
+            "        └─┬┬┘   └─┬┬┘",
+            "          ││      ││",
+            "  ┌───────┼┴──────┤└──────┐",
+            "  ▼       ▼       ▼       ▼",
+            "┌─┴─┐   ┌─┴─┐   ┌─┴─┐   ┌─┴─┐",
+            "│ d │   │ c │   │ e │   │ f │",
+            "└─┬─┘   └─┬─┘   └───┘   └───┘",
+            "  │       │",
+            "  └───────┴───┬┐",
+            "              ▼▼",
+            "            ┌─┴┴┐",
+            "            │ g │",
+            "            └───┘",
+        ];
+        assert_eq!(
+            draw(
+                &[
+                    "edge from:a to:d",
+                    "edge from:b to:c",
+                    "edge from:a to:e",
+                    "edge from:b to:f",
+                    "edge from:c to:g",
+                    "edge from:d to:g"
+                ],
+                60,
+                0
+            ),
+            want
+        );
+    }
+
+    #[test]
+    fn a_long_name_is_cut_to_fit_its_box() {
+        // Catches a box as wide as a long name. The picture is what
+        // the code drew before graph was restructured.
+        let want = [
+            "┌────────────────────────┐",
+            "│ a very long node text… │",
+            "└────────────┬───────────┘",
+            "             │",
+            "            ┌┘",
+            "            ▼",
+            "          ┌─┴─┐",
+            "          │ b │",
+            "          └───┘",
+        ];
+        assert_eq!(
+            draw(
+                &[
+                    "node id:a text:a_very_long_node_text_that_runs_on",
+                    "edge from:a to:b"
+                ],
+                60,
+                0
+            ),
+            want
+        );
+    }
+
+    #[test]
+    fn long_edges_pass_through_the_layers_between() {
+        // Catches an edge across layers drawn through the boxes between. The picture is what
+        // the code drew before graph was restructured.
+        let want = [
+            "    ┌───┐",
+            "    │ a │",
+            "    └┬┬┬┘",
+            "     │││",
+            "  ┌──┘└┴┬───┐",
+            "  ▼     │   │",
+            "┌─┴─┐   │   │",
+            "│ b │   │   │",
+            "└─┬─┘   │   │",
+            "  │     │   │",
+            "  └─┐┌──┘ ┌─┘",
+            "    ▼▼    │",
+            "  ┌─┴┴┐   │",
+            "  │ c │   │",
+            "  └─┬─┘   │",
+            "    │     │",
+            "    └─┐┌──┘",
+            "      ▼▼",
+            "    ┌─┴┴┐",
+            "    │ d │",
+            "    └───┘",
+        ];
+        assert_eq!(
+            draw(
+                &[
+                    "edge from:a to:b",
+                    "edge from:b to:c",
+                    "edge from:a to:c",
+                    "edge from:c to:d",
+                    "edge from:a to:d"
+                ],
+                60,
+                0
+            ),
+            want
+        );
+    }
+
+    #[test]
+    fn an_edge_to_itself_is_left_out() {
+        // Catches an edge from a node to itself drawn, or breaking the layout. The picture is what
+        // the code drew before graph was restructured.
+        let want = ["┌───┐   ┌───┐", "│ b │   │ a │", "└───┘   └───┘"];
+        assert_eq!(draw(&["edge from:a to:a", "node id:b"], 40, 0), want);
+    }
+
+    #[test]
+    fn edges_leave_a_box_apart() {
+        // Catches edges out of or into one box drawn over each other. The picture is what
+        // the code drew before graph was restructured.
+        let want = [
+            "        ┌───┐",
+            "        │ a │",
+            "        └┬┬┬┘",
+            "         │││",
+            "  ┌──────┘│└──────┐",
+            "  ▼       ▼       ▼",
+            "┌─┴─┐   ┌─┴─┐   ┌─┴─┐",
+            "│ b │   │ c │   │ d │",
+            "└─┬─┘   └─┬─┘   └─┬─┘",
+            "  │       │       │",
+            "  └──────┐│┌──────┘",
+            "         ▼▼▼",
+            "        ┌┴┴┴┐",
+            "        │ e │",
+            "        └───┘",
+        ];
+        assert_eq!(
+            draw(
+                &[
+                    "edge from:a to:b",
+                    "edge from:a to:c",
+                    "edge from:a to:d",
+                    "edge from:b to:e",
+                    "edge from:c to:e",
+                    "edge from:d to:e"
+                ],
+                60,
+                0
+            ),
+            want
+        );
+    }
+
+    /// Each cell's ink: p plain, d dim, L loud.
+    fn inks(f: &Figure) -> Vec<String> {
+        let letter = |i: &Ink| match i {
+            Ink::Plain => 'p',
+            Ink::Dim => 'd',
+            Ink::Loud => 'L',
+        };
+        f.rows
+            .iter()
+            .map(|r| r.iter().map(|(_, i)| letter(i)).collect())
+            .collect()
+    }
+
+    #[test]
+    fn a_loud_node_and_edge_are_drawn_loud_and_each_box_can_be_found() {
+        // Catches a violation's box or edge drawn plain, or a box the mouse
+        // cannot find. The inks and places are what the code gave before
+        // graph was restructured.
+        let loud = |s: &str| Input {
+            loud: true,
+            ..mk(s)
+        };
+        let marks = [
+            loud("node id:a"),
+            mk("node id:b"),
+            loud("edge from:a to:b"),
+            mk("edge from:b to:c"),
+        ];
+        let f = render(&marks, 40, 0);
+        let want = [
+            "LLLLL", "LLLLL", "LLLLL", "ppLpp", "ppLpp", "ppLpp", "ppppp", "ppppp", "ppppp",
+            "ppdpp", "ppdpp", "ppdpp", "ppppp", "ppppp", "ppppp",
+        ];
+        let place = |y| Hit {
+            x: 0,
+            y,
+            w: 5,
+            h: 3,
+            prov: vec![1],
+        };
+        assert_eq!(
+            (inks(&f), f.hits),
+            (want.map(String::from).to_vec(), vec![place(0), place(6)])
+        );
+    }
 }
