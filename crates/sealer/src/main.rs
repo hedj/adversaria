@@ -4,7 +4,7 @@
 //! sealer run <journal directory> <key file> [--once] [--interval-ms N]
 //!     Seal new entries as they appear, polling every N ms (default 200).
 
-use std::path::PathBuf;
+use std::path::Path;
 use std::process::ExitCode;
 use std::time::{Duration, SystemTime};
 
@@ -17,56 +17,72 @@ fn usage() -> ExitCode {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let (Some(cmd), Some(dir), Some(key)) = (args.first(), args.get(1), args.get(2)) else {
-        return usage();
-    };
-    let (dir, key) = (PathBuf::from(dir), PathBuf::from(key));
-    let result = match cmd.as_str() {
-        "init" if args.len() == 3 => {
-            sealer::init(&dir, &key).map(|k| println!("key {}", k.fingerprint))
-        }
-        "run" => {
-            let mut once = false;
-            let mut interval = 200;
-            let mut rest = args[3..].iter();
-            while let Some(a) = rest.next() {
-                match (a.as_str(), rest.clone().next().and_then(|n| n.parse().ok())) {
-                    ("--once", _) => once = true,
-                    ("--interval-ms", Some(n)) => {
-                        interval = n;
-                        rest.next();
-                    }
-                    _ => return usage(),
-                }
-            }
-            run(&dir, &key, once, Duration::from_millis(interval))
-        }
-        _ => return usage(),
-    };
-    match result {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
+    match command(&args) {
+        None => usage(),
+        Some(Ok(())) => ExitCode::SUCCESS,
+        Some(Err(e)) => {
             eprintln!("sealer: {e}");
             ExitCode::FAILURE
         }
     }
 }
 
-fn run(
-    dir: &std::path::Path,
-    key: &std::path::Path,
+/// Run the command the arguments give; None if they give none.
+fn command(args: &[String]) -> Option<Result<(), sealer::Error>> {
+    let [cmd, dir, key, rest @ ..] = args else {
+        return None;
+    };
+    let (dir, key) = (Path::new(dir), Path::new(key));
+    match cmd.as_str() {
+        "init" if rest.is_empty() => Some(init(dir, key)),
+        "run" => Some(run(dir, key, Polling::parse(rest)?)),
+        _ => None,
+    }
+}
+
+fn init(dir: &Path, key: &Path) -> Result<(), sealer::Error> {
+    let key = sealer::init(dir, key)?;
+    println!("key {}", key.fingerprint);
+    Ok(())
+}
+
+/// How run polls the journal: once, or again after each interval.
+struct Polling {
     once: bool,
     interval: Duration,
-) -> Result<(), sealer::Error> {
+}
+
+impl Polling {
+    /// From run's options; None if one of them is not an option.
+    fn parse(options: &[String]) -> Option<Polling> {
+        let (once, interval) = (false, Duration::from_millis(200));
+        let mut polling = Polling { once, interval };
+        let mut rest = options.iter();
+        while let Some(option) = rest.next() {
+            match option.as_str() {
+                "--once" => polling.once = true,
+                "--interval-ms" => polling.interval = millis(rest.next()?)?,
+                _ => return None,
+            }
+        }
+        Some(polling)
+    }
+}
+
+fn millis(text: &str) -> Option<Duration> {
+    text.parse().ok().map(Duration::from_millis)
+}
+
+fn run(dir: &Path, key: &Path, polling: Polling) -> Result<(), sealer::Error> {
     let key = sealer::load_key(key)?;
     loop {
         let n = sealer::seal_pending(dir, &key, &SystemTime::now)?;
         if n > 0 {
             println!("sealed {n}");
         }
-        if once {
+        if polling.once {
             return Ok(());
         }
-        std::thread::sleep(interval);
+        std::thread::sleep(polling.interval);
     }
 }
