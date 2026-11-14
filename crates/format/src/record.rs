@@ -110,24 +110,140 @@ pub fn all_nfc(v: &Value) -> bool {
     }
 }
 
-/// Parse one line, which must be the canonical JSON of an object.
-fn canonical_object(line: &str) -> Result<Map<String, Value>, String> {
-    let v: Value = serde_json::from_str(line).map_err(|e| format!("not JSON: {e}"))?;
-    let canon = jcs::dumps(&v).map_err(|e| e.0)?;
-    if canon != line {
-        return Err("not canonical JSON (RFC 8785), or a key is repeated".into());
+/// The fields of one line, which is the canonical JSON of an object, read
+/// by key: each reading checks its field and says what is wrong with it.
+struct Fields(Map<String, Value>);
+
+/// What a hash must be, for an error.
+const HASH: &str = "64 lowercase hex digits";
+
+impl Fields {
+    fn read(line: &str) -> Result<Fields, String> {
+        let v: Value = serde_json::from_str(line).map_err(|e| format!("not JSON: {e}"))?;
+        check_canonical(&v, line)?;
+        match v {
+            Value::Object(m) => Ok(Fields(m)),
+            _ => Err("not a JSON object".into()),
+        }
     }
-    if !all_nfc(&v) {
-        return Err("a string is not in Unicode NFC".into());
+
+    fn need(&self, key: &str) -> Result<&Value, String> {
+        self.0
+            .get(key)
+            .ok_or_else(|| format!("missing field {key:?}"))
     }
-    match v {
-        Value::Object(m) => Ok(m),
-        _ => Err("not a JSON object".into()),
+
+    fn natural(&self, key: &str) -> Result<u64, String> {
+        natural(self.need(key)?, key)
+    }
+
+    /// A field's text, or the empty text if it is not text.
+    fn text(&self, key: &str) -> Result<&str, String> {
+        Ok(self.need(key)?.as_str().unwrap_or(""))
+    }
+
+    /// A field that is `bytes` bytes in lowercase hexadecimal; if not, it
+    /// "must be" what `what` says.
+    fn hex(&self, key: &str, bytes: usize, what: &str) -> Result<String, String> {
+        let text = self.text(key)?;
+        let found = from_hex(text, bytes).map(|_| text.to_string());
+        found.ok_or_else(|| format!("{key} must be {what}"))
+    }
+
+    /// The record's own hash, which must be the hash of the record.
+    fn own_hash(&self, drop_body: bool) -> Result<String, String> {
+        let hash = self.hex("hash", 32, HASH)?;
+        if hash != record_hash(&self.0, drop_body) {
+            return Err("hash does not match the record".into());
+        }
+        Ok(hash)
+    }
+
+    // An entry's fields.
+
+    fn parent(&self) -> Result<Option<u64>, String> {
+        match self.need("parent")? {
+            Value::Null => Ok(None),
+            v => natural(v, "parent").map(Some),
+        }
+    }
+
+    /// The parent's hash: there exactly when there is a parent.
+    fn prev(&self, parent: Option<u64>) -> Result<Option<String>, String> {
+        match (self.need("prev")?, parent) {
+            (Value::Null, None) => Ok(None),
+            (v, Some(_)) if is_hash(v) => Ok(v.as_str().map(String::from)),
+            _ => Err("prev must be null exactly when parent is, else a hash".into()),
+        }
+    }
+
+    fn kind(&self) -> Result<String, String> {
+        let kind = self.text("kind")?;
+        if !KINDS.contains(&kind) {
+            return Err(format!("unknown kind {}", self.0["kind"]));
+        }
+        Ok(kind.to_string())
+    }
+
+    /// The body: an object that its body_hash is the hash of, or none
+    /// once purged.
+    fn body(&self) -> Result<Option<Value>, String> {
+        match self.need("body")? {
+            Value::Null => Ok(None),
+            b @ Value::Object(_) => self.checked_body(b).map(Some),
+            _ => Err("body must be an object, or null when purged".into()),
+        }
+    }
+
+    fn checked_body(&self, body: &Value) -> Result<Value, String> {
+        if body_hash(body)? != self.hex("body_hash", 32, HASH)? {
+            return Err("body_hash does not match the body".into());
+        }
+        Ok(body.clone())
+    }
+
+    // A seal's fields.
+
+    fn date(&self) -> Result<String, String> {
+        let date = self.text("date")?;
+        if !is_date(date) {
+            return Err("date must be ISO 8601 UTC to the second, as 2026-11-12T09:30:00Z".into());
+        }
+        Ok(date.to_string())
+    }
+
+    /// The hash of the seal before: none for the first.
+    fn prev_seal(&self) -> Result<Option<String>, String> {
+        match self.need("prev")? {
+            Value::Null => Ok(None),
+            v if is_hash(v) => Ok(v.as_str().map(String::from)),
+            _ => Err("prev must be null or a hash".into()),
+        }
+    }
+
+    // A key's fields.
+
+    /// The public key, which its fingerprint must be the hash of.
+    fn key(&self) -> Result<String, String> {
+        let key = self.hex("key", 32, HASH)?;
+        let bytes = from_hex(&key, 32).unwrap_or_default();
+        if self.text("fingerprint")? != sha256_hex(&bytes) {
+            return Err("fingerprint is not the SHA-256 of the key".into());
+        }
+        Ok(key)
     }
 }
 
-fn need<'a>(m: &'a Map<String, Value>, k: &str) -> Result<&'a Value, String> {
-    m.get(k).ok_or_else(|| format!("missing field {k:?}"))
+/// A line must be the canonical JSON of its value, with every string in
+/// Unicode NFC.
+fn check_canonical(v: &Value, line: &str) -> Result<(), String> {
+    if jcs::dumps(v).map_err(|e| e.0)? != line {
+        return Err("not canonical JSON (RFC 8785), or a key is repeated".into());
+    }
+    if !all_nfc(v) {
+        return Err("a string is not in Unicode NFC".into());
+    }
+    Ok(())
 }
 
 fn natural(v: &Value, what: &str) -> Result<u64, String> {
@@ -137,16 +253,15 @@ fn natural(v: &Value, what: &str) -> Result<u64, String> {
     }
 }
 
-fn check_own_hash(m: &Map<String, Value>, drop_body: bool) -> Result<String, String> {
-    let hash = need(m, "hash")?;
-    if !is_hash(hash) {
-        return Err("hash must be 64 lowercase hex digits".into());
-    }
-    let want = record_hash(m, drop_body);
-    if hash.as_str() != Some(want.as_str()) {
-        return Err("hash does not match the record".into());
-    }
-    Ok(want)
+/// The canonical JSON of a record's fields, as one line.
+fn line_of(fields: Value) -> Result<String, String> {
+    jcs::dumps(&fields).map_err(|e| e.0)
+}
+
+/// The hash of a record made of these fields.
+fn hash_of(fields: &Value, drop_body: bool) -> String {
+    let empty = Map::new();
+    record_hash(fields.as_object().unwrap_or(&empty), drop_body)
 }
 
 /// Check a header line against the format it should name.
@@ -154,8 +269,8 @@ pub fn check_header(line: &str, format: &str) -> Result<(), String> {
     if line == header(format) {
         return Ok(());
     }
-    let m = canonical_object(line)?;
-    match (m.get("format"), m.get("version")) {
+    let f = Fields::read(line)?;
+    match (f.0.get("format"), f.0.get("version")) {
         (Some(f), _) if f != format => Err(format!("header names format {f}, expected {format:?}")),
         (_, Some(v)) if v != VERSION => Err(format!("format version {v} is not supported")),
         _ => Err(format!("header must be exactly {}", header(format))),
@@ -183,45 +298,31 @@ impl Entry {
         kind: &str,
         body: Value,
     ) -> Result<Entry, String> {
-        if !KINDS.contains(&kind) {
-            return Err(format!("unknown kind {kind:?}"));
-        }
-        if !body.is_object() {
-            return Err("a body must be a JSON object".into());
-        }
-        if !all_nfc(&body) {
-            return Err(
-                "a string in the body is not in Unicode NFC; normalise it with record::nfc".into(),
-            );
-        }
-        let body_hash = body_hash(&body)?;
-        let mut m = Map::new();
-        m.insert("seq".into(), json!(seq));
-        m.insert("parent".into(), json!(parent.map(|p| p.0)));
-        m.insert("prev".into(), json!(parent.map(|p| p.1)));
-        m.insert("kind".into(), json!(kind));
-        m.insert("body_hash".into(), json!(body_hash));
-        let hash = record_hash(&m, true);
-        let line = Entry {
+        check_new(kind, &body)?;
+        let mut entry = Entry {
             seq,
             parent: parent.map(|p| p.0),
             prev: parent.map(|p| p.1.to_string()),
             kind: kind.into(),
+            body_hash: body_hash(&body)?,
             body: Some(body),
-            body_hash,
-            hash,
-        }
-        .to_line()?;
-        Entry::parse(&line)
+            hash: String::new(),
+        };
+        entry.hash = hash_of(&entry.fields(), true);
+        Entry::parse(&entry.to_line()?)
+    }
+
+    /// The entry's fields, as the format names them.
+    fn fields(&self) -> Value {
+        json!({
+            "seq": self.seq, "parent": self.parent, "prev": self.prev, "kind": self.kind,
+            "body": self.body, "body_hash": self.body_hash, "hash": self.hash,
+        })
     }
 
     /// The entry as one line of canonical JSON, without its newline.
     pub fn to_line(&self) -> Result<String, String> {
-        let v = json!({
-            "seq": self.seq, "parent": self.parent, "prev": self.prev, "kind": self.kind,
-            "body": self.body, "body_hash": self.body_hash, "hash": self.hash,
-        });
-        jcs::dumps(&v).map_err(|e| e.0)
+        line_of(self.fields())
     }
 
     /// The same entry with its body purged.
@@ -234,49 +335,40 @@ impl Entry {
 
     /// Parse a line and check everything the line can check on itself.
     pub fn parse(line: &str) -> Result<Entry, String> {
-        let m = canonical_object(line)?;
-        let seq = natural(need(&m, "seq")?, "seq")?;
-        let parent = match need(&m, "parent")? {
-            Value::Null => None,
-            v => Some(natural(v, "parent")?),
-        };
-        let prev = match (need(&m, "prev")?, parent) {
-            (Value::Null, None) => None,
-            (v, Some(_)) if is_hash(v) => Some(v.as_str().unwrap().to_string()),
-            _ => return Err("prev must be null exactly when parent is, else a hash".into()),
-        };
+        let f = Fields::read(line)?;
+        let seq = f.natural("seq")?;
+        let parent = f.parent()?;
+        let prev = f.prev(parent)?;
         if parent.is_some_and(|p| p >= seq) {
             return Err("parent must come before the entry".into());
         }
-        let kind = need(&m, "kind")?.as_str().unwrap_or("");
-        if !KINDS.contains(&kind) {
-            return Err(format!("unknown kind {}", m["kind"]));
-        }
-        let bh = need(&m, "body_hash")?;
-        if !is_hash(bh) {
-            return Err("body_hash must be 64 lowercase hex digits".into());
-        }
-        let body = match need(&m, "body")? {
-            Value::Null => None,
-            b @ Value::Object(_) => {
-                if body_hash(b)? != bh.as_str().unwrap() {
-                    return Err("body_hash does not match the body".into());
-                }
-                Some(b.clone())
-            }
-            _ => return Err("body must be an object, or null when purged".into()),
-        };
-        let hash = check_own_hash(&m, true)?;
         Ok(Entry {
             seq,
             parent,
             prev,
-            kind: kind.into(),
-            body,
-            body_hash: bh.as_str().unwrap().into(),
-            hash,
+            kind: f.kind()?,
+            body_hash: f.hex("body_hash", 32, HASH)?,
+            body: f.body()?,
+            hash: f.own_hash(true)?,
         })
     }
+}
+
+/// What a new entry must be: of a known kind, with an object for its
+/// body, in Unicode NFC.
+fn check_new(kind: &str, body: &Value) -> Result<(), String> {
+    if !KINDS.contains(&kind) {
+        return Err(format!("unknown kind {kind:?}"));
+    }
+    if !body.is_object() {
+        return Err("a body must be a JSON object".into());
+    }
+    if !all_nfc(body) {
+        return Err(
+            "a string in the body is not in Unicode NFC; normalise it with record::nfc".into(),
+        );
+    }
+    Ok(())
 }
 
 /// One record of `seals.jsonl`. The sealer signs the 32 bytes of the entry's hash.
@@ -301,101 +393,81 @@ impl Seal {
         sig: &str,
         prev: Option<&str>,
     ) -> Result<Seal, String> {
-        let mut m = Map::new();
-        m.insert("seq".into(), json!(seq));
-        m.insert("entry_hash".into(), json!(entry_hash));
-        m.insert("date".into(), json!(date));
-        m.insert("author".into(), json!(author));
-        m.insert("sig".into(), json!(sig));
-        m.insert("prev".into(), json!(prev));
-        let hash = record_hash(&m, false);
-        m.insert("hash".into(), json!(hash));
-        Seal::parse(&jcs::dumps(&Value::Object(m)).map_err(|e| e.0)?)
+        let mut fields = json!({
+            "seq": seq, "entry_hash": entry_hash, "date": date,
+            "author": author, "sig": sig, "prev": prev,
+        });
+        fields["hash"] = json!(hash_of(&fields, false));
+        Seal::parse(&line_of(fields)?)
     }
 
     pub fn to_line(&self) -> Result<String, String> {
-        let v = json!({
+        line_of(json!({
             "seq": self.seq, "entry_hash": self.entry_hash, "date": self.date,
             "author": self.author, "sig": self.sig, "prev": self.prev, "hash": self.hash,
-        });
-        jcs::dumps(&v).map_err(|e| e.0)
+        }))
     }
 
     pub fn parse(line: &str) -> Result<Seal, String> {
-        let m = canonical_object(line)?;
-        let seq = natural(need(&m, "seq")?, "seq")?;
-        let entry_hash = need(&m, "entry_hash")?;
-        if !is_hash(entry_hash) {
-            return Err("entry_hash must be 64 lowercase hex digits".into());
-        }
-        let date = need(&m, "date")?.as_str().unwrap_or("");
-        if !is_date(date) {
-            return Err("date must be ISO 8601 UTC to the second, as 2026-11-12T09:30:00Z".into());
-        }
-        let author = need(&m, "author")?;
-        if !is_hash(author) {
-            return Err("author must be a key fingerprint, 64 lowercase hex digits".into());
-        }
-        let sig = need(&m, "sig")?.as_str().unwrap_or("");
-        if from_hex(sig, 64).is_none() {
-            return Err("sig must be 128 lowercase hex digits".into());
-        }
-        let prev = match need(&m, "prev")? {
-            Value::Null => None,
-            v if is_hash(v) => Some(v.as_str().unwrap().to_string()),
-            _ => return Err("prev must be null or a hash".into()),
-        };
-        let hash = check_own_hash(&m, false)?;
+        let f = Fields::read(line)?;
         Ok(Seal {
-            seq,
-            entry_hash: entry_hash.as_str().unwrap().into(),
-            date: date.into(),
-            author: author.as_str().unwrap().into(),
-            sig: sig.into(),
-            prev,
-            hash,
+            seq: f.natural("seq")?,
+            entry_hash: f.hex("entry_hash", 32, HASH)?,
+            date: f.date()?,
+            author: f.hex("author", 32, "a key fingerprint, 64 lowercase hex digits")?,
+            sig: f.hex("sig", 64, "128 lowercase hex digits")?,
+            prev: f.prev_seal()?,
+            hash: f.own_hash(false)?,
         })
     }
 }
 
 /// ISO 8601 UTC to the second, with a valid calendar date and time.
 pub fn is_date(s: &str) -> bool {
-    let b = s.as_bytes();
-    let digits = |r: std::ops::Range<usize>| b[r.clone()].iter().all(u8::is_ascii_digit);
-    if b.len() != 20
-        || b[4] != b'-'
-        || b[7] != b'-'
-        || b[10] != b'T'
-        || b[13] != b':'
-        || b[16] != b':'
-        || b[19] != b'Z'
-        || !(digits(0..4)
-            && digits(5..7)
-            && digits(8..10)
-            && digits(11..13)
-            && digits(14..16)
-            && digits(17..19))
-    {
-        return false;
+    let parts = s.strip_suffix('Z').and_then(|s| s.split_once('T'));
+    parts.is_some_and(|(date, time)| valid_date(date) && valid_time(time))
+}
+
+fn valid_date(text: &str) -> bool {
+    match numbers(text, "0000-00-00").as_deref() {
+        Some([y, mo, d]) => (1..=12).contains(mo) && (1..=days_in(*y, *mo)).contains(d),
+        _ => false,
     }
-    let n = |r: std::ops::Range<usize>| s[r].parse::<u32>().unwrap();
-    let (y, mo, d, h, mi, se) = (n(0..4), n(5..7), n(8..10), n(11..13), n(14..16), n(17..19));
-    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
-    let days = [
-        31,
-        if leap { 29 } else { 28 },
-        31,
-        30,
-        31,
-        30,
-        31,
-        31,
-        30,
-        31,
-        30,
-        31,
-    ];
-    (1..=12).contains(&mo) && d >= 1 && d <= days[mo as usize - 1] && h < 24 && mi < 60 && se < 60
+}
+
+fn valid_time(text: &str) -> bool {
+    match numbers(text, "00:00:00").as_deref() {
+        Some([h, mi, se]) => *h < 24 && *mi < 60 && *se < 60,
+        _ => false,
+    }
+}
+
+/// The numbers in a text that has a form's shape: a digit wherever the
+/// form has 0, and the form's own character elsewhere.
+fn numbers(text: &str, form: &str) -> Option<Vec<u32>> {
+    let fits = |(c, f): (u8, u8)| {
+        if f == b'0' {
+            c.is_ascii_digit()
+        } else {
+            c == f
+        }
+    };
+    if text.len() != form.len() || !text.bytes().zip(form.bytes()).all(fits) {
+        return None;
+    }
+    let runs = text.split(|c: char| !c.is_ascii_digit());
+    Some(runs.filter_map(|n| n.parse().ok()).collect())
+}
+
+fn days_in(year: u32, month: u32) -> u32 {
+    let divides = |n: u32| year.is_multiple_of(n);
+    let leap = (divides(4) && !divides(100)) || divides(400);
+    match month {
+        2 if leap => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    }
 }
 
 /// One record of `keys.jsonl`: an author's Ed25519 public key.
@@ -410,18 +482,16 @@ pub struct Key {
 
 impl Key {
     pub fn new(public: &[u8; 32]) -> Result<Key, String> {
-        let mut m = Map::new();
-        m.insert("alg".into(), json!("ed25519"));
-        m.insert("key".into(), json!(to_hex(public)));
-        m.insert("fingerprint".into(), json!(sha256_hex(public)));
-        let hash = record_hash(&m, false);
-        m.insert("hash".into(), json!(hash));
-        Key::parse(&jcs::dumps(&Value::Object(m)).map_err(|e| e.0)?)
+        let (key, fingerprint) = (to_hex(public), sha256_hex(public));
+        let mut fields = json!({"alg": "ed25519", "key": key, "fingerprint": fingerprint});
+        fields["hash"] = json!(hash_of(&fields, false));
+        Key::parse(&line_of(fields)?)
     }
 
     pub fn to_line(&self) -> Result<String, String> {
-        let v = json!({"alg": "ed25519", "key": self.key, "fingerprint": self.fingerprint, "hash": self.hash});
-        jcs::dumps(&v).map_err(|e| e.0)
+        line_of(json!({
+            "alg": "ed25519", "key": self.key, "fingerprint": self.fingerprint, "hash": self.hash,
+        }))
     }
 
     pub fn bytes(&self) -> [u8; 32] {
@@ -429,22 +499,14 @@ impl Key {
     }
 
     pub fn parse(line: &str) -> Result<Key, String> {
-        let m = canonical_object(line)?;
-        if need(&m, "alg")? != "ed25519" {
+        let f = Fields::read(line)?;
+        if f.need("alg")? != "ed25519" {
             return Err("alg must be \"ed25519\"".into());
         }
-        let key = need(&m, "key")?.as_str().unwrap_or("");
-        let Some(bytes) = from_hex(key, 32) else {
-            return Err("key must be 64 lowercase hex digits".into());
-        };
-        if need(&m, "fingerprint")?.as_str() != Some(sha256_hex(&bytes).as_str()) {
-            return Err("fingerprint is not the SHA-256 of the key".into());
-        }
-        let hash = check_own_hash(&m, false)?;
         Ok(Key {
-            key: key.into(),
-            fingerprint: m["fingerprint"].as_str().unwrap().into(),
-            hash,
+            key: f.key()?,
+            fingerprint: f.text("fingerprint")?.to_string(),
+            hash: f.own_hash(false)?,
         })
     }
 }
@@ -623,6 +685,39 @@ mod tests {
         );
     }
 
+    /// The line of a record made of these fields, with its hash added: a
+    /// record that is wrong only in what a test puts in its fields.
+    fn hashed_line(mut fields: Value, drop_body: bool) -> String {
+        fields["hash"] = json!(hash_of(&fields, drop_body));
+        line_of(fields).unwrap()
+    }
+
+    #[test]
+    fn a_first_entry_with_a_parents_hash_is_refused() {
+        // Catches prev accepted where there is no parent.
+        let body = json!({});
+        let fields = json!({
+            "seq": 1, "parent": null, "prev": sha256_hex(b"no entry"), "kind": "edit",
+            "body": body, "body_hash": body_hash(&body).unwrap(),
+        });
+        assert_eq!(
+            Entry::parse(&hashed_line(fields, true)),
+            Err("prev must be null exactly when parent is, else a hash".into())
+        );
+    }
+
+    #[test]
+    fn a_key_with_another_keys_fingerprint_is_refused() {
+        // Catches a fingerprint that is not checked against its key.
+        let fields = json!({
+            "alg": "ed25519", "key": to_hex(&[7u8; 32]), "fingerprint": sha256_hex(&[8u8; 32]),
+        });
+        assert_eq!(
+            Key::parse(&hashed_line(fields, false)),
+            Err("fingerprint is not the SHA-256 of the key".into())
+        );
+    }
+
     #[test]
     fn dates() {
         // Catches malformed or impossible dates accepted, or valid ones refused.
@@ -644,6 +739,8 @@ mod tests {
             "2026-11-12T09:30:00.5Z",
             "",
             "2026-1a-12T09:30:00Z",
+            "2026/11/12T09:30:00Z",
+            "2026-11-12T09.30.00Z",
         ] {
             assert!(!is_date(bad), "{bad}");
         }
