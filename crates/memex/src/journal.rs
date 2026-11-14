@@ -34,6 +34,19 @@ impl From<io::Error> for Error {
     }
 }
 
+impl From<LineError> for Error {
+    fn from(e: LineError) -> Self {
+        Error::Format(e)
+    }
+}
+
+/// The format's own checks of an entry refuse it with a message.
+impl From<String> for Error {
+    fn from(m: String) -> Self {
+        Error::Refused(m)
+    }
+}
+
 pub struct Journal {
     dir: PathBuf,
     entries: Vec<Entry>,
@@ -57,7 +70,7 @@ impl Journal {
             sync_dir(dir)?;
         }
         let text = fs::read_to_string(&path)?;
-        let entries = chain::check_journal(&text).map_err(Error::Format)?;
+        let entries = chain::check_journal(&text)?;
         Ok(Journal {
             dir: dir.into(),
             entries,
@@ -113,18 +126,17 @@ impl Journal {
             Some(p) => Some((p, self.entries[p as usize - 1].hash.clone())),
         };
         // The format keeps text in Unicode NFC, so the writer normalises it.
-        let body = record::nfc(&body).map_err(Error::Refused)?;
+        let body = record::nfc(&body)?;
         let e = Entry::new(
             seq,
             parent.as_ref().map(|(p, h)| (*p, h.as_str())),
             kind,
             body,
-        )
-        .map_err(Error::Refused)?;
+        )?;
         let mut f = OpenOptions::new()
             .append(true)
             .open(self.dir.join(JOURNAL))?;
-        f.write_all((e.to_line().map_err(Error::Refused)? + "\n").as_bytes())?;
+        f.write_all((e.to_line()? + "\n").as_bytes())?;
         if self.durable {
             f.sync_data()?;
         }
@@ -160,7 +172,7 @@ impl Journal {
     fn rewrite(&self) -> Result<(), Error> {
         let mut text = record::header(JOURNAL_FORMAT) + "\n";
         for e in &self.entries {
-            text += &(e.to_line().map_err(Error::Refused)? + "\n");
+            text += &(e.to_line()? + "\n");
         }
         let tmp = self.dir.join(format!("{JOURNAL}.tmp"));
         let mut f = File::create(&tmp)?;
