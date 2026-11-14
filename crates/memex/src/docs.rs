@@ -704,4 +704,80 @@ mod tests {
         );
         assert_ne!(normal("1988"), normal("1989"));
     }
+
+    /// What the reader makes of one block of Pandoc's tree.
+    fn read_block(block: Value) -> Reader {
+        let mut r = Reader::default();
+        r.block(&block, None);
+        r
+    }
+
+    fn word(text: &str) -> Value {
+        serde_json::json!({"t": "Str", "c": text})
+    }
+
+    /// (depth, style, text) of each block read.
+    fn shape(r: &Reader) -> Vec<(usize, &str, &str)> {
+        let blocks = r.blocks.iter();
+        blocks
+            .map(|b| (b.depth, b.style.as_str(), b.text.as_str()))
+            .collect()
+    }
+
+    #[test]
+    fn a_list_items_first_paragraph_is_the_item_and_the_rest_go_under_it() {
+        // Catches a second paragraph read as another item, or at the item's depth.
+        let item =
+            serde_json::json!([{"t": "Plain", "c": [word("a")]}, {"t": "Para", "c": [word("b")]}]);
+        let r = read_block(serde_json::json!({"t": "BulletList", "c": [item]}));
+        assert_eq!(shape(&r), [(0, "bullet", "a"), (1, "para", "b")]);
+    }
+
+    /// A citation of one work, as Pandoc gives it.
+    fn citation(key: &str) -> Value {
+        serde_json::json!({"t": "Cite", "c": [[{"citationId": key}], []]})
+    }
+
+    #[test]
+    fn a_citations_key_is_kept_though_the_text_would_not_show_it_as_one() {
+        // Catches keys taken only from the text "[@key]": a key with "/" is
+        // not read back from text, so it must come from the citation.
+        let r = read_block(serde_json::json!({"t": "Para", "c": [citation("smith/2020")]}));
+        assert_eq!(r.blocks[0].cites, ["smith/2020"]);
+    }
+
+    #[test]
+    fn a_citation_inside_a_links_text_counts() {
+        // Catches the citations of a link's text dropped with its label.
+        let link = serde_json::json!({"t": "Link", "c": [[], [citation("smith/2020")], ["u", ""]]});
+        let r = read_block(serde_json::json!({"t": "Para", "c": [link]}));
+        assert_eq!(r.blocks[0].cites, ["smith/2020"]);
+    }
+
+    #[test]
+    fn a_headings_class_is_counted_as_lost() {
+        // Catches a heading's class dropped silently when its identifier is
+        // the one Pandoc would make.
+        let attr = serde_json::json!(["intro", ["unnumbered"], []]);
+        let r = read_block(serde_json::json!({"t": "Header", "c": [1, attr, [word("Intro")]]}));
+        assert_eq!(r.losses.get("heading identifier or class"), Some(&1));
+    }
+
+    #[test]
+    fn a_tables_caption_is_counted_as_lost() {
+        // Catches a caption dropped silently.
+        let caption = serde_json::json!([null, [{"t": "Plain", "c": [word("c")]}]]);
+        let table = serde_json::json!([[], caption, [], [[], []], [], []]);
+        let r = read_block(serde_json::json!({"t": "Table", "c": table}));
+        assert_eq!(r.losses.get("table caption"), Some(&1));
+    }
+
+    #[test]
+    fn only_a_well_formed_key_is_a_citation_in_text() {
+        // Catches any text after "@" in brackets taken for a key.
+        assert_eq!(
+            cite_keys("[@ok; @not a key!] [@a_b-c:1.2]"),
+            ["ok", "a_b-c:1.2"]
+        );
+    }
 }
