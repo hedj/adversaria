@@ -223,7 +223,7 @@ pub const STD: &[&str] = &[
 ];
 
 /// One measured unit.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Unit {
     /// Where: file, and the unit's name in it.
     pub file: String,
@@ -248,6 +248,17 @@ pub struct Unit {
 }
 
 impl Unit {
+    /// A unit of a file, by its name, and what it refers to.
+    pub fn new(file: &str, name: &str, referents: BTreeSet<String>) -> Unit {
+        let (file, name) = (file.to_string(), name.to_string());
+        Unit {
+            file,
+            name,
+            referents,
+            ..Default::default()
+        }
+    }
+
     /// The lower bound: ambiguous calls left out.
     pub fn load(&self) -> usize {
         self.referents.len()
@@ -295,6 +306,15 @@ pub struct Defs {
 const SMALL: usize = 4;
 
 impl Defs {
+    /// The definitions of all the files.
+    fn of(parsed: &[Parsed]) -> Defs {
+        let mut defs = Defs::default();
+        for p in parsed {
+            DefCollector(&mut defs).visit_file(&p.tree);
+        }
+        defs
+    }
+
     fn chunk_of(&self, field: &str) -> Option<&String> {
         let owners = self.field_owners.get(field)?;
         let only = owners.iter().next().filter(|_| owners.len() == 1)?;
@@ -447,21 +467,31 @@ pub(crate) fn type_of(
     e: &syn::Expr,
 ) -> Option<String> {
     match e {
-        syn::Expr::Path(p) => p
-            .path
-            .get_ident()
-            .and_then(|i| locals.get(&i.to_string()).cloned()),
-        syn::Expr::Field(f) => {
-            let syn::Member::Named(id) = &f.member else {
-                return None;
-            };
-            let t = type_of(defs, locals, &f.base)?;
-            defs.field_types.get(&(t, id.to_string())).cloned()
-        }
+        syn::Expr::Path(p) => local_type(locals, p),
+        syn::Expr::Field(f) => field_type(defs, locals, f),
         syn::Expr::Paren(p) => type_of(defs, locals, &p.expr),
         syn::Expr::Reference(r) => type_of(defs, locals, &r.expr),
         _ => None,
     }
+}
+
+/// The declared type of a local, if it is one of known type.
+fn local_type(locals: &BTreeMap<String, String>, p: &syn::ExprPath) -> Option<String> {
+    let name = p.path.get_ident()?.to_string();
+    locals.get(&name).cloned()
+}
+
+/// The declared type of a named field of an expression of known type.
+fn field_type(
+    defs: &Defs,
+    locals: &BTreeMap<String, String>,
+    f: &syn::ExprField,
+) -> Option<String> {
+    let syn::Member::Named(id) = &f.member else {
+        return None;
+    };
+    let base = type_of(defs, locals, &f.base)?;
+    defs.field_types.get(&(base, id.to_string())).cloned()
 }
 
 /// Collects one function's referents.
@@ -702,7 +732,25 @@ struct FnCollector<'a> {
     blind: &'a mut Blind,
 }
 
-impl FnCollector<'_> {
+impl<'a> FnCollector<'a> {
+    fn new(defs: &'a Defs, file: &str, blind: &'a mut Blind) -> FnCollector<'a> {
+        let file = file.to_string();
+        FnCollector {
+            defs,
+            file,
+            owner: vec![],
+            units: vec![],
+            blind,
+        }
+    }
+
+    /// The functions of a file, as units.
+    fn units_of(defs: &'a Defs, p: &Parsed, blind: &'a mut Blind) -> Vec<Unit> {
+        let mut c = FnCollector::new(defs, &p.name, blind);
+        c.visit_file(&p.tree);
+        c.units
+    }
+
     fn measure(&mut self, name: String, block: &syn::Block, sig: &syn::Signature) {
         let owner = self.owner.last().cloned();
         let mut r = Refs {
@@ -797,141 +845,171 @@ pub fn measure_rust(
     files: &[(String, String)],
     crates: &[String],
 ) -> Result<(Vec<Unit>, Vec<Unit>, Blind), String> {
-    let parsed: Vec<(String, syn::File)> = files
-        .iter()
-        .map(|(n, src)| {
-            syn::parse_file(src)
-                .map(|f| (n.clone(), f))
-                .map_err(|e| format!("{n}: {e}"))
-        })
-        .collect::<Result<_, _>>()?;
-    let mut defs = Defs::default();
-    for (_, f) in &parsed {
-        DefCollector(&mut defs).visit_file(f);
-    }
-    let names = module_names(files);
-    let mut blind = Blind::default();
-    let mut fns = Vec::new();
-    let mut modules = Vec::new();
-    for (name, f) in &parsed {
-        let mut c = FnCollector {
-            defs: &defs,
-            file: name.clone(),
-            owner: vec![],
-            units: vec![],
-            blind: &mut blind,
-        };
-        c.visit_file(f);
-        fns.extend(c.units);
-        modules.push(module_unit(name, f, crates, &names));
-    }
+    let parsed = parse_files(files)?;
+    let modules = module_units(&parsed, crates, &module_names(files));
+    let defs = Defs::of(&parsed);
+    let (fns, blind) = fn_units(&defs, &parsed);
     Ok((fns, modules, blind))
 }
 
-/// A file as a module: the other modules and workspace crates it names.
-fn module_unit(name: &str, f: &syn::File, crates: &[String], names: &BTreeSet<String>) -> Unit {
-    struct Mods<'a> {
-        crates: &'a [String],
-        out: BTreeSet<String>,
-        children: usize,
-        /// The module `super` names, from the file's path.
-        parent: String,
-        /// The project's modules, by name.
-        names: &'a BTreeSet<String>,
-    }
-    impl Mods<'_> {
-        /// What a name under `crate` or `super` refers to: a module, if it
-        /// is one; else the module it is an item of.
-        fn owner(&self, first: &str, item: &str) -> String {
-            if self.names.contains(item) {
-                format!("mod {item}")
-            } else if first == "super" {
-                format!("mod {}", self.parent)
-            } else {
-                "mod crate".into()
-            }
-        }
-    }
-    impl<'ast> Visit<'ast> for Mods<'_> {
-        fn visit_path(&mut self, p: &'ast syn::Path) {
-            let s: Vec<String> = p.segments.iter().map(|s| s.ident.to_string()).collect();
-            match s.first().map(String::as_str) {
-                Some("crate" | "super") if s.len() > 2 => {
-                    self.out.insert(format!("mod {}", s[1]));
-                }
-                Some(first @ ("crate" | "super")) if s.len() == 2 => {
-                    let o = self.owner(first, &s[1]);
-                    self.out.insert(o);
-                }
-                Some(c) if self.crates.iter().any(|x| x == c) && s.len() > 1 => {
-                    self.out.insert(format!("crate {c}"));
-                }
-                _ => {}
-            }
-            syn::visit::visit_path(self, p);
-        }
-        fn visit_use_tree(&mut self, t: &'ast syn::UseTree) {
-            if let syn::UseTree::Path(p) = t {
-                let first = p.ident.to_string();
-                if first == "crate" || first == "super" {
-                    if let syn::UseTree::Path(q) = &*p.tree {
-                        self.out.insert(format!("mod {}", q.ident));
-                    } else if let syn::UseTree::Name(q) = &*p.tree {
-                        let o = self.owner(&first, &q.ident.to_string());
-                        self.out.insert(o);
-                    } else if let syn::UseTree::Group(g) = &*p.tree {
-                        for t in &g.items {
-                            match t {
-                                syn::UseTree::Path(q) => {
-                                    self.out.insert(format!("mod {}", q.ident));
-                                }
-                                syn::UseTree::Name(q) => {
-                                    let o = self.owner(&first, &q.ident.to_string());
-                                    self.out.insert(o);
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                    return;
-                }
-                if self.crates.contains(&first) {
-                    self.out.insert(format!("crate {first}"));
-                    return;
-                }
-            }
-            syn::visit::visit_use_tree(self, t);
-        }
-        fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
-            if m.content.is_none() {
-                self.children += 1;
-            }
-            syn::visit::visit_item_mod(self, m);
-        }
-    }
-    let mut m = Mods {
-        crates,
-        out: BTreeSet::new(),
-        children: 0,
-        parent: parent_module(name),
-        names,
+/// A file's name and its syntax tree.
+struct Parsed {
+    name: String,
+    tree: syn::File,
+}
+
+/// Each file's syntax tree, by its name.
+fn parse_files(files: &[(String, String)]) -> Result<Vec<Parsed>, String> {
+    let parse = |(name, src): &(String, String)| {
+        let tree = syn::parse_file(src).map_err(|e| format!("{name}: {e}"))?;
+        Ok(Parsed {
+            name: name.clone(),
+            tree,
+        })
     };
-    m.visit_file(f);
+    files.iter().map(parse).collect()
+}
+
+/// Each function of the files as a unit, and what the measure could not
+/// see in them.
+fn fn_units(defs: &Defs, parsed: &[Parsed]) -> (Vec<Unit>, Blind) {
+    let mut blind = Blind::default();
+    let mut fns = Vec::new();
+    for p in parsed {
+        fns.extend(FnCollector::units_of(defs, p, &mut blind));
+    }
+    (fns, blind)
+}
+
+/// Each file as a module.
+fn module_units(parsed: &[Parsed], crates: &[String], names: &BTreeSet<String>) -> Vec<Unit> {
+    parsed
+        .iter()
+        .map(|p| module_unit(p, crates, names))
+        .collect()
+}
+
+/// A file as a module: the other modules and workspace crates it names.
+fn module_unit(p: &Parsed, crates: &[String], names: &BTreeSet<String>) -> Unit {
+    let mut m = Mods::new(crates, &p.name, names);
+    m.visit_file(&p.tree);
     // A file does not refer to itself.
-    let me = Path::new(name)
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    m.out.remove(&format!("mod {me}"));
-    Unit {
-        file: name.to_string(),
-        name: "(module)".into(),
-        referents: m.out,
-        ambiguous: BTreeSet::new(),
-        children: m.children,
-        forward: 0,
-        strict: None,
-        held: None,
+    m.out.remove(&format!("mod {}", stem_of(&p.name)));
+    m.into_unit(&p.name)
+}
+
+/// A file's name without its directory or extension.
+fn stem_of(name: &str) -> String {
+    let stem = Path::new(name).file_stem();
+    stem.map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+/// The modules and crates a file names, and how many files it holds as
+/// modules.
+struct Mods<'a> {
+    crates: &'a [String],
+    out: BTreeSet<String>,
+    children: usize,
+    /// The module `super` names, from the file's path.
+    parent: String,
+    /// The project's modules, by name.
+    names: &'a BTreeSet<String>,
+}
+
+impl<'a> Mods<'a> {
+    fn new(crates: &'a [String], name: &str, names: &'a BTreeSet<String>) -> Mods<'a> {
+        let parent = parent_module(name);
+        Mods {
+            crates,
+            out: BTreeSet::new(),
+            children: 0,
+            parent,
+            names,
+        }
+    }
+
+    fn into_unit(self, name: &str) -> Unit {
+        let children = self.children;
+        Unit {
+            children,
+            ..Unit::new(name, "(module)", self.out)
+        }
+    }
+
+    /// What a name under `crate` or `super` refers to: a module, if it
+    /// is one; else the module it is an item of.
+    fn owner(&self, first: &str, item: &str) -> String {
+        if self.names.contains(item) {
+            format!("mod {item}")
+        } else if first == "super" {
+            format!("mod {}", self.parent)
+        } else {
+            "mod crate".into()
+        }
+    }
+
+    /// A use under `crate` or `super`: a module, or the owner of a name,
+    /// or each of a group.
+    fn use_in_project(&mut self, first: &str, tree: &syn::UseTree) {
+        match tree {
+            syn::UseTree::Path(q) => {
+                self.out.insert(format!("mod {}", q.ident));
+            }
+            syn::UseTree::Name(q) => {
+                let o = self.owner(first, &q.ident.to_string());
+                self.out.insert(o);
+            }
+            syn::UseTree::Group(g) => g.items.iter().for_each(|t| self.use_in_group(first, t)),
+            _ => {}
+        }
+    }
+
+    /// One use of a group under `crate` or `super`.
+    fn use_in_group(&mut self, first: &str, t: &syn::UseTree) {
+        if matches!(t, syn::UseTree::Path(_) | syn::UseTree::Name(_)) {
+            self.use_in_project(first, t);
+        }
+    }
+
+    /// A path's module or crate, if it names one.
+    fn path_of(&self, s: &[String]) -> Option<String> {
+        match s.first().map(String::as_str) {
+            Some("crate" | "super") if s.len() > 2 => Some(format!("mod {}", s[1])),
+            Some(first @ ("crate" | "super")) if s.len() == 2 => Some(self.owner(first, &s[1])),
+            Some(c) if self.crates.iter().any(|x| x == c) && s.len() > 1 => {
+                Some(format!("crate {c}"))
+            }
+            _ => None,
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for Mods<'_> {
+    fn visit_path(&mut self, p: &'ast syn::Path) {
+        let s: Vec<String> = p.segments.iter().map(|s| s.ident.to_string()).collect();
+        self.out.extend(self.path_of(&s));
+        syn::visit::visit_path(self, p);
+    }
+    fn visit_use_tree(&mut self, t: &'ast syn::UseTree) {
+        if let syn::UseTree::Path(p) = t {
+            let first = p.ident.to_string();
+            if first == "crate" || first == "super" {
+                self.use_in_project(&first, &p.tree);
+                return;
+            }
+            if self.crates.contains(&first) {
+                self.out.insert(format!("crate {first}"));
+                return;
+            }
+        }
+        syn::visit::visit_use_tree(self, t);
+    }
+    fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
+        if m.content.is_none() {
+            self.children += 1;
+        }
+        syn::visit::visit_item_mod(self, m);
     }
 }
 
@@ -971,186 +1049,375 @@ fn parent_module(name: &str) -> String {
 
 // ---- Markdown ---------------------------------------------------------
 
-/// Measure Markdown documents: each section, by heading.
-pub fn measure_markdown(docs: &[(String, String)]) -> Vec<Unit> {
-    struct Sec {
-        file: String,
-        title: String,
-        level: usize,
-        body: Vec<String>,
-        children: usize,
-    }
-    let mut secs: Vec<Sec> = Vec::new();
-    for (file, text) in docs {
-        let mut fenced = false;
-        for line in text.lines() {
-            if line.starts_with("```") {
-                fenced = !fenced;
-            }
-            let level = line.chars().take_while(|c| *c == '#').count();
-            if !fenced && level > 0 && line[level..].starts_with(' ') {
-                let title = line[level..].trim().to_string();
-                // Parent: the last section of this file with a lower level.
-                if let Some(p) = secs
-                    .iter_mut()
-                    .rev()
-                    .take_while(|s| s.file == *file)
-                    .find(|s| s.level < level)
-                {
-                    p.children += 1;
-                }
-                secs.push(Sec {
-                    file: file.clone(),
-                    title,
-                    level,
-                    body: vec![],
-                    children: 0,
-                });
-            } else if let Some(s) = secs.last_mut().filter(|s| s.file == *file) {
-                s.body.push(line.to_string());
-            }
+/// A section of a Markdown document: its file, its heading's title and
+/// level, its lines, and how many sections it holds directly.
+struct Sec {
+    file: String,
+    title: String,
+    level: usize,
+    body: Vec<String>,
+    children: usize,
+}
+
+impl Sec {
+    fn new(file: &str, title: String, level: usize) -> Sec {
+        let file = file.to_string();
+        Sec {
+            file,
+            title,
+            level,
+            body: vec![],
+            children: 0,
         }
     }
-    // Where each term is defined.
-    let ticked = |s: &str| -> Vec<String> {
-        s.split('`')
-            .skip(1)
-            .step_by(2)
-            .map(|t| t.trim().to_string())
-            .filter(|t| !t.is_empty())
-            .collect()
-    };
-    // The terms each section introduces itself: in its heading, as the
-    // first backticked cell of a table row, or as a bold lead-in.
-    let introduces = |s: &Sec| -> Vec<String> {
-        let mut out = ticked(&s.title);
-        for l in &s.body {
-            let l = l.trim_start();
-            if let Some(rest) = l.strip_prefix("| `")
-                && let Some(t) = rest.split('`').next()
-            {
-                out.push(t.trim().to_string());
-            }
-            if let Some(rest) = l.strip_prefix("**")
-                && let Some(t) = rest.split("**").next()
-            {
-                let t = t.trim_matches(['`', '.', ':', ' ']).to_string();
-                if !t.is_empty() && t.len() < 40 {
-                    out.push(t);
-                }
-            }
+
+    /// The terms the section introduces itself: in its heading, as the
+    /// first backticked cell of a table row, or as a bold lead-in.
+    fn introduces(&self) -> Vec<String> {
+        let mut out = ticked(&self.title);
+        for l in &self.body {
+            out.extend(introduced_in(l.trim_start()));
         }
         out
-    };
-    let local: Vec<BTreeSet<String>> = secs
-        .iter()
-        .map(|s| introduces(s).into_iter().collect())
-        .collect();
-    // Where each term is defined, for other sections. Records (the log,
-    // the plan) introduce terms locally but define none for others: a
-    // table of sizes or timings is data, not a glossary.
-    let defines_terms = |f: &str| !f.ends_with("docs/log.md") && !f.ends_with("docs/plan.md");
+    }
+
+    /// The section as a unit that refers to these.
+    fn unit(&self, referents: BTreeSet<String>) -> Unit {
+        let children = self.children;
+        Unit {
+            children,
+            ..Unit::new(&self.file, &self.title, referents)
+        }
+    }
+
+    /// Whether a § reference names the section: its title, or the start
+    /// of it.
+    fn is_named(&self, target: &str) -> bool {
+        let t = &self.title;
+        let starts =
+            t.starts_with(&format!("{target}. ")) || (target.len() > 3 && t.starts_with(target));
+        *t == target || starts
+    }
+}
+
+/// Measure Markdown documents: each section, by heading.
+pub fn measure_markdown(docs: &[(String, String)]) -> Vec<Unit> {
+    let secs = sections(docs);
+    let terms = Terms::of(&secs);
+    (0..secs.len()).map(|i| terms.unit(&secs, i)).collect()
+}
+
+/// The documents' sections, in order.
+fn sections(docs: &[(String, String)]) -> Vec<Sec> {
+    let mut secs = Vec::new();
+    for (file, text) in docs {
+        read_sections(&mut secs, file, text);
+    }
+    secs
+}
+
+/// A document's sections, after those of the documents before. A line
+/// in a fenced block is never a heading.
+fn read_sections(secs: &mut Vec<Sec>, file: &str, text: &str) {
+    let mut fenced = false;
+    for line in text.lines() {
+        if line.starts_with("```") {
+            fenced = !fenced;
+        }
+        match heading(line).filter(|_| !fenced) {
+            Some((level, title)) => open_section(secs, file, level, title),
+            None => add_line(secs, file, line),
+        }
+    }
+}
+
+/// A heading's level and title.
+fn heading(line: &str) -> Option<(usize, String)> {
+    let level = line.chars().take_while(|c| *c == '#').count();
+    let is_heading = level > 0 && line[level..].starts_with(' ');
+    is_heading.then(|| (level, line[level..].trim().to_string()))
+}
+
+/// A new section, counted as a child of the last section of its file
+/// with a lower level.
+fn open_section(secs: &mut Vec<Sec>, file: &str, level: usize, title: String) {
+    if let Some(p) = parent_of(secs, file, level) {
+        p.children += 1;
+    }
+    secs.push(Sec::new(file, title, level));
+}
+
+/// The last section of a file with a lower level.
+fn parent_of<'a>(secs: &'a mut [Sec], file: &str, level: usize) -> Option<&'a mut Sec> {
+    let of_file = secs.iter_mut().rev().take_while(|s| s.file == file);
+    of_file.into_iter().find(|s| s.level < level)
+}
+
+/// A line of the last section, if it is of this file.
+fn add_line(secs: &mut [Sec], file: &str, line: &str) {
+    if let Some(s) = secs.last_mut().filter(|s| s.file == file) {
+        s.body.push(line.to_string());
+    }
+}
+
+/// The backticked terms of a text.
+fn ticked(s: &str) -> Vec<String> {
+    let inside = s
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .map(|t| t.trim().to_string());
+    inside.filter(|t| !t.is_empty()).collect()
+}
+
+/// The terms a line introduces: a table row's first backticked cell, and
+/// a bold lead-in.
+fn introduced_in(l: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(rest) = l.strip_prefix("| `")
+        && let Some(t) = rest.split('`').next()
+    {
+        out.push(t.trim().to_string());
+    }
+    if let Some(rest) = l.strip_prefix("**")
+        && let Some(t) = rest.split("**").next()
+    {
+        let t = t.trim_matches(['`', '.', ':', ' ']).to_string();
+        if !t.is_empty() && t.len() < 40 {
+            out.push(t);
+        }
+    }
+    out
+}
+
+/// Records (the log, the plan) introduce terms locally but define none
+/// for others: a table of sizes or timings is data, not a glossary.
+fn defines_terms(f: &str) -> bool {
+    !f.ends_with("docs/log.md") && !f.ends_with("docs/plan.md")
+}
+
+/// Where the documents' terms are defined.
+struct Terms {
+    /// Each term, by the first section that defines it for others.
+    defined: BTreeMap<String, usize>,
+    /// How many terms each section defines.
+    defines: Vec<usize>,
+    /// The terms each section introduces itself.
+    local: Vec<BTreeSet<String>>,
+}
+
+impl Terms {
+    fn of(secs: &[Sec]) -> Terms {
+        let local = secs
+            .iter()
+            .map(|s| s.introduces().into_iter().collect())
+            .collect();
+        let defined = definitions(secs);
+        let defines = definition_counts(&defined, secs.len());
+        Terms {
+            defined,
+            defines,
+            local,
+        }
+    }
+
+    /// Section i as a unit: the terms, sections and documents it names.
+    fn unit(&self, secs: &[Sec], i: usize) -> Unit {
+        let mut refs = SecRefs::default();
+        for l in &secs[i].body {
+            refs.add_all(self.line_refs(secs, i, l));
+        }
+        refs.unit(&secs[i])
+    }
+
+    /// What a line of section i names: terms, sections and documents.
+    fn line_refs(&self, secs: &[Sec], i: usize, l: &str) -> Vec<Ref> {
+        let mut refs = self.term_refs(secs, i, l);
+        refs.extend(cite_refs(secs, i, l));
+        refs.extend(doc_refs(&secs[i].file, l));
+        refs
+    }
+
+    /// The terms a line of section i uses that are defined elsewhere.
+    fn term_refs(&self, secs: &[Sec], i: usize, l: &str) -> Vec<Ref> {
+        let terms = ticked(l).into_iter();
+        terms.filter_map(|t| self.term_ref(secs, i, t)).collect()
+    }
+
+    /// A term used in section i, defined in another: the section that
+    /// defines it, if it is not one i introduces itself.
+    fn defining(&self, term: &str, i: usize) -> Option<usize> {
+        let d = *self.defined.get(term)?;
+        (d != i && !self.local[i].contains(term)).then_some(d)
+    }
+
+    /// What a term used in section i refers to, if it is defined
+    /// elsewhere: its defining section, as one chunk if that defines at
+    /// most four terms, else the term itself.
+    fn term_ref(&self, secs: &[Sec], i: usize, term: String) -> Option<Ref> {
+        let d = self.defining(&term, i)?;
+        let later = d > i && secs[d].file == secs[i].file;
+        let referent = self.referent(&term, d, &secs[d].title);
+        Some(Ref::term(term, referent, later))
+    }
+
+    /// Terms defined together in a section of at most four are learned
+    /// together: one chunk. Else each counts.
+    fn referent(&self, term: &str, d: usize, title: &str) -> String {
+        if self.defines[d] <= 4 {
+            return format!("chunk {title}");
+        }
+        format!("term {term} ({title})")
+    }
+}
+
+/// Each term, by the first section that defines it for others.
+fn definitions(secs: &[Sec]) -> BTreeMap<String, usize> {
     let mut defined: BTreeMap<String, usize> = BTreeMap::new();
-    for (i, s) in secs
+    let defining = secs
         .iter()
         .enumerate()
-        .filter(|(_, s)| defines_terms(&s.file))
-    {
-        for t in introduces(s) {
+        .filter(|(_, s)| defines_terms(&s.file));
+    for (i, s) in defining {
+        for t in s.introduces() {
             defined.entry(t).or_insert(i);
         }
     }
-    // How many terms each section defines.
-    let mut defines = vec![0usize; secs.len()];
+    defined
+}
+
+/// How many terms each of n sections defines.
+fn definition_counts(defined: &BTreeMap<String, usize>, n: usize) -> Vec<usize> {
+    let mut defines = vec![0usize; n];
     for d in defined.values() {
         defines[*d] += 1;
     }
-    secs.iter()
-        .enumerate()
-        .map(|(i, s)| {
-            let mut r = BTreeSet::new();
-            let mut strict = BTreeSet::new();
-            let mut forward = BTreeSet::new();
-            for l in &s.body {
-                for t in ticked(l) {
-                    if let Some(&d) = defined.get(&t)
-                        && d != i
-                        && !local[i].contains(&t)
-                    {
-                        // Terms defined together in a section of at most four
-                        // are learned together: one chunk. Else each counts.
-                        if defines[d] <= 4 {
-                            r.insert(format!("chunk {}", secs[d].title));
-                        } else {
-                            r.insert(format!("term {t} ({})", secs[d].title));
-                        }
-                        strict.insert(format!("term {t}"));
-                        if d > i && secs[d].file == s.file {
-                            forward.insert(t.clone());
-                        }
-                    }
-                }
-                let mut rest = l.as_str();
-                while let Some(k) = rest.find('§') {
-                    let after = &rest[k + '§'.len_utf8()..];
-                    let after_t = after.trim_start();
-                    // A number (§ 9, § 4.2), or a name up to punctuation or
-                    // the next "and" or "or" (§ The journal format).
-                    let target: String = if after_t.starts_with(|c: char| c.is_ascii_digit()) {
-                        after_t
-                            .chars()
-                            .take_while(|c| c.is_ascii_digit() || *c == '.')
-                            .collect()
-                    } else {
-                        let t: String = after_t
-                            .chars()
-                            .take_while(|c| !matches!(c, '(' | ')' | ',' | ';' | ':' | '.' | '|'))
-                            .collect();
-                        t.split(" and ")
-                            .next()
-                            .unwrap_or("")
-                            .split(" or ")
-                            .next()
-                            .unwrap_or("")
-                            .to_string()
-                    };
-                    let target = target.trim().trim_end_matches('.').to_string();
-                    if !target.is_empty() {
-                        // Forward if a later section of this document is it.
-                        let later = secs.iter().enumerate().skip(i + 1).any(|(_, x)| {
-                            x.file == s.file
-                                && (x.title == target
-                                    || x.title.starts_with(&format!("{target}. "))
-                                    || (target.len() > 3 && x.title.starts_with(&target)))
-                        });
-                        if later {
-                            forward.insert(format!("§ {target}"));
-                        }
-                        r.insert(format!("§ {target}"));
-                        strict.insert(format!("§ {target}"));
-                    }
-                    rest = after;
-                }
-                for w in l.split(|c: char| c.is_whitespace() || c == '(' || c == ')' || c == ',') {
-                    if let Some(d) = w.strip_prefix("docs/").or_else(|| w.strip_prefix("`docs/")) {
-                        let d = d.trim_end_matches(['`', '.', ',', ':']);
-                        if d.ends_with(".md") && !s.file.ends_with(d) {
-                            r.insert(format!("doc {d}"));
-                            strict.insert(format!("doc {d}"));
-                        }
-                    }
-                }
-            }
-            Unit {
-                file: s.file.clone(),
-                name: s.title.clone(),
-                referents: r,
-                ambiguous: BTreeSet::new(),
-                children: s.children,
-                forward: forward.len(),
-                strict: Some(strict.len()),
-                held: None,
-            }
+    defines
+}
+
+/// What a section names: the referent as counted with chunks, as counted
+/// apart, and, if it is defined later in the same document, its name.
+struct Ref {
+    referent: String,
+    strict: String,
+    forward: Option<String>,
+}
+
+impl Ref {
+    /// A term, by its referent, forward if defined later.
+    fn term(term: String, referent: String, later: bool) -> Ref {
+        let strict = format!("term {term}");
+        let forward = later.then_some(term);
+        Ref {
+            referent,
+            strict,
+            forward,
+        }
+    }
+
+    /// A § reference, forward if to a later section.
+    fn cite(later: bool, target: String) -> Ref {
+        let name = format!("§ {target}");
+        let forward = later.then(|| name.clone());
+        Ref {
+            referent: name.clone(),
+            strict: name,
+            forward,
+        }
+    }
+}
+
+/// What a section names, as counted with chunks, as counted apart, and
+/// what it names before its definition.
+#[derive(Default)]
+struct SecRefs {
+    chunked: BTreeSet<String>,
+    strict: BTreeSet<String>,
+    forward: BTreeSet<String>,
+}
+
+impl SecRefs {
+    fn add_all(&mut self, refs: Vec<Ref>) {
+        refs.into_iter().for_each(|r| self.add(r));
+    }
+
+    fn add(&mut self, r: Ref) {
+        self.chunked.insert(r.referent);
+        self.strict.insert(r.strict);
+        self.forward.extend(r.forward);
+    }
+
+    fn unit(self, s: &Sec) -> Unit {
+        let (forward, strict) = (self.forward.len(), Some(self.strict.len()));
+        Unit {
+            forward,
+            strict,
+            ..s.unit(self.chunked)
+        }
+    }
+}
+
+/// The § references of a line of section i, each forward if a later
+/// section of its document is the one named.
+fn cite_refs(secs: &[Sec], i: usize, l: &str) -> Vec<Ref> {
+    let targets = cited(l);
+    targets
+        .into_iter()
+        .map(|t| Ref::cite(names_later(secs, i, &t), t))
+        .collect()
+}
+
+/// Whether a section of section i's document after it is the one named.
+fn names_later(secs: &[Sec], i: usize, target: &str) -> bool {
+    let later = secs[i + 1..].iter().filter(|x| x.file == secs[i].file);
+    later.into_iter().any(|x| x.is_named(target))
+}
+
+/// What a line's § references name.
+fn cited(l: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = l;
+    while let Some(k) = rest.find('§') {
+        let after = &rest[k + '§'.len_utf8()..];
+        out.extend(Some(cite_target(after)).filter(|t| !t.is_empty()));
+        rest = after;
+    }
+    out
+}
+
+/// What follows a §: a number (§ 9, § 4.2), or a name up to punctuation
+/// or the next "and" or "or" (§ The journal format).
+fn cite_target(after: &str) -> String {
+    let a = after.trim_start();
+    let target: String = if a.starts_with(|c: char| c.is_ascii_digit()) {
+        a.chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect()
+    } else {
+        cite_name(a)
+    };
+    target.trim().trim_end_matches('.').to_string()
+}
+
+/// A name up to punctuation, or the next "and" or "or".
+fn cite_name(a: &str) -> String {
+    let stop = |c: &char| matches!(c, '(' | ')' | ',' | ';' | ':' | '.' | '|');
+    let t: String = a.chars().take_while(|c| !stop(c)).collect();
+    let before_and = t.split(" and ").next().unwrap_or("");
+    before_and.split(" or ").next().unwrap_or("").to_string()
+}
+
+/// The other documents under docs/ that a line of a document names.
+fn doc_refs(file: &str, l: &str) -> Vec<Ref> {
+    let words = l.split(|c: char| c.is_whitespace() || c == '(' || c == ')' || c == ',');
+    let named = words.filter_map(|w| w.strip_prefix("docs/").or_else(|| w.strip_prefix("`docs/")));
+    let docs = named.map(|d| d.trim_end_matches(['`', '.', ',', ':']));
+    let others = docs.filter(|d| d.ends_with(".md") && !file.ends_with(d));
+    others
+        .map(|d| Ref {
+            referent: format!("doc {d}"),
+            strict: format!("doc {d}"),
+            forward: None,
         })
         .collect()
 }
@@ -1160,25 +1427,15 @@ pub fn measure_markdown(docs: &[(String, String)]) -> Vec<Unit> {
 /// Parse what prolog/measure_xref.pl prints: one line per predicate,
 /// "file<TAB>Name/Arity<TAB>callee callee ...".
 pub fn parse_xref(out: &str) -> Vec<Unit> {
-    out.lines()
-        .filter_map(|l| {
-            let mut p = l.splitn(3, '\t');
-            let (file, name, callees) = (p.next()?, p.next()?, p.next().unwrap_or(""));
-            Some(Unit {
-                file: file.to_string(),
-                name: name.to_string(),
-                referents: callees
-                    .split_whitespace()
-                    .map(|c| format!("pred {c}"))
-                    .collect(),
-                ambiguous: BTreeSet::new(),
-                children: 0,
-                forward: 0,
-                strict: None,
-                held: None,
-            })
-        })
-        .collect()
+    out.lines().filter_map(xref_unit).collect()
+}
+
+/// A predicate as a unit, from a line of the cross-reference.
+fn xref_unit(l: &str) -> Option<Unit> {
+    let mut p = l.splitn(3, '\t');
+    let (file, name, callees) = (p.next()?, p.next()?, p.next().unwrap_or(""));
+    let preds = callees.split_whitespace().map(|c| format!("pred {c}"));
+    Some(Unit::new(file, name, preds.collect()))
 }
 
 // ---- the report -------------------------------------------------------
@@ -1297,15 +1554,12 @@ mod tests {
     fn the_count_with_each_field_apart_includes_units_the_chunks_do_not_change() {
         // Catches the strict count taken only over units whose two counts
         // differ.
-        let unit = |load: usize, strict: Option<usize>| Unit {
-            file: "a.rs".into(),
-            name: String::new(),
-            referents: (0..load).map(|i| i.to_string()).collect(),
-            ambiguous: BTreeSet::new(),
-            children: 0,
-            forward: 0,
-            strict,
-            held: None,
+        let unit = |load: usize, strict: Option<usize>| {
+            let referents = (0..load).map(|i| i.to_string()).collect();
+            Unit {
+                strict,
+                ..Unit::new("a.rs", "", referents)
+            }
         };
         let s = summary(&[unit(5, None), unit(3, Some(6)), unit(1, None)], 4);
         assert!(s.contains("2 over 4 counting each field apart"), "{s}");
