@@ -3307,4 +3307,17 @@ mod tests {
         ];
         assert_eq!(inks(&render(&marks, 20, 6)), want);
     }
+
+    #[test]
+    fn a_cell_is_found_across_its_column() {
+        // Catches a cell found only where its text starts: a click anywhere
+        // in its column finds it. The places are what the code gave before
+        // the grid's columns were given runs.
+        let f = render(
+            &[mk("cell x:a y:1 text:hello"), mk("cell x:a y:2 text:7")],
+            30,
+            0,
+        );
+        assert_eq!(f.hits, [found(4, 2, 5, 1), found(4, 3, 5, 1)]);
+    }
 }
