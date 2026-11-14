@@ -3027,4 +3027,85 @@ mod tests {
         ];
         assert_eq!(draw(&["bar x:a y:1", "bar x:b y:3"], 30, 6), want);
     }
+
+    #[test]
+    fn a_bar_in_a_narrow_band_keeps_a_column_free_each_side() {
+        // Catches a bar as wide as its band, or wider, running into the
+        // next. The picture is what the code drew before the plot's places
+        // were given runs.
+        let want = [
+            "3 │ ██   2   1   2",
+            "  │ ██  ██  ██  ███",
+            "0 │ ██  ██  ██  ███",
+            "  └─────────────────",
+            "    a   b   c    d",
+        ];
+        let specs = ["bar x:a y:3", "bar x:b y:2", "bar x:c y:1", "bar x:d y:2"];
+        assert_eq!(draw(&specs, 20, 5), want);
+    }
+
+    #[test]
+    fn numbers_come_before_categories_on_an_axis() {
+        // Catches a mixed axis sorted by text alone, or categories first.
+        // The picture is what the code drew before the plot's places were
+        // given runs.
+        let want = [
+            "2 │ ██████     1",
+            "  │ ██████  ███████",
+            "0 │ ██████  ███████",
+            "  └─────────────────",
+            "      2        a",
+        ];
+        assert_eq!(draw(&["bar x:a y:1", "bar x:2 y:2"], 20, 5), want);
+    }
+
+    #[test]
+    fn a_mark_that_cannot_be_read_is_noted_before_the_legend() {
+        // Catches the notes of a view put out of order.
+        let specs = [
+            "blob x:1",
+            "line x:1 y:1 series:s1",
+            "line x:2 y:2 series:s2",
+        ];
+        let notes: Vec<String> = draw(&specs, 20, 5)
+            .into_iter()
+            .filter(|l| l.starts_with("note"))
+            .collect();
+        let first = "note: no mark “blob”; the marks are dot, bar, line, rule, text, tick, span, cell, node, edge";
+        assert_eq!(notes, [first, "note: ● s1", "note: ○ s2"]);
+    }
+
+    #[test]
+    fn a_graph_notes_what_it_leaves_out_before_its_cycles() {
+        // Catches a graph's notes put out of order.
+        let specs = ["edge from:a to:b", "edge from:b to:a", "dot x:1 y:1"];
+        let notes: Vec<String> = draw(&specs, 30, 0)
+            .into_iter()
+            .filter(|l| l.starts_with("note"))
+            .collect();
+        let want = [
+            "note: 1 marks not drawn: a graph draws only node and edge",
+            "note: 1 edge back up, round the right, to close a cycle",
+        ];
+        assert_eq!(notes, want);
+    }
+
+    #[test]
+    fn a_loud_line_stays_loud_where_a_dim_one_crosses_it() {
+        // Catches a crossing drawn in the ink of the last line through it.
+        // The inks are what the code drew before the plot's lines were
+        // given runs.
+        let mut loud = mk("rule y:2");
+        loud.loud = true;
+        let marks = [loud, mk("rule x:2"), mk("dot x:1 y:1"), mk("dot x:3 y:3")];
+        let want = [
+            "dpdppppppppdpppppppp",
+            "ppdLLLLLLLLLLLLLLLLL",
+            "ppdppppppppdpppppppp",
+            "dpdppppppppdpppppppp",
+            "ppdddddddddddddddddd",
+            "pppdpppppppppppppppd",
+        ];
+        assert_eq!(inks(&render(&marks, 20, 6)), want);
+    }
 }
