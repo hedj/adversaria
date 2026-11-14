@@ -153,11 +153,29 @@ pub enum Ink {
 /// A rectangle of the figure and the facts drawn there.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hit {
+    pub area: Rect,
+    pub prov: Vec<u64>,
+}
+
+/// A rectangle of a figure: its top left corner, its width and its height.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Rect {
     pub x: usize,
     pub y: usize,
     pub w: usize,
     pub h: usize,
-    pub prov: Vec<u64>,
+}
+
+impl Rect {
+    /// One character.
+    fn cell(x: usize, y: usize) -> Rect {
+        Rect::row(x, y, 1)
+    }
+
+    /// A row of `w` characters.
+    fn row(x: usize, y: usize, w: usize) -> Rect {
+        Rect { x, y, w, h: 1 }
+    }
 }
 
 /// What a view draws: rows of characters, where each mark landed, and
@@ -365,13 +383,12 @@ impl Canvas {
             && x + n <= self.w
             && (x..x + n).all(|i| self.cells[y][i].0 == ' ' && self.lines[y][i].0 == 0)
     }
-    /// A box three rows high and `w` wide, of its rows of characters (as
-    /// frame_of gives them): each its left end, what fills it, and its
-    /// right end.
-    fn frame(&mut self, x: usize, y: usize, w: usize, rows: [[char; 3]; 3], ink: Ink) {
+    /// A box, of three rows of characters as frame_of gives them: each
+    /// row its left end, what fills it, and its right end.
+    fn frame(&mut self, b: Rect, rows: [[char; 3]; 3], ink: Ink) {
         for (i, [left, fill, right]) in rows.into_iter().enumerate() {
-            let middle = fill.to_string().repeat(w - 2);
-            self.text(x, y + i, &format!("{left}{middle}{right}"), ink);
+            let middle = fill.to_string().repeat(b.w - 2);
+            self.text(b.x, b.y + i, &format!("{left}{middle}{right}"), ink);
         }
     }
 
@@ -393,9 +410,9 @@ impl Canvas {
     }
 
     /// A rectangle of one character.
-    fn fill(&mut self, x: usize, y: usize, w: usize, h: usize, c: char, ink: Ink) {
-        for row in y..y + h {
-            for col in x..x + w {
+    fn fill(&mut self, r: Rect, c: char, ink: Ink) {
+        for row in r.y..r.y + r.h {
+            for col in r.x..r.x + r.w {
                 self.put(col, row, c, ink);
             }
         }
@@ -439,15 +456,10 @@ impl Canvas {
             self.line(x, y, bits, ink);
         }
     }
-    fn hit(&mut self, x: usize, y: usize, w: usize, h: usize, prov: &[u64]) {
-        if !prov.is_empty() && w > 0 && h > 0 {
-            self.hits.push(Hit {
-                x,
-                y,
-                w,
-                h,
-                prov: prov.to_vec(),
-            });
+    fn hit(&mut self, area: Rect, prov: &[u64]) {
+        if !prov.is_empty() && area.w > 0 && area.h > 0 {
+            let prov = prov.to_vec();
+            self.hits.push(Hit { area, prov });
         }
     }
     fn finish(self, notes: Vec<String>) -> Figure {
@@ -681,6 +693,27 @@ impl Frame {
     fn mid_col(&self, v: &V) -> Option<usize> {
         self.xs.mid(v, self.size.0).map(|p| self.x0() + p)
     }
+
+    /// A bar along the middle row of a y, from zero to an x.
+    fn bar_across(&self, x: &V, y: &V) -> Option<Rect> {
+        let r = self.mid_row(y)?;
+        let ((c0, _), (c1, _)) = (self.col(&V::Num(0.0))?, self.col(x)?);
+        Some(Rect::row(c0.min(c1), r, c0.abs_diff(c1) + 1))
+    }
+
+    /// A bar up the columns of an x, from zero to a y: as wide as the
+    /// columns less one on each side, from 1 to 8, and centred on them.
+    fn bar_up(&self, x: &V, y: &V) -> Option<Rect> {
+        let (ca, cb) = self.col(x)?;
+        let ((r0, _), (r1, _)) = (self.row(&V::Num(0.0))?, self.row(y)?);
+        let w = (cb - ca + 1).saturating_sub(2).clamp(1, 8);
+        Some(Rect {
+            x: (ca + cb).div_ceil(2) - w / 2,
+            y: r0.min(r1),
+            w,
+            h: r0.abs_diff(r1) + 1,
+        })
+    }
 }
 
 /// The width of the margin for a scale's labels on the y axis, with a
@@ -802,42 +835,30 @@ impl Plot {
         }
     }
 
-    /// A bar along a row, from zero to its x.
+    /// A bar along a row, from zero to its x, its label after it.
     fn bar_across(&mut self, m: &M, x: &V, y: &V) {
-        let f = &self.frame;
-        let (Some(r), Some((c0, _)), Some((c1, _))) = (f.mid_row(y), f.col(&V::Num(0.0)), f.col(x))
-        else {
+        let Some(bar) = self.frame.bar_across(x, y) else {
             return;
         };
-        let (a, b) = (c0.min(c1), c0.max(c1));
-        for x in a..=b {
-            self.cv.put(x, r, '█', m.ink());
-        }
-        let label = bar_label(m, x);
-        self.cv.text(b + 2, r, &label, m.ink());
-        self.cv.hit(a, r, b - a + 1, 1, &m.prov);
+        self.cv.fill(bar, '█', m.ink());
+        self.cv
+            .text(bar.x + bar.w + 1, bar.y, &bar_label(m, x), m.ink());
+        self.cv.hit(bar, &m.prov);
     }
 
     /// A bar up a column, from zero to its y, its label above it if there
     /// is room.
     fn bar_up(&mut self, m: &M, x: &V, y: &V) {
-        let f = &self.frame;
-        let (Some((ca, cb)), Some((r0, _)), Some((r1, _))) =
-            (f.col(x), f.row(&V::Num(0.0)), f.row(y))
-        else {
+        let Some(bar) = self.frame.bar_up(x, y) else {
             return;
         };
-        let w = (cb - ca + 1).saturating_sub(2).clamp(1, 8);
-        let cx = (ca + cb).div_ceil(2) - w / 2;
-        let (a, b) = (r0.min(r1), r0.max(r1));
-        self.cv.fill(cx, a, w, b - a + 1, '█', m.ink());
-        if a > 0 {
+        self.cv.fill(bar, '█', m.ink());
+        if bar.y > 0 {
             let label = bar_label(m, y);
-            let n = label.chars().count();
-            self.cv
-                .text((cx + w / 2).saturating_sub(n / 2), a - 1, &label, m.ink());
+            let left = (bar.x + bar.w / 2).saturating_sub(label.chars().count() / 2);
+            self.cv.text(left, bar.y - 1, &label, m.ink());
         }
-        self.cv.hit(cx, a, w, b - a + 1, &m.prov);
+        self.cv.hit(bar, &m.prov);
     }
 
     /// Lines, one for each series, each joining its points in order of x.
@@ -882,7 +903,7 @@ impl Plot {
     fn points_of(&mut self, pts: &[(usize, usize, &M)], p: char) {
         for (x, y, m) in pts {
             self.cv.put(*x, *y, p, m.ink());
-            self.cv.hit(*x, *y, 1, 1, &m.prov);
+            self.cv.hit(Rect::cell(*x, *y), &m.prov);
         }
     }
 
@@ -916,7 +937,7 @@ impl Plot {
             self.cv
                 .text(if inside { a + 1 } else { b + 2 }, r, &t, m.ink());
         }
-        self.cv.hit(a, r, b - a + 1, 1, &m.prov);
+        self.cv.hit(Rect::row(a, r, b - a + 1), &m.prov);
     }
 
     /// Dots and texts, each at its point.
@@ -943,13 +964,13 @@ impl Plot {
         if let Some(t) = m.get("text").map(V::text) {
             self.cv.text(x + 2, y, &t, m.ink());
         }
-        self.cv.hit(x, y, 1, 1, &m.prov);
+        self.cv.hit(Rect::cell(x, y), &m.prov);
     }
 
     fn text_mark(&mut self, m: &M, x: usize, y: usize) {
         let t = m.get("text").map(V::text).unwrap_or_default();
         self.cv.text(x, y, &t, m.ink());
-        self.cv.hit(x, y, t.chars().count(), 1, &m.prov);
+        self.cv.hit(Rect::row(x, y, t.chars().count()), &m.prov);
     }
 
     /// Ticks, in order of x: on a lane if they have y; else on the x axis,
@@ -977,7 +998,7 @@ impl Plot {
         };
         self.cv.put(x, y, '◆', m.ink());
         self.cv.text(x + 2, y, t, m.ink());
-        self.cv.hit(x, y, 1, 1, &m.prov);
+        self.cv.hit(Rect::cell(x, y), &m.prov);
     }
 
     /// A tick on the axis, and its label on the lowest free row above,
@@ -993,7 +1014,13 @@ impl Plot {
         };
         self.cv.text(start, y, t, m.ink());
         self.stem(x, y + 1, axis);
-        self.cv.hit(start, y, n - 1, axis - y + 1, &m.prov);
+        let label = Rect {
+            x: start,
+            y,
+            w: n - 1,
+            h: axis - y + 1,
+        };
+        self.cv.hit(label, &m.prov);
     }
 
     /// A dim line down column x, from row `from` to the row above `to`,
@@ -1201,7 +1228,7 @@ impl Table {
             let right = c.at[i] + c.widths[i] - t.chars().count();
             let x = if cell.number { right } else { c.at[i] };
             cv.text(x, y, &t, cell.ink());
-            cv.hit(c.at[i], y, c.widths[i], 1, &cell.prov);
+            cv.hit(Rect::row(c.at[i], y, c.widths[i]), &cell.prov);
         }
     }
 }
@@ -1594,6 +1621,16 @@ impl Layout {
         self.layer[v] * 6
     }
 
+    /// A vertex's box: three rows high, at the top of its layer.
+    fn box_of(&self, v: usize) -> Rect {
+        Rect {
+            x: self.x[v],
+            y: self.top(v),
+            w: self.width[v],
+            h: 3,
+        }
+    }
+
     /// The middle of a vertex's right side, just outside it.
     fn right_of(&self, v: usize) -> (usize, usize) {
         (self.x[v] + self.width[v], self.top(v) + 1)
@@ -1823,13 +1860,13 @@ impl<'a> Draw<'a> {
     }
 
     fn boxed(&mut self, v: usize, n: &Node) {
-        let (bx, by, ww) = (self.at.x[v], self.at.top(v), self.at.width[v]);
+        let b = self.at.box_of(v);
         let ink = if n.loud { Ink::Loud } else { Ink::Plain };
-        self.cv.frame(bx, by, ww, frame_of(&n.shape), ink);
+        self.cv.frame(b, frame_of(&n.shape), ink);
         self.cv
-            .text(bx + 2, by + 1, &truncate(&n.text, ww - 4), ink);
-        self.port_marks(v, by, ink);
-        self.cv.hit(bx, by, ww, 3, &n.prov);
+            .text(b.x + 2, b.y + 1, &truncate(&n.text, b.w - 4), ink);
+        self.port_marks(v, b.y, ink);
+        self.cv.hit(b, &n.prov);
     }
 
     /// Where edges leave a box and arrive at it.
@@ -2147,7 +2184,7 @@ mod tests {
             .count();
         assert!(loud > 0);
         let h = f.hits.iter().find(|h| h.prov == [7]).unwrap();
-        assert_eq!(f.rows[h.y][h.x].0, '█');
+        assert_eq!(f.rows[h.area.y][h.area.x].0, '█');
         let mut c = mk("cell x:a y:1 text:9");
         c.loud = true;
         let g = render(&[c], 20, 0);
@@ -2472,10 +2509,7 @@ mod tests {
         // restructured.
         let f = render(&[mk("cell x:a y:1"), mk("cell x:b y:2")], 30, 0);
         let hit = |x, y| Hit {
-            x,
-            y,
-            w: 1,
-            h: 1,
+            area: Rect { x, y, w: 1, h: 1 },
             prov: vec![1],
         };
         assert_eq!(f.hits, [hit(4, 2), hit(8, 3)]);
@@ -2824,10 +2858,12 @@ mod tests {
             "ppdpp", "ppdpp", "ppdpp", "ppppp", "ppppp", "ppppp",
         ];
         let place = |y| Hit {
-            x: 0,
-            y,
-            w: 5,
-            h: 3,
+            area: Rect {
+                x: 0,
+                y,
+                w: 5,
+                h: 3,
+            },
             prov: vec![1],
         };
         assert_eq!(
@@ -2908,10 +2944,7 @@ mod tests {
     /// Where a fact of entry 1 is found, by its rectangle.
     fn found(x: usize, y: usize, w: usize, h: usize) -> Hit {
         Hit {
-            x,
-            y,
-            w,
-            h,
+            area: Rect { x, y, w, h },
             prov: vec![1],
         }
     }

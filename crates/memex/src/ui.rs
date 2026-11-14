@@ -332,11 +332,11 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
             lines.extend(figure_lines(&fig, indent));
             for hit in &fig.hits {
                 if let Some(item) = hit_item(app, hit) {
-                    for dy in 0..hit.h {
+                    for dy in 0..hit.area.h {
                         places.push((
-                            top + hit.y + dy,
-                            indent + hit.x,
-                            hit.w,
+                            top + hit.area.y + dy,
+                            indent + hit.area.x,
+                            hit.area.w,
                             Click::Item { pane, id: item },
                         ));
                     }
