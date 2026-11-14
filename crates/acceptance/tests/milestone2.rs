@@ -2,7 +2,7 @@
 //! real SWI-Prolog child process.
 
 use format::terms::Term;
-use memex::prolog::{End, Error, Prolog};
+use memex::prolog::{End, Error, Prolog, Query};
 use protocol::Kind;
 use std::time::{Duration, Instant};
 
@@ -131,29 +131,39 @@ fn rust_to_prolog_to_rust() {
     let mut rng = Rng(11);
     let t0 = Instant::now();
     for k in 0..10_000 {
-        let t = gen_term(&mut rng, 0);
-        let goal = c("=", vec![v(1000), t.clone()]);
-        let q = p.query(&goal).unwrap();
-        let (ans, end) = p.next(&q, 2).unwrap();
-        assert_eq!((ans.len(), end), (1, Some(End::Exhausted)), "term {k}");
-        // Compare X and the goal's own variables, under one renaming.
-        let want = c(
-            "t",
-            q.vars
-                .iter()
-                .map(|id| if *id == 1000 { t.clone() } else { v(*id) })
-                .collect(),
-        );
-        assert!(
-            protocol::variant(&c("t", ans[0].clone()), &want),
-            "term {k}: {t:?} came back as {:?}",
-            ans[0]
-        );
+        round_trip(&mut p, gen_term(&mut rng, 0), k);
     }
     eprintln!(
         "10,000 Rust -> Prolog -> Rust round trips in {:?}",
         t0.elapsed()
     );
+}
+
+/// X = t: a goal that gives a term back as variable 1000.
+fn unified_with(t: Term) -> Term {
+    c("=", vec![v(1000), t])
+}
+
+/// Term k, sent to Prolog and back, is the same, up to renaming its
+/// variables: X and the goal's own variables, under one renaming.
+fn round_trip(p: &mut Prolog, t: Term, k: usize) {
+    let q = p.query(&unified_with(t.clone())).unwrap();
+    let (ans, end) = p.next(&q, 2).unwrap();
+    assert_eq!((ans.len(), end), (1, Some(End::Exhausted)), "term {k}");
+    let want = expected(&q, &t);
+    let back = c("t", ans[0].clone());
+    assert!(
+        protocol::variant(&back, &want),
+        "term {k}: {t:?} came back as {:?}",
+        ans[0]
+    );
+}
+
+/// What a query of X = t gives back: t for X, and each other variable as
+/// itself.
+fn expected(q: &Query, t: &Term) -> Term {
+    let value = |id: &u64| if *id == 1000 { t.clone() } else { v(*id) };
+    c("t", q.vars.iter().map(value).collect())
 }
 
 #[test]
@@ -214,21 +224,26 @@ fn prolog_to_rust_to_prolog() {
     );
     let t0 = Instant::now();
     for seed in 0..10_000 {
-        let ans = p.all(&c("seeded_term", vec![i(seed), v(0)]), 2).unwrap();
-        assert_eq!(ans.len(), 1, "seed {seed}");
-        let back = p
-            .all(&c("same_as_seeded", vec![i(seed), ans[0][0].clone()]), 2)
-            .unwrap();
-        assert_eq!(
-            back.len(),
-            1,
-            "seed {seed}: {:?} did not come back as itself",
-            ans[0][0]
-        );
+        seeded_round_trip(&mut p, seed);
     }
     eprintln!(
         "10,000 Prolog -> Rust -> Prolog round trips in {:?}",
         t0.elapsed()
+    );
+}
+
+/// The term Prolog makes from a seed, sent to Rust and back, is the one it
+/// made.
+fn seeded_round_trip(p: &mut Prolog, seed: i64) {
+    let ans = p.all(&c("seeded_term", vec![i(seed), v(0)]), 2).unwrap();
+    assert_eq!(ans.len(), 1, "seed {seed}");
+    let same = c("same_as_seeded", vec![i(seed), ans[0][0].clone()]);
+    let back = p.all(&same, 2).unwrap();
+    assert_eq!(
+        back.len(),
+        1,
+        "seed {seed}: {:?} did not come back as itself",
+        ans[0][0]
     );
 }
 
@@ -253,42 +268,56 @@ fn answers_only_on_next() {
     // per NEXT n." Counted on both sides: messages received, and answers
     // Prolog computed (a flag the goal bumps per answer).
     let mut p = Prolog::start().unwrap();
-    let quiet = Duration::from_millis(300);
-    let goal = and(
-        c("between", vec![i(1), i(1000), v(0)]),
-        c(
-            "flag",
-            vec![a("m2_produced"), v(1), c("+", vec![v(1), i(1)])],
-        ),
-    );
-    let q = p.query(&goal).unwrap();
+    let q = p.query(&counting_to(1000)).unwrap();
     assert!(
-        p.receive(quiet).unwrap().is_none(),
+        p.receive(QUIET).unwrap().is_none(),
         "a message came before NEXT"
     );
     assert_eq!(produced(&mut p), 0, "Prolog computed before NEXT");
     let mut total = 0;
     for n in [1u32, 10, 989] {
-        let (ans, end) = p.next(&q, n).unwrap();
-        assert_eq!((ans.len(), end), (n as usize, None));
-        assert!(
-            p.receive(quiet).unwrap().is_none(),
-            "more than {n} came for NEXT {n}"
-        );
-        total += n as i64;
-        assert_eq!(produced(&mut p), total);
-        assert_eq!(ans.last().unwrap()[0], i(total));
+        total = take(&mut p, &q, n, total);
     }
     // All 1,000 are out; the next NEXT finds there are no more.
     let (ans, end) = p.next(&q, 5).unwrap();
     assert_eq!((ans.len(), end), (0, Some(End::Exhausted)));
 }
 
+/// How long to wait to see that nothing more comes.
+const QUIET: Duration = Duration::from_millis(300);
+
+/// The numbers from 1 to n, each counted in the flag m2_produced as Prolog
+/// computes it.
+fn counting_to(n: i64) -> Term {
+    and(c("between", vec![i(1), i(n), v(0)]), counted())
+}
+
+/// Add one to the flag m2_produced.
+fn counted() -> Term {
+    let count = c("+", vec![v(1), i(1)]);
+    c("flag", vec![a("m2_produced"), v(1), count])
+}
+
+/// NEXT n gives n answers and no more, and Prolog has computed exactly
+/// those; the total, n more.
+fn take(p: &mut Prolog, q: &Query, n: u32, total: i64) -> i64 {
+    let (ans, end) = p.next(q, n).unwrap();
+    assert_eq!((ans.len(), end), (n as usize, None));
+    assert!(
+        p.receive(QUIET).unwrap().is_none(),
+        "more than {n} came for NEXT {n}"
+    );
+    let total = total + n as i64;
+    assert_eq!(produced(p), total);
+    assert_eq!(ans.last().unwrap()[0], i(total));
+    total
+}
+
 #[test]
 fn cancel_drops_the_query() {
     // Catches CANCEL that leaves the query alive, or is not acknowledged.
     let mut p = Prolog::start().unwrap();
-    let q = p.query(&c("between", vec![i(1), a("inf"), v(0)])).unwrap();
+    let q = p.query(&counting_forever()).unwrap();
     assert_eq!(p.next(&q, 3).unwrap().0.len(), 3);
     assert_eq!(p.cancel(&q).unwrap(), End::Cancelled);
     assert!(
@@ -348,24 +377,28 @@ fn facts_assert_and_retract() {
     let mut p = Prolog::start().unwrap();
     let fact = c("date", vec![a("buran"), i(1988)]);
     p.assert_fact(&fact, 7).unwrap();
-    assert_eq!(
-        p.all(&c("date", vec![a("buran"), v(0)]), 5).unwrap(),
-        vec![vec![i(1988)]]
-    );
+    assert_eq!(dates_of(&mut p, "buran"), vec![vec![i(1988)]]);
     assert!(
         p.retract_fact(&fact, 8).is_err(),
         "retracted by the wrong seq"
     );
     p.retract_fact(&fact, 7).unwrap();
+    assert!(dates_of(&mut p, "buran").is_empty());
+    let over_a_built_in = c("atom", vec![a("x")]);
     assert!(
-        p.all(&c("date", vec![a("buran"), v(0)]), 5)
-            .unwrap()
-            .is_empty()
-    );
-    assert!(
-        p.assert_fact(&c("atom", vec![a("x")]), 9).is_err(),
+        p.assert_fact(&over_a_built_in, 9).is_err(),
         "asserted over a built-in"
     );
+}
+
+/// The numbers from 1 on, without end.
+fn counting_forever() -> Term {
+    c("between", vec![i(1), a("inf"), v(0)])
+}
+
+/// The dates Prolog holds for an entity.
+fn dates_of(p: &mut Prolog, e: &str) -> Vec<Vec<Term>> {
+    p.all(&c("date", vec![a(e), v(0)]), 5).unwrap()
 }
 
 #[test]
@@ -495,62 +528,69 @@ fn the_store_replays_into_prolog_the_same_twice() {
     // milestone 1 check, now with real facts: replaying twice gives the same
     // facts in the same order. Catches facts from another branch, a
     // retraction not applied, or the order changed on loading.
-    use memex::journal::Journal;
-    use serde_json::json;
     let dir = std::env::temp_dir().join(format!("adversaria-m2-store-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    let mut j = Journal::open(&dir).unwrap();
+    let facts = branching_journal_facts(&dir);
+    let runs = [loaded(&facts), loaded(&facts)];
+    assert_eq!(runs[0], listed(&facts));
+    assert_eq!(runs[0], runs[1]);
+    assert_eq!(listed(&facts).len(), 3);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// An encoded fact: the date of an entity.
+fn date_fact(e: &str, y: i64) -> serde_json::Value {
+    format::terms::encode(&c("date", vec![a(e), i(y)])).unwrap()
+}
+
+/// The facts at the head of a journal of an edit, an import, a
+/// supposition on another branch, a retraction of the import, and an
+/// adoption.
+fn branching_journal_facts(dir: &std::path::Path) -> Vec<(u64, Term)> {
+    use serde_json::json;
+    let mut j = memex::journal::Journal::open(dir).unwrap();
     j.durable = false;
-    let fact = |e: &str, y: i64| format::terms::encode(&c("date", vec![a(e), i(y)])).unwrap();
-    j.append(
-        "edit",
-        json!({"facts": [fact("buran", 1988), fact("energia", 1987)]}),
-    )
-    .unwrap();
-    j.append("import", json!({"facts": [fact("talk", 1989)]}))
+    let first = json!({"facts": [date_fact("buran", 1988), date_fact("energia", 1987)]});
+    j.append("edit", first).unwrap();
+    j.append("import", json!({"facts": [date_fact("talk", 1989)]}))
         .unwrap();
-    j.append_after(
-        Some(1),
-        "suppose",
-        json!({"facts": [fact("other_branch", 1)]}),
-    )
-    .unwrap();
+    let elsewhere = json!({"facts": [date_fact("other_branch", 1)]});
+    j.append_after(Some(1), "suppose", elsewhere).unwrap();
     j.append_after(Some(2), "retract", json!({"target": 2}))
         .unwrap();
-    j.append("adopt", json!({"facts": [fact("buran_landing", 1988)]}))
-        .unwrap();
+    j.append(
+        "adopt",
+        json!({"facts": [date_fact("buran_landing", 1988)]}),
+    )
+    .unwrap();
     let head = j.last().unwrap().seq;
-    let facts = memex::store::facts(j.entries(), head).unwrap();
-    let listed: Vec<Vec<Term>> = facts
+    memex::store::facts(j.entries(), head).unwrap()
+}
+
+/// The facts, each with its seq, as Prolog lists them.
+fn listed(facts: &[(u64, Term)]) -> Vec<Vec<Term>> {
+    facts
         .iter()
         .map(|(s, f)| vec![i(*s as i64), f.clone()])
-        .collect();
-    let mut runs = Vec::new();
-    for _ in 0..2 {
-        let mut p = Prolog::start().unwrap();
-        memex::store::load(&mut p, &facts).unwrap();
-        runs.push(p.all(&c("memex_fact", vec![v(0), v(1)]), 10).unwrap());
-        assert_eq!(
-            p.all(&c("date", vec![a("buran"), v(0)]), 5).unwrap(),
-            vec![vec![i(1988)]]
-        );
-        assert!(
-            p.all(&c("date", vec![a("talk"), v(0)]), 5)
-                .unwrap()
-                .is_empty(),
-            "retracted fact present"
-        );
-        assert!(
-            p.all(&c("date", vec![a("other_branch"), v(0)]), 5)
-                .unwrap()
-                .is_empty(),
-            "other branch present"
-        );
-    }
-    assert_eq!(runs[0], listed);
-    assert_eq!(runs[0], runs[1]);
-    assert_eq!(listed.len(), 3);
-    std::fs::remove_dir_all(&dir).unwrap();
+        .collect()
+}
+
+/// The facts as a new Prolog holds them, once loaded: the facts kept,
+/// none retracted, none from another branch.
+fn loaded(facts: &[(u64, Term)]) -> Vec<Vec<Term>> {
+    let mut p = Prolog::start().unwrap();
+    memex::store::load(&mut p, facts).unwrap();
+    let run = p.all(&c("memex_fact", vec![v(0), v(1)]), 10).unwrap();
+    assert_eq!(dates_of(&mut p, "buran"), vec![vec![i(1988)]]);
+    assert!(
+        dates_of(&mut p, "talk").is_empty(),
+        "retracted fact present"
+    );
+    assert!(
+        dates_of(&mut p, "other_branch").is_empty(),
+        "other branch present"
+    );
+    run
 }
 
 /// A client of a server that sends these bytes at once, whatever it is asked.
