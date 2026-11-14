@@ -427,6 +427,25 @@ fn the_server_dies_on_a_garbled_header() {
 }
 
 #[test]
+fn bytes_sent_as_they_are_reach_the_server_at_once() {
+    // Catches bytes held in the client's buffer: with nothing sent after
+    // them, the garbled header must still reach the server and kill it.
+    let mut p = Prolog::start().unwrap();
+    p.send_bytes(&[7, 1, 0, 1, 0, 0, 0, 0]).unwrap();
+    let e = p.receive(Duration::from_secs(10)).unwrap_err();
+    assert!(matches!(&e, Error::Dead(_)), "{e:?}");
+}
+
+#[test]
+fn a_dead_servers_reason_says_how_it_ended() {
+    // Catches the server's exit status lost from the reason given.
+    let mut p = Prolog::start().unwrap();
+    p.send_bytes(&[7, 1, 0, 1, 0, 0, 0, 0]).unwrap();
+    let e = p.all(&a("true"), 1).unwrap_err();
+    assert!(e.to_string().contains("(exit status: "), "{e}");
+}
+
+#[test]
 fn the_client_dies_with_the_server() {
     // Catches a client that hangs, or keeps calling a dead server, after a
     // garbled header kills it.
