@@ -38,6 +38,10 @@ impl Rng {
     fn below(&mut self, n: u64) -> u64 {
         self.next() % n
     }
+    /// One of a list, at random.
+    fn pick<T: Copy>(&mut self, xs: &[T]) -> T {
+        xs[self.below(xs.len() as u64) as usize]
+    }
 }
 
 const NAMES: [&str; 10] = [
@@ -53,53 +57,69 @@ const NAMES: [&str; 10] = [
     "supports",
 ];
 
+/// Integers at the edges of the protocol's sizes.
+const INTS: [i64; 9] = [
+    0,
+    1,
+    -1,
+    268435455,
+    -268435456,
+    268435456,
+    -268435457,
+    i64::MAX,
+    i64::MIN,
+];
+
 /// Atoms, integers small and large, floats, strings, variables 0-4, lists
 /// and nested compounds.
 fn gen_term(rng: &mut Rng, depth: u32) -> Term {
-    let pick = |rng: &mut Rng, n: usize| rng.below(n as u64) as usize;
     match rng.below(if depth >= 4 { 7 } else { 9 }) {
-        0 => a(NAMES[pick(rng, NAMES.len())]),
-        1 => i([
-            0,
-            1,
-            -1,
-            268435455,
-            -268435456,
-            268435456,
-            -268435457,
-            i64::MAX,
-            i64::MIN,
-        ][pick(rng, 9)]),
+        0 => a(rng.pick(&NAMES)),
+        1 => i(rng.pick(&INTS)),
         2 => i(rng.below(2_000_001) as i64 - 1_000_000),
-        3 => loop {
-            let x = f64::from_bits(rng.next());
-            if x.is_finite() {
-                break Term::Float([x, 0.0, -0.0, 1.0, 0.1, 1e23, 5e-324][pick(rng, 7)]);
-            }
-        },
-        4 => Term::Str(
-            (0..rng.below(7))
-                .filter_map(|_| char::from_u32(1 + rng.below(0x2fff) as u32))
-                .collect(),
-        ),
+        3 => Term::Float(gen_float(rng)),
+        4 => Term::Str(gen_text(rng)),
         5 => v(rng.below(5)),
-        6 => s(["", "a\nb", "😀"][pick(rng, 3)]),
-        7 => {
-            let args: Vec<Term> = (0..1 + rng.below(4))
-                .map(|_| gen_term(rng, depth + 1))
-                .collect();
-            // '[|]'/2 is SWI-Prolog's list cell, so it cannot cross (tested below).
-            let names: Vec<&str> = NAMES
-                .iter()
-                .copied()
-                .filter(|n| !(*n == "[|]" && args.len() == 2))
-                .collect();
-            c(names[pick(rng, names.len())], args)
-        }
-        _ => (0..rng.below(4)).fold(a("[]"), |tail, _| {
-            c(".", vec![gen_term(rng, depth + 1), tail])
-        }),
+        6 => s(rng.pick(&["", "a\nb", "😀"])),
+        7 => gen_compound(rng, depth),
+        _ => gen_list(rng, depth),
     }
+}
+
+/// A finite float: the one drawn, or one of six that are hard to print.
+fn gen_float(rng: &mut Rng) -> f64 {
+    loop {
+        let x = f64::from_bits(rng.next());
+        if x.is_finite() {
+            return rng.pick(&[x, 0.0, -0.0, 1.0, 0.1, 1e23, 5e-324]);
+        }
+    }
+}
+
+/// Up to six characters, from the first 12,287 after NUL.
+fn gen_text(rng: &mut Rng) -> String {
+    let n = rng.below(7);
+    (0..n)
+        .filter_map(|_| char::from_u32(1 + rng.below(0x2fff) as u32))
+        .collect()
+}
+
+/// A compound of one to four terms, one level deeper. '[|]'/2 is
+/// SWI-Prolog's list cell, so it cannot cross (tested below).
+fn gen_compound(rng: &mut Rng, depth: u32) -> Term {
+    let n = 1 + rng.below(4);
+    let args: Vec<Term> = (0..n).map(|_| gen_term(rng, depth + 1)).collect();
+    let crosses = |name: &&str| !(*name == "[|]" && args.len() == 2);
+    let names: Vec<&str> = NAMES.iter().copied().filter(crosses).collect();
+    c(rng.pick(&names), args)
+}
+
+/// A list of up to three terms, one level deeper, built from its end.
+fn gen_list(rng: &mut Rng, depth: u32) -> Term {
+    let n = rng.below(4);
+    (0..n).fold(a("[]"), |tail, _| {
+        c(".", vec![gen_term(rng, depth + 1), tail])
+    })
 }
 
 #[test]

@@ -13,6 +13,10 @@ impl Rng {
     pub fn below(&mut self, n: u64) -> u64 {
         self.next() % n
     }
+    /// One of a list, at random.
+    pub fn pick<T: Copy>(&mut self, xs: &[T]) -> T {
+        xs[self.below(xs.len() as u64) as usize]
+    }
 }
 
 pub const NAMES: [&str; 10] = [
@@ -28,52 +32,65 @@ pub const NAMES: [&str; 10] = [
     "supports",
 ];
 
+/// Integers at the edges of the protocol's sizes.
+const INTS: [i64; 9] = [
+    0,
+    1,
+    -1,
+    268435455,
+    -268435456,
+    268435456,
+    -268435457,
+    i64::MAX,
+    i64::MIN,
+];
+
 /// A random term: atoms, integers small and large, floats, strings,
 /// variables, lists and nested compounds.
 pub fn gen_term(rng: &mut Rng, depth: u32) -> Term {
-    let pick = |rng: &mut Rng, n: usize| rng.below(n as u64) as usize;
     match rng.below(if depth >= 4 { 7 } else { 9 }) {
-        0 => Term::Atom(NAMES[pick(rng, NAMES.len())].into()),
-        1 => Term::Int(
-            [
-                0,
-                1,
-                -1,
-                268435455,
-                -268435456,
-                268435456,
-                -268435457,
-                i64::MAX,
-                i64::MIN,
-            ][pick(rng, 9)],
-        ),
+        0 => Term::Atom(rng.pick(&NAMES).into()),
+        1 => Term::Int(rng.pick(&INTS)),
         2 => Term::Int(rng.below(2_000_001) as i64 - 1_000_000),
-        3 => loop {
-            let x = f64::from_bits(rng.next());
-            if x.is_finite() {
-                break Term::Float([x, 0.0, -0.0, 1.0, 0.1, 1e23, 5e-324][pick(rng, 7)]);
-            }
-        },
-        4 => Term::Str(
-            (0..rng.below(7))
-                .filter_map(|_| char::from_u32(1 + rng.below(0x2fff) as u32))
-                .collect(),
-        ),
+        3 => Term::Float(gen_float(rng)),
+        4 => Term::Str(gen_text(rng)),
         5 => Term::Var(rng.below(5)),
-        6 => Term::Str(["", "a\nb", "😀"][pick(rng, 3)].into()),
-        7 => Term::Compound(
-            NAMES[pick(rng, NAMES.len())].into(),
-            (0..1 + rng.below(4))
-                .map(|_| gen_term(rng, depth + 1))
-                .collect(),
-        ),
-        _ => {
-            let n = rng.below(4);
-            (0..n).fold(Term::Atom("[]".into()), |tail, _| {
-                Term::Compound(".".into(), vec![gen_term(rng, depth + 1), tail])
-            })
+        6 => Term::Str(rng.pick(&["", "a\nb", "😀"]).into()),
+        7 => Term::Compound(rng.pick(&NAMES).into(), gen_args(rng, depth)),
+        _ => gen_list(rng, depth),
+    }
+}
+
+/// A finite float: the one drawn, or one of six that are hard to print.
+fn gen_float(rng: &mut Rng) -> f64 {
+    loop {
+        let x = f64::from_bits(rng.next());
+        if x.is_finite() {
+            return rng.pick(&[x, 0.0, -0.0, 1.0, 0.1, 1e23, 5e-324]);
         }
     }
+}
+
+/// Up to six characters, from the first 12,287 after NUL.
+fn gen_text(rng: &mut Rng) -> String {
+    let n = rng.below(7);
+    (0..n)
+        .filter_map(|_| char::from_u32(1 + rng.below(0x2fff) as u32))
+        .collect()
+}
+
+/// One to four terms, one level deeper.
+fn gen_args(rng: &mut Rng, depth: u32) -> Vec<Term> {
+    let n = 1 + rng.below(4);
+    (0..n).map(|_| gen_term(rng, depth + 1)).collect()
+}
+
+/// A list of up to three terms, one level deeper, built from its end.
+fn gen_list(rng: &mut Rng, depth: u32) -> Term {
+    let n = rng.below(4);
+    (0..n).fold(Term::Atom("[]".into()), |tail, _| {
+        Term::Compound(".".into(), vec![gen_term(rng, depth + 1), tail])
+    })
 }
 
 pub fn atoms_for_tests() -> Atoms {
@@ -204,9 +221,8 @@ fn malformed_cells_refused() {
 fn a_long_list_decodes_without_deep_recursion() {
     // Catches a decoder that recurses once per list element: a long list
     // from Prolog would overflow the stack (found when a few hundred
-    // suggestions overflowed a test thread). Run in a thread with a small
-    // stack so a recursive decoder fails here, not by chance elsewhere.
-    let atoms = Atoms::default();
+    // suggestions overflowed a test thread). The stack here is small, so a
+    // recursive decoder fails.
     let n = 200_000;
     let mut cells = Vec::with_capacity(2 * n + 1);
     for i in 0..n {
@@ -214,23 +230,24 @@ fn a_long_list_decodes_without_deep_recursion() {
         cells.push(int_cell(i as i64 % 1000).unwrap());
     }
     cells.push(cell(ATOM, 0));
-    let len = std::thread::Builder::new()
-        .stack_size(256 * 1024)
-        .spawn(move || {
-            let t = decode(&cells, &atoms).unwrap();
-            let mut count = 0;
-            let mut at = &t[0];
-            while let Term::Compound(_, a) = at {
-                count += 1;
-                at = &a[1];
-            }
-            std::mem::forget(t); // dropping a long list recurses too (a known limit)
-            count
-        })
-        .unwrap()
-        .join()
-        .unwrap();
+    let len = on_a_stack_of(256 * 1024, move || {
+        let t = decode(&cells, &Atoms::default()).unwrap();
+        let len = list_length(&t[0]);
+        std::mem::forget(t); // dropping a long list recurses too (a known limit)
+        len
+    });
     assert_eq!(len, n);
+}
+
+/// The number of cells along a list's spine.
+fn list_length(list: &Term) -> usize {
+    let mut count = 0;
+    let mut at = list;
+    while let Term::Compound(_, a) = at {
+        count += 1;
+        at = &a[1];
+    }
+    count
 }
 
 /// Cells for f(f(...f([])...)), `depth` compounds deep.
@@ -241,37 +258,61 @@ fn nested(depth: usize, a: &Atoms) -> Vec<u32> {
     cells
 }
 
-#[test]
-fn nesting_is_limited_and_refused_without_recursing_to_overflow() {
-    // Catches a decoder that recurses until the stack runs out on a deeply
-    // nested term from Prolog (found: depth 1,000 aborted a test thread),
-    // and a limit that also counts a list's spine, so long lists fail.
+/// What a function gives, run in a thread with a stack of this many bytes,
+/// so that one that recurses too deep fails here, not by chance elsewhere.
+fn on_a_stack_of<T: Send + 'static>(bytes: usize, f: impl FnOnce() -> T + Send + 'static) -> T {
+    let thread = std::thread::Builder::new().stack_size(bytes);
+    thread.spawn(f).unwrap().join().unwrap()
+}
+
+/// The error of decoding a term nested this deep, on a stack of 2 MiB.
+fn nested_refusal(depth: usize) -> String {
     let a = atoms_for_tests();
-    let r = std::thread::Builder::new()
-        .stack_size(2 * 1024 * 1024)
-        .spawn(move || {
-            let ok = decode(&nested(MAX_DEPTH, &a), &a).is_ok();
-            let over = decode(&nested(MAX_DEPTH + 1, &a), &a).unwrap_err().0;
-            let far = decode(&nested(1_000_000, &a), &a).unwrap_err().0;
-            // A list of 10,000 lists of one element: spine not counted.
-            let mut cells = Vec::new();
-            for _ in 0..10_000 {
-                cells.push(cell(STRUCT, (2 << 21) | 1));
-                cells.extend([cell(STRUCT, (2 << 21) | 1), cell(INT, 7), cell(ATOM, 0)]);
-            }
-            cells.push(cell(ATOM, 0));
-            let t = decode(&cells, &a);
-            let lists = t.is_ok();
-            std::mem::forget(t); // a long list's drop recurses (a known limit)
-            (ok, over, far, lists)
-        })
-        .unwrap()
-        .join()
-        .unwrap();
-    assert!(r.0, "depth {MAX_DEPTH} is allowed");
-    assert!(r.1.contains("nested deeper than 256"), "{}", r.1);
-    assert!(r.2.contains("nested deeper than 256"), "{}", r.2);
-    assert!(r.3, "a long list of short lists decodes");
+    on_a_stack_of(2 << 20, move || {
+        decode(&nested(depth, &a), &a).unwrap_err().0
+    })
+}
+
+// The next four catch a decoder that recurses until the stack runs out on a
+// deeply nested term from Prolog (found: depth 1,000 aborted a test thread),
+// and a limit that also counts a list's spine, so long lists fail.
+
+#[test]
+fn nesting_to_the_limit_is_allowed() {
+    let a = atoms_for_tests();
+    let ok = on_a_stack_of(2 << 20, move || decode(&nested(MAX_DEPTH, &a), &a).is_ok());
+    assert!(ok, "depth {MAX_DEPTH} is allowed");
+}
+
+#[test]
+fn nesting_one_past_the_limit_is_refused() {
+    let r = nested_refusal(MAX_DEPTH + 1);
+    assert!(r.contains("nested deeper than 256"), "{r}");
+}
+
+#[test]
+fn nesting_a_million_deep_is_refused_without_recursing_to_overflow() {
+    let r = nested_refusal(1_000_000);
+    assert!(r.contains("nested deeper than 256"), "{r}");
+}
+
+#[test]
+fn a_long_list_of_short_lists_decodes() {
+    // A list of 10,000 lists of one element: the spine is not counted.
+    let mut cells = Vec::new();
+    for _ in 0..10_000 {
+        cells.push(cell(STRUCT, (2 << 21) | 1));
+        cells.extend([cell(STRUCT, (2 << 21) | 1), cell(INT, 7), cell(ATOM, 0)]);
+    }
+    cells.push(cell(ATOM, 0));
+    let a = atoms_for_tests();
+    let decodes = on_a_stack_of(2 << 20, move || {
+        let t = decode(&cells, &a);
+        let ok = t.is_ok();
+        std::mem::forget(t); // a long list's drop recurses (a known limit)
+        ok
+    });
+    assert!(decodes, "a long list of short lists decodes");
 }
 
 #[test]
