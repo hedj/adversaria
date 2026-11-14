@@ -166,11 +166,14 @@ impl Suggestion {
 fn renumber(t: &Term, seen: &mut Vec<u64>) -> Term {
     match t {
         Term::Var(v) => Term::Var(place(seen, *v)),
-        Term::Compound(f, a) => {
-            Term::Compound(f.clone(), a.iter().map(|x| renumber(x, seen)).collect())
-        }
+        Term::Compound(f, a) => Term::Compound(f.clone(), renumber_all(a, seen)),
         t => t.clone(),
     }
+}
+
+/// Terms renumbered in order, sharing what has been seen.
+fn renumber_all(ts: &[Term], seen: &mut Vec<u64>) -> Vec<Term> {
+    ts.iter().map(|t| renumber(t, seen)).collect()
 }
 
 /// A variable's place among those seen, where it is put if it is new.
@@ -385,11 +388,9 @@ struct Said {
 impl Said {
     fn read(text: &str) -> Said {
         let lower = text.to_lowercase();
-        let words = lower.split(|c: char| !c.is_alphanumeric());
-        let numbers = lower.split(|c: char| !c.is_ascii_digit());
         Said {
-            words: words.filter(|w| w.len() >= 3).map(String::from).collect(),
-            numbers: numbers.filter_map(|n| n.parse().ok()).collect(),
+            words: words_of(&lower),
+            numbers: numbers_of(&lower),
         }
     }
 
@@ -405,23 +406,16 @@ impl Said {
             return vec![];
         }
         let numbered = (0..args.len()).filter(|k| matches!(args[*k], Term::Int(_)));
-        numbered
-            .flat_map(|k| self.changes(facts, name, args, k))
-            .collect()
+        let changes = |k| self.changes(facts, &Number { name, args, k });
+        numbered.flat_map(changes).collect()
     }
 
-    /// A fact with its number at k changed to each other number of the
-    /// text, scored by the words that name the fact; none if none does.
-    fn changes(
-        &self,
-        facts: &[(u64, Term)],
-        name: &str,
-        args: &[Term],
-        k: usize,
-    ) -> Vec<(usize, Term)> {
-        let score = self.score(name, &others(facts, args, k));
-        let numbers = self.numbers.iter().filter(|n| args[k] != Term::Int(**n));
-        let readings = numbers.map(|n| (score, with_number(name, args, k, *n)));
+    /// A fact with a number changed to each other number of the text,
+    /// scored by the words that name the fact; none if none does.
+    fn changes(&self, facts: &[(u64, Term)], at: &Number) -> Vec<(usize, Term)> {
+        let score = self.score(at.name, &at.others(facts));
+        let numbers = self.numbers.iter().filter(|n| !at.is(**n));
+        let readings = numbers.map(|n| (score, at.changed_to(*n)));
         readings.filter(|_| score > 0).collect()
     }
 
@@ -441,38 +435,69 @@ fn claimed(fact: &Term) -> &Term {
     }
 }
 
-/// A fact's arguments other than the one at k, each shown and by its
-/// label, in small letters.
-fn others(facts: &[(u64, Term)], args: &[Term], k: usize) -> String {
-    let rest = args.iter().enumerate().filter(|(j, _)| *j != k);
-    let words: Vec<String> = rest
-        .map(|(_, a)| format!("{} {}", show(a), label(facts, a)))
-        .collect();
-    words.join(" ").to_lowercase().replace('_', " ")
+/// A text's words of three letters or more.
+fn words_of(text: &str) -> Vec<String> {
+    let words = text.split(|c: char| !c.is_alphanumeric());
+    words.filter(|w| w.len() >= 3).map(String::from).collect()
 }
 
-/// A fact with its argument at k made a number.
-fn with_number(name: &str, args: &[Term], k: usize, n: i64) -> Term {
-    let mut args = args.to_vec();
-    args[k] = Term::Int(n);
-    Term::Compound(name.to_string(), args)
+/// A text's numbers.
+fn numbers_of(text: &str) -> Vec<i64> {
+    let numbers = text.split(|c: char| !c.is_ascii_digit());
+    numbers.filter_map(|n| n.parse().ok()).collect()
+}
+
+/// A number in a fact, by its place: the fact's name, its arguments, and
+/// which of them is the number.
+struct Number<'a> {
+    name: &'a str,
+    args: &'a [Term],
+    k: usize,
+}
+
+impl Number<'_> {
+    fn is(&self, n: i64) -> bool {
+        self.args[self.k] == Term::Int(n)
+    }
+
+    /// The fact's other arguments, each shown and by its label, in small
+    /// letters.
+    fn others(&self, facts: &[(u64, Term)]) -> String {
+        let rest = self.args.iter().enumerate().filter(|(j, _)| *j != self.k);
+        let words: Vec<String> = rest
+            .map(|(_, a)| format!("{} {}", show(a), label(facts, a)))
+            .collect();
+        words.join(" ").to_lowercase().replace('_', " ")
+    }
+
+    /// The fact with this number changed to another.
+    fn changed_to(&self, n: i64) -> Term {
+        let mut args = self.args.to_vec();
+        args[self.k] = Term::Int(n);
+        Term::Compound(self.name.to_string(), args)
+    }
 }
 
 /// A fact restated in English, by a generic frame: "the date of Buran's
 /// flight is 1989".
 pub fn restate(facts: &[(u64, Term)], t: &Term) -> String {
     match t {
-        Term::Compound(n, a) if a.len() == 2 => format!(
-            "the {} of {} is {}",
-            n.replace('_', " "),
-            label(facts, &a[0]),
-            show(&a[1])
-        ),
-        Term::Compound(n, a) if a.len() == 1 => {
-            format!("{} is {}", label(facts, &a[0]), n.replace('_', " "))
-        }
+        Term::Compound(n, a) if a.len() == 2 => attribute(facts, n, a),
+        Term::Compound(n, a) if a.len() == 1 => quality(facts, n, &a[0]),
         t => show(t),
     }
+}
+
+/// A fact of two arguments, as an attribute: "the date of Buran's flight
+/// is 1989".
+fn attribute(facts: &[(u64, Term)], name: &str, a: &[Term]) -> String {
+    let what = name.replace('_', " ");
+    format!("the {what} of {} is {}", label(facts, &a[0]), show(&a[1]))
+}
+
+/// A fact of one argument, as a quality: "Buran is reusable".
+fn quality(facts: &[(u64, Term)], name: &str, e: &Term) -> String {
+    format!("{} is {}", label(facts, e), name.replace('_', " "))
 }
 
 fn number_word(n: i64) -> String {
@@ -501,14 +526,18 @@ pub fn fill(template: &str, names: &[String], answers: &Term, facts: &[(u64, Ter
 
 /// Rows of an entity and a year, as "year label" in order of the years.
 fn timeline(rows: &[Term], facts: &[(u64, Term)]) -> String {
-    let point = |r: &Term| match list(r).as_slice() {
-        [e, Term::Int(y)] => Some((*y, label(facts, e))),
-        _ => None,
-    };
-    let mut points: Vec<(i64, String)> = rows.iter().filter_map(point).collect();
+    let mut points: Vec<(i64, String)> = rows.iter().filter_map(|r| point(r, facts)).collect();
     points.sort();
     let shown: Vec<String> = points.iter().map(|(y, l)| format!("{y} {l}")).collect();
     shown.join(" ── ")
+}
+
+/// A row of an entity and a year, as the year and the entity's label.
+fn point(row: &Term, facts: &[(u64, Term)]) -> Option<(i64, String)> {
+    match list(row).as_slice() {
+        [e, Term::Int(y)] => Some((*y, label(facts, e))),
+        _ => None,
+    }
 }
 
 /// A template with each name's value put in.
