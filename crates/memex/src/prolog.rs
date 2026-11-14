@@ -66,13 +66,53 @@ pub struct Query {
     pub vars: Vec<u64>,
 }
 
+/// A client of the server: the process, the atoms both sides know by
+/// number, the number of the next request, and, once the server has
+/// died, why.
 pub struct Prolog {
-    child: Child,
-    stdin: BufWriter<ChildStdin>,
-    replies: Receiver<io::Result<Message>>,
+    server: Server,
     atoms: Atoms,
     next_req: u32,
     dead: Option<String>,
+}
+
+/// The server's process: the child, what it is sent, and what it says,
+/// read in a thread of its own. It is killed when dropped.
+struct Server {
+    child: Child,
+    stdin: BufWriter<ChildStdin>,
+    replies: Receiver<io::Result<Message>>,
+}
+
+impl Server {
+    fn start(path: &std::path::Path) -> io::Result<Server> {
+        let mut child = spawn(path)?;
+        let stdin = BufWriter::new(child.stdin.take().unwrap());
+        let replies = listen(child.stdout.take().unwrap());
+        Ok(Server {
+            child,
+            stdin,
+            replies,
+        })
+    }
+
+    /// Kill it, and wait for it to end.
+    fn stop(&mut self) -> io::Result<std::process::ExitStatus> {
+        let _ = self.child.kill();
+        self.child.wait()
+    }
+
+    fn write_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
+        use std::io::Write;
+        self.stdin.write_all(bytes)?;
+        self.stdin.flush()
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        let _ = self.stop();
+    }
 }
 
 /// prolog/server.pl, unless ADVERSARIA_PROLOG names another directory.
@@ -117,14 +157,10 @@ impl Prolog {
     }
 
     /// Start `swipl` with another server file. For tests.
-    pub fn start_with(server: &std::path::Path) -> Result<Prolog, Error> {
-        let mut child = spawn(server)?;
-        let stdin = BufWriter::new(child.stdin.take().unwrap());
-        let replies = listen(child.stdout.take().unwrap());
+    pub fn start_with(path: &std::path::Path) -> Result<Prolog, Error> {
+        let server = Server::start(path)?;
         Ok(Prolog {
-            child,
-            stdin,
-            replies,
+            server,
             atoms: Atoms::default(),
             next_req: 1,
             dead: None,
@@ -133,12 +169,8 @@ impl Prolog {
 
     /// Kill the child, record why, and return the error every later call gets.
     fn die(&mut self, reason: String) -> Error {
-        let _ = self.child.kill();
-        let status = self
-            .child
-            .wait()
-            .map(|s| format!(" ({s})"))
-            .unwrap_or_default();
+        let status = self.server.stop();
+        let status = status.map(|s| format!(" ({s})")).unwrap_or_default();
         let reason = format!("{reason}{status}");
         self.dead = Some(reason.clone());
         Error::Dead(reason)
@@ -167,18 +199,15 @@ impl Prolog {
                 m.body.len()
             )));
         }
-        protocol::write_message(&mut self.stdin, &m)
+        protocol::write_message(&mut self.server.stdin, &m)
             .map_err(|e| self.die(format!("cannot write to it: {e}")))
     }
 
     /// Send bytes as they are, framed or not. For tests of bad input.
     pub fn send_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
-        use std::io::Write;
         self.alive()?;
-        self.stdin
-            .write_all(bytes)
-            .and_then(|_| self.stdin.flush())
-            .map_err(|e| self.die(format!("cannot write to it: {e}")))
+        let written = self.server.write_bytes(bytes);
+        written.map_err(|e| self.die(format!("cannot write to it: {e}")))
     }
 
     /// The next message from the server, waiting at most `timeout`; None if
@@ -186,7 +215,7 @@ impl Prolog {
     pub fn receive(&mut self, timeout: Duration) -> Result<Option<Message>, Error> {
         // No alive() check: once dead, the channel is closed, and die()
         // gives the same reason again.
-        match self.replies.recv_timeout(timeout) {
+        match self.server.replies.recv_timeout(timeout) {
             Ok(Ok(m)) => {
                 if m.kind == Kind::AtomIs {
                     self.learn(&m)?;
@@ -339,12 +368,5 @@ impl Prolog {
     /// Remove the fact that journal entry `seq` added.
     pub fn retract_fact(&mut self, fact: &Term, seq: u64) -> Result<(), Error> {
         self.fact_message(Kind::Retract, fact, seq)
-    }
-}
-
-impl Drop for Prolog {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
     }
 }
