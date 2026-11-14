@@ -283,6 +283,14 @@ mod tests {
     }
 
     #[test]
+    fn a_variable_typed_without_a_name_is_named_by_its_number() {
+        // Catches an unnamed variable given another variable's name, or
+        // none: in f(X, _), the second is _1.
+        let (_, names) = Engine::start().unwrap().parse("f(X, _)").unwrap();
+        assert_eq!(names, ["X", "_1"]);
+    }
+
+    #[test]
     fn a_goal_held_in_a_variable_is_refused_in_words() {
         // Catches the refusal shown as Prolog's own term, variable_goal.
         let said = refusal(|e, body| e.check_definition(&body), "p(X), X");

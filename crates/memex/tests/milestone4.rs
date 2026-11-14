@@ -437,6 +437,22 @@ fn recomputation_touches_only_dependent_nodes() {
 }
 
 #[test]
+fn a_second_adoption_is_the_one_retracted() {
+    // Catches the retraction of an item's first adoption, already
+    // retracted, in place of its last.
+    let dir = temp("adopt-twice");
+    let mut app = scene(&dir);
+    leap(&mut app, "talk notes");
+    tap(&mut app, Key::F(3));
+    tap(&mut app, Key::F(4));
+    tap(&mut app, Key::F(3));
+    let second = app.journal().entries().last().unwrap().seq;
+    tap(&mut app, Key::F(4));
+    assert_eq!(app.message, format!("adoption {second} retracted"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn replay_reproduces_claims_constraints_and_worlds() {
     // Catches state of milestone 4 that lives outside the journal: a replay
     // must give the same outline, view, world and reasoning.
