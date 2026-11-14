@@ -1649,4 +1649,29 @@ mod tests {
             assert!(e.contains(why), "{m:?}: {e}");
         }
     }
+
+    #[test]
+    fn a_channel_takes_one_value() {
+        // Catches x(1, 2) read as x(1).
+        let two = t("x", vec![Term::Int(1), Term::Int(2)]);
+        let said = channels(&t("rule", vec![two])).unwrap_err();
+        assert_eq!(said, "rule: x takes one value");
+    }
+
+    #[test]
+    fn identical_marks_are_drawn_once_and_loudly_if_any_is_loud() {
+        // Catches a violation's mark drawn plainly because a plain copy of
+        // it came first.
+        let loud = Input {
+            loud: true,
+            ..mk("dot x:1 y:1")
+        };
+        let figure = render(&[mk("dot x:1 y:1"), loud], 20, 6);
+        let inks = figure
+            .rows
+            .iter()
+            .flatten()
+            .filter(|(_, ink)| *ink == Ink::Loud);
+        assert_eq!((figure.hits.len(), inks.count() > 0), (1, true));
+    }
 }
