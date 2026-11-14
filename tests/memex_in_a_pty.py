@@ -27,6 +27,8 @@ KITTY_REPLY = b"\x1b[?0u\x1b_Gi=31;OK\x1b\\\x1b[?62;c"
 PLAIN_REPLY = b"\x1b[?62;22c"
 ALT = 2  # kitty modifier bit for Alt; the modifiers field is 1 + bits
 RIGHT_ALT = 57449  # kitty's code for the Right Alt key
+CONTROL = 4  # kitty modifier bit for Control
+LEFT_CONTROL = 57442  # kitty's code for the Left Control key
 
 
 def key(code, mods=0, event=1):
@@ -36,6 +38,13 @@ def key(code, mods=0, event=1):
 
 def press_release(ch, mods=0):
     return key(ord(ch), mods, 1) + key(ord(ch), mods, 3)
+
+
+def command(line):
+    """The keys of a command: Left Control held while it is typed."""
+    keys = [key(LEFT_CONTROL, CONTROL, 1)]
+    keys += [press_release(c, CONTROL) for c in line]
+    return keys + [key(LEFT_CONTROL, 0, 3)]
 
 
 def run(binary, journal, reply, keys, timeout=10, args=(), kill_after=None):
@@ -237,6 +246,18 @@ def main():
         es = entries(j) if os.path.exists(os.path.join(j, "journal.jsonl")) else []
         texts = [e["body"].get("add") for e in es if e["kind"] == "edit" and e["body"].get("op") == "text"]
         check("text left for a second is written before a crash", "Kept" in texts, (status, texts))
+
+        # 9. The memex reasons after each change, unasked: two dates for one
+        #    event and a rule against it show a violation in the top bar.
+        j = os.path.join(d, "reasons")
+        keys = [press_release(c) for c in "Buran"]
+        keys += command("fact date(buran, 1988)")
+        keys += command("fact date(buran, 1989)")
+        keys += command("constraint one date: false :- date(E, D1), date(E, D2), D1 \\= D2.")
+        keys += [b"\x1b[21~"]
+        status, out = run(binary, j, KITTY_REPLY, keys)
+        check("a change is reasoned over and its violation shown",
+              status == 0 and b"constraint violation" in out, (status, out[-300:]))
 
     print(f"{failures} failed")
     sys.exit(1 if failures else 0)
