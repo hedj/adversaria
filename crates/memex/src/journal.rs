@@ -167,10 +167,7 @@ impl Journal {
     /// still checks. The rewrite goes through a temporary file and a rename,
     /// so a crash leaves the old file or the new one, never a torn one.
     pub fn purge(&mut self, target: u64, reason: &str) -> Result<Entry, Error> {
-        let t = match self.entries.get((target as usize).wrapping_sub(1)) {
-            Some(t) => t,
-            None => return Err(Error::Refused(format!("entry {target} does not exist"))),
-        };
+        let t = self.entry(target)?;
         if t.kind() == "purge" {
             return Err(Error::Refused(format!(
                 "entry {target} is a purge, and cannot be purged"
