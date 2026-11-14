@@ -1565,6 +1565,19 @@ mod tests {
         assert!(s.contains("2 over 4 counting each field apart"), "{s}");
     }
 
+    /// The referents of each function of one file.
+    fn referents_of(src: &str) -> Vec<BTreeSet<String>> {
+        let (fns, _, _) = measure_rust(&[("a.rs".into(), src.into())], &[]).unwrap();
+        fns.into_iter().map(|u| u.referents).collect()
+    }
+
+    #[test]
+    fn a_call_through_self_counts_the_function() {
+        // Catches Self:: read as a path the project does not own.
+        let refs = referents_of("struct A; impl A { fn f() {} fn g() { Self::f() } }");
+        assert!(refs[1].contains("fn f"), "{refs:?}");
+    }
+
     #[test]
     fn a_small_structs_own_fields_are_context_even_if_others_share_the_name() {
         // Catches self.x counted where x is also another struct's field.
