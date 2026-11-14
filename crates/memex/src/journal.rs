@@ -112,27 +112,46 @@ impl Journal {
     }
 
     fn write(&mut self, parent: Option<u64>, kind: &str, body: Value) -> Result<Entry, Error> {
-        let seq = self.entries.len() as u64 + 1;
-        let parent = match parent {
-            None if seq == 1 => None,
-            None => {
-                return Err(Error::Refused(
-                    "only the first entry may have no parent".into(),
-                ));
-            }
-            Some(p) if p == 0 || p >= seq => {
-                return Err(Error::Refused(format!("entry {p} does not exist")));
-            }
-            Some(p) => Some((p, self.entries[p as usize - 1].hash.clone())),
-        };
+        let e = self.next_entry(parent, kind, body)?;
+        self.append_line(&e)?;
+        self.entries.push(e.clone());
+        Ok(e)
+    }
+
+    /// The entry to write next, after `parent`.
+    fn next_entry(&self, parent: Option<u64>, kind: &str, body: Value) -> Result<Entry, Error> {
+        let parent = self.parent(parent)?;
         // The format keeps text in Unicode NFC, so the writer normalises it.
         let body = record::nfc(&body)?;
-        let e = Entry::new(
-            seq,
-            parent.as_ref().map(|(p, h)| (*p, h.as_str())),
-            kind,
-            body,
-        )?;
+        Ok(Entry::new(self.next(), parent, kind, body)?)
+    }
+
+    /// The number and hash of the entry a new one follows: any earlier
+    /// entry, or none for the first.
+    fn parent(&self, parent: Option<u64>) -> Result<Option<(u64, &str)>, Error> {
+        match parent {
+            None if self.entries.is_empty() => Ok(None),
+            None => Err(Error::Refused(
+                "only the first entry may have no parent".into(),
+            )),
+            Some(p) => self.entry(p).map(|e| Some((p, e.hash.as_str()))),
+        }
+    }
+
+    /// An entry already written.
+    fn entry(&self, seq: u64) -> Result<&Entry, Error> {
+        let found = self.entries.get((seq as usize).wrapping_sub(1));
+        found.ok_or_else(|| Error::Refused(format!("entry {seq} does not exist")))
+    }
+
+    /// The number the next entry gets.
+    fn next(&self) -> u64 {
+        self.entries.len() as u64 + 1
+    }
+
+    /// Add an entry's line to the end of the file, and flush it to the
+    /// disk if the journal is durable.
+    fn append_line(&self, e: &Entry) -> Result<(), Error> {
         let mut f = OpenOptions::new()
             .append(true)
             .open(self.dir.join(JOURNAL))?;
@@ -140,8 +159,7 @@ impl Journal {
         if self.durable {
             f.sync_data()?;
         }
-        self.entries.push(e.clone());
-        Ok(e)
+        Ok(())
     }
 
     /// Purge an entry: write a purge entry naming it and why, then replace
