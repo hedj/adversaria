@@ -56,12 +56,23 @@ pub fn lines<'a>(file: &str, text: &'a str) -> Result<Vec<&'a str>, LineError> {
     Ok(lines)
 }
 
+/// The record lines of a file, each with its line number: those after
+/// its header, which must name the format.
+pub fn records<'a>(
+    file: &str,
+    format: &str,
+    text: &'a str,
+) -> Result<Vec<(usize, &'a str)>, LineError> {
+    let lines = lines(file, text)?;
+    record::check_header(lines[0], format).map_err(|m| line_error(file, 1, m))?;
+    let numbered = lines.into_iter().enumerate().skip(1);
+    Ok(numbered.map(|(i, line)| (i + 1, line)).collect())
+}
+
 /// Check the whole journal; return its entries in order.
 pub fn check_journal(text: &str) -> Result<Vec<Entry>, LineError> {
-    let lines = lines(JOURNAL, text)?;
-    record::check_header(lines[0], JOURNAL_FORMAT).map_err(|m| line_error(JOURNAL, 1, m))?;
     let mut journal = Journal::default();
-    for line in &lines[1..] {
+    for (_, line) in records(JOURNAL, JOURNAL_FORMAT, text)? {
         journal.read(line)?;
     }
     journal.finish()

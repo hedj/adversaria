@@ -128,8 +128,8 @@ fn ten_thousand_entries_check() {
 fn check_texts(keys: &str, journal: &str, seals: &str) -> Result<(), LineError> {
     let ks = check::check_keys(keys)?;
     let es = chain::check_journal(journal)?;
-    check::check_seals(seals, &es, &ks, true)?;
-    Ok(())
+    let ss = check::check_seals(seals, &es, &ks)?;
+    check::all_sealed(&ss, &es)
 }
 
 #[test]
@@ -373,5 +373,42 @@ fn unsealed_entry_is_named() {
         (e.file.as_str(), e.line, e.msg.as_str()),
         (JOURNAL, 6, "entry 5 is not sealed")
     );
+    cleanup(&dir, &key);
+}
+
+/// The first error of a checked directory: its file, line and message.
+fn first_error(dir: &Path) -> (String, usize, String) {
+    let e = check::check_dir(dir).unwrap_err();
+    (e.file, e.line, e.msg)
+}
+
+#[test]
+fn a_seal_that_does_not_follow_the_seal_before_is_refused() {
+    // Catches a seals file whose chain is not checked: a seal rewritten to
+    // follow some other seal still has its true signature.
+    let (dir, key) = generate("seal-prev", 3, 0);
+    let p = dir.join(SEALS);
+    let text = fs::read_to_string(&p).unwrap();
+    let mut lines: Vec<String> = text.lines().map(String::from).collect();
+    let s = format::record::Seal::parse(&lines[2]).unwrap();
+    let elsewhere = format::record::sha256_hex(b"no seal");
+    let moved = format::record::Seal::new(s.entry, s.stamp, Some(&elsewhere)).unwrap();
+    lines[2] = moved.to_line().unwrap();
+    fs::write(&p, lines.join("\n") + "\n").unwrap();
+    let want = "prev is not the hash of the seal before";
+    assert_eq!(first_error(&dir), (SEALS.into(), 3, want.into()));
+    cleanup(&dir, &key);
+}
+
+#[test]
+fn a_key_listed_twice_is_refused() {
+    // Catches keys.jsonl accepted with the same key on two lines.
+    let (dir, key) = generate("key-twice", 1, 0);
+    let p = dir.join(KEYS);
+    let text = fs::read_to_string(&p).unwrap();
+    let again = text.lines().nth(1).unwrap();
+    fs::write(&p, format!("{text}{again}\n")).unwrap();
+    let want = "this key is listed twice";
+    assert_eq!(first_error(&dir), (KEYS.into(), 3, want.into()));
     cleanup(&dir, &key);
 }

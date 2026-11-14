@@ -159,7 +159,7 @@ pub fn seal_pending(
         f.write_all((record::header(SEALS_FORMAT) + "\n").as_bytes())?;
         f.sync_all()?;
     }
-    let seals = check::check_seals(&fs::read_to_string(&seals_path)?, &entries, &keys, false)?;
+    let seals = check::check_seals(&fs::read_to_string(&seals_path)?, &entries, &keys)?;
     let mut prev = seals.last().map(|s| s.hash.clone());
     let mut lines = String::new();
     for e in &entries[seals.len()..] {
