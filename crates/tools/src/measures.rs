@@ -254,4 +254,15 @@ mod tests {
         let es = chain(&[("edit", json!({"op": "init"})), shown(), shown()]);
         assert_eq!(measure(&es).disagreements_seen, 1);
     }
+
+    #[test]
+    fn an_adoption_later_retracted_is_counted() {
+        // Catches a retraction of an adopted suggestion missed.
+        let es = chain(&[
+            ("edit", json!({"op": "init"})),
+            ("edit", json!({"op": "facts", "suggestion": "k1"})),
+            ("retract", json!({"target": 2})),
+        ]);
+        assert_eq!(measure(&es).adopted_then_retracted, 1);
+    }
 }
