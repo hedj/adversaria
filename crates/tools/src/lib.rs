@@ -68,36 +68,49 @@ pub fn value(v: &Value) -> Option<String> {
     let s = v["value"].as_str()?;
     match v["type"].as_str()? {
         "uri" => entity_id(s).map(atom),
-        "literal" | "typed-literal" => match v["datatype"].as_str() {
-            Some("http://www.w3.org/2001/XMLSchema#dateTime") => {
-                // "+1988-11-15T00:00:00Z", or "-0500-01-01T00:00:00Z". Precision is not kept.
-                let neg = s.starts_with('-');
-                let body = s.trim_start_matches(['+', '-']);
-                let date = body.split('T').next()?;
-                let mut parts = date.split('-').map(|p| p.parse::<i64>().ok());
-                let (y, m, d) = (parts.next()??, parts.next()??, parts.next()??);
-                Some(format!("date({}, {m}, {d})", if neg { -y } else { y }))
-            }
-            Some("http://www.w3.org/2001/XMLSchema#decimal")
-            | Some("http://www.w3.org/2001/XMLSchema#integer")
-            | Some("http://www.w3.org/2001/XMLSchema#double") => {
-                let n = s.trim_start_matches('+');
-                if let Ok(i) = n.parse::<i64>() {
-                    Some(i.to_string())
-                } else {
-                    n.parse::<f64>()
-                        .ok()
-                        .filter(|x| x.is_finite())
-                        .map(|x| format!("{x:?}"))
-                }
-            }
-            Some(_) => None,
-            None => match v["xml:lang"].as_str() {
-                None | Some("en") => Some(string(s)),
-                Some(_) => None,
-            },
-        },
+        "literal" | "typed-literal" => literal(v, s),
         _ => None,
+    }
+}
+
+/// A literal: a date, a number, or English (or untagged) text; none of
+/// another type or language.
+fn literal(v: &Value, s: &str) -> Option<String> {
+    match v["datatype"].as_str() {
+        Some("http://www.w3.org/2001/XMLSchema#dateTime") => date_value(s),
+        Some("http://www.w3.org/2001/XMLSchema#decimal")
+        | Some("http://www.w3.org/2001/XMLSchema#integer")
+        | Some("http://www.w3.org/2001/XMLSchema#double") => number_value(s),
+        Some(_) => None,
+        None => text_value(v, s),
+    }
+}
+
+/// "+1988-11-15T00:00:00Z", or "-0500-01-01T00:00:00Z", as date(Y, M, D).
+/// Precision is not kept.
+fn date_value(s: &str) -> Option<String> {
+    let neg = s.starts_with('-');
+    let date = s.trim_start_matches(['+', '-']).split('T').next()?;
+    let mut parts = date.split('-').map(|p| p.parse::<i64>().ok());
+    let (y, m, d) = (parts.next()??, parts.next()??, parts.next()??);
+    Some(format!("date({}, {m}, {d})", if neg { -y } else { y }))
+}
+
+/// A whole number as itself, else a finite float.
+fn number_value(s: &str) -> Option<String> {
+    let n = s.trim_start_matches('+');
+    if let Ok(i) = n.parse::<i64>() {
+        return Some(i.to_string());
+    }
+    let x = n.parse::<f64>().ok().filter(|x| x.is_finite());
+    x.map(|x| format!("{x:?}"))
+}
+
+/// Text in English, or with no language.
+fn text_value(v: &Value, s: &str) -> Option<String> {
+    match v["xml:lang"].as_str() {
+        None | Some("en") => Some(string(s)),
+        Some(_) => None,
     }
 }
 
