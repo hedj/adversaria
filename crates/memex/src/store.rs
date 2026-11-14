@@ -9,68 +9,117 @@
 use crate::prolog::{self, Prolog};
 use format::record::Entry;
 use format::terms::{self, Term};
+use serde_json::Value;
+use std::collections::HashSet;
 
 /// The facts of the world whose head is `head`, in the order they were added,
 /// each with the seq of the entry that added it.
 pub fn facts(entries: &[Entry], head: u64) -> Result<Vec<(u64, Term)>, String> {
-    let get = |s: u64| {
-        entries
-            .get((s as usize).wrapping_sub(1))
-            .ok_or(format!("entry {s} does not exist"))
-    };
+    let mut world = Replay::new(entries);
+    for e in path(entries, head)? {
+        world.read(e)?;
+    }
+    Ok(world.facts)
+}
+
+fn entry(entries: &[Entry], seq: u64) -> Result<&Entry, String> {
+    let found = entries.get((seq as usize).wrapping_sub(1));
+    found.ok_or(format!("entry {seq} does not exist"))
+}
+
+/// The entries of a world, from the root to its head.
+fn path(entries: &[Entry], head: u64) -> Result<Vec<&Entry>, String> {
     let mut path = Vec::new();
     let mut at = Some(head);
-    while let Some(s) = at {
-        let e = get(s)?;
-        path.push(e);
-        at = e.parent_seq();
+    while let Some(seq) = at {
+        path.push(entry(entries, seq)?);
+        at = path.last().and_then(|e| e.parent_seq());
     }
     path.reverse();
-    let mut on_path = std::collections::HashSet::new();
-    let mut out: Vec<(u64, Term)> = Vec::new();
-    let mut retracted = std::collections::HashSet::new();
-    for e in path {
-        on_path.insert(e.seq);
-        let Some(body) = &e.body() else { continue };
-        if e.kind() == "retract" {
-            let t = body
-                .get("target")
-                .and_then(|t| t.as_u64())
-                .ok_or(format!("entry {}: a retract needs a target", e.seq))?;
-            if !on_path.contains(&t) || t == e.seq {
-                return Err(format!(
-                    "entry {}: retracts entry {t}, which is not earlier in this world",
-                    e.seq
-                ));
-            }
-            if get(t)?.kind() == "retract" {
-                return Err(format!(
-                    "entry {}: retracts a retraction; adopt the facts again instead",
-                    e.seq
-                ));
-            }
-            if !retracted.insert(t) {
-                return Err(format!("entry {}: entry {t} is already retracted", e.seq));
-            }
-            out.retain(|(s, _)| *s != t);
-        }
-        if let Some(fs) = body.get("facts") {
-            let list = fs
-                .as_array()
-                .ok_or(format!("entry {}: facts must be a list", e.seq))?;
-            for f in list {
-                let t = terms::decode(f).map_err(|m| format!("entry {}: {m}", e.seq))?;
-                if !matches!(t, Term::Atom(_) | Term::Compound(..)) {
-                    return Err(format!(
-                        "entry {}: a fact must be an atom or a compound",
-                        e.seq
-                    ));
-                }
-                out.push((e.seq, t));
-            }
+    Ok(path)
+}
+
+/// A world being replayed: the entries read so far on its path, those
+/// retracted, and the facts that stand.
+struct Replay<'a> {
+    entries: &'a [Entry],
+    on_path: HashSet<u64>,
+    retracted: HashSet<u64>,
+    facts: Vec<(u64, Term)>,
+}
+
+impl<'a> Replay<'a> {
+    fn new(entries: &'a [Entry]) -> Self {
+        let (on_path, retracted, facts) = (HashSet::new(), HashSet::new(), Vec::new());
+        Replay {
+            entries,
+            on_path,
+            retracted,
+            facts,
         }
     }
-    Ok(out)
+
+    /// Read the next entry on the path; an error names the entry.
+    fn read(&mut self, e: &Entry) -> Result<(), String> {
+        self.on_path.insert(e.seq);
+        let Some(body) = e.body() else { return Ok(()) };
+        let done = self.apply(e, body);
+        done.map_err(|m| format!("entry {}: {m}", e.seq))
+    }
+
+    /// What an entry's body does to the facts: a retract removes those of
+    /// its target, and any entry may add its own.
+    fn apply(&mut self, e: &Entry, body: &Value) -> Result<(), String> {
+        if e.kind() == "retract" {
+            self.retract(e.seq, body)?;
+        }
+        self.add(e.seq, body)
+    }
+
+    fn retract(&mut self, seq: u64, body: &Value) -> Result<(), String> {
+        let target = body.get("target").and_then(Value::as_u64);
+        let t = target.ok_or("a retract needs a target")?;
+        self.check_target(seq, t)?;
+        self.facts.retain(|(s, _)| *s != t);
+        Ok(())
+    }
+
+    /// A retract names an entry earlier in this world, which is no
+    /// retraction and is not yet retracted.
+    fn check_target(&mut self, seq: u64, t: u64) -> Result<(), String> {
+        if !self.on_path.contains(&t) || t == seq {
+            return Err(format!(
+                "retracts entry {t}, which is not earlier in this world"
+            ));
+        }
+        if entry(self.entries, t)?.kind() == "retract" {
+            return Err("retracts a retraction; adopt the facts again instead".into());
+        }
+        if !self.retracted.insert(t) {
+            return Err(format!("entry {t} is already retracted"));
+        }
+        Ok(())
+    }
+
+    /// Add the facts a body carries, if it carries any.
+    fn add(&mut self, seq: u64, body: &Value) -> Result<(), String> {
+        let Some(list) = body.get("facts") else {
+            return Ok(());
+        };
+        for f in list.as_array().ok_or("facts must be a list")? {
+            self.facts.push((seq, fact(f)?));
+        }
+        Ok(())
+    }
+}
+
+/// A fact as the journal encodes it: an atom or a compound term.
+fn fact(encoded: &Value) -> Result<Term, String> {
+    let t = terms::decode(encoded).map_err(|m| m.to_string())?;
+    if !matches!(t, Term::Atom(_) | Term::Compound(..)) {
+        return Err("a fact must be an atom or a compound".into());
+    }
+    Ok(t)
 }
 
 /// Load a world's facts into Prolog, in order.
