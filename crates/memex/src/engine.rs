@@ -6,7 +6,9 @@
 //! whose facts changed.
 
 use crate::prolog::{Error, Prolog};
+use crate::reason::{Suggestion, list, show};
 use format::terms::Term;
+use std::collections::HashSet;
 
 pub struct Engine {
     p: Prolog,
@@ -33,6 +35,18 @@ pub fn variables(t: &Term) -> Vec<u64> {
     out
 }
 
+/// A fact by what it is and where it came from, to compare facts without
+/// scanning a list: a world with many facts syncs in linear time.
+fn key((seq, fact): &(u64, Term)) -> (u64, String) {
+    (*seq, format!("{fact:?}"))
+}
+
+/// The facts that are not among some others.
+fn absent<'a>(facts: &'a [(u64, Term)], others: &[(u64, Term)]) -> Vec<&'a (u64, Term)> {
+    let keys: HashSet<(u64, String)> = others.iter().map(key).collect();
+    facts.iter().filter(|f| !keys.contains(&key(f))).collect()
+}
+
 impl Engine {
     pub fn start() -> Result<Engine, Error> {
         Ok(Engine {
@@ -44,44 +58,34 @@ impl Engine {
 
     /// Make the loaded facts equal these, by difference.
     pub fn sync(&mut self, facts: &[(u64, Term)]) -> Result<(), Error> {
-        // Compared by a key, not by scanning a list, so a world with many
-        // facts (an outline's own, two per item) syncs in linear time.
-        let key = |(s, f): &(u64, Term)| (*s, format!("{f:?}"));
-        let want: std::collections::HashSet<(u64, String)> = facts.iter().map(key).collect();
-        let have: std::collections::HashSet<(u64, String)> = self.loaded.iter().map(key).collect();
-        for f in &self.loaded {
-            if !want.contains(&key(f)) {
-                self.p.retract_fact(&f.1, f.0)?;
-            }
+        for (seq, gone) in absent(&self.loaded, facts) {
+            self.p.retract_fact(gone, *seq)?;
         }
-        for f in facts {
-            if !have.contains(&key(f)) {
-                self.p.assert_fact(&f.1, f.0)?;
-            }
+        for (seq, new) in absent(facts, &self.loaded) {
+            self.p.assert_fact(new, *seq)?;
         }
         self.loaded = facts.to_vec();
         Ok(())
     }
 
+    /// The first answer to a goal, if it has one: a value for each of its
+    /// variables.
+    fn first(&mut self, goal: &Term) -> Result<Option<Vec<Term>>, Error> {
+        Ok(self.p.all(goal, 2)?.into_iter().next())
+    }
+
     /// The value of a node: the list its definition gives.
     pub fn node(&mut self, id: u64) -> Result<Term, Error> {
-        let a = self
-            .p
-            .all(&c("node", vec![Term::Int(id as i64), Term::Var(0)]), 2)?;
-        a.into_iter()
-            .next()
-            .map(|v| v[0].clone())
-            .ok_or_else(|| Error::Server(format!("node {id} has no value")))
+        let goal = c("node", vec![Term::Int(id as i64), Term::Var(0)]);
+        let value = self.first(&goal)?.map(|v| v[0].clone());
+        value.ok_or_else(|| Error::Server(format!("node {id} has no value")))
     }
 
     /// How many times a node has been evaluated.
     pub fn evals(&mut self, id: u64) -> Result<i64, Error> {
-        let a = self.p.all(
-            &c("node_evals", vec![Term::Int(id as i64), Term::Var(0)]),
-            2,
-        )?;
-        match a.first().map(|v| &v[0]) {
-            Some(Term::Int(n)) => Ok(*n),
+        let goal = c("node_evals", vec![Term::Int(id as i64), Term::Var(0)]);
+        match self.first(&goal)?.as_deref() {
+            Some([Term::Int(n)]) => Ok(*n),
             _ => Err(Error::Server("node_evals gave no count".into())),
         }
     }
@@ -89,89 +93,29 @@ impl Engine {
     /// Read a term with Prolog's own reader. Returns the term and the names
     /// of its variables, in order of first appearance.
     pub fn parse(&mut self, text: &str) -> Result<(Term, Vec<String>), Error> {
-        let goal = c(
-            "term_string",
-            vec![
-                Term::Var(0),
-                Term::Str(text.into()),
-                c(
-                    ".",
-                    vec![
-                        c("variable_names", vec![Term::Var(1)]),
-                        Term::Atom("[]".into()),
-                    ],
-                ),
-            ],
-        );
-        let a = self.p.all(&goal, 2)?;
-        let vals = a
-            .into_iter()
-            .next()
-            .ok_or_else(|| Error::Server("no term read".into()))?;
-        let mut names = Vec::new();
-        let mut list = &vals[1];
-        let mut by_var = Vec::new();
-        while let Term::Compound(f, args) = list {
-            if f != "." {
-                break;
-            }
-            if let Term::Compound(eq, nv) = &args[0]
-                && eq == "="
-                && let (Term::Atom(n), Term::Var(v)) = (&nv[0], &nv[1])
-            {
-                by_var.push((*v, n.clone()));
-            }
-            list = &args[1];
-        }
-        for v in variables(&vals[0]) {
-            names.push(
-                by_var
-                    .iter()
-                    .find(|(x, _)| *x == v)
-                    .map(|(_, n)| n.clone())
-                    .unwrap_or_else(|| format!("_{v}")),
-            );
-        }
+        let answer = self.first(&read_goal(text))?;
+        let vals = answer.ok_or_else(|| Error::Server("no term read".into()))?;
+        let names = names_of(&vals[0], &vals[1]);
         Ok((vals[0].clone(), names))
     }
 
     /// Try a constraint against a planted violation.
     pub fn plant(&mut self, vars: &Term, body: &Term) -> Result<Term, Error> {
-        let a = self.p.all(
-            &c(
-                "plant_check",
-                vec![vars.clone(), body.clone(), Term::Var(1_000_000)],
-            ),
-            2,
-        )?;
-        a.into_iter()
-            .next()
-            .and_then(|v| v.last().cloned())
-            .ok_or_else(|| Error::Server("plant_check gave nothing".into()))
+        let result = Term::Var(1_000_000);
+        let goal = c("plant_check", vec![vars.clone(), body.clone(), result]);
+        let found = self.first(&goal)?.and_then(|v| v.last().cloned());
+        found.ok_or_else(|| Error::Server("plant_check gave nothing".into()))
     }
 
     /// Load the Wikidata subset of import entry `seq` from its blob, or
     /// unload it (None). Does nothing if that one is already loaded.
     pub fn wikidata(&mut self, import: Option<(u64, &std::path::Path)>) -> Result<(), Error> {
-        if import.map(|i| i.0) == self.wikidata {
+        let seq = import.map(|i| i.0);
+        if seq == self.wikidata {
             return Ok(());
         }
-        match import {
-            Some((seq, file)) => {
-                let goal = c(
-                    "load_wikidata",
-                    vec![
-                        Term::Str(file.to_string_lossy().into_owned()),
-                        Term::Int(seq as i64),
-                    ],
-                );
-                self.p.all(&goal, 1)?;
-            }
-            None => {
-                self.p.all(&Term::Atom("unload_wikidata".into()), 1)?;
-            }
-        }
-        self.wikidata = import.map(|i| i.0);
+        self.p.all(&wikidata_goal(import), 1)?;
+        self.wikidata = seq;
         Ok(())
     }
 
@@ -179,101 +123,150 @@ impl Engine {
     /// reasoner allows (prolog/dataflow.pl, vet/1). Err says what is not
     /// allowed, in words.
     pub fn check_definition(&mut self, body: &Term) -> Result<(), String> {
-        match self.p.all(&c("check_definition", vec![body.clone()]), 1) {
-            Ok(_) => Ok(()),
-            Err(Error::Prolog(Term::Compound(e, a)))
-                if e == "error"
-                    && matches!(&a[0], Term::Compound(p, pa) if p == "permission_error" && pa.len() == 3 && pa[1] == Term::Atom("not_allowed".into())) =>
-            {
-                let Term::Compound(_, pa) = &a[0] else {
-                    unreachable!()
-                };
-                let what = match &pa[2] {
-                    Term::Compound(s, na) if s == "/" && na.len() == 2 => {
-                        format!(
-                            "{}/{}",
-                            crate::reason::show(&na[0]),
-                            crate::reason::show(&na[1])
-                        )
-                    }
-                    Term::Atom(v) if v == "variable_goal" => "a goal held in a variable".into(),
-                    other => crate::reason::show(other),
-                };
-                Err(format!(
-                    "{what} is not allowed: a definition may only read facts, compare and compute (docs/guide.md, § 3.1)"
-                ))
-            }
-            Err(e) => Err(e.to_string()),
-        }
+        let goal = c("check_definition", vec![body.clone()]);
+        let checked = self.p.all(&goal, 1);
+        checked.map(|_| ()).map_err(definition_refusal)
     }
 
     /// Whether a rule may be kept (prolog/dataflow.pl, check_rule/2). Err
     /// says why not, in words.
     pub fn check_rule(&mut self, head: &Term, body: &Term) -> Result<(), String> {
-        match self
-            .p
-            .all(&c("check_rule", vec![head.clone(), body.clone()]), 1)
-        {
-            Ok(_) => Ok(()),
-            Err(Error::Prolog(Term::Compound(e, a))) if e == "error" => {
-                let show = crate::reason::show;
-                Err(match &a[0] {
-                    Term::Compound(k, x) if k == "permission_error" && x.len() == 3 => {
-                        match (&x[1], &x[2]) {
-                            (Term::Atom(w), what) if w == "recursive_rule" => {
-                                format!(
-                                    "{} is recursive, directly or through other rules; rules may not be",
-                                    show(what)
-                                )
-                            }
-                            (_, Term::Compound(s, na)) if s == "/" && na.len() == 2 => format!(
-                                "{}/{} is not allowed: a rule may only read facts, compare and compute",
-                                show(&na[0]),
-                                show(&na[1])
-                            ),
-                            (_, what) => format!("{} is not allowed", show(what)),
-                        }
-                    }
-                    Term::Compound(k, x) if k == "domain_error" && x.len() == 2 => {
-                        "a variable of the head is not bound by the body".to_string()
-                    }
-                    other => show(other),
-                })
-            }
-            Err(e) => Err(e.to_string()),
-        }
+        let goal = c("check_rule", vec![head.clone(), body.clone()]);
+        let checked = self.p.all(&goal, 1);
+        checked.map(|_| ()).map_err(rule_refusal)
     }
 
     /// Check a file of Wikidata facts as the loader reads it, keeping
     /// nothing: Err names the first term that is not one.
     pub fn check_wikidata(&mut self, file: &std::path::Path) -> Result<(), Error> {
-        self.p
-            .all(
-                &c(
-                    "check_wikidata",
-                    vec![Term::Str(file.to_string_lossy().into_owned())],
-                ),
-                1,
-            )
-            .map(|_| ())
+        let file = Term::Str(file.to_string_lossy().into_owned());
+        self.p.all(&c("check_wikidata", vec![file]), 1).map(|_| ())
     }
 
     /// Suggestions without a model, best evidence first.
-    pub fn suggestions(&mut self) -> Result<Vec<crate::reason::Suggestion>, Error> {
-        let a = self.p.all(&c("suggestions", vec![Term::Var(0)]), 2)?;
-        let list = a
-            .into_iter()
-            .next()
-            .map(|v| v[0].clone())
-            .unwrap_or(Term::Atom("[]".into()));
-        Ok(crate::reason::list(&list)
-            .iter()
-            .filter_map(crate::reason::Suggestion::from_term)
-            .collect())
+    pub fn suggestions(&mut self) -> Result<Vec<Suggestion>, Error> {
+        let answer = self.first(&c("suggestions", vec![Term::Var(0)]))?;
+        let found = answer.map(|v| list(&v[0])).unwrap_or_default();
+        Ok(found.iter().filter_map(Suggestion::from_term).collect())
     }
 
     /// Run any goal; all answers.
     pub fn all(&mut self, goal: &Term) -> Result<Vec<Vec<Term>>, Error> {
         self.p.all(goal, 100)
+    }
+}
+
+// Reading a term.
+
+/// The goal that reads a text as a term, with the names of its variables.
+fn read_goal(text: &str) -> Term {
+    let names = c("variable_names", vec![Term::Var(1)]);
+    let options = c(".", vec![names, Term::Atom("[]".into())]);
+    c(
+        "term_string",
+        vec![Term::Var(0), Term::Str(text.into()), options],
+    )
+}
+
+/// The names of a term's variables, in order of first appearance, from
+/// the reader's list of Name = Variable; a variable it did not name is _N.
+fn names_of(term: &Term, bindings: &Term) -> Vec<String> {
+    let named: Vec<(u64, String)> = list(bindings).iter().filter_map(binding).collect();
+    let name = |v: u64| named.iter().find(|(x, _)| *x == v).map(|(_, n)| n.clone());
+    let all = variables(term).into_iter();
+    all.map(|v| name(v).unwrap_or_else(|| format!("_{v}")))
+        .collect()
+}
+
+/// A variable and its name, from Name = Variable.
+fn binding(pair: &Term) -> Option<(u64, String)> {
+    match pair {
+        Term::Compound(eq, nv) if eq == "=" => match (&nv[0], &nv[1]) {
+            (Term::Atom(n), Term::Var(v)) => Some((*v, n.clone())),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The goal that loads an import's Wikidata subset, or unloads it.
+fn wikidata_goal(import: Option<(u64, &std::path::Path)>) -> Term {
+    match import {
+        Some((seq, file)) => {
+            let file = Term::Str(file.to_string_lossy().into_owned());
+            c("load_wikidata", vec![file, Term::Int(seq as i64)])
+        }
+        None => Term::Atom("unload_wikidata".into()),
+    }
+}
+
+// Refusals, in words.
+
+/// What Prolog's error(E, _) holds, if the error is one.
+fn raised(e: &Error) -> Option<&Term> {
+    match e {
+        Error::Prolog(Term::Compound(f, a)) if f == "error" => a.first(),
+        _ => None,
+    }
+}
+
+/// What a permission error forbids, and how: permission_error(_, How, What).
+fn forbidden(e: &Error) -> Option<(&Term, &Term)> {
+    match raised(e)? {
+        Term::Compound(k, x) if k == "permission_error" && x.len() == 3 => Some((&x[1], &x[2])),
+        _ => None,
+    }
+}
+
+/// A predicate as Name/Arity, if the term is one.
+fn indicator(t: &Term) -> Option<String> {
+    match t {
+        Term::Compound(s, na) if s == "/" && na.len() == 2 => {
+            Some(format!("{}/{}", show(&na[0]), show(&na[1])))
+        }
+        _ => None,
+    }
+}
+
+fn definition_refusal(e: Error) -> String {
+    match forbidden(&e) {
+        Some((Term::Atom(how), what)) if how == "not_allowed" => format!(
+            "{} is not allowed: a definition may only read facts, compare and compute (docs/guide.md, § 3.1)",
+            not_allowed(what)
+        ),
+        _ => e.to_string(),
+    }
+}
+
+/// What a definition may not call, as the user should read it.
+fn not_allowed(what: &Term) -> String {
+    match (indicator(what), what) {
+        (Some(predicate), _) => predicate,
+        (None, Term::Atom(v)) if v == "variable_goal" => "a goal held in a variable".into(),
+        (None, other) => show(other),
+    }
+}
+
+fn rule_refusal(e: Error) -> String {
+    match (forbidden(&e), raised(&e)) {
+        (Some((how, what)), _) => rule_forbidden(how, what),
+        (None, Some(Term::Compound(k, x))) if k == "domain_error" && x.len() == 2 => {
+            "a variable of the head is not bound by the body".to_string()
+        }
+        (None, Some(other)) => show(other),
+        (None, None) => e.to_string(),
+    }
+}
+
+fn rule_forbidden(how: &Term, what: &Term) -> String {
+    match (how, indicator(what)) {
+        (Term::Atom(w), _) if w == "recursive_rule" => format!(
+            "{} is recursive, directly or through other rules; rules may not be",
+            show(what)
+        ),
+        (_, Some(predicate)) => {
+            format!("{predicate} is not allowed: a rule may only read facts, compare and compute")
+        }
+        (_, None) => format!("{} is not allowed", show(what)),
     }
 }
