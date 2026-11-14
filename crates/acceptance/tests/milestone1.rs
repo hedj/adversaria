@@ -66,31 +66,45 @@ fn generate(name: &str, n: u64, purges: u64) -> (PathBuf, PathBuf) {
     let key = dir.with_extension("key");
     let _ = fs::remove_file(&key);
     sealer::init(&dir, &key).unwrap();
-    let mut j = Journal::open(&dir).unwrap();
+    write_entries(&dir, n, purges);
+    add_blob(&dir, b"a figure");
+    let k = sealer::load_key(&key).unwrap();
+    sealer::seal_pending(&dir, &k, &ticking_clock()).unwrap();
+    (dir, key)
+}
+
+/// n entries, of every kind, with branches; then the purges.
+fn write_entries(dir: &Path, n: u64, purges: u64) {
+    let mut j = Journal::open(dir).unwrap();
     j.durable = false;
     let mut rng = Rng(n);
     j.append("edit", body(&mut rng, 1)).unwrap();
     while (j.entries().len() as u64) < n - purges {
-        let last = j.last().unwrap().seq;
-        // One entry in ten starts a branch from an earlier entry.
-        let parent = if rng.below(10) == 0 {
-            1 + rng.below(last)
-        } else {
-            last
-        };
-        let kind = KINDS[rng.below(KINDS.len() as u64) as usize];
-        j.append_after(Some(parent), kind, body(&mut rng, last + 1))
-            .unwrap();
+        append_one(&mut j, &mut rng);
     }
     for i in 0..purges {
         j.purge(2 + 3 * i, "test purge").unwrap();
     }
+}
+
+/// An entry of a kind at random. One in ten starts a branch from an
+/// earlier entry.
+fn append_one(j: &mut Journal, rng: &mut Rng) {
+    let last = j.last().unwrap().seq;
+    let parent = if rng.below(10) == 0 {
+        1 + rng.below(last)
+    } else {
+        last
+    };
+    let kind = KINDS[rng.below(KINDS.len() as u64) as usize];
+    j.append_after(Some(parent), kind, body(rng, last + 1))
+        .unwrap();
+}
+
+/// A blob, named by the SHA-256 of its content.
+fn add_blob(dir: &Path, blob: &[u8]) {
     fs::create_dir_all(dir.join(BLOBS)).unwrap();
-    let blob = b"a figure";
     fs::write(dir.join(BLOBS).join(sha256_hex(blob)), blob).unwrap();
-    let k = sealer::load_key(&key).unwrap();
-    sealer::seal_pending(&dir, &k, &ticking_clock()).unwrap();
-    (dir, key)
 }
 
 fn cleanup(dir: &Path, key: &Path) {
@@ -110,18 +124,20 @@ fn ten_thousand_entries_check() {
         "10,000 entries: written and sealed in {made:?}, checked in {:?}",
         t.elapsed()
     );
-    assert_eq!(
-        (r.entries.len(), r.seals.len(), r.keys.len(), r.blobs),
-        (10_000, 10_000, 1, 1)
-    );
+    assert_eq!(sizes(&r), (10_000, 10_000, 1, 1));
     assert_eq!(r.entries.iter().filter(|e| e.body().is_none()).count(), 20);
-    assert!(
-        r.entries
-            .iter()
-            .any(|e| e.parent_seq() != Some(e.seq - 1) && e.seq > 1),
-        "no branch was made"
-    );
+    assert!(r.entries.iter().any(branches), "no branch was made");
     cleanup(&dir, &key);
+}
+
+/// How many entries, seals, keys and blobs a checked directory holds.
+fn sizes(r: &check::Report) -> (usize, usize, usize, usize) {
+    (r.entries.len(), r.seals.len(), r.keys.len(), r.blobs)
+}
+
+/// Whether an entry starts a branch: its parent is not the one before it.
+fn branches(e: &format::record::Entry) -> bool {
+    e.parent_seq() != Some(e.seq - 1) && e.seq > 1
 }
 
 /// Check the three files as text, as check_dir does after reading them.
@@ -138,57 +154,108 @@ fn any_changed_byte_fails_naming_its_line() {
     // record is changed (test every field kind at least once)". Every byte of
     // every line of all three files is changed in turn, so every field is.
     let (dir, key) = generate("bytes", 12, 1);
-    let read = |f: &str| fs::read_to_string(dir.join(f)).unwrap();
-    let texts = [read(KEYS), read(JOURNAL), read(SEALS)];
+    let texts = FILES.map(|f| fs::read_to_string(dir.join(f)).unwrap());
     check_texts(&texts[0], &texts[1], &texts[2]).unwrap();
-    let mut tried = 0;
-    for (which, file) in [KEYS, JOURNAL, SEALS].iter().enumerate() {
-        let bytes = texts[which].as_bytes();
-        for i in 0..bytes.len() {
-            let mut b = bytes.to_vec();
-            b[i] ^= 0x01;
-            let line = 1 + bytes[..i].iter().filter(|c| **c == b'\n').count();
-            let Ok(changed) = String::from_utf8(b) else {
-                continue; // not UTF-8: check_dir refuses it when reading; tested below
-            };
-            let mut t = texts.clone();
-            t[which] = changed;
-            let e = check_texts(&t[0], &t[1], &t[2])
-                .expect_err(&format!("{file} byte {i} changed, still checks"));
-            assert_eq!(
-                (e.file.as_str(), e.line),
-                (*file, line),
-                "{file} byte {i}: {e}"
-            );
-            tried += 1;
-        }
-    }
+    let tried: usize = (0..3).map(|which| changes_refused(&texts, which)).sum();
     eprintln!("{tried} single-byte changes, each refused at its own line");
     assert!(tried > 5_000);
     cleanup(&dir, &key);
 }
 
+/// The three files of a journal directory, in the order checked.
+const FILES: [&str; 3] = [KEYS, JOURNAL, SEALS];
+
+/// Each byte of one of the three texts changed in turn: each change is
+/// refused at the line it is on. How many changes left UTF-8 to check.
+fn changes_refused(texts: &[String; 3], which: usize) -> usize {
+    let file = FILES[which];
+    let changes = changed_texts(texts, which);
+    changes.iter().for_each(|c| c.assert_refused(file));
+    changes.len()
+}
+
+/// The three texts with one byte changed, the byte, and its line.
+struct Change {
+    at: usize,
+    line: usize,
+    texts: [String; 3],
+}
+
+impl Change {
+    /// The change is refused, at its line.
+    fn assert_refused(&self, file: &str) {
+        let e = check_all(&self.texts)
+            .expect_err(&format!("{file} byte {} changed, still checks", self.at));
+        assert_eq!(
+            (e.file.as_str(), e.line),
+            (file, self.line),
+            "{file} byte {}: {e}",
+            self.at
+        );
+    }
+}
+
+/// Each change of a byte of one text that leaves it UTF-8 (one that does
+/// not, check_dir refuses when reading; tested below).
+fn changed_texts(texts: &[String; 3], which: usize) -> Vec<Change> {
+    (0..texts[which].len())
+        .filter_map(|i| change_at(texts, which, i))
+        .collect()
+}
+
+fn change_at(texts: &[String; 3], which: usize, i: usize) -> Option<Change> {
+    let t = with_byte_changed(texts, which, i)?;
+    let line = line_of(&texts[which], i);
+    Some(Change {
+        at: i,
+        line,
+        texts: t,
+    })
+}
+
+/// Check the three texts, in order.
+fn check_all(t: &[String; 3]) -> Result<(), LineError> {
+    check_texts(&t[0], &t[1], &t[2])
+}
+
+/// The three texts with byte i of one changed, if that is still UTF-8.
+fn with_byte_changed(texts: &[String; 3], which: usize, i: usize) -> Option<[String; 3]> {
+    let mut b = texts[which].as_bytes().to_vec();
+    b[i] ^= 0x01;
+    let mut t = texts.clone();
+    t[which] = String::from_utf8(b).ok()?;
+    Some(t)
+}
+
+/// The line, from 1, that byte i of a text is on.
+fn line_of(text: &str, i: usize) -> usize {
+    1 + text.as_bytes()[..i].iter().filter(|c| **c == b'\n').count()
+}
+
 #[test]
-fn bytes_that_break_utf8_or_blobs_are_named() {
-    // Catches a non-UTF-8 line or a changed blob passing, or blamed elsewhere.
+fn bytes_that_break_utf8_are_named_by_their_line() {
+    // Catches a non-UTF-8 line passing, or blamed elsewhere.
     let (dir, key) = generate("utf8", 5, 0);
     let p = dir.join(JOURNAL);
-    let good = fs::read(&p).unwrap();
-    let line3 = good
-        .iter()
-        .enumerate()
-        .filter(|(_, c)| **c == b'\n')
-        .nth(1)
-        .unwrap()
-        .0
-        + 5;
-    let mut bad = good.clone();
-    bad[line3] = 0xff;
+    let mut bad = fs::read(&p).unwrap();
+    let at = start_of_line(&bad, 3) + 4;
+    bad[at] = 0xff;
     fs::write(&p, &bad).unwrap();
     let e = check::check_dir(&dir).unwrap_err();
     assert_eq!((e.file.as_str(), e.line), (JOURNAL, 3), "{e}");
-    fs::write(&p, &good).unwrap();
+    cleanup(&dir, &key);
+}
 
+/// Where line n, from 1, begins.
+fn start_of_line(bytes: &[u8], n: usize) -> usize {
+    let ends = bytes.iter().enumerate().filter(|(_, c)| **c == b'\n');
+    ends.map(|(i, _)| i).nth(n - 2).unwrap() + 1
+}
+
+#[test]
+fn a_changed_blob_is_named() {
+    // Catches a changed blob passing, or blamed elsewhere.
+    let (dir, key) = generate("blob", 5, 0);
     let blob = fs::read_dir(dir.join(BLOBS))
         .unwrap()
         .next()
@@ -240,34 +307,43 @@ fn replay_rebuilds_the_same_store_twice() {
     cleanup(&dir, &key);
 }
 
-#[test]
-fn sealer_refusals() {
-    // Catches the sealer signing a broken journal, using an exposed key, or
-    // signing with a key not in keys.jsonl.
-    use std::os::unix::fs::PermissionsExt;
-    let (dir, key) = generate("refuse", 5, 0);
-    let k = sealer::load_key(&key).unwrap();
+// The next three catch the sealer using an exposed key, signing a broken
+// journal, or signing with a key not in keys.jsonl.
 
+#[test]
+fn the_sealer_refuses_a_key_others_can_read() {
+    use std::os::unix::fs::PermissionsExt;
+    let (dir, key) = generate("refuse-key", 5, 0);
     fs::set_permissions(&key, fs::Permissions::from_mode(0o644)).unwrap();
     assert!(sealer::load_key(&key).is_err());
-    fs::set_permissions(&key, fs::Permissions::from_mode(0o600)).unwrap();
+    cleanup(&dir, &key);
+}
 
+#[test]
+fn the_sealer_refuses_a_broken_journal_and_writes_no_seal() {
+    let (dir, key) = generate("refuse-broken", 5, 0);
+    let k = sealer::load_key(&key).unwrap();
     let p = dir.join(JOURNAL);
     let good = fs::read_to_string(&p).unwrap();
     fs::write(&p, good.replacen("\"item\":3", "\"item\":4", 1)).unwrap();
     let seals_before = fs::read_to_string(dir.join(SEALS)).unwrap();
     assert!(sealer::seal_pending(&dir, &k, &ticking_clock()).is_err());
     assert_eq!(fs::read_to_string(dir.join(SEALS)).unwrap(), seals_before);
-    fs::write(&p, &good).unwrap();
+    cleanup(&dir, &key);
+}
 
-    let other = dir.with_extension("other-key");
+#[test]
+fn the_sealer_refuses_a_key_not_in_the_journals_keys() {
+    let (dir, key) = generate("refuse-other", 5, 0);
+    let (elsewhere, other) = (
+        temp_dir("refuse-elsewhere"),
+        dir.with_extension("other-key"),
+    );
     let _ = fs::remove_file(&other);
-    let elsewhere = temp_dir("refuse-elsewhere");
     sealer::init(&elsewhere, &other).unwrap();
     let ok = sealer::load_key(&other).unwrap();
     assert!(sealer::seal_pending(&dir, &ok, &ticking_clock()).is_err());
-    fs::remove_file(&other).unwrap();
-    fs::remove_dir_all(&elsewhere).unwrap();
+    cleanup(&elsewhere, &other);
     cleanup(&dir, &key);
 }
 
@@ -284,40 +360,123 @@ fn torn_last_line_waits() {
     cleanup(&dir, &key);
 }
 
+/// A seal's line.
+fn seal_line(s: &format::record::Seal) -> String {
+    s.to_line().unwrap()
+}
+
+/// The seals' lines with seal n's signature changed in its last digit.
+fn forged_at(lines: &[String], n: usize) -> Vec<String> {
+    let mut out = lines.to_vec();
+    out[n] = forged(&lines[n]);
+    out
+}
+
+/// A seal's line with its signature's last digit changed.
+fn forged(line: &str) -> String {
+    let s = format::record::Seal::parse(line).unwrap();
+    let stamp = format::record::Stamp {
+        sig: flipped(&s.stamp.sig),
+        ..s.stamp
+    };
+    seal_line(&format::record::Seal::new(s.entry, stamp, s.prev.as_deref()).unwrap())
+}
+
+/// A signature with its last hex digit changed.
+fn flipped(sig: &str) -> String {
+    let last = if sig.ends_with('0') { "1" } else { "0" };
+    format!("{}{last}", &sig[..127])
+}
+
+/// The seals' lines after line n made again, each following the one
+/// before, so only what was changed is wrong.
+fn rechained(mut lines: Vec<String>, n: usize) -> Vec<String> {
+    for i in n + 1..lines.len() {
+        let prev = hash_of(&lines[i - 1]);
+        lines[i] = following(&lines[i], &prev);
+    }
+    lines
+}
+
+/// The hash of a seal's line.
+fn hash_of(line: &str) -> String {
+    format::record::Seal::parse(line).unwrap().hash
+}
+
+fn read_lines(p: &Path) -> Vec<String> {
+    fs::read_to_string(p)
+        .unwrap()
+        .lines()
+        .map(String::from)
+        .collect()
+}
+
+fn write_lines(p: &Path, lines: &[String]) {
+    fs::write(p, lines.join("\n") + "\n").unwrap();
+}
+
 #[test]
 fn forged_seal_refused() {
     // Catches seals checked only by their own hash: a forger who recomputes
     // the hash still cannot make the signature.
     let (dir, key) = generate("forge", 4, 0);
     let p = dir.join(SEALS);
-    let text = fs::read_to_string(&p).unwrap();
-    let lines: Vec<&str> = text.lines().collect();
-    let s = format::record::Seal::parse(lines[2]).unwrap();
-    let sig = format!(
-        "{}{}",
-        &s.stamp.sig[..127],
-        if s.stamp.sig.ends_with('0') { "1" } else { "0" }
-    );
-    let stamp = format::record::Stamp { sig, ..s.stamp };
-    let forged = format::record::Seal::new(s.entry, stamp, s.prev.as_deref()).unwrap();
-    let mut out: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
-    out[2] = forged.to_line().unwrap();
-    // Re-chain the seals after it, so only the signature is wrong.
-    for i in 3..out.len() {
-        let t = format::record::Seal::parse(&out[i]).unwrap();
-        let prev = format::record::Seal::parse(&out[i - 1]).unwrap().hash;
-        out[i] = format::record::Seal::new(t.entry, t.stamp, Some(&prev))
-            .unwrap()
-            .to_line()
-            .unwrap();
-    }
-    fs::write(&p, out.join("\n") + "\n").unwrap();
-    let e = check::check_dir(&dir).unwrap_err();
-    assert_eq!(
-        (e.file.as_str(), e.line, e.msg.as_str()),
-        (SEALS, 3, "the signature does not verify")
-    );
+    let forged = forged_at(&read_lines(&p), 2);
+    write_lines(&p, &rechained(forged, 2));
+    let want = (SEALS.into(), 3, "the signature does not verify".into());
+    assert_eq!(first_error(&dir), want);
     cleanup(&dir, &key);
+}
+
+/// The entries with entry 2's text rewritten, and every hash after it
+/// made again, so that the chain checks.
+fn rewritten(old: &[format::record::Entry]) -> Vec<format::record::Entry> {
+    let mut new: Vec<format::record::Entry> = vec![old[0].clone()];
+    for e in &old[1..] {
+        let again = rewrite_one(e, &new);
+        new.push(again);
+    }
+    new
+}
+
+/// An entry made again after those made so far.
+fn rewrite_one(e: &format::record::Entry, new: &[format::record::Entry]) -> format::record::Entry {
+    let b = body_rewritten(e);
+    let parent = parent_in(new, e);
+    format::record::Entry::new(e.seq, parent, e.kind(), b).unwrap()
+}
+
+/// An entry's body, its text rewritten if it is entry 2.
+fn body_rewritten(e: &format::record::Entry) -> Value {
+    let mut b = e.body().cloned().unwrap();
+    if e.seq == 2 {
+        b["text"] = json!("rewritten");
+    }
+    b
+}
+
+/// An entry's parent among these, as Entry::new names a parent.
+fn parent_in<'a>(
+    new: &'a [format::record::Entry],
+    e: &format::record::Entry,
+) -> Option<(u64, &'a str)> {
+    let p = &new[e.parent_seq()? as usize - 1];
+    Some((p.seq, p.hash.as_str()))
+}
+
+/// The journal's text, rewritten from entry 2.
+fn rewritten_text(p: &Path) -> String {
+    let old = chain::check_journal(&fs::read_to_string(p).unwrap()).unwrap();
+    journal_text(&rewritten(&old))
+}
+
+/// A journal's text, of these entries.
+fn journal_text(entries: &[format::record::Entry]) -> String {
+    let mut text = format::record::header(format::record::JOURNAL_FORMAT) + "\n";
+    for e in entries {
+        text += &(e.to_line().unwrap() + "\n");
+    }
+    text
 }
 
 #[test]
@@ -326,37 +485,15 @@ fn consistently_rewritten_journal_refused() {
     // the chain checks: only the seals can show it.
     let (dir, key) = generate("rewrite", 6, 0);
     let p = dir.join(JOURNAL);
-    let old = chain::check_journal(&fs::read_to_string(&p).unwrap()).unwrap();
-    let mut new: Vec<format::record::Entry> = vec![old[0].clone()];
-    for e in &old[1..] {
-        let mut b = e.body().cloned().unwrap();
-        if e.seq == 2 {
-            b["text"] = json!("rewritten");
-        }
-        let parent = e
-            .parent_seq()
-            .map(|p| (p, new[p as usize - 1].hash.clone()));
-        new.push(
-            format::record::Entry::new(
-                e.seq,
-                parent.as_ref().map(|(p, h)| (*p, h.as_str())),
-                e.kind(),
-                b,
-            )
-            .unwrap(),
-        );
-    }
-    let mut text = format::record::header(format::record::JOURNAL_FORMAT) + "\n";
-    for e in &new {
-        text += &(e.to_line().unwrap() + "\n");
-    }
+    let text = rewritten_text(&p);
     chain::check_journal(&text).expect("the rewritten chain checks on its own");
     fs::write(&p, text).unwrap();
-    let e = check::check_dir(&dir).unwrap_err();
-    assert_eq!(
-        (e.file.as_str(), e.line, e.msg.as_str()),
-        (SEALS, 3, "entry_hash is not the hash of entry 2")
+    let want = (
+        SEALS.into(),
+        3,
+        "entry_hash is not the hash of entry 2".into(),
     );
+    assert_eq!(first_error(&dir), want);
     cleanup(&dir, &key);
 }
 
@@ -364,15 +501,10 @@ fn consistently_rewritten_journal_refused() {
 fn unsealed_entry_is_named() {
     // Catches a journal accepted while an entry has no seal (no date, no signature).
     let (dir, key) = generate("unsealed", 4, 0);
-    Journal::open(&dir)
-        .unwrap()
-        .append("edit", json!({"text": "late"}))
-        .unwrap();
-    let e = check::check_dir(&dir).unwrap_err();
-    assert_eq!(
-        (e.file.as_str(), e.line, e.msg.as_str()),
-        (JOURNAL, 6, "entry 5 is not sealed")
-    );
+    let mut j = Journal::open(&dir).unwrap();
+    j.append("edit", json!({"text": "late"})).unwrap();
+    let want = (JOURNAL.into(), 6, "entry 5 is not sealed".into());
+    assert_eq!(first_error(&dir), want);
     cleanup(&dir, &key);
 }
 
@@ -388,16 +520,18 @@ fn a_seal_that_does_not_follow_the_seal_before_is_refused() {
     // follow some other seal still has its true signature.
     let (dir, key) = generate("seal-prev", 3, 0);
     let p = dir.join(SEALS);
-    let text = fs::read_to_string(&p).unwrap();
-    let mut lines: Vec<String> = text.lines().map(String::from).collect();
-    let s = format::record::Seal::parse(&lines[2]).unwrap();
-    let elsewhere = format::record::sha256_hex(b"no seal");
-    let moved = format::record::Seal::new(s.entry, s.stamp, Some(&elsewhere)).unwrap();
-    lines[2] = moved.to_line().unwrap();
-    fs::write(&p, lines.join("\n") + "\n").unwrap();
+    let mut lines = read_lines(&p);
+    lines[2] = following(&lines[2], &sha256_hex(b"no seal"));
+    write_lines(&p, &lines);
     let want = "prev is not the hash of the seal before";
     assert_eq!(first_error(&dir), (SEALS.into(), 3, want.into()));
     cleanup(&dir, &key);
+}
+
+/// A seal's line, made again to follow the seal of another hash.
+fn following(line: &str, prev: &str) -> String {
+    let s = format::record::Seal::parse(line).unwrap();
+    seal_line(&format::record::Seal::new(s.entry, s.stamp, Some(prev)).unwrap())
 }
 
 #[test]
