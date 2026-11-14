@@ -192,6 +192,11 @@ impl Rect {
         self.x + self.w / 2
     }
 
+    /// The text row of a box: its middle row, two in from each side.
+    fn inner(&self) -> Rect {
+        Rect::new(self.x + 2, self.y + 1, self.w - 4, 1)
+    }
+
     /// The rectangle stretched down to end at a row.
     fn down_to(&self, row: usize) -> Rect {
         Rect {
@@ -239,6 +244,17 @@ impl Run {
 
     fn mid(&self) -> usize {
         (self.lo + self.hi) / 2
+    }
+
+    /// Its centre, rounding to the right.
+    fn centre(&self) -> usize {
+        self.lo + self.len() / 2
+    }
+
+    /// Port k of n, spread evenly inside the run, one in from each end.
+    fn port(&self, k: usize, n: usize) -> usize {
+        let inner = self.len().saturating_sub(2);
+        self.lo + 1 + (k + 1) * inner / (n + 1)
     }
 
     /// A text cut to fit the run, and the cell where it starts.
@@ -551,10 +567,35 @@ impl Canvas {
 
     /// A line down from a point to a row, across, and down to another
     /// point.
-    fn elbow(&mut self, from: (usize, usize), row: usize, to: (usize, usize), ink: Ink) {
-        self.vline(from.0, Run::of(from.1, row), ink);
-        self.hline(Run::of(from.0, to.0), row, ink);
-        self.vline(to.0, Run::of(row, to.1), ink);
+    fn elbow(&mut self, p: &Path, ink: Ink) {
+        self.vline(p.from.0, Run::of(p.from.1, p.row), ink);
+        self.hline(Run::of(p.from.0, p.to.0), p.row, ink);
+        self.vline(p.to.0, Run::of(p.row, p.to.1), ink);
+    }
+
+    /// One character at each of these columns of a row.
+    fn put_each(&mut self, xs: &[usize], y: usize, c: char, ink: Ink) {
+        for x in xs {
+            self.put(*x, y, c, ink);
+        }
+    }
+
+    /// Text at the first of these places where it has room; else none.
+    fn text_where_free(&mut self, places: [(usize, usize); 2], text: &str, ink: Ink) {
+        let Some((x, y)) = self.first_free(places, text.chars().count()) else {
+            return;
+        };
+        self.text(x, y, text, ink);
+    }
+
+    /// The first of these places with n free cells from it.
+    fn first_free(&self, places: [(usize, usize); 2], n: usize) -> Option<(usize, usize)> {
+        places.into_iter().find(|(x, y)| self.free(*x, *y, n))
+    }
+
+    /// Text cut to the width of a rectangle, at its top left.
+    fn text_cut(&mut self, r: Rect, s: &str, ink: Ink) {
+        self.text_in(r, &truncate(s, r.w), ink);
     }
 
     /// A rectangle of one character.
@@ -1725,33 +1766,70 @@ struct Seg {
     last: bool,
 }
 
+/// Which end of a part of an edge: where it leaves its upper vertex, or
+/// where it enters its lower.
+#[derive(Clone, Copy)]
+enum Side {
+    Out,
+    In,
+}
+
+impl Seg {
+    fn new(from: usize, to: usize, edge: usize, last: bool) -> Seg {
+        Seg {
+            from,
+            to,
+            edge,
+            last,
+        }
+    }
+
+    /// The vertex at this side.
+    fn end(&self, side: Side) -> usize {
+        match side {
+            Side::Out => self.from,
+            Side::In => self.to,
+        }
+    }
+
+    /// The vertex at the other side.
+    fn far(&self, side: Side) -> usize {
+        match side {
+            Side::Out => self.to,
+            Side::In => self.from,
+        }
+    }
+}
+
 /// Where a graph is drawn. A vertex is a node, or a dummy on a long edge
 /// in a layer that edge crosses: the dummies come after all the nodes.
 struct Layout {
     /// Each vertex's layer, and the parts of the edges between them.
     layer: Vec<usize>,
     segs: Vec<Seg>,
-    /// Each vertex's column and its width.
-    x: Vec<usize>,
-    width: Vec<usize>,
+    /// Each vertex's columns.
+    cols: Vec<Run>,
+    /// How many vertices are nodes.
+    nodes: usize,
 }
 
 impl Layout {
     fn of(g: &Graph) -> Layout {
         let (layer, segs) = through_dummies(g);
-        let width = (0..layer.len()).map(|v| box_width(g, v)).collect();
+        let cols = unplaced(g, layer.len());
+        let nodes = g.nodes.len();
         let mut at = Layout {
             layer,
             segs,
-            x: Vec::new(),
-            width,
+            cols,
+            nodes,
         };
-        at.x = at.columns(&at.ordered());
+        at.place(&at.ordered());
         at
     }
 
-    fn is_dummy(&self, v: usize, g: &Graph) -> bool {
-        v >= g.nodes.len()
+    fn is_dummy(&self, v: usize) -> bool {
+        v >= self.nodes
     }
 
     fn depth(&self) -> usize {
@@ -1772,6 +1850,8 @@ impl Layout {
         order
     }
 
+    /// Reorder each layer by its neighbours in the one before: down the
+    /// layers, by the vertices above; up them, by those below.
     fn sweep(&self, order: &mut [Vec<usize>], down: bool) {
         let depth = order.len();
         let layers: Vec<usize> = if down {
@@ -1779,15 +1859,16 @@ impl Layout {
         } else {
             (0..depth.saturating_sub(1)).rev().collect()
         };
+        let side = if down { Side::In } else { Side::Out };
         for l in layers {
             let other = if down { l - 1 } else { l + 1 };
-            order[l] = self.reorder(&order[l], &order[other], down);
+            order[l] = self.reorder(&order[l], &order[other], side);
         }
     }
 
     /// A layer by the barycentres of its vertices, ties kept in order.
-    fn reorder(&self, layer: &[usize], other: &[usize], down: bool) -> Vec<usize> {
-        let key = |(i, v): (usize, &usize)| (self.barycentre(*v, i, other, down), i, *v);
+    fn reorder(&self, layer: &[usize], other: &[usize], side: Side) -> Vec<usize> {
+        let key = |(i, v): (usize, &usize)| (self.barycentre(*v, i, other, side), i, *v);
         let mut keyed: Vec<(f64, usize, usize)> = layer.iter().enumerate().map(key).collect();
         keyed.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
         keyed.into_iter().map(|(_, _, v)| v).collect()
@@ -1795,24 +1876,28 @@ impl Layout {
 
     /// The mean place, in the other layer, of a vertex's neighbours there;
     /// its own place i if it has none.
-    fn barycentre(&self, v: usize, i: usize, other: &[usize], down: bool) -> f64 {
-        let pos = |u: usize| other.iter().position(|x| *x == u);
-        let neighbour = |s: &Seg| match down {
-            true if s.to == v => pos(s.from),
-            false if s.from == v => pos(s.to),
-            _ => None,
-        };
-        let ns: Vec<usize> = self.segs.iter().filter_map(neighbour).collect();
-        if ns.is_empty() {
+    fn barycentre(&self, v: usize, i: usize, other: &[usize], side: Side) -> f64 {
+        let neighbours = self.neighbours(v, side);
+        let places: Vec<usize> = neighbours
+            .iter()
+            .filter_map(|u| place_in(other, *u))
+            .collect();
+        if places.is_empty() {
             return i as f64;
         }
-        ns.iter().sum::<usize>() as f64 / ns.len() as f64
+        places.iter().sum::<usize>() as f64 / places.len() as f64
+    }
+
+    /// The vertices at the far end of the parts that have v at this side.
+    fn neighbours(&self, v: usize, side: Side) -> Vec<usize> {
+        let touching = self.segs.iter().filter(|s| s.end(side) == v);
+        touching.map(|s| s.far(side)).collect()
     }
 
     /// A layer's width: its boxes, three columns apart.
     fn layer_width(&self, l: usize) -> usize {
         let on = (0..self.layer.len()).filter(|v| self.layer[*v] == l);
-        on.map(|v| self.width[v] + 3)
+        on.map(|v| self.cols[v].len() + 3)
             .sum::<usize>()
             .saturating_sub(3)
     }
@@ -1823,18 +1908,23 @@ impl Layout {
         widths.max().unwrap_or(1).max(1)
     }
 
-    /// Each vertex's column: each layer centred, its boxes three columns
+    /// Each vertex's columns: each layer centred, its boxes three columns
     /// apart.
-    fn columns(&self, order: &[Vec<usize>]) -> Vec<usize> {
-        let mut x = vec![0usize; self.layer.len()];
-        for (l, o) in order.iter().enumerate() {
-            let mut at = (self.body() - self.layer_width(l)) / 2;
-            for v in o {
-                x[*v] = at;
-                at += self.width[*v] + 3;
-            }
+    fn place(&mut self, order: &[Vec<usize>]) {
+        let body = self.body();
+        for (l, vertices) in order.iter().enumerate() {
+            let lo = (body - self.layer_width(l)) / 2;
+            self.place_layer(vertices, lo);
         }
-        x
+    }
+
+    /// A layer's vertices in order from column lo, three columns apart.
+    fn place_layer(&mut self, vertices: &[usize], mut lo: usize) {
+        for v in vertices {
+            let w = self.cols[*v].len();
+            self.cols[*v] = Run::of(lo, lo + w - 1);
+            lo += w + 3;
+        }
     }
 
     /// The width of the boxes, and of the loops round the right that edges
@@ -1852,8 +1942,13 @@ impl Layout {
         (self.depth() * 6).saturating_sub(3).max(1)
     }
 
+    /// A canvas for the graph.
+    fn canvas(&self, g: &Graph) -> Canvas {
+        Canvas::new(self.figure_width(g), self.height())
+    }
+
     fn centre(&self, v: usize) -> usize {
-        self.x[v] + self.width[v] / 2
+        self.cols[v].centre()
     }
 
     /// The top row of a vertex's layer.
@@ -1863,42 +1958,114 @@ impl Layout {
 
     /// A vertex's box: three rows high, at the top of its layer.
     fn box_of(&self, v: usize) -> Rect {
-        Rect::new(self.x[v], self.top(v), self.width[v], 3)
+        Rect::of(self.cols[v], Run::of(self.top(v), self.top(v) + 2))
     }
 
     /// The middle of a vertex's right side, just outside it.
     fn right_of(&self, v: usize) -> (usize, usize) {
-        (self.x[v] + self.width[v], self.top(v) + 1)
+        (self.cols[v].hi + 1, self.top(v) + 1)
     }
+
+    /// The column of port k of n along a vertex: a lone one at its
+    /// centre, else spread evenly inside its box. A dummy's ports are lone:
+    /// one part enters it and one leaves.
+    fn port(&self, v: usize, k: usize, n: usize) -> usize {
+        if n == 1 {
+            return self.centre(v);
+        }
+        self.cols[v].port(k, n)
+    }
+
+    /// Ports along a vertex for parts of edges, in the order of the
+    /// centres of their other ends.
+    fn spread(&self, v: usize, mut ends: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
+        ends.sort();
+        let n = ends.len();
+        let ports = ends.into_iter().enumerate();
+        ports
+            .map(|(k, (_, seg))| (seg, self.port(v, k, n)))
+            .collect()
+    }
+
+    /// Whether a part of an edge has v at this side.
+    fn touches(&self, si: usize, v: usize, side: Side) -> bool {
+        self.segs[si].end(side) == v
+    }
+
+    /// The centre of the vertex at the far end of a part from this side.
+    fn far_centre(&self, si: usize, side: Side) -> usize {
+        self.centre(self.segs[si].far(side))
+    }
+
+    /// The row where a part leaves its upper vertex: below a box, or at
+    /// the top of a dummy, so that the edge runs on through the dummy's
+    /// layer.
+    fn leaving_row(&self, si: usize) -> usize {
+        let v = self.segs[si].from;
+        self.top(v) + if self.is_dummy(v) { 0 } else { 2 }
+    }
+
+    /// The row where a part ends: the row above its lower vertex.
+    fn entering_row(&self, si: usize) -> usize {
+        self.top(self.segs[si].to) - 1
+    }
+
+    /// The row of a part's run across, between the layers.
+    fn run_row(&self, si: usize) -> usize {
+        self.top(self.segs[si].from) + 4
+    }
+}
+
+/// A vertex's place in a layer, if it is there.
+fn place_in(layer: &[usize], v: usize) -> Option<usize> {
+    layer.iter().position(|x| *x == v)
 }
 
 /// Each node's layer, then a dummy for each layer a long edge crosses,
 /// each in its own layer; and the edges' parts, from layer to layer.
 fn through_dummies(g: &Graph) -> (Vec<usize>, Vec<Seg>) {
-    let mut layer = g.layers();
-    let mut segs = Vec::new();
+    let mut parts = Parts {
+        layer: g.layers(),
+        segs: Vec::new(),
+    };
     for (edge, e) in g.edges.iter().enumerate() {
-        let (a, b) = e.laid();
-        let mut from = a;
-        for l in layer[a] + 1..layer[b] {
-            layer.push(l);
-            let to = layer.len() - 1;
-            segs.push(Seg {
-                from,
-                to,
-                edge,
-                last: false,
-            });
-            from = to;
-        }
-        segs.push(Seg {
-            from,
-            to: b,
-            edge,
-            last: true,
-        });
+        parts.add(edge, e.laid());
     }
-    (layer, segs)
+    (parts.layer, parts.segs)
+}
+
+/// The vertices of a layout and the parts of its edges, being made.
+struct Parts {
+    layer: Vec<usize>,
+    segs: Vec<Seg>,
+}
+
+impl Parts {
+    /// An edge's parts, from a to b through a dummy in each layer between.
+    fn add(&mut self, edge: usize, (a, b): (usize, usize)) {
+        let path = self.path(a, b);
+        let last = path.len() - 2;
+        for (k, w) in path.windows(2).enumerate() {
+            self.segs.push(Seg::new(w[0], w[1], edge, k == last));
+        }
+    }
+
+    /// The vertices from a to b: a new dummy in each layer between.
+    fn path(&mut self, a: usize, b: usize) -> Vec<usize> {
+        let mut path = vec![a];
+        for l in self.layer[a] + 1..self.layer[b] {
+            self.layer.push(l);
+            path.push(self.layer.len() - 1);
+        }
+        path.push(b);
+        path
+    }
+}
+
+/// The columns of n vertices, each as wide as its box, before they are
+/// placed.
+fn unplaced(g: &Graph, n: usize) -> Vec<Run> {
+    (0..n).map(|v| Run::of(0, box_width(g, v) - 1)).collect()
 }
 
 /// A box's width: its text, cut at 22, and two columns either side; a
@@ -1923,65 +2090,86 @@ struct Ports {
 
 impl Ports {
     fn of(g: &Graph, at: &Layout) -> Ports {
-        let forward = (0..at.segs.len()).filter(|i| !g.edges[at.segs[*i].edge].reversed);
-        let n = at.segs.len();
-        let mut p = Ports {
-            forward: forward.collect(),
-            out: vec![0; n],
-            into: vec![0; n],
-        };
+        let mut p = Ports::new(forward_parts(g, at), at.segs.len());
         for v in 0..at.layer.len() {
-            p.place(g, at, v);
+            p.place(at, v);
         }
         p
     }
 
-    /// The ports of the parts that leave a vertex, and of those that
-    /// enter it.
-    fn place(&mut self, g: &Graph, at: &Layout, v: usize) {
-        let outs = self.ends(at, |s| s.from == v, |s| s.to);
-        for (seg, px) in spread(g, at, v, outs) {
-            self.out[seg] = px;
-        }
-        let ins = self.ends(at, |s| s.to == v, |s| s.from);
-        for (seg, px) in spread(g, at, v, ins) {
-            self.into[seg] = px;
+    fn new(forward: Vec<usize>, n: usize) -> Ports {
+        Ports {
+            forward,
+            out: vec![0; n],
+            into: vec![0; n],
         }
     }
 
-    /// The forward parts that touch a vertex, each with the centre of its
-    /// other end.
-    fn ends(
-        &self,
-        at: &Layout,
-        touches: impl Fn(&Seg) -> bool,
-        other: fn(&Seg) -> usize,
-    ) -> Vec<(usize, usize)> {
-        let touching = self.forward.iter().filter(|i| touches(&at.segs[**i]));
-        touching
-            .map(|i| (at.centre(other(&at.segs[*i])), *i))
-            .collect()
+    /// The ports of the parts that leave a vertex, and of those that
+    /// enter it.
+    fn place(&mut self, at: &Layout, v: usize) {
+        let outs = self.ends(at, v, Side::Out);
+        set(&mut self.out, at.spread(v, outs));
+        let ins = self.ends(at, v, Side::In);
+        set(&mut self.into, at.spread(v, ins));
+    }
+
+    /// The forward parts that have v at this side, each with the centre of
+    /// its other end.
+    fn ends(&self, at: &Layout, v: usize, side: Side) -> Vec<(usize, usize)> {
+        let touching = self
+            .forward
+            .iter()
+            .copied()
+            .filter(|si| at.touches(*si, v, side));
+        touching.map(|si| (at.far_centre(si, side), si)).collect()
+    }
+
+    /// Where edges touch a vertex: the columns of its ports.
+    fn marks_of(&self, at: &Layout, v: usize) -> Marks {
+        let outs = self.at_vertex(at, v, Side::Out);
+        let ins = self.at_vertex(at, v, Side::In);
+        Marks { outs, ins }
+    }
+
+    /// The columns of the ports at this side of a vertex.
+    fn at_vertex(&self, at: &Layout, v: usize, side: Side) -> Vec<usize> {
+        let ports = match side {
+            Side::Out => &self.out,
+            Side::In => &self.into,
+        };
+        let touching = self.forward.iter().filter(|si| at.touches(**si, v, side));
+        touching.map(|si| ports[*si]).collect()
     }
 }
 
-/// Ports along a vertex for parts of edges, by the centres of their other
-/// ends: a dummy's, or a lone one, at the centre; else spread evenly
-/// inside the box.
-fn spread(g: &Graph, at: &Layout, v: usize, mut ends: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
-    ends.sort();
-    let (n, inner) = (ends.len(), at.width[v].saturating_sub(2));
-    let alone = at.is_dummy(v, g) || n == 1;
-    let px = |k: usize| {
-        if alone {
-            at.centre(v)
-        } else {
-            at.x[v] + 1 + (k + 1) * inner / (n + 1)
-        }
-    };
-    ends.into_iter()
-        .enumerate()
-        .map(|(k, (_, seg))| (seg, px(k)))
-        .collect()
+/// Where edges touch a box: the columns where they leave it, along its
+/// foot, and where they arrive, along its top.
+struct Marks {
+    outs: Vec<usize>,
+    ins: Vec<usize>,
+}
+
+impl Marks {
+    /// The marks on a box. One at the top of the figure has none along its
+    /// top: no part enters the first layer.
+    fn draw(&self, cv: &mut Canvas, b: Rect, ink: Ink) {
+        cv.put_each(&self.outs, b.y + 2, '┬', ink);
+        cv.put_each(&self.ins, b.y, '┴', ink);
+    }
+}
+
+/// The parts of a layout's edges that are not reversed.
+fn forward_parts(g: &Graph, at: &Layout) -> Vec<usize> {
+    let forward = |si: &usize| !g.edges[at.segs[*si].edge].reversed;
+    (0..at.segs.len()).filter(forward).collect()
+}
+
+/// Each part's port, as placed.
+fn set(ports: &mut [usize], placed: Vec<(usize, usize)>) {
+    for (si, column) in placed {
+        ports[si] = column;
+    }
 }
 
 /// A label to place: where it goes, else where it may go instead.
@@ -1990,6 +2178,32 @@ struct Label {
     or: (usize, usize),
     text: String,
     ink: Ink,
+}
+
+impl Label {
+    fn draw(&self, cv: &mut Canvas) {
+        cv.text_where_free([self.at, self.or], &self.text, self.ink);
+    }
+}
+
+/// The way a part of an edge is drawn down: from where it leaves, to a
+/// row across, and on to where it ends.
+struct Path {
+    from: (usize, usize),
+    row: usize,
+    to: (usize, usize),
+}
+
+impl Path {
+    /// Beside the arrow at its end.
+    fn beside(&self) -> (usize, usize) {
+        (self.to.0 + 2, self.to.1)
+    }
+
+    /// On its run across, after both its ends.
+    fn on_run(&self) -> (usize, usize) {
+        (self.from.0.max(self.to.0) + 2, self.row)
+    }
 }
 
 /// A graph being drawn: the graph, where it lies, its ports, and the
@@ -2003,7 +2217,7 @@ struct Draw<'a> {
 
 impl<'a> Draw<'a> {
     fn new(g: &'a Graph, at: &'a Layout, ports: &'a Ports) -> Draw<'a> {
-        let cv = Canvas::new(at.figure_width(g), at.height());
+        let cv = at.canvas(g);
         Draw { g, at, ports, cv }
     }
 
@@ -2043,47 +2257,47 @@ impl<'a> Draw<'a> {
         labels
     }
 
+    /// A part of an edge drawn down, with an arrow at the end of its last
+    /// part, where its label goes beside it, or else on its run.
     fn down(&mut self, si: usize) -> Option<Label> {
-        let s = &self.at.segs[si];
-        let (e, ink) = (&self.g.edges[s.edge], self.g.edges[s.edge].ink());
-        let (from, to) = (self.leaves(si), self.enters(si));
-        let mid = self.at.top(s.from) + 4;
-        self.cv.elbow(from, mid, to, ink);
-        if !s.last {
+        let path = self.path(si);
+        let (e, last) = self.edge_of(si);
+        self.cv.elbow(&path, e.ink());
+        if !last {
             return None;
         }
-        self.cv.put(to.0, to.1, '▼', ink);
-        // A label goes beside the arrow, where the edge is its own; else
-        // on its horizontal run.
-        e.label((to.0 + 2, to.1), (from.0.max(to.0) + 2, mid))
+        self.cv.put(path.to.0, path.to.1, '▼', e.ink());
+        e.label(path.beside(), path.on_run())
     }
 
-    /// Where a part of an edge leaves its upper vertex: below a box, or
-    /// at the top of a dummy, so that the edge runs on through the
-    /// dummy's layer.
+    /// The edge a part is of, and whether it is the edge's last part.
+    fn edge_of(&self, si: usize) -> (&'a Edge, bool) {
+        let s = &self.at.segs[si];
+        (&self.g.edges[s.edge], s.last)
+    }
+
+    fn path(&self, si: usize) -> Path {
+        let from = self.leaves(si);
+        let to = self.enters(si);
+        let row = self.at.run_row(si);
+        Path { from, row, to }
+    }
+
+    /// Where a part of an edge leaves its upper vertex.
     fn leaves(&self, si: usize) -> (usize, usize) {
-        let v = self.at.segs[si].from;
-        let below = if self.at.is_dummy(v, self.g) { 0 } else { 2 };
-        (self.ports.out[si], self.at.top(v) + below)
+        (self.ports.out[si], self.at.leaving_row(si))
     }
 
-    /// Where a part of an edge ends: the row above its lower vertex.
+    /// Where a part of an edge ends, above its lower vertex.
     fn enters(&self, si: usize) -> (usize, usize) {
-        let v = self.at.segs[si].to;
-        (self.ports.into[si], self.at.top(v) - 1)
+        (self.ports.into[si], self.at.entering_row(si))
     }
 
     /// Each label where it goes if there is room, else where it may go
     /// instead if there is room there; else it is left out.
     fn labels(&mut self, labels: Vec<Label>) {
         for l in labels {
-            let n = l.text.chars().count();
-            let place = [l.at, l.or]
-                .into_iter()
-                .find(|(x, y)| self.cv.free(*x, *y, n));
-            if let Some((x, y)) = place {
-                self.cv.text(x, y, &l.text, l.ink);
-            }
+            l.draw(&mut self.cv);
         }
     }
 
@@ -2096,25 +2310,28 @@ impl<'a> Draw<'a> {
 
     fn boxed(&mut self, v: usize, n: &Node) {
         let b = self.at.box_of(v);
-        let ink = if n.loud { Ink::Loud } else { Ink::Plain };
-        self.cv.frame(b, frame_of(&n.shape), ink);
-        self.cv
-            .text(b.x + 2, b.y + 1, &truncate(&n.text, b.w - 4), ink);
-        self.port_marks(v, b.y, ink);
-        self.cv.hit(b, &n.prov);
+        n.draw(&mut self.cv, b);
+        let marks = self.marks(v);
+        marks.draw(&mut self.cv, b, n.ink());
     }
 
-    /// Where edges leave a box and arrive at it.
-    fn port_marks(&mut self, v: usize, by: usize, ink: Ink) {
-        for &i in &self.ports.forward {
-            let s = &self.at.segs[i];
-            if s.from == v {
-                self.cv.put(self.ports.out[i], by + 2, '┬', ink);
-            }
-            if s.to == v && by > 0 {
-                self.cv.put(self.ports.into[i], by, '┴', ink);
-            }
-        }
+    /// Where edges touch a vertex.
+    fn marks(&self, v: usize) -> Marks {
+        self.ports.marks_of(self.at, v)
+    }
+}
+
+impl Node {
+    fn ink(&self) -> Ink {
+        if self.loud { Ink::Loud } else { Ink::Plain }
+    }
+
+    /// The node's box, its text inside cut to fit, and where it is found.
+    fn draw(&self, cv: &mut Canvas, b: Rect) {
+        let ink = self.ink();
+        cv.frame(b, frame_of(&self.shape), ink);
+        cv.text_cut(b.inner(), &self.text, ink);
+        cv.hit(b, &self.prov);
     }
 }
 
