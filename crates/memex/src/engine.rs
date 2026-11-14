@@ -270,3 +270,36 @@ fn rule_forbidden(how: &Term, what: &Term) -> String {
         (_, None) => format!("{} is not allowed", show(what)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What the engine says of a definition or a rule, read from text.
+    fn refusal(check: impl Fn(&mut Engine, Term) -> Result<(), String>, text: &str) -> String {
+        let mut engine = Engine::start().unwrap();
+        let (term, _) = engine.parse(text).unwrap();
+        check(&mut engine, term).unwrap_err()
+    }
+
+    #[test]
+    fn a_goal_held_in_a_variable_is_refused_in_words() {
+        // Catches the refusal shown as Prolog's own term, variable_goal.
+        let said = refusal(|e, body| e.check_definition(&body), "p(X), X");
+        assert!(
+            said.starts_with("a goal held in a variable is not allowed"),
+            "{said}"
+        );
+    }
+
+    #[test]
+    fn a_head_variable_the_body_leaves_free_is_refused_in_words() {
+        // Catches the refusal lost, or shown as Prolog's domain_error.
+        let rule = |e: &mut Engine, t: Term| match t {
+            Term::Compound(_, a) => e.check_rule(&a[0], &a[1]),
+            _ => Ok(()),
+        };
+        let said = refusal(rule, "q(X, Y) :- p(X)");
+        assert_eq!(said, "a variable of the head is not bound by the body");
+    }
+}
