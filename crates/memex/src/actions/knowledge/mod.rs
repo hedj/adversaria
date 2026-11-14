@@ -132,12 +132,13 @@ fn all_bound(
     outer: &Term,
     inner: &Term,
     names: &[String],
-    (o, i): (&str, &str),
+    parts: (&str, &str),
 ) -> Result<(), String> {
     let free = free_names(outer, inner, names);
     if free.is_empty() {
         return Ok(());
     }
+    let (o, i) = parts;
     let verb = if free.len() == 1 { "is" } else { "are" };
     Err(format!(
         "{} in {o} {verb} not bound by {i}",

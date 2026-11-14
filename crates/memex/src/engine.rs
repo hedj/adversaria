@@ -172,10 +172,14 @@ fn read_goal(text: &str) -> Term {
 /// the reader's list of Name = Variable; a variable it did not name is _N.
 fn names_of(term: &Term, bindings: &Term) -> Vec<String> {
     let named: Vec<(u64, String)> = list(bindings).iter().filter_map(binding).collect();
-    let name = |v: u64| named.iter().find(|(x, _)| *x == v).map(|(_, n)| n.clone());
     let all = variables(term).into_iter();
-    all.map(|v| name(v).unwrap_or_else(|| format!("_{v}")))
-        .collect()
+    all.map(|v| name_of(&named, v)).collect()
+}
+
+/// A variable's name, if the reader named it; else _N.
+fn name_of(named: &[(u64, String)], v: u64) -> String {
+    let name = named.iter().find(|(x, _)| *x == v).map(|(_, n)| n.clone());
+    name.unwrap_or_else(|| format!("_{v}"))
 }
 
 /// A variable and its name, from Name = Variable.

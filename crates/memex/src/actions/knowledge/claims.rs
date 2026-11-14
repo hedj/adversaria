@@ -70,11 +70,9 @@ impl App {
     }
 
     fn adoption_of(&self, item: u64) -> Option<u64> {
-        self.path(self.tip)
-            .iter()
-            .rev()
-            .find(|e| adopts(e, item))
-            .map(|e| e.seq)
+        let path = self.path(self.tip);
+        let last = path.iter().rev().find(|e| adopts(e, item))?;
+        Some(last.seq)
     }
 
     // Suggestions.
