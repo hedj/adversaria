@@ -87,71 +87,129 @@ pub fn kind(e: &Entry) -> Option<&'static str> {
 }
 
 pub fn measure(entries: &[Entry]) -> Report {
-    let mut r = Report {
-        entries: entries.len(),
-        ..Default::default()
-    };
-    for k in KINDS {
-        r.actions.insert(k, 0);
-    }
-    let mut offered = BTreeSet::new();
-    let mut adopted = Vec::new();
-    let retracted: BTreeSet<u64> = entries
-        .iter()
-        .filter(|e| e.kind() == "retract")
-        .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
-        .collect();
-    let (mut seen_v, mut seen_d, mut corrected) =
-        (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
-    let mut last: Vec<String> = Vec::new();
+    let mut r = Report::of(entries.len());
+    let (mut offers, mut watch) = (Offers::default(), Watch::default());
     for e in entries {
-        let op = e.body().and_then(|b| b["op"].as_str());
-        match kind(e) {
-            Some(k) => *r.actions.get_mut(k).unwrap() += 1,
-            None if e.kind() == "view" && matches!(op, Some("observed" | "offer")) => {
-                r.observations += 1
-            }
-            None => r.unclassified += 1,
-        }
-        let Some(b) = &e.body() else { continue };
-        if b.get("suggestion").is_some() {
-            adopted.push(e.seq);
-        }
-        match (e.kind(), b["op"].as_str()) {
-            ("view", Some("offer")) => offered.extend(
-                b["keys"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|k| k.as_str().map(String::from)),
-            ),
-            ("view", Some("dismiss")) => r.dismissed += 1,
-            ("view", Some("observed")) => {
-                let keys = |k: &str| -> Vec<String> {
-                    b[k].as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter_map(|x| x.as_str().map(String::from))
-                        .collect()
-                };
-                let now = keys("violations");
-                if b["world"] == "actual" {
-                    corrected.extend(last.iter().filter(|k| !now.contains(k)).cloned());
-                }
-                seen_v.extend(now.iter().cloned());
-                seen_d.extend(keys("disagreements"));
-                last = now;
-            }
-            _ => {}
+        r.count(e);
+        offers.read(e);
+        watch.read(e);
+    }
+    offers.report(&mut r, &retracted(entries));
+    watch.report(&mut r);
+    r
+}
+
+impl Report {
+    /// A report of a journal of n entries, every kind of action at 0.
+    fn of(n: usize) -> Report {
+        let actions = KINDS.iter().map(|k| (*k, 0)).collect();
+        Report {
+            entries: n,
+            actions,
+            ..Default::default()
         }
     }
-    r.offered = offered.len();
-    r.adopted = adopted.len();
-    r.adopted_then_retracted = adopted.iter().filter(|s| retracted.contains(s)).count();
-    r.violations_seen = seen_v.len();
-    r.violations_corrected = corrected.len();
-    r.disagreements_seen = seen_d.len();
-    r
+
+    /// An entry, as an action of its kind, an observation, or neither;
+    /// and a dismissal counted.
+    fn count(&mut self, e: &Entry) {
+        match kind(e) {
+            Some(k) => *self.actions.get_mut(k).unwrap() += 1,
+            None if is_view(e, &["observed", "offer"]) => self.observations += 1,
+            None => self.unclassified += 1,
+        }
+        if is_view(e, &["dismiss"]) {
+            self.dismissed += 1;
+        }
+    }
+}
+
+/// Whether an entry is a view of one of these ops.
+fn is_view(e: &Entry, ops: &[&str]) -> bool {
+    let op = e.body().and_then(|b| b["op"].as_str());
+    e.kind() == "view" && op.is_some_and(|o| ops.contains(&o))
+}
+
+/// The entries that retract entries, by the entry each retracts.
+fn retracted(entries: &[Entry]) -> BTreeSet<u64> {
+    let retracts = entries.iter().filter(|e| e.kind() == "retract");
+    retracts
+        .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
+        .collect()
+}
+
+/// A list's texts.
+fn strings(v: &serde_json::Value) -> Vec<String> {
+    let list = v.as_array().into_iter().flatten();
+    list.filter_map(|x| x.as_str().map(String::from)).collect()
+}
+
+/// The suggestions offered, by key, and the entries that adopted one.
+#[derive(Default)]
+struct Offers {
+    offered: BTreeSet<String>,
+    adopted: Vec<u64>,
+}
+
+impl Offers {
+    fn read(&mut self, e: &Entry) {
+        let Some(b) = e.body() else { return };
+        if b.get("suggestion").is_some() {
+            self.adopted.push(e.seq);
+        }
+        if is_view(e, &["offer"]) {
+            self.offered.extend(strings(&b["keys"]));
+        }
+    }
+
+    fn report(&self, r: &mut Report, retracted: &BTreeSet<u64>) {
+        r.offered = self.offered.len();
+        r.adopted = self.adopted.len();
+        r.adopted_then_retracted = self
+            .adopted
+            .iter()
+            .filter(|s| retracted.contains(s))
+            .count();
+    }
+}
+
+/// What observations showed: the violations and disagreements seen, the
+/// violations later gone in the actual world, and the violations shown
+/// last.
+#[derive(Default)]
+struct Watch {
+    violations: BTreeSet<String>,
+    disagreements: BTreeSet<String>,
+    corrected: BTreeSet<String>,
+    last: Vec<String>,
+}
+
+impl Watch {
+    fn read(&mut self, e: &Entry) {
+        let Some(b) = e.body() else { return };
+        if is_view(e, &["observed"]) {
+            self.observe(b);
+        }
+    }
+
+    /// An observation: a violation shown before and not now, in the
+    /// actual world, is corrected.
+    fn observe(&mut self, b: &serde_json::Value) {
+        let now = strings(&b["violations"]);
+        if b["world"] == "actual" {
+            let gone = self.last.iter().filter(|k| !now.contains(k)).cloned();
+            self.corrected.extend(gone);
+        }
+        self.violations.extend(now.iter().cloned());
+        self.disagreements.extend(strings(&b["disagreements"]));
+        self.last = now;
+    }
+
+    fn report(&self, r: &mut Report) {
+        r.violations_seen = self.violations.len();
+        r.violations_corrected = self.corrected.len();
+        r.disagreements_seen = self.disagreements.len();
+    }
 }
 
 impl fmt::Display for Report {
@@ -203,19 +261,15 @@ mod tests {
 
     fn chain(bodies: &[(&str, serde_json::Value)]) -> Vec<Entry> {
         let mut out: Vec<Entry> = Vec::new();
-        for (i, (k, b)) in bodies.iter().enumerate() {
-            let parent = out.last().map(|e: &Entry| (e.seq, e.hash.clone()));
-            out.push(
-                Entry::new(
-                    i as u64 + 1,
-                    parent.as_ref().map(|(s, h)| (*s, h.as_str())),
-                    k,
-                    b.clone(),
-                )
-                .unwrap(),
-            );
+        for ((k, b), seq) in bodies.iter().zip(1..) {
+            out.push(Entry::new(seq, after(&out), k, b.clone()).unwrap());
         }
         out
+    }
+
+    /// The last entry, as Entry::new names a parent.
+    fn after(es: &[Entry]) -> Option<(u64, &str)> {
+        es.last().map(|e| (e.seq, e.hash.as_str()))
     }
 
     #[test]
