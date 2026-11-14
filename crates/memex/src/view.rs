@@ -2905,4 +2905,77 @@ mod tests {
         ];
         assert_eq!(draw(&specs, 60, 0), want);
     }
+    /// Where a fact of entry 1 is found, by its rectangle.
+    fn found(x: usize, y: usize, w: usize, h: usize) -> Hit {
+        Hit {
+            x,
+            y,
+            w,
+            h,
+            prov: vec![1],
+        }
+    }
+
+    /// What a plot draws, and where its facts are found.
+    fn drawn_and_found(specs: &[&str], w: usize, h: usize) -> (Vec<String>, Vec<Hit>) {
+        let marks: Vec<Input> = specs.iter().map(|s| mk(s)).collect();
+        (draw(specs, w, h), render(&marks, w, h).hits)
+    }
+
+    #[test]
+    fn a_bar_up_is_at_most_eight_wide_and_found_where_it_is_drawn() {
+        // Catches a bar wider than 8, a row short, or found elsewhere.
+        // There is no room above it for its label. The picture is what
+        // the code drew before the bars were given rectangles.
+        let want = [
+            "3 │              ████████",
+            "  │              ████████",
+            "  │              ████████",
+            "0 │              ████████",
+            "  └─────────────────────────────────────",
+            "                     a",
+        ];
+        let (rows, hits) = drawn_and_found(&["bar x:a y:3"], 40, 6);
+        assert_eq!(
+            (rows, hits),
+            (want.map(String::from).to_vec(), vec![found(17, 0, 8, 4)])
+        );
+    }
+
+    #[test]
+    fn a_bar_across_runs_from_zero_with_its_label_after_it() {
+        // Catches a bar a column short, its label in the wrong place, or
+        // found elsewhere. The label of the longest bar has no room. The
+        // picture is what the code drew before the bars were given
+        // rectangles.
+        let want = [
+            "a │███████████████████████████",
+            "b │██████████ 1",
+            "  └───────────────────────────",
+            "   0                         3",
+        ];
+        let (rows, hits) = drawn_and_found(&["bar y:a x:3", "bar y:b x:1"], 30, 0);
+        let places = vec![found(3, 0, 27, 1), found(3, 1, 10, 1)];
+        assert_eq!((rows, hits), (want.map(String::from).to_vec(), places));
+    }
+
+    #[test]
+    fn each_point_is_found_where_it_is_drawn() {
+        // Catches a dot, a text, or a tick found elsewhere: a tick on the
+        // axis is found at its label and down its stem. The places are
+        // what the code gave before the bars were given rectangles.
+        let specs = [
+            "dot x:1 y:1",
+            "text x:2 y:2 text:hello",
+            "tick x:3 y:1 text:t",
+            "tick x:2 text:axis",
+        ];
+        let places = vec![
+            found(3, 5, 1, 1),
+            found(16, 0, 5, 1),
+            found(16, 5, 4, 2),
+            found(29, 5, 1, 1),
+        ];
+        assert_eq!(drawn_and_found(&specs, 30, 8).1, places);
+    }
 }
