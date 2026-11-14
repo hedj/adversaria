@@ -270,6 +270,20 @@ impl Fields {
     // A key.
 
     /// The public key, which its fingerprint must be the hash of.
+    fn public_key(&self) -> Result<Key, String> {
+        if self.need("alg")? != "ed25519" {
+            return Err("alg must be \"ed25519\"".into());
+        }
+        let key = self.key()?;
+        let fingerprint = self.text("fingerprint")?.to_string();
+        let hash = self.own_hash(false)?;
+        Ok(Key {
+            key,
+            fingerprint,
+            hash,
+        })
+    }
+
     fn key(&self) -> Result<String, String> {
         let key = self.hex("key", 32, HASH)?;
         let bytes = from_hex(&key, 32).unwrap_or_default();
@@ -605,15 +619,7 @@ impl Key {
     }
 
     pub fn parse(line: &str) -> Result<Key, String> {
-        let f = Fields::read(line)?;
-        if f.need("alg")? != "ed25519" {
-            return Err("alg must be \"ed25519\"".into());
-        }
-        Ok(Key {
-            key: f.key()?,
-            fingerprint: f.text("fingerprint")?.to_string(),
-            hash: f.own_hash(false)?,
-        })
+        Fields::read(line)?.public_key()
     }
 }
 
