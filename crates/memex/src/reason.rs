@@ -108,59 +108,28 @@ impl Suggestion {
     pub fn from_term(t: &Term) -> Option<Suggestion> {
         // Variables are numbered within the whole answer; number them from 0
         // within this suggestion, so its key does not depend on its place.
-        let mut seen: Vec<u64> = Vec::new();
-        fn renumber(t: &Term, seen: &mut Vec<u64>) -> Term {
-            match t {
-                Term::Var(v) => {
-                    let i = seen.iter().position(|x| x == v).unwrap_or_else(|| {
-                        seen.push(*v);
-                        seen.len() - 1
-                    });
-                    Term::Var(i as u64)
-                }
-                Term::Compound(f, a) => {
-                    Term::Compound(f.clone(), a.iter().map(|x| renumber(x, seen)).collect())
-                }
-                t => t.clone(),
-            }
-        }
-        let t = &renumber(t, &mut seen);
-        match t {
-            Term::Compound(f, a) if f == "suggestion" && a.len() == 4 => Some(Suggestion {
-                kind: a[0].clone(),
-                facts: list(&a[1]),
-                evidence: match &a[2] {
-                    Term::Str(s) => s.clone(),
-                    t => show(t),
-                },
-                score: match &a[3] {
-                    Term::Int(n) => *n,
-                    _ => 0,
-                },
-            }),
-            _ => None,
-        }
+        let t = renumber(t, &mut Vec::new());
+        let a = parts(&t, "suggestion", 4)?;
+        let (kind, facts) = (a[0].clone(), list(&a[1]));
+        let (evidence, score) = (evidence(&a[2]), score(&a[3]));
+        Some(Suggestion {
+            kind,
+            facts,
+            evidence,
+            score,
+        })
     }
 
     /// Known by what it proposes and its evidence: a dismissed suggestion
     /// comes back only if its evidence changes.
     pub fn key(&self) -> String {
-        format!(
-            "{} | {} | {}",
-            show(&self.kind),
-            self.facts.iter().map(show).collect::<Vec<_>>().join(", "),
-            self.evidence
-        )
+        format!("{} | {}", self.identity(), self.evidence)
     }
 
     /// What it proposes, without its evidence: its place in a frozen list
     /// holds while its evidence grows.
     pub fn identity(&self) -> String {
-        format!(
-            "{} | {}",
-            show(&self.kind),
-            self.facts.iter().map(show).collect::<Vec<_>>().join(", ")
-        )
+        format!("{} | {}", show(&self.kind), shown(&self.facts))
     }
 
     pub fn kind_name(&self) -> &str {
@@ -173,33 +142,83 @@ impl Suggestion {
 
     /// The suggestion in words.
     pub fn describe(&self) -> String {
-        let arg = |t: &Term, i: usize| match t {
-            Term::Compound(_, x) => x.get(i).map(show).unwrap_or_default(),
-            _ => String::new(),
-        };
-        let fact = self
-            .facts
-            .first()
-            .cloned()
-            .unwrap_or(Term::Atom("[]".into()));
+        let fact = self.facts.first().cloned();
+        let fact = fact.unwrap_or(Term::Atom("[]".into()));
         match (self.kind_name(), &self.kind) {
             ("link", _) => format!("{} is Wikidata {}", arg(&fact, 0), arg(&fact, 1)),
             ("mapping", _) => format!("{} is Wikidata's {}", arg(&fact, 0), arg(&fact, 1)),
-            ("constraint", Term::Compound(_, x)) if x.len() == 3 => {
-                let name = match &x[0] {
-                    Term::Str(n) | Term::Atom(n) => n.clone(),
-                    t => show(t),
-                };
-                format!("constraint {name}: false :- {}", show(&x[2]))
+            ("constraint", Term::Compound(_, x)) if x.len() == 3 => constraint_words(&x[0], &x[2]),
+            ("rule", kind) => format!("rule {} :- {}", arg(kind, 0), arg(kind, 1)),
+            ("reference", kind) => {
+                format!(
+                    "cite {} for the claims about {}",
+                    arg(kind, 1),
+                    arg(kind, 0)
+                )
             }
-            ("rule", _) => format!("rule {} :- {}", arg(&self.kind, 0), arg(&self.kind, 1)),
-            ("reference", _) => format!(
-                "cite {} for the claims about {}",
-                arg(&self.kind, 1),
-                arg(&self.kind, 0)
-            ),
-            _ => show(&self.kind),
+            (_, kind) => show(kind),
         }
+    }
+}
+
+/// A term with its variables numbered from 0 in order of first appearance;
+/// `seen` holds the variables met so far.
+fn renumber(t: &Term, seen: &mut Vec<u64>) -> Term {
+    match t {
+        Term::Var(v) => Term::Var(place(seen, *v)),
+        Term::Compound(f, a) => {
+            Term::Compound(f.clone(), a.iter().map(|x| renumber(x, seen)).collect())
+        }
+        t => t.clone(),
+    }
+}
+
+/// A variable's place among those seen, where it is put if it is new.
+fn place(seen: &mut Vec<u64>, v: u64) -> u64 {
+    let known = seen.iter().position(|x| *x == v);
+    let at = known.unwrap_or_else(|| {
+        seen.push(v);
+        seen.len() - 1
+    });
+    at as u64
+}
+
+fn evidence(t: &Term) -> String {
+    match t {
+        Term::Str(s) => s.clone(),
+        t => show(t),
+    }
+}
+
+fn score(t: &Term) -> i64 {
+    match t {
+        Term::Int(n) => *n,
+        _ => 0,
+    }
+}
+
+/// An argument of a compound term, shown; nothing if it has none there.
+fn arg(t: &Term, i: usize) -> String {
+    match t {
+        Term::Compound(_, x) => x.get(i).map(show).unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
+fn constraint_words(name: &Term, body: &Term) -> String {
+    let name = match name {
+        Term::Str(n) | Term::Atom(n) => n.clone(),
+        t => show(t),
+    };
+    format!("constraint {name}: false :- {}", show(body))
+}
+
+/// The arguments of a compound term of a name and an arity, if the term
+/// is one.
+fn parts<'a>(t: &'a Term, name: &str, arity: usize) -> Option<&'a [Term]> {
+    match t {
+        Term::Compound(f, a) if f == name && a.len() == arity => Some(a),
+        _ => None,
     }
 }
 
@@ -207,12 +226,9 @@ impl Suggestion {
 pub fn list(t: &Term) -> Vec<Term> {
     let mut out = Vec::new();
     let mut at = t;
-    while let Term::Compound(f, a) = at {
-        if f != "." || a.len() != 2 {
-            break;
-        }
-        out.push(a[0].clone());
-        at = &a[1];
+    while let Some(cell) = parts(at, ".", 2) {
+        out.push(cell[0].clone());
+        at = &cell[1];
     }
     out
 }
@@ -226,82 +242,82 @@ pub fn make_list(items: Vec<Term>) -> Term {
         })
 }
 
-/// A constraint node's value: Vars-Prov pairs. Solutions that rest on the
-/// same facts (the same pair found both ways round) count once.
 /// A layer's value, as (mark, seqs of the facts it rests on) pairs.
 pub fn marks(v: &Term) -> Vec<(Term, Vec<u64>)> {
-    list(v)
-        .into_iter()
-        .filter_map(|p| match p {
-            Term::Compound(f, a) if f == "-" && a.len() == 2 => Some((
-                a[0].clone(),
-                list(&a[1])
-                    .into_iter()
-                    .filter_map(|s| match s {
-                        Term::Int(n) if n > 0 => Some(n as u64),
-                        _ => None,
-                    })
-                    .collect(),
-            )),
-            _ => None,
-        })
-        .collect()
+    list(v).iter().filter_map(mark).collect()
 }
 
+/// Mark-Seqs: a mark, and the entries whose facts it rests on.
+fn mark(pair: &Term) -> Option<(Term, Vec<u64>)> {
+    let a = parts(pair, "-", 2)?;
+    let seqs = list(&a[1]).into_iter().filter_map(|s| match s {
+        Term::Int(n) if n > 0 => Some(n as u64),
+        _ => None,
+    });
+    Some((a[0].clone(), seqs.collect()))
+}
+
+/// A constraint node's value: Vars-Prov pairs. Solutions that rest on the
+/// same facts (the same pair found both ways round) count once.
 pub fn solutions(v: &Term) -> Vec<Solution> {
     let mut out: Vec<Solution> = Vec::new();
-    for pair in list(v) {
-        let Term::Compound(f, a) = &pair else {
-            continue;
-        };
-        if f != "-" || a.len() != 2 {
-            continue;
+    for s in list(v).iter().filter_map(solution) {
+        if s.rests_on_two() && !out.iter().any(|o| o.key() == s.key()) {
+            out.push(s);
         }
-        // belief(Seq, Fact) or claim(Source, Seq, Fact).
-        let parsed: Vec<(Prov, Term)> = list(&a[1])
-            .iter()
-            .filter_map(|p| match p {
-                Term::Compound(f, x) if f == "belief" && x.len() == 2 => match &x[0] {
-                    Term::Int(s) => Some((Prov::Belief(*s as u64), x[1].clone())),
-                    _ => None,
-                },
-                Term::Compound(f, x) if f == "claim" && x.len() == 3 => match (&x[0], &x[1]) {
-                    (Term::Str(src) | Term::Atom(src), Term::Int(s)) => {
-                        Some((Prov::Claim(src.clone(), *s as u64), x[2].clone()))
-                    }
-                    _ => None,
-                },
-                _ => None,
-            })
-            .collect();
-        let prov: Vec<Prov> = parsed.iter().map(|p| p.0.clone()).collect();
-        let facts: Vec<Term> = parsed.into_iter().map(|p| p.1).collect();
-        // A solution is known by the facts it rests on.
-        let key = |prov: &[Prov], facts: &[Term]| {
-            let mut k: Vec<String> = prov
-                .iter()
-                .zip(facts)
-                .map(|(p, f)| format!("{}:{}", p.seq(), show(f)))
-                .collect();
-            k.sort();
-            k.dedup();
-            k
-        };
-        let k = key(&prov, &facts);
-        if k.len() < 2 && prov.len() >= 2 {
-            continue; // one fact matched twice: not two facts disagreeing
-        }
-        if out.iter().any(|s| key(&s.prov, &s.facts) == k) {
-            continue;
-        }
-        out.push(Solution {
-            values: list(&a[0]),
-            prov,
-            facts,
-        });
     }
     out
 }
+
+/// Vars-Prov: a solution's values, and what each rests on.
+fn solution(pair: &Term) -> Option<Solution> {
+    let a = parts(pair, "-", 2)?;
+    let (prov, facts) = list(&a[1]).iter().filter_map(rests_on).unzip();
+    let values = list(&a[0]);
+    Some(Solution {
+        values,
+        prov,
+        facts,
+    })
+}
+
+/// belief(Seq, Fact) or claim(Source, Seq, Fact): where a fact came from,
+/// and the fact.
+fn rests_on(p: &Term) -> Option<(Prov, Term)> {
+    if let Some([Term::Int(s), fact]) = parts(p, "belief", 2) {
+        return Some((Prov::Belief(*s as u64), fact.clone()));
+    }
+    match parts(p, "claim", 3)? {
+        [Term::Str(src) | Term::Atom(src), Term::Int(s), fact] => {
+            Some((Prov::Claim(src.clone(), *s as u64), fact.clone()))
+        }
+        _ => None,
+    }
+}
+
+impl Solution {
+    /// A solution is known by the facts it rests on.
+    fn key(&self) -> Vec<String> {
+        let rests = self.prov.iter().zip(&self.facts);
+        let mut k: Vec<String> = rests
+            .map(|(p, f)| format!("{}:{}", p.seq(), show(f)))
+            .collect();
+        k.sort();
+        k.dedup();
+        k
+    }
+
+    /// Whether it rests on two facts: one fact matched twice is not two
+    /// facts disagreeing.
+    fn rests_on_two(&self) -> bool {
+        self.key().len() >= 2 || self.prov.len() < 2
+    }
+}
+
+/// The operators that are written between their two arguments.
+const INFIX: [&str; 12] = [
+    "\\=", "=", "is", "<", ">", "=<", ">=", "+", "-", "*", "/", ":-",
+];
 
 /// A term as Prolog would print it, near enough for reading.
 pub fn show(t: &Term) -> String {
@@ -311,41 +327,32 @@ pub fn show(t: &Term) -> String {
         Term::Str(s) => format!("\"{s}\""),
         Term::Atom(a) => a.clone(),
         Term::Var(v) => format!("_{v}"),
-        Term::Compound(f, _) if f == "." => format!(
-            "[{}]",
-            list(t).iter().map(show).collect::<Vec<_>>().join(", ")
-        ),
-        Term::Compound(f, a) if f == "," && a.len() == 2 => {
-            format!("{}, {}", show(&a[0]), show(&a[1]))
-        }
-        Term::Compound(f, a)
-            if a.len() == 2
-                && [
-                    "\\=", "=", "is", "<", ">", "=<", ">=", "+", "-", "*", "/", ":-",
-                ]
-                .contains(&f.as_str()) =>
-        {
+        Term::Compound(f, _) if f == "." => format!("[{}]", shown(&list(t))),
+        Term::Compound(f, a) if f == "," && a.len() == 2 => shown(a),
+        Term::Compound(f, a) if a.len() == 2 && INFIX.contains(&f.as_str()) => {
             format!("{} {f} {}", show(&a[0]), show(&a[1]))
         }
-        Term::Compound(f, a) => {
-            format!("{f}({})", a.iter().map(show).collect::<Vec<_>>().join(", "))
-        }
+        Term::Compound(f, a) => format!("{f}({})", shown(a)),
     }
+}
+
+/// Terms shown, with commas between.
+fn shown(terms: &[Term]) -> String {
+    terms.iter().map(show).collect::<Vec<_>>().join(", ")
 }
 
 /// The label a world gives an entity (`label(E, "text")`), or its own name.
 pub fn label(facts: &[(u64, Term)], e: &Term) -> String {
-    for (_, f) in facts {
-        if let Term::Compound(n, a) = f
-            && n == "label"
-            && a.len() == 2
-            && &a[0] == e
-            && let Term::Str(s) = &a[1]
-        {
-            return s.clone();
-        }
+    let given = facts.iter().find_map(|(_, f)| given_label(f, e));
+    given.unwrap_or_else(|| show(e).replace('_', " "))
+}
+
+/// The text of a fact label(E, "text"), if it is one about this entity.
+fn given_label(fact: &Term, e: &Term) -> Option<String> {
+    match parts(fact, "label", 2)? {
+        [of, Term::Str(s)] if of == e => Some(s.clone()),
+        _ => None,
     }
-    show(e).replace('_', " ")
 }
 
 fn is_meta(f: &Term) -> bool {
@@ -357,62 +364,98 @@ fn is_meta(f: &Term) -> bool {
 /// text's words name the fact's other arguments. No model and no parser: a
 /// "do you mean?" built from the world's own facts, until APE is used.
 pub fn readings(facts: &[(u64, Term)], text: &str) -> Vec<Term> {
-    let lower = text.to_lowercase();
-    let words: Vec<&str> = lower
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| w.len() >= 3)
-        .collect();
-    let numbers: Vec<i64> = lower
-        .split(|c: char| !c.is_ascii_digit())
-        .filter_map(|n| n.parse().ok())
-        .collect();
+    let said = Said::read(text);
     let mut scored: Vec<(usize, Term)> = Vec::new();
-    let mut seen: Vec<Term> = Vec::new();
-    for (_, f) in facts {
-        let f = match f {
-            Term::Compound(n, a) if n == "claims" && a.len() == 2 => &a[1],
-            f => f,
-        };
-        if is_meta(f) {
-            continue;
-        }
-        let Term::Compound(name, args) = f else {
-            continue;
-        };
-        for (k, arg) in args.iter().enumerate() {
-            let Term::Int(old) = arg else { continue };
-            for n in &numbers {
-                if n == old {
-                    continue;
-                }
-                let others: String = args
-                    .iter()
-                    .enumerate()
-                    .filter(|(j, _)| *j != k)
-                    .map(|(_, a)| format!("{} {}", show(a), label(facts, a)))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    .to_lowercase()
-                    .replace('_', " ");
-                let score = words
-                    .iter()
-                    .filter(|w| others.contains(*w) || name.contains(*w))
-                    .count();
-                if score == 0 {
-                    continue;
-                }
-                let mut a2 = args.clone();
-                a2[k] = Term::Int(*n);
-                let t = Term::Compound(name.clone(), a2);
-                if !seen.contains(&t) {
-                    seen.push(t.clone());
-                    scored.push((score, t));
-                }
-            }
+    for reading in facts.iter().flat_map(|(_, f)| said.readings_of(facts, f)) {
+        if !scored.iter().any(|(_, t)| *t == reading.1) {
+            scored.push(reading);
         }
     }
     scored.sort_by_key(|s| std::cmp::Reverse(s.0));
     scored.into_iter().map(|(_, t)| t).collect()
+}
+
+/// What a typed text says, for matching against facts: its words of
+/// three letters or more, and its numbers.
+struct Said {
+    words: Vec<String>,
+    numbers: Vec<i64>,
+}
+
+impl Said {
+    fn read(text: &str) -> Said {
+        let lower = text.to_lowercase();
+        let words = lower.split(|c: char| !c.is_alphanumeric());
+        let numbers = lower.split(|c: char| !c.is_ascii_digit());
+        Said {
+            words: words.filter(|w| w.len() >= 3).map(String::from).collect(),
+            numbers: numbers.filter_map(|n| n.parse().ok()).collect(),
+        }
+    }
+
+    /// The readings a fact gives, each with its score: the fact with one
+    /// of its numbers changed to one of the text's, where a word of the
+    /// text names the fact.
+    fn readings_of(&self, facts: &[(u64, Term)], fact: &Term) -> Vec<(usize, Term)> {
+        let fact = claimed(fact);
+        let Term::Compound(name, args) = fact else {
+            return vec![];
+        };
+        if is_meta(fact) {
+            return vec![];
+        }
+        let numbered = (0..args.len()).filter(|k| matches!(args[*k], Term::Int(_)));
+        numbered
+            .flat_map(|k| self.changes(facts, name, args, k))
+            .collect()
+    }
+
+    /// A fact with its number at k changed to each other number of the
+    /// text, scored by the words that name the fact; none if none does.
+    fn changes(
+        &self,
+        facts: &[(u64, Term)],
+        name: &str,
+        args: &[Term],
+        k: usize,
+    ) -> Vec<(usize, Term)> {
+        let score = self.score(name, &others(facts, args, k));
+        let numbers = self.numbers.iter().filter(|n| args[k] != Term::Int(**n));
+        let readings = numbers.map(|n| (score, with_number(name, args, k, *n)));
+        readings.filter(|_| score > 0).collect()
+    }
+
+    /// How many of the text's words are in a fact's name or its other
+    /// arguments.
+    fn score(&self, name: &str, others: &str) -> usize {
+        let names = |w: &&String| others.contains(w.as_str()) || name.contains(w.as_str());
+        self.words.iter().filter(names).count()
+    }
+}
+
+/// The fact a claim makes, or the fact itself.
+fn claimed(fact: &Term) -> &Term {
+    match parts(fact, "claims", 2) {
+        Some(a) => &a[1],
+        None => fact,
+    }
+}
+
+/// A fact's arguments other than the one at k, each shown and by its
+/// label, in small letters.
+fn others(facts: &[(u64, Term)], args: &[Term], k: usize) -> String {
+    let rest = args.iter().enumerate().filter(|(j, _)| *j != k);
+    let words: Vec<String> = rest
+        .map(|(_, a)| format!("{} {}", show(a), label(facts, a)))
+        .collect();
+    words.join(" ").to_lowercase().replace('_', " ")
+}
+
+/// A fact with its argument at k made a number.
+fn with_number(name: &str, args: &[Term], k: usize, n: i64) -> Term {
+    let mut args = args.to_vec();
+    args[k] = Term::Int(n);
+    Term::Compound(name.to_string(), args)
 }
 
 /// A fact restated in English, by a generic frame: "the date of Buran's
@@ -448,36 +491,43 @@ fn number_word(n: i64) -> String {
 pub fn fill(template: &str, names: &[String], answers: &Term, facts: &[(u64, Term)]) -> String {
     let rows = list(answers);
     if template == "timeline" {
-        let mut points: Vec<(i64, String)> = rows
-            .iter()
-            .filter_map(|r| match list(r).as_slice() {
-                [e, Term::Int(y)] => Some((*y, label(facts, e))),
-                _ => None,
-            })
-            .collect();
-        points.sort();
-        return points
-            .iter()
-            .map(|(y, l)| format!("{y} {l}"))
-            .collect::<Vec<_>>()
-            .join(" ── ");
+        return timeline(&rows, facts);
     }
-    let Some(first) = rows.first().map(list) else {
-        return format!("{template} (no answer)");
+    match rows.first() {
+        Some(first) => filled(template, names, &list(first)),
+        None => format!("{template} (no answer)"),
+    }
+}
+
+/// Rows of an entity and a year, as "year label" in order of the years.
+fn timeline(rows: &[Term], facts: &[(u64, Term)]) -> String {
+    let point = |r: &Term| match list(r).as_slice() {
+        [e, Term::Int(y)] => Some((*y, label(facts, e))),
+        _ => None,
     };
+    let mut points: Vec<(i64, String)> = rows.iter().filter_map(point).collect();
+    points.sort();
+    let shown: Vec<String> = points.iter().map(|(y, l)| format!("{y} {l}")).collect();
+    shown.join(" ── ")
+}
+
+/// A template with each name's value put in.
+fn filled(template: &str, names: &[String], values: &[Term]) -> String {
     let mut out = template.to_string();
-    for (i, n) in names.iter().enumerate() {
-        let Some(v) = first.get(i) else { continue };
-        let years = match v {
-            Term::Int(1) => "a year".to_string(),
-            Term::Int(k) => format!("{} years", number_word(*k)),
-            v => show(v),
-        };
-        out = out
-            .replace(&format!("{{{n}:years}}"), &years)
-            .replace(&format!("{{{n}}}"), &show(v));
+    for (n, v) in names.iter().zip(values) {
+        out = out.replace(&format!("{{{n}:years}}"), &years(v));
+        out = out.replace(&format!("{{{n}}}"), &show(v));
     }
     out
+}
+
+/// A count of years in words: "a year", "two years".
+fn years(v: &Term) -> String {
+    match v {
+        Term::Int(1) => "a year".to_string(),
+        Term::Int(k) => format!("{} years", number_word(*k)),
+        v => show(v),
+    }
 }
 
 #[cfg(test)]
