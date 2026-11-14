@@ -161,33 +161,26 @@ fn quasi_key(name: &str) -> Result<QuasiKey, String> {
 }
 
 /// A quasimode's keys, as written: one name or a list of names.
-fn key_list(name: &str, keys: &toml::Value) -> Result<Vec<QuasiKey>, String> {
-    let ks = key_names(name, keys)?
-        .iter()
-        .map(|n| quasi_key(n).map_err(|e| format!("[quasimodes] {name}: {e}")))
-        .collect::<Result<Vec<QuasiKey>, _>>()?;
-    if ks.is_empty() {
-        return Err(format!(
-            "[quasimodes] {name}: a quasimode needs at least one key"
-        ));
+fn key_list(keys: &toml::Value) -> Result<Vec<QuasiKey>, String> {
+    let named: Result<Vec<QuasiKey>, String> =
+        key_names(keys)?.into_iter().map(quasi_key).collect();
+    let keys = named?;
+    if keys.is_empty() {
+        return Err("a quasimode needs at least one key".into());
     }
-    Ok(ks)
+    Ok(keys)
 }
 
-fn key_names<'a>(name: &str, keys: &'a toml::Value) -> Result<Vec<&'a str>, String> {
+fn key_names(keys: &toml::Value) -> Result<Vec<&str>, String> {
     match keys {
         toml::Value::String(s) => Ok(vec![s.as_str()]),
-        toml::Value::Array(a) => a
-            .iter()
-            .map(|v| {
-                v.as_str()
-                    .ok_or(format!("[quasimodes] {name}: each key is a string"))
-            })
-            .collect(),
-        _ => Err(format!(
-            "[quasimodes] {name}: a key name, or a list of them"
-        )),
+        toml::Value::Array(a) => a.iter().map(key_text).collect(),
+        _ => Err("a key name, or a list of them".into()),
     }
+}
+
+fn key_text(v: &toml::Value) -> Result<&str, String> {
+    v.as_str().ok_or("each key is a string".into())
 }
 
 /// A bound command line must start with a command the memex has, or be
@@ -261,7 +254,8 @@ impl Config {
             let q = quasi_named(name).ok_or_else(|| {
                 format!("[quasimodes] has no {name}: the quasimodes are leap_forward, leap_back, command, scope, suppose")
             })?;
-            self.quasimodes.push((q, key_list(name, keys)?));
+            let keys = key_list(keys).map_err(|e| format!("[quasimodes] {name}: {e}"))?;
+            self.quasimodes.push((q, keys));
         }
         Ok(())
     }
