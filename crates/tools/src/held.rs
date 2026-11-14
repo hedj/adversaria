@@ -62,15 +62,26 @@ pub fn held(defs: &Defs, owner: Option<&str>, sig: &syn::Signature, block: &syn:
 /// One line for a set of functions: how many hold more than the limit at
 /// some statement, and the middle and the highest of their peaks.
 pub fn summary(units: &[Unit], limit: usize) -> String {
+    let over_upper = units.iter().filter(|u| upper(u) > limit).count();
     let mut peaks: Vec<usize> = units.iter().filter_map(lower).collect();
     peaks.sort();
     let over = peaks.iter().filter(|p| **p > limit).count();
-    let over_upper = units.iter().filter(|u| upper(u) > limit).count();
+    let head = format!(
+        "{} functions; {over} hold more than {limit} at a statement",
+        peaks.len()
+    );
     format!(
-        "{} functions; {over} hold more than {limit} at a statement (upper bound {over_upper}); median {}; highest {}",
-        peaks.len(),
-        peaks.get(peaks.len() / 2).copied().unwrap_or(0),
-        peaks.last().copied().unwrap_or(0),
+        "{head} (upper bound {over_upper}); {}",
+        middle_and_highest(&peaks)
+    )
+}
+
+/// The middle and the highest of some sorted peaks.
+fn middle_and_highest(peaks: &[usize]) -> String {
+    let middle = peaks.get(peaks.len() / 2).copied().unwrap_or(0);
+    format!(
+        "median {middle}; highest {}",
+        peaks.last().copied().unwrap_or(0)
     )
 }
 
@@ -95,13 +106,21 @@ struct Uses {
 
 fn peak(uses: &[Uses]) -> Held {
     let held: Vec<BTreeSet<String>> = (0..uses.len()).map(|k| held_at(uses, k)).collect();
-    let at = (0..held.len()).max_by_key(|k| (held[*k].len(), usize::MAX - k));
-    let upper = (0..held.len()).map(|k| with_maybe(&held[k], &uses[k]));
+    let upper = (0..held.len())
+        .map(|k| with_maybe(&held[k], &uses[k]))
+        .max();
+    let at = worst(&held);
+    let things = at.map(|k| held[k].clone()).unwrap_or_default();
     Held {
-        upper: upper.max().unwrap_or(0),
-        things: at.map(|k| held[k].clone()).unwrap_or_default(),
+        upper: upper.unwrap_or(0),
+        things,
         at: at.unwrap_or(0),
     }
+}
+
+/// The statement that holds the most, the first of those that tie.
+fn worst(held: &[BTreeSet<String>]) -> Option<usize> {
+    (0..held.len()).max_by_key(|k| (held[*k].len(), usize::MAX - k))
 }
 
 /// What the reader holds at statement k: what it names, and what is
@@ -115,12 +134,13 @@ fn held_at(uses: &[Uses], k: usize) -> BTreeSet<String> {
 /// The locals that a statement before k names and a statement after k
 /// names again.
 fn carried(uses: &[Uses], k: usize) -> BTreeSet<String> {
-    let named = |part: &[Uses], x: &String| part.iter().any(|u| u.locals.contains(x));
-    let before = uses[..k].iter().flat_map(|u| &u.locals);
-    before
-        .filter(|x| named(&uses[k + 1..], x))
-        .cloned()
-        .collect()
+    let (before, after) = (named_in(&uses[..k]), named_in(&uses[k + 1..]));
+    before.intersection(&after).map(|x| x.to_string()).collect()
+}
+
+/// The locals some statements name.
+fn named_in(uses: &[Uses]) -> BTreeSet<&String> {
+    uses.iter().flat_map(|u| &u.locals).collect()
 }
 
 fn with_maybe(held: &BTreeSet<String>, uses: &Uses) -> usize {
@@ -140,10 +160,22 @@ struct Scope<'a> {
     defs: &'a Defs,
     /// The type whose method this is: the topic.
     owner: Option<&'a str>,
-    /// The declared types of self and of the typed parameters.
+    names: Names,
+}
+
+/// The names a function binds: the declared types of self and of the
+/// typed parameters, and the names of the parameters and bindings.
+struct Names {
     types: BTreeMap<String, String>,
-    /// The names of the parameters and bindings.
     locals: BTreeSet<String>,
+}
+
+impl Names {
+    fn of(owner: Option<&str>, sig: &syn::Signature, block: &syn::Block) -> Names {
+        let types = typed_locals(owner, sig, block);
+        let locals = bound_names(sig, block);
+        Names { types, locals }
+    }
 }
 
 impl<'a> Scope<'a> {
@@ -153,12 +185,8 @@ impl<'a> Scope<'a> {
         sig: &syn::Signature,
         block: &syn::Block,
     ) -> Self {
-        Scope {
-            defs,
-            owner,
-            types: typed_locals(owner, sig, block),
-            locals: bound_names(sig, block),
-        }
+        let names = Names::of(owner, sig, block);
+        Scope { defs, owner, names }
     }
 
     /// Read a part in order: its own statement, then those inside it.
@@ -177,6 +205,16 @@ impl<'a> Scope<'a> {
     fn has(&self, owner: &str, piece: &str) -> bool {
         let field = self.defs.field_owners.get(piece);
         field.is_some_and(|s| s.contains(owner)) || self.has_method(owner, piece)
+    }
+
+    /// The declared type of an expression, where it is known.
+    fn type_of(&self, e: &syn::Expr) -> Option<String> {
+        type_of(self.defs, &self.names.types, e)
+    }
+
+    /// Whether a type is not the project's.
+    fn is_library(&self, t: &str) -> bool {
+        !self.defs.types.contains(t)
     }
 
     fn has_method(&self, owner: &str, method: &str) -> bool {
@@ -295,7 +333,7 @@ impl<'s, 'ast> Head<'s, 'ast> {
 
     /// A local, if the name is one: `self` is the topic, and free.
     fn local(&mut self, name: &str) -> bool {
-        let known = self.scope.locals.contains(name);
+        let known = self.scope.names.locals.contains(name);
         if known && name != "self" {
             self.uses.sure.insert(format!("local {name}"));
             self.uses.locals.insert(format!("local {name}"));
@@ -316,25 +354,41 @@ impl<'s, 'ast> Head<'s, 'ast> {
 
     fn label(&mut self, label: &str, p: &syn::Path) {
         let of_self = p.segments.first().is_some_and(|s| s.ident == "Self");
-        match (label.strip_prefix("fn "), self.scope.owner) {
-            (Some(f), _) if f.contains("::") => {
-                let (owner, f) = f.split_once("::").unwrap();
-                self.piece(owner, f);
-            }
-            (Some(f), Some(o)) if of_self && self.scope.has_method(o, f) => self.piece(o, f),
+        match label.strip_prefix("fn ") {
+            Some(f) if f.contains("::") => self.assoc(f),
+            Some(f) if of_self && self.is_own_method(f) => self.own_piece(f),
             _ => {
                 self.uses.sure.insert(label.to_string());
             }
         }
     }
 
+    /// Type::function: a piece of the type.
+    fn assoc(&mut self, f: &str) {
+        let (owner, f) = f.split_once("::").unwrap();
+        self.piece(owner, f);
+    }
+
+    /// Whether Self::f names a method of the type whose method this is.
+    fn is_own_method(&self, f: &str) -> bool {
+        self.scope
+            .owner
+            .is_some_and(|o| self.scope.has_method(o, f))
+    }
+
+    /// Self::f: a piece of the type whose method this is.
+    fn own_piece(&mut self, f: &str) {
+        let owner = self.scope.owner.unwrap();
+        self.piece(owner, f);
+    }
+
     /// A method call: a piece of its receiver's type where that is known,
     /// nothing where the type is a library's, else found by name.
     fn method(&mut self, receiver: &syn::Expr, m: &str) {
         let scope = self.scope;
-        match type_of(scope.defs, &scope.types, receiver) {
+        match scope.type_of(receiver) {
             Some(t) if scope.has_method(&t, m) => self.piece(&holder(receiver, t), m),
-            Some(t) if !scope.defs.types.contains(&t) => {}
+            Some(t) if scope.is_library(&t) => {}
             _ => self.method_by_name(m),
         }
     }
@@ -355,9 +409,9 @@ impl<'s, 'ast> Head<'s, 'ast> {
     /// of the one struct that has a field so named, else the field alone.
     fn field(&mut self, base: &syn::Expr, f: &str) {
         let scope = self.scope;
-        match type_of(scope.defs, &scope.types, base) {
+        match scope.type_of(base) {
             Some(t) if scope.has(&t, f) => self.piece(&holder(base, t), f),
-            Some(t) if !scope.defs.types.contains(&t) => {}
+            Some(t) if scope.is_library(&t) => {}
             _ => self.field_by_name(f),
         }
     }
