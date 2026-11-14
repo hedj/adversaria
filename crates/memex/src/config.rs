@@ -504,4 +504,12 @@ mod tests {
             assert!(e.contains(why), "{text:?} gave {e:?}");
         }
     }
+
+    #[test]
+    fn a_fault_in_a_quasimodes_keys_names_the_quasimode() {
+        // Catches a fault reported without the quasimode it is in, or a key
+        // that is not a string accepted.
+        let said = Config::parse("[quasimodes]\ncommand = [3]\n").unwrap_err();
+        assert_eq!(said, "[quasimodes] command: each key is a string");
+    }
 }
