@@ -273,3 +273,45 @@ fn nesting_is_limited_and_refused_without_recursing_to_overflow() {
     assert!(r.2.contains("nested deeper than 256"), "{}", r.2);
     assert!(r.3, "a long list of short lists decodes");
 }
+
+#[test]
+fn a_blob_whose_padding_is_not_zero_is_refused() {
+    // Catches bytes hidden after a blob's text: "A" as a string, then a 1.
+    let cells = [(BLOB << 29) | 2, 0x7341_0001];
+    let refused = decode(&cells, &atoms_for_tests()).unwrap_err().0;
+    assert_eq!(refused, "blob is empty or its padding is not zero");
+}
+
+#[test]
+fn a_lists_tail_is_no_deeper_than_the_list() {
+    // Catches the tail counted a level below its list: after one element,
+    // a tail nested to the limit must still decode.
+    let a = atoms_for_tests();
+    let mut cells = vec![CONS, cell(INT, 7)];
+    cells.extend(nested(MAX_DEPTH, &a));
+    let decoded = std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(move || decode(&cells, &a).is_ok());
+    assert!(decoded.unwrap().join().unwrap());
+}
+
+#[test]
+fn a_renaming_must_hold_both_ways() {
+    // Catches two variables renamed to one: f(X, Y) is no variant of f(Z, Z).
+    let f = |x, y| Term::Compound("f".into(), vec![Term::Var(x), Term::Var(y)]);
+    let pairs = [(f(0, 1), f(5, 5)), (f(5, 5), f(0, 1)), (f(0, 1), f(8, 9))];
+    let variants = pairs.map(|(a, b)| variant(&a, &b));
+    assert_eq!(variants, [false, false, true]);
+}
+
+#[test]
+fn a_message_longer_than_its_header_can_count_is_refused() {
+    // Catches a body of 65,535 words written with a length that wraps.
+    let message = |words| Message {
+        kind: Kind::Query,
+        req: 1,
+        body: vec![0; words],
+    };
+    let written = |words| write_message(&mut Vec::new(), &message(words)).is_ok();
+    assert_eq!((written(0xfffe), written(0xffff)), (true, false));
+}
