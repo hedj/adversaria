@@ -513,7 +513,8 @@ impl Renaming {
     fn matches(&mut self, a: &Term, b: &Term) -> bool {
         match (a, b) {
             (Term::Var(x), Term::Var(y)) => self.pairs(*x, *y),
-            (Term::Compound(f, xs), Term::Compound(g, ys)) => f == g && self.all_match(xs, ys),
+            (Term::Compound(f, _), Term::Compound(g, _)) if f != g => false,
+            (Term::Compound(_, xs), Term::Compound(_, ys)) => self.all_match(xs, ys),
             _ => a == b,
         }
     }
