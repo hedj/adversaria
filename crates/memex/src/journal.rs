@@ -259,6 +259,18 @@ mod tests {
     }
 
     #[test]
+    fn refusals_say_why() {
+        // Catches a refusal that reaches the user without its reason.
+        let d = temp_dir("why");
+        let mut j = Journal::open(&d).unwrap();
+        let missing = j.append_after(Some(1), "edit", json!({})).unwrap_err();
+        assert_eq!(missing.to_string(), "entry 1 does not exist");
+        let not_object = j.append("edit", json!("x")).unwrap_err();
+        assert_eq!(not_object.to_string(), "a body must be a JSON object");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
     fn purge_keeps_the_chain() {
         // Catches a purge that leaves the body, breaks the chain, or can be repeated.
         let d = temp_dir("purge");
