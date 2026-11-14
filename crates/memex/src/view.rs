@@ -1674,4 +1674,168 @@ mod tests {
             .filter(|(_, ink)| *ink == Ink::Loud);
         assert_eq!((figure.hits.len(), inks.count() > 0), (1, true));
     }
+
+    #[test]
+    fn a_rule_at_an_x_runs_down_the_plot() {
+        // Catches a rule given an x not drawn, or drawn across. The picture is what the
+        // code drew before plot was restructured.
+        let want = [
+            "10 │          │        ●",
+            "   │          │",
+            "   │          │",
+            "   │          │",
+            "   │          │",
+            " 0 │●         │",
+            "   └────────────────────",
+            "    0                 10",
+        ];
+        assert_eq!(
+            draw(&["dot x:0 y:0", "dot x:10 y:10", "rule x:5"], 24, 8),
+            want
+        );
+    }
+
+    #[test]
+    fn a_span_is_labelled_inside_if_its_label_fits_and_after_if_not() {
+        // Catches a span's label always inside, or always after. The picture is what the
+        // code drew before plot was restructured.
+        let want = [
+            "a │━inside━━━━━━━━━━━━━━━━━━━━",
+            "  │",
+            "b │━━━━ out",
+            "  │",
+            "  └───────────────────────────",
+            "   0                        20",
+        ];
+        assert_eq!(
+            draw(
+                &[
+                    "span x1:0 x2:20 y:a text:inside",
+                    "span x1:0 x2:2 y:b text:out"
+                ],
+                30,
+                6
+            ),
+            want
+        );
+    }
+
+    #[test]
+    fn a_span_without_a_lane_lies_across_the_middle() {
+        // Catches a span with no y left out. The picture is what the
+        // code drew before plot was restructured.
+        let want = [
+            "",
+            "",
+            "",
+            " ━━━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            "",
+            "────────────────────────",
+            " 0                    10",
+        ];
+        assert_eq!(draw(&["span x1:0 x2:10"], 24, 8), want);
+    }
+
+    #[test]
+    fn a_tick_label_with_no_room_is_named() {
+        // Catches a tick's label dropped silently when no row has room. The picture is what the
+        // code drew before plot was restructured.
+        let want = [
+            "         bbbbbbbbbb",
+            " aaaaaaaaaa",
+            "─┴────────┴────────┴",
+            " 1                 3",
+            "note: no room for the label cccccccccc",
+        ];
+        assert_eq!(
+            draw(
+                &[
+                    "tick x:1 text:aaaaaaaaaa",
+                    "tick x:2 text:bbbbbbbbbb",
+                    "tick x:3 text:cccccccccc"
+                ],
+                20,
+                4
+            ),
+            want
+        );
+    }
+
+    #[test]
+    fn ticks_stack_their_labels_in_order_of_x_with_a_stem_to_the_axis() {
+        // Catches ticks stacked in the order given, or a raised label with no stem down to its tick. The picture is what the
+        // code drew before plot was restructured.
+        let want = [
+            "",
+            "",
+            "",
+            "",
+            "  c    bbbbbbbbbbbbbbbbbbbbbb",
+            " aaaaaaaaaa                  │",
+            "─┴┴──────────────────────────┴",
+            " 1                          50",
+        ];
+        assert_eq!(
+            draw(
+                &[
+                    "tick x:50 text:bbbbbbbbbbbbbbbbbbbbbb",
+                    "tick x:1 text:aaaaaaaaaa",
+                    "tick x:2 text:c"
+                ],
+                30,
+                8
+            ),
+            want
+        );
+    }
+
+    #[test]
+    fn a_line_is_not_drawn_over_a_bar() {
+        // Catches the dots joining a line drawn over a bar already there. The picture is what the
+        // code drew before plot was restructured.
+        let want = [
+            "10 │        █     ·●",
+            "   │        █  ···",
+            "   │        █··",
+            "   │     ···█",
+            "   │  ···   █",
+            " 0 │●·      █",
+            "   └────────────────",
+            "    0             10",
+        ];
+        assert_eq!(
+            draw(&["bar x:5 y:10", "line x:0 y:0", "line x:10 y:10"], 20, 8),
+            want
+        );
+    }
+
+    #[test]
+    fn a_dot_is_labelled_with_its_text() {
+        // Catches a dot's text dropped. The picture is what the
+        // code drew before plot was restructured.
+        let want = [
+            "3 │                ●",
+            "  │",
+            "  │",
+            "1 │● here",
+            "  └─────────────────",
+            "   1               5",
+        ];
+        assert_eq!(draw(&["dot x:1 y:1 text:here", "dot x:5 y:3"], 20, 6), want);
+    }
+
+    #[test]
+    fn ticks_alone_have_no_y_axis() {
+        // Catches a y axis drawn with no y scale. The picture is what the
+        // code drew before plot was restructured.
+        let want = [
+            "",
+            "",
+            " a                    b",
+            "─┴─────────────────────┴",
+            " 1                     5",
+        ];
+        assert_eq!(draw(&["tick x:1 text:a", "tick x:5 text:b"], 24, 5), want);
+    }
 }
