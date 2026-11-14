@@ -1028,131 +1028,208 @@ fn ticks_in_order(ms: &[M]) -> Vec<&M> {
 // ---- grids ----------------------------------------------------------
 
 fn grid(ms: &[M], width: usize) -> Figure {
-    let xs = Scale::train(
-        &ms.iter().filter_map(|m| m.get("x")).collect::<Vec<_>>(),
-        false,
-    );
-    let ys = Scale::train(
-        &ms.iter().filter_map(|m| m.get("y")).collect::<Vec<_>>(),
-        false,
-    );
-    let names = |s: &Scale| match s {
-        Scale::Band(c) => c.clone(),
-        Scale::Line { .. } | Scale::None => vec![],
-    };
-    // A numeric axis still lists its values, in order: rows 1, 2, 3.
-    let distinct = |c: &str| {
-        let mut v: Vec<&V> = ms.iter().filter_map(|m| m.get(c)).collect();
-        v.sort_by(|a, b| {
-            a.num()
-                .unwrap_or(0.0)
-                .total_cmp(&b.num().unwrap_or(0.0))
-                .then(a.text().cmp(&b.text()))
-        });
-        let mut out: Vec<String> = Vec::new();
-        for x in v {
-            if !out.contains(&x.text()) {
-                out.push(x.text());
-            }
+    let table = Table::of(ms);
+    let columns = Columns::fit(&table, width);
+    table.draw(&columns)
+}
+
+/// The names along one axis of a grid: a band scale's categories, else
+/// the distinct values in order, so a numeric axis still lists them:
+/// rows 1, 2, 3.
+fn axis_names(ms: &[M], channel: &str) -> Vec<String> {
+    let values: Vec<&V> = ms.iter().filter_map(|m| m.get(channel)).collect();
+    match Scale::train(&values, false) {
+        Scale::Band(c) => c,
+        Scale::Line { .. } | Scale::None => distinct(values),
+    }
+}
+
+/// Values' texts, each once, in order of number and then of text.
+fn distinct(mut values: Vec<&V>) -> Vec<String> {
+    let num = |v: &V| v.num().unwrap_or(0.0);
+    values.sort_by(|a, b| num(a).total_cmp(&num(b)).then(a.text().cmp(&b.text())));
+    let mut out: Vec<String> = Vec::new();
+    for t in values.iter().map(|v| v.text()) {
+        if !out.contains(&t) {
+            out.push(t);
         }
-        out
-    };
-    let cols = if xs.is_band() {
-        names(&xs)
-    } else {
-        distinct("x")
-    };
-    let rows = if ys.is_band() {
-        names(&ys)
-    } else {
-        distinct("y")
-    };
-    // Each cell's text, and whether any mark there is loud.
-    // Each cell: its text, whether loud, the facts under it, whether a number.
-    type Cell = (String, bool, Vec<u64>, bool);
-    let mut at: Vec<Vec<Cell>> =
-        vec![vec![(String::new(), false, vec![], false); cols.len()]; rows.len()];
-    for m in ms {
+    }
+    out
+}
+
+/// One cell of a grid: the texts of its marks, whether any is loud, the
+/// facts under them, and whether the last is a number.
+#[derive(Clone, Default)]
+struct Cell {
+    text: String,
+    loud: bool,
+    prov: Vec<u64>,
+    number: bool,
+}
+
+impl Cell {
+    /// Add a mark's text, or ■ if it has none.
+    fn add(&mut self, m: &M) {
+        if !self.text.is_empty() {
+            self.text.push_str(", ");
+        }
+        self.text
+            .push_str(&m.get("text").map(V::text).unwrap_or_else(|| "■".into()));
+        self.loud |= m.loud;
+        self.prov.extend(&m.prov);
+        self.number = m.get("text").is_some_and(|v| v.num().is_some());
+    }
+
+    /// The width the cell's text takes, with its mark if it is loud.
+    fn width(&self) -> usize {
+        self.text.chars().count() + usize::from(self.loud)
+    }
+
+    /// The cell as shown in a column of a width: its text, cut to fit and
+    /// marked ! if loud.
+    fn shown(&self, width: usize) -> String {
+        let mut t = truncate(&self.text, width - usize::from(self.loud));
+        if self.loud {
+            t.push('!');
+        }
+        t
+    }
+
+    fn ink(&self) -> Ink {
+        if self.loud { Ink::Loud } else { Ink::Plain }
+    }
+}
+
+/// A grid's columns and rows, by name, and its cells, row by row.
+struct Table {
+    cols: Vec<String>,
+    rows: Vec<String>,
+    cells: Vec<Vec<Cell>>,
+}
+
+impl Table {
+    fn of(ms: &[M]) -> Table {
+        let (cols, rows) = (axis_names(ms, "x"), axis_names(ms, "y"));
+        let cells = vec![vec![Cell::default(); cols.len()]; rows.len()];
+        let mut t = Table { cols, rows, cells };
+        for m in ms {
+            t.place(m);
+        }
+        t
+    }
+
+    /// Put a mark in the cell of its x and y, if it has both.
+    fn place(&mut self, m: &M) {
         let (Some(x), Some(y)) = (m.get("x"), m.get("y")) else {
-            continue;
+            return;
         };
-        let (Some(i), Some(j)) = (
-            cols.iter().position(|c| *c == x.text()),
-            rows.iter().position(|r| *r == y.text()),
-        ) else {
-            continue;
-        };
-        let cell = &mut at[j][i];
-        let t = m.get("text").map(V::text).unwrap_or_else(|| "■".into());
-        if !cell.0.is_empty() {
-            cell.0.push_str(", ");
+        let i = self.cols.iter().position(|c| *c == x.text());
+        let j = self.rows.iter().position(|r| *r == y.text());
+        if let (Some(i), Some(j)) = (i, j) {
+            self.cells[j][i].add(m);
         }
-        cell.0.push_str(&t);
-        cell.1 |= m.loud;
-        cell.2.extend(&m.prov);
-        cell.3 = m.get("text").is_some_and(|v| v.num().is_some());
     }
-    let head = rows
-        .iter()
-        .map(|r| r.chars().count())
-        .max()
-        .unwrap_or(0)
-        .min(16);
-    let mut widths: Vec<usize> = cols
-        .iter()
-        .enumerate()
-        .map(|(i, c)| {
-            let content = at
-                .iter()
-                .map(|r| r[i].0.chars().count() + usize::from(r[i].1))
-                .max()
-                .unwrap_or(0);
-            content.max(c.chars().count()).clamp(1, 20)
-        })
-        .collect();
-    // Narrow the widest columns until the grid fits.
-    let total = |w: &[usize]| head + w.iter().map(|x| x + 3).sum::<usize>();
-    while total(&widths) > width {
-        let Some(i) = (0..widths.len()).max_by_key(|i| widths[*i]) else {
-            break;
-        };
-        if widths[i] <= 3 {
-            break;
+
+    /// The width a column needs: its widest cell or its name, from 1 to 20.
+    fn column_width(&self, i: usize) -> usize {
+        let content = self.cells.iter().map(|r| r[i].width()).max().unwrap_or(0);
+        content.max(self.cols[i].chars().count()).clamp(1, 20)
+    }
+
+    /// The width of the rows' names, at most 16.
+    fn head(&self) -> usize {
+        let longest = self.rows.iter().map(|r| r.chars().count()).max();
+        longest.unwrap_or(0).min(16)
+    }
+
+    fn draw(&self, c: &Columns) -> Figure {
+        let (w, h) = (c.total(), self.rows.len() + 2);
+        let mut cv = Canvas::new(w.max(1), h);
+        self.draw_head(&mut cv, c, w);
+        for j in 0..self.rows.len() {
+            self.draw_row(&mut cv, c, j);
         }
-        widths[i] -= 1;
+        cv.finish(vec![])
     }
-    let w = total(&widths).min(width.max(1));
-    let h = rows.len() + 2;
-    let mut cv = Canvas::new(w.max(1), h);
-    let xpos: Vec<usize> = (0..cols.len())
-        .map(|i| head + 3 + widths[..i].iter().map(|x| x + 3).sum::<usize>())
-        .collect();
-    for (i, c) in cols.iter().enumerate() {
-        cv.text(xpos[i], 0, &truncate(c, widths[i]), Ink::Dim);
+
+    /// The columns' names, a rule under them, and a line before each
+    /// column.
+    fn draw_head(&self, cv: &mut Canvas, c: &Columns, w: usize) {
+        for (i, name) in self.cols.iter().enumerate() {
+            cv.text(c.at[i], 0, &truncate(name, c.widths[i]), Ink::Dim);
+        }
+        cv.hline(0, w.saturating_sub(1), 1, Ink::Dim);
+        for x in &c.at {
+            cv.vline(x - 2, 0, cv.h - 1, Ink::Dim);
+        }
     }
-    cv.hline(0, w.saturating_sub(1), 1, Ink::Dim);
-    for (i, _) in cols.iter().enumerate() {
-        cv.vline(xpos[i] - 2, 0, h - 1, Ink::Dim);
-    }
-    for (j, r) in rows.iter().enumerate() {
+
+    /// A row: its name, then each cell, a number to the right of its
+    /// column.
+    fn draw_row(&self, cv: &mut Canvas, c: &Columns, j: usize) {
         let y = j + 2;
-        cv.text(0, y, &truncate(r, head), Ink::Dim);
-        for (i, (t, loud, prov, num)) in at[j].iter().enumerate() {
-            let mut t = truncate(t, widths[i] - usize::from(*loud));
-            if *loud {
-                t.push('!');
-            }
-            let n = t.chars().count();
-            let x = if *num {
-                xpos[i] + widths[i] - n
-            } else {
-                xpos[i]
-            };
-            cv.text(x, y, &t, if *loud { Ink::Loud } else { Ink::Plain });
-            cv.hit(xpos[i], y, widths[i], 1, prov);
+        cv.text(0, y, &truncate(&self.rows[j], c.head), Ink::Dim);
+        for (i, cell) in self.cells[j].iter().enumerate() {
+            let t = cell.shown(c.widths[i]);
+            let right = c.at[i] + c.widths[i] - t.chars().count();
+            let x = if cell.number { right } else { c.at[i] };
+            cv.text(x, y, &t, cell.ink());
+            cv.hit(c.at[i], y, c.widths[i], 1, &cell.prov);
         }
     }
-    cv.finish(vec![])
+}
+
+/// How a grid's columns are laid out: the width of the rows' names, each
+/// column's width, and where each begins.
+struct Columns {
+    head: usize,
+    widths: Vec<usize>,
+    at: Vec<usize>,
+    /// The width given to the grid.
+    width: usize,
+}
+
+impl Columns {
+    /// The columns each as wide as it needs, the widest narrowed in turn
+    /// until the grid fits the width, or none is wider than 3.
+    fn fit(t: &Table, width: usize) -> Columns {
+        let head = t.head();
+        let mut widths: Vec<usize> = (0..t.cols.len()).map(|i| t.column_width(i)).collect();
+        while total(head, &widths) > width && narrow(&mut widths) {}
+        let at = (0..widths.len())
+            .map(|i| head + 3 + total(0, &widths[..i]))
+            .collect();
+        Columns {
+            head,
+            widths,
+            at,
+            width,
+        }
+    }
+
+    /// The width the grid takes, at most the width given.
+    fn total(&self) -> usize {
+        total(self.head, &self.widths).min(self.width.max(1))
+    }
+}
+
+/// The width of a grid with a head and columns of these widths, three
+/// characters between them.
+fn total(head: usize, widths: &[usize]) -> usize {
+    head + widths.iter().map(|x| x + 3).sum::<usize>()
+}
+
+/// Narrow the widest column by one, unless it is 3 or narrower; whether
+/// one was narrowed.
+fn narrow(widths: &mut [usize]) -> bool {
+    let Some(i) = (0..widths.len()).max_by_key(|i| widths[*i]) else {
+        return false;
+    };
+    if widths[i] <= 3 {
+        return false;
+    }
+    widths[i] -= 1;
+    true
 }
 
 // ---- graphs ---------------------------------------------------------
