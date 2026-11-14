@@ -251,4 +251,14 @@ mod tests {
         es[0] = es[0].purged();
         assert!(facts(&es, 2).unwrap().is_empty());
     }
+
+    #[test]
+    fn an_error_names_its_entry() {
+        // Catches a fault in a world reported without the entry it is in.
+        let es = journal(&[(None, "edit", json!({})), (Some(1), "retract", json!({}))]);
+        assert_eq!(
+            facts(&es, 2),
+            Err("entry 2: a retract needs a target".into())
+        );
+    }
 }
