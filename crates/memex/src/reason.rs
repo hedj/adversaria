@@ -546,6 +546,39 @@ mod tests {
     }
 
     #[test]
+    fn a_numbers_own_value_does_not_name_its_fact() {
+        // Catches a fact scored by the number that is to change: "1988"
+        // in the text is not a word that names date(buran, 1988).
+        let facts = vec![(2, date("buran", 1988))];
+        assert_eq!(readings(&facts, "1988 to 1989"), Vec::<Term>::new());
+    }
+
+    #[test]
+    fn a_word_of_three_letters_names_a_fact() {
+        // Catches the shortest words dropped: "ant" names date(ant, 1).
+        let facts = vec![(2, date("ant", 1))];
+        assert_eq!(readings(&facts, "the ant 2"), [date("ant", 2)]);
+    }
+
+    #[test]
+    fn a_fact_of_two_arguments_is_restated_as_an_attribute() {
+        // Catches the underscores of a name left in its English.
+        let t = Term::Compound(
+            "launch_site".into(),
+            vec![Term::Atom("buran".into()), Term::Atom("baikonur".into())],
+        );
+        assert_eq!(restate(&[], &t), "the launch site of buran is baikonur");
+    }
+
+    #[test]
+    fn a_fact_of_one_argument_is_restated_as_a_quality() {
+        // Catches the quality put before what has it, or its underscores
+        // left in.
+        let t = Term::Compound("partly_reusable".into(), vec![Term::Atom("buran".into())]);
+        assert_eq!(restate(&[], &t), "buran is partly reusable");
+    }
+
+    #[test]
     fn readings_come_from_the_world() {
         // Catches a reading that changes the wrong fact, or none at all.
         let facts = vec![
