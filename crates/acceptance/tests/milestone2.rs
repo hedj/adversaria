@@ -513,3 +513,37 @@ fn the_store_replays_into_prolog_the_same_twice() {
     assert_eq!(listed.len(), 3);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// A client of a server that sends these bytes at once, whatever it is asked.
+fn client_of_a_server_that_says(name: &str, bytes: &[u8]) -> Prolog {
+    let dir = std::env::temp_dir().join(format!("adversaria-m2-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = format!(
+        ":- initialization(main, main).\nmain :- set_stream(user_output, type(binary)), forall(member(B, {bytes:?}), put_byte(B)), flush_output, read(_).\n"
+    );
+    std::fs::write(dir.join("server.pl"), program).unwrap();
+    Prolog::start_with(&dir.join("server.pl")).unwrap()
+}
+
+#[test]
+fn an_answer_of_the_wrong_width_is_refused() {
+    // Catches an answer taken with more or fewer values than the query has
+    // variables: here ANSWER for request 1 with two integers, for one variable.
+    let answer = [7, 0, 0, 3, 0, 0, 0, 1, 32, 0, 0, 1, 32, 0, 0, 1];
+    let mut p = client_of_a_server_that_says("width", &answer);
+    let q = p.query(&Term::Var(0)).unwrap();
+    let refused = p.next(&q, 1).unwrap_err().to_string();
+    assert_eq!(refused, "answer has 2 values for 1 variables");
+}
+
+#[test]
+fn a_wrong_reply_to_an_atom_request_is_refused() {
+    // Catches a client that waits on, or goes on, when the server answers
+    // ATOM with something other than ATOM_IS: here DONE for request 1.
+    let mut p = client_of_a_server_that_says("atom", &[8, 0, 0, 1, 0, 0, 0, 1]);
+    let refused = p
+        .intern(&[a("unknown_to_the_server")])
+        .unwrap_err()
+        .to_string();
+    assert_eq!(refused, "ATOM got Done");
+}
