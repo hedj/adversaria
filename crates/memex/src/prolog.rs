@@ -6,7 +6,7 @@ use protocol::{Atoms, DONE_CANCELLED, DONE_ERROR, DONE_OK, Kind, Message, ProtoE
 use std::fmt;
 use std::io::{self, BufReader, BufWriter};
 use std::path::PathBuf;
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
 use std::time::Duration;
 
@@ -83,6 +83,33 @@ fn server_path() -> PathBuf {
     dir.join("server.pl")
 }
 
+/// Start `swipl` on a server file; its errors go to this process's stderr.
+fn spawn(server: &std::path::Path) -> io::Result<Child> {
+    let mut swipl = Command::new("swipl");
+    let piped = swipl
+        .arg("-q")
+        .arg(server)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped());
+    piped.stderr(Stdio::inherit()).spawn()
+}
+
+/// Read the server's messages in a thread of their own, until its output
+/// ends or is garbled; they arrive on the channel returned.
+fn listen(stdout: ChildStdout) -> Receiver<io::Result<Message>> {
+    let mut stdout = BufReader::new(stdout);
+    let (tx, replies) = channel();
+    std::thread::spawn(move || {
+        while let Some(m) = protocol::read_message(&mut stdout).transpose() {
+            let last = m.is_err();
+            if tx.send(m).is_err() || last {
+                return;
+            }
+        }
+    });
+    replies
+}
+
 impl Prolog {
     /// Start `swipl` with the server; its errors go to this process's stderr.
     pub fn start() -> Result<Prolog, Error> {
@@ -91,32 +118,9 @@ impl Prolog {
 
     /// Start `swipl` with another server file. For tests.
     pub fn start_with(server: &std::path::Path) -> Result<Prolog, Error> {
-        let mut child = Command::new("swipl")
-            .arg("-q")
-            .arg(server)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()?;
+        let mut child = spawn(server)?;
         let stdin = BufWriter::new(child.stdin.take().unwrap());
-        let mut stdout = BufReader::new(child.stdout.take().unwrap());
-        let (tx, replies) = channel();
-        std::thread::spawn(move || {
-            loop {
-                match protocol::read_message(&mut stdout) {
-                    Ok(Some(m)) => {
-                        if tx.send(Ok(m)).is_err() {
-                            return;
-                        }
-                    }
-                    Ok(None) => return,
-                    Err(e) => {
-                        let _ = tx.send(Err(e));
-                        return;
-                    }
-                }
-            }
-        });
+        let replies = listen(child.stdout.take().unwrap());
         Ok(Prolog {
             child,
             stdin,
@@ -226,19 +230,23 @@ impl Prolog {
             let req = self.new_req();
             let (body, _) = protocol::encode(&[Term::Str(name.clone())], &self.atoms)?;
             self.send(Kind::Atom, req, body)?;
-            loop {
-                let m = self
-                    .receive(Duration::from_secs(60))?
-                    .ok_or_else(|| Error::Server("no ATOM_IS".into()))?;
-                if m.req == req && m.kind == Kind::AtomIs {
-                    break;
-                }
-                if m.req == req {
-                    return Err(Error::Server(format!("ATOM got {:?}", m.kind)));
-                }
-            }
+            self.await_atom(req)?;
         }
         Ok(())
+    }
+
+    /// Wait for the ATOM_IS that answers request `req`; receiving it has
+    /// learned the number.
+    fn await_atom(&mut self, req: u32) -> Result<(), Error> {
+        loop {
+            let m = self.receive(Duration::from_secs(60))?;
+            let m = m.ok_or_else(|| Error::Server("no ATOM_IS".into()))?;
+            match (m.req == req, m.kind) {
+                (true, Kind::AtomIs) => return Ok(()),
+                (true, kind) => return Err(Error::Server(format!("ATOM got {kind:?}"))),
+                (false, _) => {}
+            }
+        }
     }
 
     /// Start a query. Nothing is computed until `next` asks.
@@ -260,22 +268,24 @@ impl Prolog {
         while answers.len() < n as usize {
             let m = self.reply(q.req)?;
             match m.kind {
-                Kind::Answer => {
-                    let vals = protocol::decode(&m.body, &self.atoms)?;
-                    if vals.len() != q.vars.len() {
-                        return Err(Error::Server(format!(
-                            "answer has {} values for {} variables",
-                            vals.len(),
-                            q.vars.len()
-                        )));
-                    }
-                    answers.push(vals);
-                }
+                Kind::Answer => answers.push(self.answer(&m, q.vars.len())?),
                 Kind::Done => return Ok((answers, Some(self.done(&m)?))),
                 k => return Err(Error::Server(format!("unexpected {k:?}"))),
             }
         }
         Ok((answers, None))
+    }
+
+    /// An answer's values: one for each of the query's variables.
+    fn answer(&self, m: &Message, variables: usize) -> Result<Vec<Term>, Error> {
+        let vals = protocol::decode(&m.body, &self.atoms)?;
+        if vals.len() != variables {
+            let n = vals.len();
+            return Err(Error::Server(format!(
+                "answer has {n} values for {variables} variables"
+            )));
+        }
+        Ok(vals)
     }
 
     fn done(&self, m: &Message) -> Result<End, Error> {
