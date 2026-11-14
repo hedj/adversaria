@@ -12,7 +12,7 @@
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
 
 /// One block of a document, flattened in outline order.
 #[derive(Debug, Clone, PartialEq)]
@@ -49,28 +49,32 @@ fn pandoc(args: &[&str], input: Option<&[u8]>) -> Result<Vec<u8>, String> {
 }
 
 fn pandoc_run(sandbox: bool, args: &[&str], input: Option<&[u8]>) -> Result<Vec<u8>, String> {
-    use std::io::Write;
-    let mut child = Command::new("pandoc")
-        .args(sandbox.then_some("--sandbox"))
-        .args(args)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("cannot run pandoc: {e}"))?;
-    let mut stdin = child.stdin.take().unwrap();
-    if let Some(i) = input {
-        stdin.write_all(i).map_err(|e| e.to_string())?;
-    }
-    drop(stdin);
+    let mut child = spawn_pandoc(sandbox, args)?;
+    feed(&mut child, input)?;
     let out = child.wait_with_output().map_err(|e| e.to_string())?;
     if !out.status.success() {
-        return Err(format!(
-            "pandoc: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        ));
+        let said = String::from_utf8_lossy(&out.stderr);
+        return Err(format!("pandoc: {}", said.trim()));
     }
     Ok(out.stdout)
+}
+
+fn spawn_pandoc(sandbox: bool, args: &[&str]) -> Result<Child, String> {
+    let mut pandoc = Command::new("pandoc");
+    let run = pandoc.args(sandbox.then_some("--sandbox")).args(args);
+    let piped = run
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    piped.spawn().map_err(|e| format!("cannot run pandoc: {e}"))
+}
+
+/// Give a child its input, if there is any, and close its input.
+fn feed(child: &mut Child, input: Option<&[u8]>) -> Result<(), String> {
+    use std::io::Write;
+    let mut stdin = child.stdin.take().unwrap();
+    let written = input.map(|i| stdin.write_all(i));
+    written.unwrap_or(Ok(())).map_err(|e| e.to_string())
 }
 
 /// A path as Pandoc's argument: one that starts with "-" gets "./" before
@@ -88,26 +92,48 @@ fn path_arg(path: &Path) -> String {
 pub fn read(path: &Path) -> Result<(Vec<Block>, Losses, Value), String> {
     let fmt = format_of(path)
         .ok_or("not a document format the memex reads (md, docx, odt, tex, html)")?;
-    let p = path_arg(path);
-    let json = pandoc(&["-f", fmt, "-t", "json", &p], None)?;
+    let json = pandoc(&["-f", fmt, "-t", "json", &path_arg(path)], None)?;
     let doc: Value =
         serde_json::from_slice(&json).map_err(|e| format!("pandoc gave no JSON tree: {e}"))?;
-    let mut r = Reader {
-        blocks: vec![],
-        losses: Losses::new(),
-        level: 0,
-    };
-    for b in doc["blocks"].as_array().cloned().unwrap_or_default() {
+    let mut r = Reader::default();
+    for b in items(&doc["blocks"]) {
         r.block(&b, None);
     }
     Ok((r.blocks, r.losses, doc["meta"].clone()))
 }
 
+/// The elements of a JSON list; none if the value is not a list.
+fn items(v: &Value) -> Vec<Value> {
+    v.as_array().cloned().unwrap_or_default()
+}
+
+/// Whether a JSON value is a list with something in it.
+fn filled(v: &Value) -> bool {
+    v.as_array().is_some_and(|a| !a.is_empty())
+}
+
+fn text_of(v: &Value) -> String {
+    v.as_str().unwrap_or("").to_string()
+}
+
+/// A block that is a run of inline content.
+fn is_text(block: &Value) -> bool {
+    matches!(block["t"].as_str(), Some("Plain" | "Para"))
+}
+
+#[derive(Default)]
 struct Reader {
     blocks: Vec<Block>,
     losses: Losses,
     /// The level of the last heading: content goes one deeper.
     level: usize,
+}
+
+/// Inline content being read: its text as Markdown, and its citation keys.
+#[derive(Default)]
+struct Run {
+    text: String,
+    cites: Vec<String>,
 }
 
 impl Reader {
@@ -136,99 +162,27 @@ impl Reader {
         });
     }
 
+    /// A block of a style whose text is inline content.
+    fn push_text(&mut self, depth: usize, style: &str, inlines: &Value) {
+        let (text, cites) = self.inlines(inlines);
+        self.push(depth, style, text, cites);
+    }
+
     /// One block. `in_list` is the depth of the enclosing list item, if any.
     fn block(&mut self, b: &Value, in_list: Option<usize>) {
         let depth = in_list.unwrap_or(self.level);
         let c = &b["c"];
         match b["t"].as_str().unwrap_or("") {
-            "Header" => {
-                let level = c[0].as_u64().unwrap_or(1) as usize;
-                let (text, cites) = self.inlines(&c[2]);
-                // Pandoc makes an identifier from a heading's text, and makes
-                // it again on import: only another identifier, or classes or
-                // attributes, are lost.
-                let id = c[1][0].as_str().unwrap_or("");
-                if (!id.is_empty() && id != auto_identifier(&text))
-                    || c[1][1].as_array().is_some_and(|a| !a.is_empty())
-                    || c[1][2].as_array().is_some_and(|a| !a.is_empty())
-                {
-                    self.lose("heading identifier or class");
-                }
-                self.push(level - 1, "heading", text, cites);
-                self.level = level;
-            }
-            "Para" | "Plain" => {
-                let inl = c.as_array().cloned().unwrap_or_default();
-                if inl.len() == 1 && inl[0]["t"] == "Math" && inl[0]["c"][0]["t"] == "DisplayMath" {
-                    self.push(
-                        depth,
-                        "math",
-                        inl[0]["c"][1].as_str().unwrap_or("").to_string(),
-                        vec![],
-                    );
-                } else {
-                    let (text, cites) = self.inlines(c);
-                    self.push(depth, "para", text, cites);
-                }
-            }
-            "BulletList" | "OrderedList" => {
-                let (style, items) = if b["t"] == "BulletList" {
-                    ("bullet", c.clone())
-                } else {
-                    ("ordered", c[1].clone())
-                };
-                for item in items.as_array().cloned().unwrap_or_default() {
-                    let blocks = item.as_array().cloned().unwrap_or_default();
-                    let mut first = true;
-                    for ib in &blocks {
-                        if first && matches!(ib["t"].as_str(), Some("Plain" | "Para")) {
-                            let (text, cites) = self.inlines(&ib["c"]);
-                            self.push(depth, style, text, cites);
-                            first = false;
-                        } else {
-                            self.block(ib, Some(depth + 1));
-                        }
-                    }
-                }
-            }
-            "BlockQuote" => {
-                for ib in c.as_array().cloned().unwrap_or_default() {
-                    if matches!(ib["t"].as_str(), Some("Plain" | "Para")) {
-                        let (text, cites) = self.inlines(&ib["c"]);
-                        self.push(depth, "quote", text, cites);
-                    } else {
-                        self.block(&ib, Some(depth));
-                    }
-                }
-            }
-            "CodeBlock" => self.push(
-                depth,
-                "code",
-                c[1].as_str().unwrap_or("").to_string(),
-                vec![],
-            ),
+            "Header" => self.header(c),
+            "Para" | "Plain" => self.para(c, depth),
+            "BulletList" => self.list("bullet", c, depth),
+            "OrderedList" => self.list("ordered", &c[1], depth),
+            "BlockQuote" => self.quote(c, depth),
+            "CodeBlock" => self.push(depth, "code", text_of(&c[1]), vec![]),
             "Table" => self.table(c, depth),
-            "Div" => {
-                if c[0][0].as_str().is_some_and(|id| !id.is_empty())
-                    || c[0][1].as_array().is_some_and(|a| !a.is_empty())
-                {
-                    self.lose("division attributes");
-                }
-                for ib in c[1].as_array().cloned().unwrap_or_default() {
-                    self.block(&ib, in_list);
-                }
-            }
-            "LineBlock" => {
-                let mut lines = Vec::new();
-                for l in c.as_array().cloned().unwrap_or_default() {
-                    lines.push(self.inlines(&l).0);
-                }
-                self.lose("line block (kept as one paragraph)");
-                self.push(depth, "para", lines.join(" "), vec![]);
-            }
-            "Figure" => {
-                self.lose("figure");
-            }
+            "Div" => self.div(c, in_list),
+            "LineBlock" => self.line_block(c, depth),
+            "Figure" => self.lose("figure"),
             "HorizontalRule" => self.lose("horizontal rule"),
             "RawBlock" => self.lose("raw block"),
             "DefinitionList" => self.lose("definition list"),
@@ -236,140 +190,207 @@ impl Reader {
         }
     }
 
+    fn header(&mut self, c: &Value) {
+        let level = c[0].as_u64().unwrap_or(1) as usize;
+        let (text, cites) = self.inlines(&c[2]);
+        if own_attributes(&c[1], &text) {
+            self.lose("heading identifier or class");
+        }
+        self.push(level - 1, "heading", text, cites);
+        self.level = level;
+    }
+
+    /// A paragraph: display mathematics alone, or text.
+    fn para(&mut self, c: &Value, depth: usize) {
+        match display_math(c) {
+            Some(tex) => self.push(depth, "math", tex, vec![]),
+            None => self.push_text(depth, "para", c),
+        }
+    }
+
+    fn list(&mut self, style: &str, list: &Value, depth: usize) {
+        for item in items(list) {
+            self.list_item(style, &item, depth);
+        }
+    }
+
+    /// A list item: its first paragraph is the item, and its other blocks
+    /// go under it.
+    fn list_item(&mut self, style: &str, item: &Value, depth: usize) {
+        let mut first = true;
+        for b in items(item) {
+            if first && is_text(&b) {
+                self.push_text(depth, style, &b["c"]);
+                first = false;
+            } else {
+                self.block(&b, Some(depth + 1));
+            }
+        }
+    }
+
+    fn quote(&mut self, c: &Value, depth: usize) {
+        for b in items(c) {
+            if is_text(&b) {
+                self.push_text(depth, "quote", &b["c"]);
+            } else {
+                self.block(&b, Some(depth));
+            }
+        }
+    }
+
+    /// A division: its blocks, as if it were not there.
+    fn div(&mut self, c: &Value, in_list: Option<usize>) {
+        let named = c[0][0].as_str().is_some_and(|id| !id.is_empty());
+        if named || filled(&c[0][1]) {
+            self.lose("division attributes");
+        }
+        for b in items(&c[1]) {
+            self.block(&b, in_list);
+        }
+    }
+
+    fn line_block(&mut self, c: &Value, depth: usize) {
+        let lines: Vec<String> = items(c).iter().map(|l| self.inlines(l).0).collect();
+        self.lose("line block (kept as one paragraph)");
+        self.push(depth, "para", lines.join(" "), vec![]);
+    }
+
     /// A table: an item holding the header row's text, and a row item for
     /// each body row, its cells joined by " | ".
     fn table(&mut self, c: &Value, depth: usize) {
-        let cell_text = |r: &mut Reader, cell: &Value| -> String {
-            cell[4]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-                .iter()
-                .map(|b| r.inlines(&b["c"]).0)
-                .collect::<Vec<_>>()
-                .join(" ")
-        };
-        let row_text = |r: &mut Reader, row: &Value| -> String {
-            row[1]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-                .iter()
-                .map(|cell| cell_text(r, cell))
-                .collect::<Vec<_>>()
-                .join(" | ")
-        };
-        let head_rows = c[3][1].as_array().cloned().unwrap_or_default();
-        let head = head_rows
-            .first()
-            .map(|r| row_text(self, r))
-            .unwrap_or_default();
-        self.push(depth, "table", head, vec![]);
-        for body in c[4].as_array().cloned().unwrap_or_default() {
-            for row in body[3].as_array().cloned().unwrap_or_default() {
-                let t = row_text(self, &row);
-                self.push(depth + 1, "row", t, vec![]);
-            }
+        let head = items(&c[3][1]).first().map(|r| self.row_text(r));
+        self.push(depth, "table", head.unwrap_or_default(), vec![]);
+        for row in items(&c[4]).iter().flat_map(|body| items(&body[3])) {
+            let text = self.row_text(&row);
+            self.push(depth + 1, "row", text, vec![]);
         }
-        if c[1][1].as_array().is_some_and(|a| !a.is_empty()) {
+        if filled(&c[1][1]) {
             self.lose("table caption");
         }
     }
 
-    /// Inline content as Markdown, and the citation keys in it.
-    fn inlines(&mut self, v: &Value) -> (String, Vec<String>) {
-        let mut out = String::new();
-        let mut cites = Vec::new();
-        for i in v.as_array().cloned().unwrap_or_default() {
-            self.inline(&i, &mut out, &mut cites);
-        }
-        (out, cites)
+    fn row_text(&mut self, row: &Value) -> String {
+        let cells: Vec<String> = items(&row[1]).iter().map(|c| self.cell_text(c)).collect();
+        cells.join(" | ")
     }
 
-    fn inline(&mut self, i: &Value, out: &mut String, cites: &mut Vec<String>) {
+    fn cell_text(&mut self, cell: &Value) -> String {
+        let blocks: Vec<String> = items(&cell[4])
+            .iter()
+            .map(|b| self.inlines(&b["c"]).0)
+            .collect();
+        blocks.join(" ")
+    }
+
+    /// Inline content as Markdown, and the citation keys in it.
+    fn inlines(&mut self, v: &Value) -> (String, Vec<String>) {
+        let mut run = Run::default();
+        self.each(v, &mut run);
+        (run.text, run.cites)
+    }
+
+    fn each(&mut self, inlines: &Value, run: &mut Run) {
+        for i in items(inlines) {
+            self.inline(&i, run);
+        }
+    }
+
+    fn inline(&mut self, i: &Value, run: &mut Run) {
         let c = &i["c"];
-        let wrap = |r: &mut Reader,
-                    mark: &str,
-                    inner: &Value,
-                    out: &mut String,
-                    cites: &mut Vec<String>| {
-            out.push_str(mark);
-            for x in inner.as_array().cloned().unwrap_or_default() {
-                r.inline(&x, out, cites);
-            }
-            out.push_str(mark);
-        };
         match i["t"].as_str().unwrap_or("") {
-            "Str" => out.push_str(c.as_str().unwrap_or("")),
-            "Space" | "SoftBreak" => out.push(' '),
-            "LineBreak" => out.push_str("\\\n"),
-            "Emph" => wrap(self, "*", c, out, cites),
-            "Strong" => wrap(self, "**", c, out, cites),
-            "Strikeout" => wrap(self, "~~", c, out, cites),
-            "Superscript" => wrap(self, "^", c, out, cites),
-            "Subscript" => wrap(self, "~", c, out, cites),
-            "Code" => out.push_str(&format!("`{}`", c[1].as_str().unwrap_or(""))),
-            "Math" => {
-                let tex = c[1].as_str().unwrap_or("");
-                if c[0]["t"] == "DisplayMath" {
-                    out.push_str(&format!("$${tex}$$"))
-                } else {
-                    out.push_str(&format!("${tex}$"))
-                }
-            }
-            "Quoted" => {
-                let (a, b) = if c[0]["t"] == "SingleQuote" {
-                    ("‘", "’")
-                } else {
-                    ("“", "”")
-                };
-                out.push_str(a);
-                for x in c[1].as_array().cloned().unwrap_or_default() {
-                    self.inline(&x, out, cites);
-                }
-                out.push_str(b);
-            }
-            "Cite" => {
-                let keys: Vec<String> = c[0]
-                    .as_array()
-                    .cloned()
-                    .unwrap_or_default()
-                    .iter()
-                    .filter_map(|x| x["citationId"].as_str().map(String::from))
-                    .collect();
-                out.push_str(&format!(
-                    "[{}]",
-                    keys.iter()
-                        .map(|k| format!("@{k}"))
-                        .collect::<Vec<_>>()
-                        .join("; ")
-                ));
-                cites.extend(keys);
-            }
-            "Link" => {
-                let mut text = String::new();
-                for x in c[1].as_array().cloned().unwrap_or_default() {
-                    self.inline(&x, &mut text, cites);
-                }
-                out.push_str(&format!("[{text}]({})", c[2][0].as_str().unwrap_or("")));
-            }
-            "Span" => {
-                self.lose("span attributes");
-                for x in c[1].as_array().cloned().unwrap_or_default() {
-                    self.inline(&x, out, cites);
-                }
-            }
-            "SmallCaps" | "Underline" => {
-                self.lose(i["t"].as_str().unwrap());
-                for x in c.as_array().cloned().unwrap_or_default() {
-                    self.inline(&x, out, cites);
-                }
-            }
+            "Str" => run.text.push_str(c.as_str().unwrap_or("")),
+            "Space" | "SoftBreak" => run.text.push(' '),
+            "LineBreak" => run.text.push_str("\\\n"),
+            "Emph" => self.wrapped(("*", "*"), c, run),
+            "Strong" => self.wrapped(("**", "**"), c, run),
+            "Strikeout" => self.wrapped(("~~", "~~"), c, run),
+            "Superscript" => self.wrapped(("^", "^"), c, run),
+            "Subscript" => self.wrapped(("~", "~"), c, run),
+            "Code" => run
+                .text
+                .push_str(&format!("`{}`", c[1].as_str().unwrap_or(""))),
+            "Math" => run.text.push_str(&math(c)),
+            "Quoted" => self.wrapped(quotes(&c[0]), &c[1], run),
+            "Cite" => run.cite(c),
+            "Link" => self.link(c, run),
+            "Span" => self.kept_bare("span attributes", &c[1], run),
+            kind @ ("SmallCaps" | "Underline") => self.kept_bare(kind, c, run),
             "Note" => self.lose("footnote"),
             "Image" => self.lose("image"),
             "RawInline" => self.lose("raw inline"),
             other => self.lose(other),
         }
+    }
+
+    /// Inline content between two marks.
+    fn wrapped(&mut self, (open, close): (&str, &str), inner: &Value, run: &mut Run) {
+        run.text.push_str(open);
+        self.each(inner, run);
+        run.text.push_str(close);
+    }
+
+    /// Inline content kept without what marked it, which is counted lost.
+    fn kept_bare(&mut self, lost: &str, inner: &Value, run: &mut Run) {
+        self.lose(lost);
+        self.each(inner, run);
+    }
+
+    /// A link: its text, then its target; citations in its text count.
+    fn link(&mut self, c: &Value, run: &mut Run) {
+        let mut label = Run::default();
+        self.each(&c[1], &mut label);
+        let target = c[2][0].as_str().unwrap_or("");
+        run.text.push_str(&format!("[{}]({target})", label.text));
+        run.cites.extend(label.cites);
+    }
+}
+
+impl Run {
+    /// A citation: its keys as "[@a; @b]".
+    fn cite(&mut self, c: &Value) {
+        let cited = items(&c[0]);
+        let keys = cited.iter().filter_map(|x| x["citationId"].as_str());
+        let keys: Vec<String> = keys.map(String::from).collect();
+        let marked: Vec<String> = keys.iter().map(|k| format!("@{k}")).collect();
+        self.text.push_str(&format!("[{}]", marked.join("; ")));
+        self.cites.extend(keys);
+    }
+}
+
+/// Whether a heading has an identifier of its own, or classes or other
+/// attributes. Pandoc makes an identifier from a heading's text, and makes
+/// it again on import, so only these are lost.
+fn own_attributes(attr: &Value, text: &str) -> bool {
+    let id = attr[0].as_str().unwrap_or("");
+    let own_id = !id.is_empty() && id != auto_identifier(text);
+    own_id || filled(&attr[1]) || filled(&attr[2])
+}
+
+/// The TeX of a paragraph that is display mathematics alone.
+fn display_math(c: &Value) -> Option<String> {
+    match items(c).as_slice() {
+        [one] if one["t"] == "Math" && one["c"][0]["t"] == "DisplayMath" => {
+            Some(text_of(&one["c"][1]))
+        }
+        _ => None,
+    }
+}
+
+/// Inline or display mathematics, between its dollars.
+fn math(c: &Value) -> String {
+    let tex = c[1].as_str().unwrap_or("");
+    if c[0]["t"] == "DisplayMath" {
+        format!("$${tex}$$")
+    } else {
+        format!("${tex}$")
+    }
+}
+
+fn quotes(kind: &Value) -> (&'static str, &'static str) {
+    if kind["t"] == "SingleQuote" {
+        ("‘", "’")
+    } else {
+        ("“", "”")
     }
 }
 
@@ -398,69 +419,102 @@ pub fn auto_identifier(text: &str) -> String {
 pub fn cite_keys(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = text;
-    while let Some(i) = rest.find("[@") {
-        let after = &rest[i + 1..];
-        let Some(j) = after.find(']') else { break };
-        for part in after[..j].split(';') {
-            let k = part.trim().trim_start_matches('@');
-            if !k.is_empty() && k.chars().all(|c| c.is_alphanumeric() || "_-:.".contains(c)) {
-                out.push(k.to_string());
-            }
-        }
-        rest = &after[j..];
+    while let Some((group, after)) = next_group(rest) {
+        out.extend(group.split(';').filter_map(key));
+        rest = after;
     }
     out
+}
+
+/// The inside of the next "[@...]" from its "@" on, and the text from its
+/// "]" on.
+fn next_group(text: &str) -> Option<(&str, &str)> {
+    let after = &text[text.find("[@")? + 1..];
+    let end = after.find(']')?;
+    Some((&after[..end], &after[end..]))
+}
+
+/// A citation key, from one part of a group, if it is one.
+fn key(part: &str) -> Option<String> {
+    let k = part.trim().trim_start_matches('@');
+    let named = !k.is_empty() && k.chars().all(|c| c.is_alphanumeric() || "_-:.".contains(c));
+    named.then(|| k.to_string())
 }
 
 /// Blocks as a Markdown document: headings by level, paragraphs, lists,
 /// quotes, code, display mathematics, and tables as pipe tables.
 pub fn markdown(blocks: &[Block]) -> String {
-    let mut out = String::new();
-    let mut i = 0;
-    while i < blocks.len() {
-        let b = &blocks[i];
-        let indent = |d: usize| "  ".repeat(d);
-        match b.style.as_str() {
-            "heading" => out.push_str(&format!("{} {}\n\n", "#".repeat(b.depth + 1), b.text)),
-            "bullet" | "ordered" => {
-                // A run of list items, nested by depth relative to the first.
-                let base = b.depth;
-                while i < blocks.len()
-                    && matches!(blocks[i].style.as_str(), "bullet" | "ordered")
-                    && blocks[i].depth >= base
-                {
-                    let x = &blocks[i];
-                    let mark = if x.style == "bullet" { "-" } else { "1." };
-                    out.push_str(&format!(
-                        "{}{mark} {}\n",
-                        "    ".repeat(x.depth - base),
-                        x.text
-                    ));
-                    i += 1;
-                }
-                out.push('\n');
-                continue;
-            }
-            "quote" => out.push_str(&format!("> {}\n\n", b.text)),
-            "code" => out.push_str(&format!("```\n{}\n```\n\n", b.text)),
-            "math" => out.push_str(&format!("$${}$$\n\n", b.text)),
-            "table" => {
-                let cols = b.text.split(" | ").count().max(1);
-                out.push_str(&format!("| {} |\n|{}\n", b.text, "---|".repeat(cols)));
-                i += 1;
-                while i < blocks.len() && blocks[i].style == "row" {
-                    out.push_str(&format!("| {} |\n", blocks[i].text));
-                    i += 1;
-                }
-                out.push('\n');
-                continue;
-            }
-            "row" => out.push_str(&format!("| {} |\n", b.text)),
-            _ => out.push_str(&format!("{}{}\n\n", indent(0), b.text)),
-        }
-        i += 1;
+    let mut w = Writer {
+        blocks,
+        at: 0,
+        out: String::new(),
+    };
+    while w.at < blocks.len() {
+        w.block();
     }
-    out
+    w.out
+}
+
+/// Blocks being written as Markdown: the next one to write, and the text
+/// so far.
+struct Writer<'a> {
+    blocks: &'a [Block],
+    at: usize,
+    out: String,
+}
+
+fn is_list_item(b: &Block) -> bool {
+    matches!(b.style.as_str(), "bullet" | "ordered")
+}
+
+impl<'a> Writer<'a> {
+    /// Write the next block, or the run of blocks it begins.
+    fn block(&mut self) {
+        let b = &self.blocks[self.at];
+        match b.style.as_str() {
+            "bullet" | "ordered" => return self.list(b.depth),
+            "table" => return self.table(b),
+            "heading" => self.say(format!("{} {}\n\n", "#".repeat(b.depth + 1), b.text)),
+            "quote" => self.say(format!("> {}\n\n", b.text)),
+            "code" => self.say(format!("```\n{}\n```\n\n", b.text)),
+            "math" => self.say(format!("$${}$$\n\n", b.text)),
+            "row" => self.say(format!("| {} |\n", b.text)),
+            _ => self.say(format!("{}\n\n", b.text)),
+        }
+        self.at += 1;
+    }
+
+    fn say(&mut self, text: String) {
+        self.out.push_str(&text);
+    }
+
+    /// The next block, stepped over, if it is one that is wanted.
+    fn next_if(&mut self, wanted: impl Fn(&Block) -> bool) -> Option<&'a Block> {
+        let b = self.blocks.get(self.at).filter(|b| wanted(b))?;
+        self.at += 1;
+        Some(b)
+    }
+
+    /// A run of list items, nested by depth relative to the first.
+    fn list(&mut self, base: usize) {
+        while let Some(x) = self.next_if(|x| is_list_item(x) && x.depth >= base) {
+            let mark = if x.style == "bullet" { "-" } else { "1." };
+            let nest = "    ".repeat(x.depth - base);
+            self.say(format!("{nest}{mark} {}\n", x.text));
+        }
+        self.say("\n".into());
+    }
+
+    /// A table: its header, a rule under it, and the rows that follow.
+    fn table(&mut self, head: &Block) {
+        let cols = head.text.split(" | ").count().max(1);
+        self.say(format!("| {} |\n|{}\n", head.text, "---|".repeat(cols)));
+        self.at += 1;
+        while let Some(row) = self.next_if(|x| x.style == "row") {
+            self.say(format!("| {} |\n", row.text));
+        }
+        self.say("\n".into());
+    }
 }
 
 /// Write Markdown as a document, through Pandoc. `sources` (entry hashes)
@@ -536,23 +590,12 @@ fn safe_link(url: &str) -> bool {
 
 /// The longest common subsequence of two lists, as matched index pairs.
 pub fn align<T: PartialEq>(a: &[T], b: &[T]) -> Vec<(usize, usize)> {
-    let (n, m) = (a.len(), b.len());
-    let mut t = vec![vec![0u32; m + 1]; n + 1];
-    for i in (0..n).rev() {
-        for j in (0..m).rev() {
-            t[i][j] = if a[i] == b[j] {
-                t[i + 1][j + 1] + 1
-            } else {
-                t[i + 1][j].max(t[i][j + 1])
-            };
-        }
-    }
+    let t = common_lengths(a, b);
     let (mut i, mut j, mut out) = (0, 0, Vec::new());
-    while i < n && j < m {
+    while i < a.len() && j < b.len() {
         if a[i] == b[j] {
             out.push((i, j));
-            i += 1;
-            j += 1;
+            (i, j) = (i + 1, j + 1);
         } else if t[i + 1][j] >= t[i][j + 1] {
             i += 1;
         } else {
@@ -560,6 +603,22 @@ pub fn align<T: PartialEq>(a: &[T], b: &[T]) -> Vec<(usize, usize)> {
         }
     }
     out
+}
+
+/// t[i][j]: the length of the longest common subsequence of a from i and
+/// b from j (the usual table, filled from the ends).
+fn common_lengths<T: PartialEq>(a: &[T], b: &[T]) -> Vec<Vec<u32>> {
+    let mut t = vec![vec![0u32; b.len() + 1]; a.len() + 1];
+    for i in (0..a.len()).rev() {
+        for j in (0..b.len()).rev() {
+            t[i][j] = if a[i] == b[j] {
+                t[i + 1][j + 1] + 1
+            } else {
+                t[i + 1][j].max(t[i][j + 1])
+            };
+        }
+    }
+    t
 }
 
 /// Markdown text as plain text, through Pandoc.
