@@ -38,8 +38,9 @@ def press_release(ch, mods=0):
     return key(ord(ch), mods, 1) + key(ord(ch), mods, 3)
 
 
-def run(binary, journal, reply, keys, timeout=10, args=()):
-    """Start the memex in a pty; answer its probe; send keys; return (status, output)."""
+def run(binary, journal, reply, keys, timeout=10, args=(), kill_after=None):
+    """Start the memex in a pty; answer its probe; send keys; return (status, output).
+    With kill_after, kill it that many seconds after the keys, as a crash would."""
     pid, fd = pty.fork()
     if pid == 0:
         os.execv(binary, [binary, *args, journal])
@@ -75,6 +76,12 @@ def run(binary, journal, reply, keys, timeout=10, args=()):
                 os.write(fd, k)
                 time.sleep(0.02)
             sent = True
+            if kill_after is not None:
+                time.sleep(kill_after)
+                os.kill(pid, 9)
+                os.waitpid(pid, 0)
+                status = "killed"
+                break
         done, st = os.waitpid(pid, os.WNOHANG)
         if done:
             status = os.waitstatus_to_exitcode(st)
@@ -221,6 +228,15 @@ def main():
         check("--mouse turns it on", status == 0 and MOUSE_ON in out, f"status {status}")
         status, out = run(binary, os.path.join(d, "both"), KITTY_REPLY, [], args=["--mouse", "--no-mouse"])
         check("--mouse with --no-mouse is a usage error", status == 2, f"status {status}")
+
+        # 8. Text typed and left for a second is written, so a crash after
+        #    it loses nothing.
+        j = os.path.join(d, "idle")
+        keys = [press_release(c) for c in "Kept"]
+        status, out = run(binary, j, KITTY_REPLY, keys, kill_after=2.0)
+        es = entries(j) if os.path.exists(os.path.join(j, "journal.jsonl")) else []
+        texts = [e["body"].get("add") for e in es if e["kind"] == "edit" and e["body"].get("op") == "text"]
+        check("text left for a second is written before a crash", "Kept" in texts, (status, texts))
 
     print(f"{failures} failed")
     sys.exit(1 if failures else 0)
