@@ -305,6 +305,14 @@ fn a_renaming_must_hold_both_ways() {
 }
 
 #[test]
+fn compounds_of_two_names_are_not_variants() {
+    // Catches compounds compared by their arguments alone: f(X) is no
+    // variant of g(X).
+    let one = |name: &str| Term::Compound(name.into(), vec![Term::Var(0)]);
+    assert!(!variant(&one("f"), &one("g")));
+}
+
+#[test]
 fn a_message_longer_than_its_header_can_count_is_refused() {
     // Catches a body of 65,535 words written with a length that wraps.
     let message = |words| Message {
