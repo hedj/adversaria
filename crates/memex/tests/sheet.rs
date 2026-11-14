@@ -169,7 +169,7 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
         .entries()
         .iter()
         .rev()
-        .find(|e| e.kind == "edit")
+        .find(|e| e.kind() == "edit")
         .unwrap()
         .seq;
     let food = app.outline.fact_item[&new];

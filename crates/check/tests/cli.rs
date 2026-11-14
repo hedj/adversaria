@@ -16,15 +16,8 @@ fn exit_codes_and_named_line() {
     let key = Key::new(&sk.verifying_key().to_bytes()).unwrap();
     let e = Entry::new(1, None, "edit", json!({"text": "hello"})).unwrap();
     let sig = to_hex(&sk.sign(&from_hex(&e.hash, 32).unwrap()).to_bytes());
-    let s = Seal::new(
-        1,
-        &e.hash,
-        "2026-11-12T09:30:00Z",
-        &key.fingerprint,
-        &sig,
-        None,
-    )
-    .unwrap();
+    let stamp = Stamp::new("2026-11-12T09:30:00Z", &key.fingerprint, &sig);
+    let s = Seal::new(e.id(), stamp, None).unwrap();
     let file = |f: &str, fmt: &str, line: String| {
         fs::write(dir.join(f), format!("{}\n{line}\n", header(fmt))).unwrap()
     };

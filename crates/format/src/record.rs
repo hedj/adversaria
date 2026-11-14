@@ -159,22 +159,48 @@ impl Fields {
         Ok(hash)
     }
 
-    // An entry's fields.
+    // An entry.
 
-    fn parent(&self) -> Result<Option<u64>, String> {
-        match self.need("parent")? {
-            Value::Null => Ok(None),
-            v => natural(v, "parent").map(Some),
+    fn entry(&self) -> Result<Entry, String> {
+        let seq = self.natural("seq")?;
+        let parent = self.parent(seq)?;
+        let content = self.content()?;
+        let hash = self.own_hash(true)?;
+        Ok(Entry {
+            seq,
+            parent,
+            content,
+            hash,
+        })
+    }
+
+    /// The entry before this one, which must have a lower number.
+    fn parent(&self, seq: u64) -> Result<Option<EntryId>, String> {
+        let parent = self.parent_id()?;
+        if parent.as_ref().is_some_and(|p| p.seq >= seq) {
+            return Err("parent must come before the entry".into());
+        }
+        Ok(parent)
+    }
+
+    /// The parent's number and its hash: both, or neither.
+    fn parent_id(&self) -> Result<Option<EntryId>, String> {
+        let seq = match self.need("parent")? {
+            Value::Null => None,
+            v => Some(natural(v, "parent")?),
+        };
+        match (seq, self.need("prev")?) {
+            (None, Value::Null) => Ok(None),
+            (Some(seq), v) if is_hash(v) => Ok(Some(EntryId::new(seq, v.as_str().unwrap_or("")))),
+            _ => Err("prev must be null exactly when parent is, else a hash".into()),
         }
     }
 
-    /// The parent's hash: there exactly when there is a parent.
-    fn prev(&self, parent: Option<u64>) -> Result<Option<String>, String> {
-        match (self.need("prev")?, parent) {
-            (Value::Null, None) => Ok(None),
-            (v, Some(_)) if is_hash(v) => Ok(v.as_str().map(String::from)),
-            _ => Err("prev must be null exactly when parent is, else a hash".into()),
-        }
+    fn content(&self) -> Result<Content, String> {
+        let kind = self.kind()?;
+        let hash = self.hex("body_hash", 32, HASH)?;
+        let body = self.body(&hash)?;
+        Ok(Content { kind, body, hash })
     }
 
     fn kind(&self) -> Result<String, String> {
@@ -185,24 +211,44 @@ impl Fields {
         Ok(kind.to_string())
     }
 
-    /// The body: an object that its body_hash is the hash of, or none
-    /// once purged.
-    fn body(&self) -> Result<Option<Value>, String> {
+    /// The body: an object with the hash given, or none once purged.
+    fn body(&self, hash: &str) -> Result<Option<Value>, String> {
         match self.need("body")? {
             Value::Null => Ok(None),
-            b @ Value::Object(_) => self.checked_body(b).map(Some),
+            b @ Value::Object(_) if body_hash(b)? == hash => Ok(Some(b.clone())),
+            Value::Object(_) => Err("body_hash does not match the body".into()),
             _ => Err("body must be an object, or null when purged".into()),
         }
     }
 
-    fn checked_body(&self, body: &Value) -> Result<Value, String> {
-        if body_hash(body)? != self.hex("body_hash", 32, HASH)? {
-            return Err("body_hash does not match the body".into());
-        }
-        Ok(body.clone())
+    // A seal.
+
+    fn seal(&self) -> Result<Seal, String> {
+        let entry = self.sealed()?;
+        let stamp = self.stamp()?;
+        let prev = self.prev_seal()?;
+        let hash = self.own_hash(false)?;
+        Ok(Seal {
+            entry,
+            stamp,
+            prev,
+            hash,
+        })
     }
 
-    // A seal's fields.
+    /// The entry a seal seals.
+    fn sealed(&self) -> Result<EntryId, String> {
+        let seq = self.natural("seq")?;
+        let hash = self.hex("entry_hash", 32, HASH)?;
+        Ok(EntryId { seq, hash })
+    }
+
+    fn stamp(&self) -> Result<Stamp, String> {
+        let date = self.date()?;
+        let author = self.hex("author", 32, "a key fingerprint, 64 lowercase hex digits")?;
+        let sig = self.hex("sig", 64, "128 lowercase hex digits")?;
+        Ok(Stamp { date, author, sig })
+    }
 
     fn date(&self) -> Result<String, String> {
         let date = self.text("date")?;
@@ -221,7 +267,7 @@ impl Fields {
         }
     }
 
-    // A key's fields.
+    // A key.
 
     /// The public key, which its fingerprint must be the hash of.
     fn key(&self) -> Result<String, String> {
@@ -277,85 +323,49 @@ pub fn check_header(line: &str, format: &str) -> Result<(), String> {
     }
 }
 
-/// One entry of `journal.jsonl`.
+/// An entry named by its number and its hash.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Entry {
+pub struct EntryId {
     pub seq: u64,
-    pub parent: Option<u64>,
-    pub prev: Option<String>,
-    pub kind: String,
-    /// None once purged.
-    pub body: Option<Value>,
-    pub body_hash: String,
     pub hash: String,
 }
 
-impl Entry {
-    /// Make a new entry; the body must be an object.
-    pub fn new(
-        seq: u64,
-        parent: Option<(u64, &str)>,
-        kind: &str,
-        body: Value,
-    ) -> Result<Entry, String> {
+impl EntryId {
+    pub fn new(seq: u64, hash: &str) -> EntryId {
+        let hash = hash.to_string();
+        EntryId { seq, hash }
+    }
+}
+
+/// What an entry holds: its kind and its body. The body's hash stands in
+/// for the body in the entry's own hash, so that a purged body leaves the
+/// entry's hash checkable.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Content {
+    pub kind: String,
+    /// None once purged.
+    pub body: Option<Value>,
+    pub hash: String,
+}
+
+impl Content {
+    /// The content of a new entry: of a known kind, with an object for
+    /// its body, in Unicode NFC.
+    pub fn new(kind: &str, body: Value) -> Result<Content, String> {
         check_new(kind, &body)?;
-        let mut entry = Entry {
-            seq,
-            parent: parent.map(|p| p.0),
-            prev: parent.map(|p| p.1.to_string()),
-            kind: kind.into(),
-            body_hash: body_hash(&body)?,
-            body: Some(body),
-            hash: String::new(),
-        };
-        entry.hash = hash_of(&entry.fields(), true);
-        Entry::parse(&entry.to_line()?)
+        let (kind, hash) = (kind.to_string(), body_hash(&body)?);
+        let body = Some(body);
+        Ok(Content { kind, body, hash })
     }
 
-    /// The entry's fields, as the format names them.
-    fn fields(&self) -> Value {
-        json!({
-            "seq": self.seq, "parent": self.parent, "prev": self.prev, "kind": self.kind,
-            "body": self.body, "body_hash": self.body_hash, "hash": self.hash,
-        })
-    }
-
-    /// The entry as one line of canonical JSON, without its newline.
-    pub fn to_line(&self) -> Result<String, String> {
-        line_of(self.fields())
-    }
-
-    /// The same entry with its body purged.
-    pub fn purged(&self) -> Entry {
-        Entry {
+    fn purged(&self) -> Content {
+        Content {
             body: None,
             ..self.clone()
         }
     }
-
-    /// Parse a line and check everything the line can check on itself.
-    pub fn parse(line: &str) -> Result<Entry, String> {
-        let f = Fields::read(line)?;
-        let seq = f.natural("seq")?;
-        let parent = f.parent()?;
-        let prev = f.prev(parent)?;
-        if parent.is_some_and(|p| p >= seq) {
-            return Err("parent must come before the entry".into());
-        }
-        Ok(Entry {
-            seq,
-            parent,
-            prev,
-            kind: f.kind()?,
-            body_hash: f.hex("body_hash", 32, HASH)?,
-            body: f.body()?,
-            hash: f.own_hash(true)?,
-        })
-    }
 }
 
-/// What a new entry must be: of a known kind, with an object for its
-/// body, in Unicode NFC.
 fn check_new(kind: &str, body: &Value) -> Result<(), String> {
     if !KINDS.contains(&kind) {
         return Err(format!("unknown kind {kind:?}"));
@@ -371,54 +381,150 @@ fn check_new(kind: &str, body: &Value) -> Result<(), String> {
     Ok(())
 }
 
-/// One record of `seals.jsonl`. The sealer signs the 32 bytes of the entry's hash.
+/// One entry of `journal.jsonl`: its number, the entry before it in its
+/// world (none for the first), what it holds, and its own hash.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Seal {
+pub struct Entry {
     pub seq: u64,
-    pub entry_hash: String,
+    pub parent: Option<EntryId>,
+    pub content: Content,
+    pub hash: String,
+}
+
+impl Entry {
+    /// Make a new entry after a parent, given by its number and hash; the
+    /// body must be an object.
+    pub fn new(
+        seq: u64,
+        parent: Option<(u64, &str)>,
+        kind: &str,
+        body: Value,
+    ) -> Result<Entry, String> {
+        let content = Content::new(kind, body)?;
+        let parent = parent.map(|(seq, hash)| EntryId::new(seq, hash));
+        let hash = String::new();
+        Entry {
+            seq,
+            parent,
+            content,
+            hash,
+        }
+        .hashed()
+    }
+
+    /// The entry with its hash, read back from its own line, so that a
+    /// new entry passes every check a line makes on itself.
+    fn hashed(mut self) -> Result<Entry, String> {
+        self.hash = hash_of(&self.fields(), true);
+        Entry::parse(&self.to_line()?)
+    }
+
+    pub fn id(&self) -> EntryId {
+        EntryId::new(self.seq, &self.hash)
+    }
+
+    pub fn kind(&self) -> &str {
+        &self.content.kind
+    }
+
+    /// The body: none once purged.
+    pub fn body(&self) -> Option<&Value> {
+        self.content.body.as_ref()
+    }
+
+    /// The number of the entry before this one in its world.
+    pub fn parent_seq(&self) -> Option<u64> {
+        self.parent.as_ref().map(|p| p.seq)
+    }
+
+    /// The entry's fields, as the format names them.
+    fn fields(&self) -> Value {
+        let prev = self.parent.as_ref().map(|p| &p.hash);
+        json!({
+            "seq": self.seq, "parent": self.parent_seq(), "prev": prev,
+            "kind": self.content.kind, "body": self.content.body,
+            "body_hash": self.content.hash, "hash": self.hash,
+        })
+    }
+
+    /// The entry as one line of canonical JSON, without its newline.
+    pub fn to_line(&self) -> Result<String, String> {
+        line_of(self.fields())
+    }
+
+    /// The same entry with its body purged.
+    pub fn purged(&self) -> Entry {
+        Entry {
+            content: self.content.purged(),
+            ..self.clone()
+        }
+    }
+
+    /// Parse a line and check everything the line can check on itself.
+    pub fn parse(line: &str) -> Result<Entry, String> {
+        Fields::read(line)?.entry()
+    }
+}
+
+/// Who sealed an entry, when, and their signature of the entry's hash.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Stamp {
     pub date: String,
     pub author: String,
     pub sig: String,
+}
+
+impl Stamp {
+    pub fn new(date: &str, author: &str, sig: &str) -> Stamp {
+        let (date, author, sig) = (date.into(), author.into(), sig.into());
+        Stamp { date, author, sig }
+    }
+}
+
+/// One record of `seals.jsonl`: the entry it seals, its stamp, the hash
+/// of the seal before it, and its own hash. The sealer signs the 32
+/// bytes of the entry's hash.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Seal {
+    pub entry: EntryId,
+    pub stamp: Stamp,
     pub prev: Option<String>,
     pub hash: String,
 }
 
 impl Seal {
     /// Make a seal record and its hash.
-    pub fn new(
-        seq: u64,
-        entry_hash: &str,
-        date: &str,
-        author: &str,
-        sig: &str,
-        prev: Option<&str>,
-    ) -> Result<Seal, String> {
-        let mut fields = json!({
-            "seq": seq, "entry_hash": entry_hash, "date": date,
-            "author": author, "sig": sig, "prev": prev,
-        });
-        fields["hash"] = json!(hash_of(&fields, false));
-        Seal::parse(&line_of(fields)?)
+    pub fn new(entry: EntryId, stamp: Stamp, prev: Option<&str>) -> Result<Seal, String> {
+        let (prev, hash) = (prev.map(String::from), String::new());
+        Seal {
+            entry,
+            stamp,
+            prev,
+            hash,
+        }
+        .hashed()
+    }
+
+    fn hashed(mut self) -> Result<Seal, String> {
+        self.hash = hash_of(&self.fields(), false);
+        Seal::parse(&self.to_line()?)
+    }
+
+    /// The seal's fields, as the format names them.
+    fn fields(&self) -> Value {
+        json!({
+            "seq": self.entry.seq, "entry_hash": self.entry.hash, "date": self.stamp.date,
+            "author": self.stamp.author, "sig": self.stamp.sig, "prev": self.prev,
+            "hash": self.hash,
+        })
     }
 
     pub fn to_line(&self) -> Result<String, String> {
-        line_of(json!({
-            "seq": self.seq, "entry_hash": self.entry_hash, "date": self.date,
-            "author": self.author, "sig": self.sig, "prev": self.prev, "hash": self.hash,
-        }))
+        line_of(self.fields())
     }
 
     pub fn parse(line: &str) -> Result<Seal, String> {
-        let f = Fields::read(line)?;
-        Ok(Seal {
-            seq: f.natural("seq")?,
-            entry_hash: f.hex("entry_hash", 32, HASH)?,
-            date: f.date()?,
-            author: f.hex("author", 32, "a key fingerprint, 64 lowercase hex digits")?,
-            sig: f.hex("sig", 64, "128 lowercase hex digits")?,
-            prev: f.prev_seal()?,
-            hash: f.own_hash(false)?,
-        })
+        Fields::read(line)?.seal()
     }
 }
 
@@ -530,7 +636,7 @@ mod tests {
         let e = Entry::new(1, None, "edit", json!({"text": "secret"})).unwrap();
         let p = Entry::parse(&e.purged().to_line().unwrap()).unwrap();
         assert_eq!(p.hash, e.hash);
-        assert_eq!(p.body, None);
+        assert_eq!(p.body(), None);
     }
 
     #[test]
@@ -770,15 +876,9 @@ mod tests {
         // Catches key or seal records that do not parse back to themselves.
         let k = Key::new(&[7u8; 32]).unwrap();
         assert_eq!(Key::parse(&k.to_line().unwrap()).unwrap(), k);
-        let s = Seal::new(
-            1,
-            &"ab".repeat(32),
-            "2026-11-12T09:30:00Z",
-            &k.fingerprint,
-            &"0".repeat(128),
-            None,
-        )
-        .unwrap();
+        let entry = EntryId::new(1, &"ab".repeat(32));
+        let stamp = Stamp::new("2026-11-12T09:30:00Z", &k.fingerprint, &"0".repeat(128));
+        let s = Seal::new(entry, stamp, None).unwrap();
         assert_eq!(Seal::parse(&s.to_line().unwrap()).unwrap(), s);
     }
 }

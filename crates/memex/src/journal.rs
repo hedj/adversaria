@@ -141,12 +141,12 @@ impl Journal {
             Some(t) => t,
             None => return Err(Error::Refused(format!("entry {target} does not exist"))),
         };
-        if t.kind == "purge" {
+        if t.kind() == "purge" {
             return Err(Error::Refused(format!(
                 "entry {target} is a purge, and cannot be purged"
             )));
         }
-        if t.body.is_none() {
+        if t.body().is_none() {
             return Err(Error::Refused(format!("entry {target} is already purged")));
         }
         let parent = self.last().map(|e| e.seq);
@@ -195,7 +195,7 @@ mod tests {
         j.append("edit", json!({"t": "a"})).unwrap();
         j.append("edit", json!({"t": "b"})).unwrap();
         let c = j.append_after(Some(1), "undo", json!({})).unwrap();
-        assert_eq!((c.seq, c.parent), (3, Some(1)));
+        assert_eq!((c.seq, c.parent_seq()), (3, Some(1)));
         let j2 = Journal::open(&d).unwrap();
         assert_eq!(j2.entries(), j.entries());
         fs::remove_dir_all(&d).unwrap();
@@ -213,7 +213,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(
-            e.body.unwrap(),
+            *e.body().unwrap(),
             json!({"t": "Bur\u{e9}", "\u{e9}": ["\u{e5}"]})
         );
         let text = fs::read_to_string(d.join(JOURNAL)).unwrap();
@@ -223,7 +223,7 @@ mod tests {
                 .is_err()
         );
         let p = j.purge(1, "Bure\u{301}").unwrap();
-        assert_eq!(p.body.unwrap()["reason"], json!("Bur\u{e9}"));
+        assert_eq!(p.body().unwrap()["reason"], json!("Bur\u{e9}"));
         fs::remove_dir_all(&d).unwrap();
     }
 
@@ -257,7 +257,7 @@ mod tests {
         let text = fs::read_to_string(d.join(JOURNAL)).unwrap();
         assert!(!text.contains("private"));
         let entries = chain::check_journal(&text).unwrap();
-        assert_eq!(entries[0].body, None);
+        assert_eq!(entries[0].body(), None);
         assert!(j.purge(1, "again").is_err());
         assert!(j.purge(3, "a purge").is_err());
         assert!(j.purge(9, "missing").is_err());

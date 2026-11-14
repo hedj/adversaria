@@ -10,6 +10,8 @@
 //!   body is null exactly when a purge names it.
 
 use crate::record::{self, Entry, JOURNAL, JOURNAL_FORMAT};
+use serde_json::Value;
+use std::collections::BTreeMap;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,11 +34,8 @@ impl fmt::Display for LineError {
 impl std::error::Error for LineError {}
 
 pub fn line_error(file: &str, line: usize, msg: impl Into<String>) -> LineError {
-    LineError {
-        file: file.into(),
-        line,
-        msg: msg.into(),
-    }
+    let (file, msg) = (file.into(), msg.into());
+    LineError { file, line, msg }
 }
 
 /// Split a file into its lines. Every line, the last included, must end in
@@ -57,81 +56,117 @@ pub fn lines<'a>(file: &str, text: &'a str) -> Result<Vec<&'a str>, LineError> {
     Ok(lines)
 }
 
-/// The purge body's target, if the body is well formed.
-fn purge_target(e: &Entry) -> Result<u64, String> {
-    let body = e
-        .body
-        .as_ref()
-        .ok_or("a purge entry cannot itself be purged")?;
-    let obj = body.as_object().unwrap();
-    let mut keys: Vec<&str> = obj.keys().map(String::as_str).collect();
-    keys.sort();
-    let target = obj.get("target").and_then(|t| t.as_u64());
-    match (
-        keys.as_slice(),
-        target,
-        obj.get("reason").map(|r| r.is_string()),
-    ) {
-        (["reason", "target"], Some(t), Some(true)) if t >= 1 => Ok(t),
-        _ => Err("a purge body is {\"reason\": text, \"target\": seq}".into()),
-    }
-}
-
 /// Check the whole journal; return its entries in order.
 pub fn check_journal(text: &str) -> Result<Vec<Entry>, LineError> {
     let lines = lines(JOURNAL, text)?;
     record::check_header(lines[0], JOURNAL_FORMAT).map_err(|m| line_error(JOURNAL, 1, m))?;
-    let mut entries: Vec<Entry> = Vec::with_capacity(lines.len() - 1);
-    // purged_by[i]: the seq of the purge entry that names entry i + 1.
-    let mut purged_by: Vec<Option<u64>> = Vec::with_capacity(lines.len() - 1);
-    for (i, line) in lines.iter().enumerate().skip(1) {
-        let n = i + 1;
-        let err = |m: String| line_error(JOURNAL, n, m);
-        let e = Entry::parse(line).map_err(err)?;
-        if e.seq != i as u64 {
-            return Err(err(format!("seq is {}, expected {i}", e.seq)));
-        }
-        match e.parent {
-            None if e.seq != 1 => return Err(err("only entry 1 may have no parent".into())),
-            Some(p) if entries[p as usize - 1].hash != *e.prev.as_ref().unwrap() => {
-                return Err(err(format!("prev is not the hash of entry {p}")));
-            }
-            _ => {}
-        }
-        if e.kind == "purge" {
-            let t = purge_target(&e).map_err(err)?;
-            if t >= e.seq {
-                return Err(err("a purge must name an earlier entry".into()));
-            }
-            let ti = t as usize - 1;
-            if entries[ti].kind == "purge" {
-                return Err(err(format!("entry {t} is a purge, and cannot be purged")));
-            }
-            if let Some(by) = purged_by[ti] {
-                return Err(err(format!("entry {t} was already purged by entry {by}")));
-            }
-            if entries[ti].body.is_some() {
-                return Err(line_error(
-                    JOURNAL,
-                    ti + 2,
-                    format!("purged by entry {}, but its body is still here", e.seq),
-                ));
-            }
-            purged_by[ti] = Some(e.seq);
-        }
-        entries.push(e);
-        purged_by.push(None);
+    let mut journal = Journal::default();
+    for line in &lines[1..] {
+        journal.read(line)?;
     }
-    for (i, e) in entries.iter().enumerate() {
-        if e.body.is_none() && purged_by[i].is_none() {
-            return Err(line_error(
-                JOURNAL,
-                i + 2,
-                "body is null, but no purge entry names it",
-            ));
+    journal.finish()
+}
+
+/// A journal being checked: the entries read so far, and for each one
+/// that a purge names, the number of that purge.
+#[derive(Default)]
+struct Journal {
+    entries: Vec<Entry>,
+    purged_by: BTreeMap<u64, u64>,
+}
+
+/// An error at an entry's line: entry n is on line n + 1.
+fn fault(seq: u64, msg: impl Into<String>) -> LineError {
+    line_error(JOURNAL, seq as usize + 1, msg)
+}
+
+impl Journal {
+    /// The number the next entry must have.
+    fn next(&self) -> u64 {
+        self.entries.len() as u64 + 1
+    }
+
+    /// An entry already read.
+    fn entry(&self, seq: u64) -> &Entry {
+        &self.entries[seq as usize - 1]
+    }
+
+    /// Read the next line: an entry in its place, which may purge another.
+    fn read(&mut self, line: &str) -> Result<(), LineError> {
+        let n = self.next();
+        let e = Entry::parse(line).map_err(|m| fault(n, m))?;
+        self.check_place(&e).map_err(|m| fault(n, m))?;
+        if e.kind() == "purge" {
+            self.purge(&e)?;
+        }
+        self.entries.push(e);
+        Ok(())
+    }
+
+    /// An entry has the next number, and follows an entry already read,
+    /// whose hash it gives; only entry 1 follows none.
+    fn check_place(&self, e: &Entry) -> Result<(), String> {
+        if e.seq != self.next() {
+            return Err(format!("seq is {}, expected {}", e.seq, self.next()));
+        }
+        match &e.parent {
+            None if e.seq != 1 => Err("only entry 1 may have no parent".into()),
+            Some(p) if self.entry(p.seq).hash != p.hash => {
+                Err(format!("prev is not the hash of entry {}", p.seq))
+            }
+            _ => Ok(()),
         }
     }
-    Ok(entries)
+
+    /// Note a purge: the entry it names must have no body left.
+    fn purge(&mut self, e: &Entry) -> Result<(), LineError> {
+        let target = self.purge_target(e).map_err(|m| fault(e.seq, m))?;
+        if self.entry(target).body().is_some() {
+            let msg = format!("purged by entry {}, but its body is still here", e.seq);
+            return Err(fault(target, msg));
+        }
+        self.purged_by.insert(target, e.seq);
+        Ok(())
+    }
+
+    /// The entry a purge names: an earlier one, which is not a purge and
+    /// was not purged before.
+    fn purge_target(&self, e: &Entry) -> Result<u64, String> {
+        let t = named_target(e)?;
+        if t >= e.seq {
+            return Err("a purge must name an earlier entry".into());
+        }
+        if self.entry(t).kind() == "purge" {
+            return Err(format!("entry {t} is a purge, and cannot be purged"));
+        }
+        match self.purged_by.get(&t) {
+            Some(by) => Err(format!("entry {t} was already purged by entry {by}")),
+            None => Ok(t),
+        }
+    }
+
+    /// The entries, if each one without a body is named by a purge.
+    fn finish(self) -> Result<Vec<Entry>, LineError> {
+        let unnamed = |e: &&Entry| e.body().is_none() && !self.purged_by.contains_key(&e.seq);
+        if let Some(e) = self.entries.iter().find(unnamed) {
+            return Err(fault(e.seq, "body is null, but no purge entry names it"));
+        }
+        Ok(self.entries)
+    }
+}
+
+/// The entry a purge's body names.
+fn named_target(e: &Entry) -> Result<u64, String> {
+    let body = e.body().ok_or("a purge entry cannot itself be purged")?;
+    let target = target_of(body);
+    target.ok_or("a purge body is {\"reason\": text, \"target\": seq}".into())
+}
+
+/// The target of a body that is exactly {"reason": text, "target": seq}.
+fn target_of(body: &Value) -> Option<u64> {
+    let obj = body.as_object().filter(|o| o.len() == 2)?;
+    obj.get("reason").filter(|r| r.is_string())?;
+    obj.get("target")?.as_u64().filter(|t| *t >= 1)
 }
 
 #[cfg(test)]
@@ -261,5 +296,24 @@ mod tests {
             .unwrap(),
         );
         assert_eq!(check_journal(&journal(&bad_body)).unwrap_err().line, 5);
+    }
+
+    /// The error from a journal of one purged entry and a purge of it
+    /// with this body.
+    fn purge_with(body: serde_json::Value) -> String {
+        let a = Entry::new(1, None, "edit", json!({})).unwrap();
+        let p = Entry::new(2, Some((1, &a.hash)), "purge", body).unwrap();
+        check_journal(&journal(&[a.purged(), p])).unwrap_err().msg
+    }
+
+    #[test]
+    fn a_purge_body_is_exactly_a_reason_and_a_target() {
+        // Catches a reason that is not text, or a further field, accepted.
+        let shape = "a purge body is {\"reason\": text, \"target\": seq}";
+        let faults = [
+            purge_with(json!({"reason": 5, "target": 1})),
+            purge_with(json!({"reason": "r", "target": 1, "more": 0})),
+        ];
+        assert_eq!(faults, [shape, shape]);
     }
 }

@@ -53,20 +53,17 @@ pub struct Report {
 /// The kind of action an entry is, or None for an observation (or the first
 /// entry, which the memex writes itself).
 pub fn kind(e: &Entry) -> Option<&'static str> {
-    let op = e.body.as_ref().and_then(|b| b["op"].as_str()).unwrap_or("");
-    match (e.kind.as_str(), op) {
+    let op = e.body().and_then(|b| b["op"].as_str()).unwrap_or("");
+    match (e.kind(), op) {
         ("edit", "init") => None,
         ("edit", "facts")
-            if e.body
-                .as_ref()
+            if e.body()
                 .is_some_and(|b| b.to_string().contains("\"ruling\"")) =>
         {
             Some("checking")
         }
         ("edit", _) | ("link", _) | ("name", _)
-            if e.body
-                .as_ref()
-                .is_some_and(|b| b.get("suggestion").is_some()) =>
+            if e.body().is_some_and(|b| b.get("suggestion").is_some()) =>
         {
             Some("deciding")
         }
@@ -101,26 +98,26 @@ pub fn measure(entries: &[Entry]) -> Report {
     let mut adopted = Vec::new();
     let retracted: BTreeSet<u64> = entries
         .iter()
-        .filter(|e| e.kind == "retract")
-        .filter_map(|e| e.body.as_ref().and_then(|b| b["target"].as_u64()))
+        .filter(|e| e.kind() == "retract")
+        .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
         .collect();
     let (mut seen_v, mut seen_d, mut corrected) =
         (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
     let mut last: Vec<String> = Vec::new();
     for e in entries {
-        let op = e.body.as_ref().and_then(|b| b["op"].as_str());
+        let op = e.body().and_then(|b| b["op"].as_str());
         match kind(e) {
             Some(k) => *r.actions.get_mut(k).unwrap() += 1,
-            None if e.kind == "view" && matches!(op, Some("observed" | "offer")) => {
+            None if e.kind() == "view" && matches!(op, Some("observed" | "offer")) => {
                 r.observations += 1
             }
             None => r.unclassified += 1,
         }
-        let Some(b) = &e.body else { continue };
+        let Some(b) = &e.body() else { continue };
         if b.get("suggestion").is_some() {
             adopted.push(e.seq);
         }
-        match (e.kind.as_str(), b["op"].as_str()) {
+        match (e.kind(), b["op"].as_str()) {
             ("view", Some("offer")) => offered.extend(
                 b["keys"]
                     .as_array()

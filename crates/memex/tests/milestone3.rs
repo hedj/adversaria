@@ -155,10 +155,10 @@ fn scene_one_as_written() {
     assert_eq!(after.len(), before + 1, "one entry, for the Leap");
     let leap = after.last().unwrap();
     assert_eq!(
-        (leap.kind.as_str(), &leap.body.as_ref().unwrap()["op"]),
+        (leap.kind(), &leap.body().unwrap()["op"]),
         ("view", &json!("leap"))
     );
-    assert_eq!(leap.body.as_ref().unwrap()["pattern"], json!("dra"));
+    assert_eq!(leap.body().unwrap()["pattern"], json!("dra"));
 
     let s = screen(&app, 140, 40);
     let right: Vec<String> = s
@@ -291,10 +291,10 @@ fn undo_redo_and_branches() {
         .journal()
         .entries()
         .iter()
-        .find(|e| e.seq > undo_seq && e.kind == "edit")
+        .find(|e| e.seq > undo_seq && e.kind() == "edit")
         .unwrap();
     assert_eq!(
-        e.parent,
+        e.parent_seq(),
         Some(undo_seq),
         "the edit follows the undo: a new branch"
     );
@@ -303,7 +303,7 @@ fn undo_redo_and_branches() {
         app.journal()
             .entries()
             .iter()
-            .any(|e| e.body.as_ref().is_some_and(|b| b["add"] == "second"))
+            .any(|e| e.body().is_some_and(|b| b["add"] == "second"))
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -387,7 +387,7 @@ fn replay_reproduces_the_screen() {
         .entries()
         .iter()
         .rev()
-        .find(|e| e.kind == "link")
+        .find(|e| e.kind() == "link")
         .unwrap()
         .seq;
     command(&mut app, &format!("retract {to_retract}"));
@@ -412,12 +412,8 @@ fn replay_reproduces_the_screen() {
     assert_eq!(replayed.outline, app.outline);
     assert_eq!(app.world, "the flight was in 1989");
     // Every kind the session used is in the journal.
-    let kinds: std::collections::BTreeSet<&str> = app
-        .journal()
-        .entries()
-        .iter()
-        .map(|e| e.kind.as_str())
-        .collect();
+    let kinds: std::collections::BTreeSet<&str> =
+        app.journal().entries().iter().map(|e| e.kind()).collect();
     for k in [
         "edit", "link", "name", "undo", "redo", "retract", "suppose", "view",
     ] {

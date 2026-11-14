@@ -105,11 +105,11 @@ fn markdown_round_trip_keeps_structure_citations_and_mathematics() {
         .journal()
         .entries()
         .iter()
-        .find(|e| e.kind == "import")
+        .find(|e| e.kind() == "import")
         .unwrap()
         .clone();
     assert_eq!(
-        imp.body.as_ref().unwrap()["losses"],
+        imp.body().unwrap()["losses"],
         serde_json::json!({"footnote": 1, "image": 1}),
         "losses recorded"
     );
@@ -378,7 +378,7 @@ fn the_quote_check() {
     assert_eq!(app.message, "quote check: misquoted");
     let e = app.journal().entries().last().unwrap();
     assert!(
-        memex::reason::show(&format::terms::decode(&e.body.as_ref().unwrap()["facts"][0]).unwrap())
+        memex::reason::show(&format::terms::decode(&e.body().unwrap()["facts"][0]).unwrap())
             .starts_with(&format!("ruling({item}, quote, misquoted, "))
     );
     std::fs::remove_dir_all(&dir).unwrap();

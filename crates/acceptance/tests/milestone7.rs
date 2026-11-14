@@ -49,11 +49,7 @@ pub fn session(dir: &Path) -> App {
         .journal()
         .entries()
         .iter()
-        .find(|e| {
-            e.body
-                .as_ref()
-                .is_some_and(|b| b.to_string().contains("1988"))
-        })
+        .find(|e| e.body().is_some_and(|b| b.to_string().contains("1988")))
         .unwrap()
         .seq;
     command(&mut app, &format!("retract {wrong}"));
@@ -70,7 +66,7 @@ pub fn session(dir: &Path) -> App {
         .entries()
         .iter()
         .rev()
-        .find(|e| e.kind == "adopt")
+        .find(|e| e.kind() == "adopt")
         .unwrap()
         .seq;
     command(&mut app, &format!("retract {adopted}"));
@@ -98,11 +94,8 @@ fn counts_match_a_hand_count() {
         .iter()
         .map(|e| {
             (
-                e.kind.clone(),
-                e.body.as_ref().unwrap()["op"]
-                    .as_str()
-                    .unwrap_or("")
-                    .to_string(),
+                e.kind().to_string(),
+                e.body().unwrap()["op"].as_str().unwrap_or("").to_string(),
             )
         })
         .collect();
@@ -215,7 +208,7 @@ fn runs_on_any_valid_journal() {
         .iter()
         .filter(|e| {
             tools::measures::kind(e).is_none()
-                && !(e.kind == "view" && e.body.as_ref().unwrap()["op"] == "observed")
+                && !(e.kind() == "view" && e.body().unwrap()["op"] == "observed")
         })
         .count();
     assert_eq!(r.unclassified, unknown);

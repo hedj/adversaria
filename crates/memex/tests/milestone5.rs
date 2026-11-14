@@ -119,11 +119,11 @@ fn a_planted_wrong_date_is_reported_against_wikidata() {
     );
     command(&mut app, &format!("import wikidata {FIXTURE}"));
     let import = app.journal().entries().last().unwrap().clone();
-    assert_eq!(import.kind, "import");
-    assert_eq!(import.body.as_ref().unwrap()["source"], "Wikidata");
+    assert_eq!(import.kind(), "import");
+    assert_eq!(import.body().unwrap()["source"], "Wikidata");
     assert!(
         dir.join("blobs")
-            .join(import.body.as_ref().unwrap()["blob"].as_str().unwrap())
+            .join(import.body().unwrap()["blob"].as_str().unwrap())
             .exists()
     );
     // The spaceplane, not the village of the same name, comes first.
@@ -145,10 +145,10 @@ fn a_planted_wrong_date_is_reported_against_wikidata() {
         .entries()
         .iter()
         .rev()
-        .find(|e| e.kind == "adopt")
+        .find(|e| e.kind() == "adopt")
         .unwrap();
     assert!(
-        adopt.body.as_ref().unwrap()["suggestion"]["evidence"]
+        adopt.body().unwrap()["suggestion"]["evidence"]
             .as_str()
             .unwrap()
             .contains("Q2548"),
@@ -190,7 +190,7 @@ fn wikidata_offers_its_own_constraint() {
     );
     let e = app.journal().entries().last().unwrap();
     assert_eq!(
-        (e.kind.as_str(), &e.body.as_ref().unwrap()["op"]),
+        (e.kind(), &e.body().unwrap()["op"]),
         ("adopt", &serde_json::json!("constraint"))
     );
     assert!(
@@ -220,7 +220,7 @@ fn a_mined_rule_shows_its_evidence_and_derives_once_adopted() {
     accept(&mut app, "rule located_in(_");
     let e = app.journal().entries().last().unwrap();
     assert!(
-        e.body.as_ref().unwrap()["suggestion"]["evidence"]
+        e.body().unwrap()["suggestion"]["evidence"]
             .as_str()
             .unwrap()
             .contains("support 2, confidence 1.00, 0 exceptions")
@@ -328,13 +328,7 @@ fn the_pane_keeps_its_rules() {
     command(&mut app, "dismiss 1");
     assert!(!described(&app).contains(&first));
     assert_eq!(
-        app.journal()
-            .entries()
-            .last()
-            .unwrap()
-            .body
-            .as_ref()
-            .unwrap()["op"],
+        app.journal().entries().last().unwrap().body().unwrap()["op"],
         "dismiss"
     );
     // With the pane in focus, the order holds while new evidence arrives.

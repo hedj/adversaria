@@ -441,10 +441,10 @@ impl App {
 
     pub fn apply(&mut self, e: &Entry) {
         // The order before the change is needed only if an item may vanish.
-        let may_remove = match e.kind.as_str() {
+        let may_remove = match e.kind() {
             "view" => false,
-            k if CONTENT.contains(&k) && e.parent == Some(self.tip) => {
-                e.body.as_ref().is_some_and(|b| b["op"] == "delete")
+            k if CONTENT.contains(&k) && e.parent_seq() == Some(self.tip) => {
+                e.body().is_some_and(|b| b["op"] == "delete")
             }
             _ => true,
         };
@@ -453,10 +453,10 @@ impl App {
         } else {
             vec![]
         };
-        match e.kind.as_str() {
+        match e.kind() {
             "view" => {
-                let jump = e.parent != Some(self.tip);
-                if let Some(b) = &e.body {
+                let jump = e.parent_seq() != Some(self.tip);
+                if let Some(b) = &e.body() {
                     self.view.restore(b);
                     if b["op"] == "leap" {
                         self.last_leap = b["pattern"]
@@ -499,7 +499,7 @@ impl App {
                 }
             }
             "undo" => {
-                if let Some(t) = e.body.as_ref().and_then(|b| b["undoes"].as_u64()) {
+                if let Some(t) = e.body().and_then(|b| b["undoes"].as_u64()) {
                     self.redo.push(t);
                 }
                 self.tip = e.seq;
@@ -511,22 +511,22 @@ impl App {
                 self.rebuild();
             }
             _ => {
-                let incremental = e.parent == Some(self.tip) && CONTENT.contains(&e.kind.as_str());
+                let incremental = e.parent_seq() == Some(self.tip) && CONTENT.contains(&e.kind());
                 self.tip = e.seq;
                 if incremental {
-                    if let Some(b) = &e.body {
-                        self.outline.apply(e.seq, &e.kind, b);
+                    if let Some(b) = &e.body() {
+                        self.outline.apply(e.seq, e.kind(), b);
                     }
                 } else {
                     self.rebuild();
                 }
-                if e.kind != "purge" {
+                if e.kind() != "purge" {
                     self.redo.clear();
                 }
-                if e.kind == "suppose"
-                    && let Some(b) = &e.body
+                if e.kind() == "suppose"
+                    && let Some(b) = &e.body()
                 {
-                    let actual = e.parent.unwrap_or(1);
+                    let actual = e.parent_seq().unwrap_or(1);
                     let name = b["name"].as_str().unwrap_or("supposed").to_string();
                     self.supposition = Some(Supposition { name, actual });
                 }
@@ -546,7 +546,7 @@ impl App {
         while let Some(s) = at {
             let Some(e) = self.entry(s) else { break };
             out.push(e);
-            at = e.parent;
+            at = e.parent_seq();
         }
         out.reverse();
         out
@@ -558,24 +558,22 @@ impl App {
         let path = self.path(tip);
         let mut retracted: HashSet<u64> = path
             .iter()
-            .filter(|e| e.kind == "retract")
-            .filter_map(|e| e.body.as_ref().and_then(|b| b["target"].as_u64()))
+            .filter(|e| e.kind() == "retract")
+            .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
             .collect();
         retracted.extend(skip);
         let mut o = Outline::default();
         let mut world = "actual".to_string();
         let mut failed = Vec::new();
         for e in path {
-            if !CONTENT.contains(&e.kind.as_str()) || retracted.contains(&e.seq) {
+            if !CONTENT.contains(&e.kind()) || retracted.contains(&e.seq) {
                 continue;
             }
-            let Some(b) = &e.body else { continue };
-            if e.kind == "suppose" {
+            let Some(b) = &e.body() else { continue };
+            if e.kind() == "suppose" {
                 world = b["name"].as_str().unwrap_or("supposed").to_string();
             }
-            if !o.apply(e.seq, &e.kind, b)
-                && !matches!(e.kind.as_str(), "suppose" | "adopt" | "import")
-            {
+            if !o.apply(e.seq, e.kind(), b) && !matches!(e.kind(), "suppose" | "adopt" | "import") {
                 failed.push(e.seq);
             }
         }
@@ -1378,14 +1376,14 @@ impl App {
         let path = self.path(head);
         let retracted: HashSet<u64> = path
             .iter()
-            .filter(|e| e.kind == "retract")
-            .filter_map(|e| e.body.as_ref().and_then(|b| b["target"].as_u64()))
+            .filter(|e| e.kind() == "retract")
+            .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
             .collect();
         path.iter()
             .rev()
-            .filter(|e| e.kind == "import" && !retracted.contains(&e.seq))
+            .filter(|e| e.kind() == "import" && !retracted.contains(&e.seq))
             .find_map(|e| {
-                let b = e.body.as_ref()?;
+                let b = e.body()?;
                 let blob = b["blob"].as_str()?;
                 (b["source"] == "Wikidata").then(|| {
                     (
@@ -1582,9 +1580,8 @@ impl App {
             .path(self.tip)
             .iter()
             .filter(|e| {
-                e.kind == "import"
-                    && e.body
-                        .as_ref()
+                e.kind() == "import"
+                    && e.body()
                         .is_some_and(|b| b["format"] == "document" && b["file"] == name.as_str())
             })
             .map(|e| e.seq)
@@ -1744,13 +1741,16 @@ impl App {
         let path = self.path(self.tip);
         let retracted: HashSet<u64> = path
             .iter()
-            .filter(|e| e.kind == "retract")
-            .filter_map(|e| e.body.as_ref().and_then(|b| b["target"].as_u64()))
+            .filter(|e| e.kind() == "retract")
+            .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
             .collect();
         let actual = self.outline_at(s.actual);
         let mut out = Vec::new();
-        for e in path.iter().filter(|e| e.seq > s.actual && e.kind == "edit") {
-            let Some(b) = &e.body else { continue };
+        for e in path
+            .iter()
+            .filter(|e| e.seq > s.actual && e.kind() == "edit")
+        {
+            let Some(b) = &e.body() else { continue };
             let item = b["item"].as_u64().unwrap_or(e.seq);
             let num = |o: &Outline| o.number(item);
             let what = match b["op"].as_str() {
@@ -1906,9 +1906,8 @@ impl App {
         let mut out = BTreeMap::new();
         for e in self.path(self.tip) {
             let Some(b) = e
-                .body
-                .as_ref()
-                .filter(|b| e.kind == "import" && b["format"] == "memex-results")
+                .body()
+                .filter(|b| e.kind() == "import" && b["format"] == "memex-results")
             else {
                 continue;
             };
@@ -1950,7 +1949,7 @@ impl App {
             .and_then(|i| i.origin)
             .ok_or("the target was not imported from a document")?;
         let e = self.entry(origin).ok_or("no import entry")?;
-        let b = e.body.clone().ok_or("the import was purged")?;
+        let b = e.body().cloned().ok_or("the import was purged")?;
         let file = b["file"].as_str().unwrap_or("");
         let fmt = crate::docs::format_of(std::path::Path::new(file))
             .ok_or("the import is not a document")?;
@@ -2098,10 +2097,10 @@ impl App {
         let mut at = Some(from);
         while let Some(s) = at {
             let e = self.entry(s)?;
-            if CONTENT.contains(&e.kind.as_str()) || e.kind == "retract" {
+            if CONTENT.contains(&e.kind()) || e.kind() == "retract" {
                 return Some(s);
             }
-            at = e.parent;
+            at = e.parent_seq();
         }
         None
     }
@@ -2114,11 +2113,11 @@ impl App {
             .iter()
             .find(|e| e.seq == t)
             .ok_or(format!("entry {t} is not in this world"))?;
-        if t == 1 || !CONTENT.contains(&e.kind.as_str()) {
-            return Err(format!("entry {t} ({}) cannot be retracted", e.kind));
+        if t == 1 || !CONTENT.contains(&e.kind()) {
+            return Err(format!("entry {t} ({}) cannot be retracted", e.kind()));
         }
         let already = path.iter().any(|x| {
-            x.kind == "retract" && x.body.as_ref().and_then(|b| b["target"].as_u64()) == Some(t)
+            x.kind() == "retract" && x.body().and_then(|b| b["target"].as_u64()) == Some(t)
         });
         if already {
             return Err(format!("entry {t} is already retracted"));

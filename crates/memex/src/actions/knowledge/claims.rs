@@ -137,5 +137,5 @@ fn check_adoptable(claims: &[(u64, String, Term)]) -> Result<(), String> {
 
 /// Whether an entry adopts a claim of an item.
 fn adopts(e: &Entry, item: u64) -> bool {
-    e.kind == "adopt" && e.body.as_ref().and_then(|b| b["item"].as_u64()) == Some(item)
+    e.kind() == "adopt" && e.body().and_then(|b| b["item"].as_u64()) == Some(item)
 }

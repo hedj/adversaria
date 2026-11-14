@@ -190,9 +190,9 @@ fn adopting_turns_a_disagreement_into_a_violation_and_back() {
     leap(&mut app, "talk notes");
     tap(&mut app, Key::F(3));
     let adopt = app.journal().entries().last().unwrap().clone();
-    assert_eq!(adopt.kind, "adopt");
+    assert_eq!(adopt.kind(), "adopt");
     assert_eq!(
-        adopt.body.as_ref().unwrap()["source"],
+        adopt.body().unwrap()["source"],
         "my notes, conference talk",
         "the belief keeps its evidence"
     );
@@ -243,13 +243,7 @@ fn interrogation_answers_its_five_questions() {
     s2.assert("Insert adopts · command unadopt retracts an adoption");
     app.bindings = memex::config::Config::default().bindings;
     assert_eq!(
-        app.journal()
-            .entries()
-            .last()
-            .unwrap()
-            .body
-            .as_ref()
-            .unwrap()["op"],
+        app.journal().entries().last().unwrap().body().unwrap()["op"],
         "interrogate",
         "interrogation is journaled as an action"
     );
@@ -303,9 +297,9 @@ fn scene_three_as_written() {
         .journal()
         .entries()
         .iter()
-        .find(|e| e.kind == "suppose")
+        .find(|e| e.kind() == "suppose")
         .unwrap();
-    assert_eq!(sup.parent, Some(actual_head));
+    assert_eq!(sup.parent_seq(), Some(actual_head));
     // Close it: back to the actual world, the branch kept.
     command(&mut app, "close");
     app.evaluate().unwrap();
@@ -319,7 +313,10 @@ fn scene_three_as_written() {
         actual_facts
     );
     assert!(
-        app.journal().entries().iter().any(|e| e.kind == "suppose"),
+        app.journal()
+            .entries()
+            .iter()
+            .any(|e| e.kind() == "suppose"),
         "the supposition stays in the journal"
     );
     std::fs::remove_dir_all(&dir).unwrap();
@@ -496,9 +493,9 @@ fn ended_by(app: &App) -> &'static str {
         .entries()
         .iter()
         .rev()
-        .find(|e| e.kind == "view" && e.body.as_ref().is_some_and(|b| b["op"] == "world"))
+        .find(|e| e.kind() == "view" && e.body().is_some_and(|b| b["op"] == "world"))
         .expect("a world-ending view entry");
-    let b = e.body.as_ref().unwrap();
+    let b = e.body().unwrap();
     ["close", "commit"]
         .into_iter()
         .find(|k| b[*k] == true)

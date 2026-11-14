@@ -88,10 +88,10 @@ fn last_kind(app: &App) -> String {
         .entries()
         .iter()
         .rev()
-        .find(|e| e.kind != "view")
+        .find(|e| e.kind() != "view")
         .unwrap()
-        .kind
-        .clone()
+        .kind()
+        .to_string()
 }
 
 /// Three items, the middle one under the first, with a claim to adopt.

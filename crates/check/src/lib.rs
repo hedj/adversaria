@@ -69,26 +69,31 @@ pub fn check_seals(
     for (i, line) in lines.iter().enumerate().skip(1) {
         let err = |m: String| line_error(SEALS, i + 1, m);
         let s = Seal::parse(line).map_err(err)?;
-        if s.seq != i as u64 {
-            return Err(err(format!("seq is {}, expected {i}", s.seq)));
+        if s.entry.seq != i as u64 {
+            return Err(err(format!("seq is {}, expected {i}", s.entry.seq)));
         }
         let Some(e) = entries.get(i - 1) else {
             return Err(err(format!(
                 "seals entry {i}, which the journal does not hold"
             )));
         };
-        if s.entry_hash != e.hash {
+        if s.entry.hash != e.hash {
             return Err(err(format!("entry_hash is not the hash of entry {i}")));
         }
         if s.prev.as_ref() != seals.last().map(|p| &p.hash) {
             return Err(err("prev is not the hash of the seal before".into()));
         }
-        let Some(k) = keys.iter().find(|k| k.fingerprint == s.author) else {
+        let Some(k) = keys.iter().find(|k| k.fingerprint == s.stamp.author) else {
             return Err(err("author is not a key in keys.jsonl".into()));
         };
         let vk = VerifyingKey::from_bytes(&k.bytes()).expect("checked in check_keys");
-        let sig = Signature::from_bytes(&record::from_hex(&s.sig, 64).unwrap().try_into().unwrap());
-        let msg = record::from_hex(&s.entry_hash, 32).unwrap();
+        let sig = Signature::from_bytes(
+            &record::from_hex(&s.stamp.sig, 64)
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        );
+        let msg = record::from_hex(&s.entry.hash, 32).unwrap();
         if vk.verify_strict(&msg, &sig).is_err() {
             return Err(err("the signature does not verify".into()));
         }

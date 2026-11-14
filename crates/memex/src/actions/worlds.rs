@@ -19,7 +19,7 @@ impl App {
     }
 
     fn parent_of(&self, seq: u64) -> Option<u64> {
-        self.entry(seq).and_then(|e| e.parent)
+        self.entry(seq).and_then(|e| e.parent_seq())
     }
 
     pub(crate) fn cmd_redo(&mut self, _: &[&str], _: u64) -> Result<(), String> {

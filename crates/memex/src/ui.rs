@@ -1034,15 +1034,15 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
             .entries()
             .iter()
             .filter(|x| {
-                x.kind == "adopt" && x.body.as_ref().is_some_and(|b| b["source"] == src.as_str())
+                x.kind() == "adopt" && x.body().is_some_and(|b| b["source"] == src.as_str())
             })
             .collect();
         let retracted = path_adopts
             .iter()
             .filter(|a| {
                 app.journal().entries().iter().any(|r| {
-                    r.kind == "retract"
-                        && r.body.as_ref().and_then(|b| b["target"].as_u64()) == Some(a.seq)
+                    r.kind() == "retract"
+                        && r.body().and_then(|b| b["target"].as_u64()) == Some(a.seq)
                 })
             })
             .count();
@@ -1074,7 +1074,7 @@ fn hint(app: &App) -> Option<(String, String)> {
         .journal()
         .entries()
         .iter()
-        .filter(|x| x.kind == "suppose")
+        .filter(|x| x.kind() == "suppose")
         .count();
     let left = 4usize.checked_sub(used).filter(|n| *n > 0)?;
     Some((

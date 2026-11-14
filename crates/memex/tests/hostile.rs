@@ -246,7 +246,7 @@ fn a_wikidata_file_holds_only_ground_facts_of_its_three_shapes() {
         assert!(
             !app.journal().entries()[before..]
                 .iter()
-                .any(|e| e.kind == "import"),
+                .any(|e| e.kind() == "import"),
             "{what}: the import was written"
         );
     }

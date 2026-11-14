@@ -6,7 +6,7 @@
 
 use ed25519_dalek::{Signer, SigningKey};
 use format::chain::{self, LineError};
-use format::record::{self, JOURNAL, KEYS, KEYS_FORMAT, Key, SEALS, SEALS_FORMAT, Seal};
+use format::record::{self, JOURNAL, KEYS, KEYS_FORMAT, Key, SEALS, SEALS_FORMAT, Seal, Stamp};
 use std::fmt;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -166,15 +166,8 @@ pub fn seal_pending(
         let hash = record::from_hex(&e.hash, 32).expect("checked");
         let sig = record::to_hex(&key.sign(&hash).to_bytes());
         let date = utc_date(clock());
-        let s = Seal::new(
-            e.seq,
-            &e.hash,
-            &date,
-            &me.fingerprint,
-            &sig,
-            prev.as_deref(),
-        )
-        .map_err(Error::Refused)?;
+        let stamp = Stamp::new(&date, &me.fingerprint, &sig);
+        let s = Seal::new(e.id(), stamp, prev.as_deref()).map_err(Error::Refused)?;
         lines += &(s.to_line().map_err(Error::Refused)? + "\n");
         prev = Some(s.hash);
     }

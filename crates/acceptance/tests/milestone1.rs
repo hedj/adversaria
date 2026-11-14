@@ -114,11 +114,11 @@ fn ten_thousand_entries_check() {
         (r.entries.len(), r.seals.len(), r.keys.len(), r.blobs),
         (10_000, 10_000, 1, 1)
     );
-    assert_eq!(r.entries.iter().filter(|e| e.body.is_none()).count(), 20);
+    assert_eq!(r.entries.iter().filter(|e| e.body().is_none()).count(), 20);
     assert!(
         r.entries
             .iter()
-            .any(|e| e.parent != Some(e.seq - 1) && e.seq > 1),
+            .any(|e| e.parent_seq() != Some(e.seq - 1) && e.seq > 1),
         "no branch was made"
     );
     cleanup(&dir, &key);
@@ -219,7 +219,7 @@ fn purged_entry_still_verifies() {
     j.purge(1, "privacy").unwrap();
     assert_eq!(sealer::seal_pending(&dir, &k, &clock).unwrap(), 1);
     let r = check::check_dir(&dir).unwrap();
-    assert_eq!(r.entries[0].body, None);
+    assert_eq!(r.entries[0].body(), None);
     assert!(
         !fs::read_to_string(dir.join(JOURNAL))
             .unwrap()
@@ -295,35 +295,21 @@ fn forged_seal_refused() {
     let s = format::record::Seal::parse(lines[2]).unwrap();
     let sig = format!(
         "{}{}",
-        &s.sig[..127],
-        if s.sig.ends_with('0') { "1" } else { "0" }
+        &s.stamp.sig[..127],
+        if s.stamp.sig.ends_with('0') { "1" } else { "0" }
     );
-    let forged = format::record::Seal::new(
-        s.seq,
-        &s.entry_hash,
-        &s.date,
-        &s.author,
-        &sig,
-        s.prev.as_deref(),
-    )
-    .unwrap();
+    let stamp = format::record::Stamp { sig, ..s.stamp };
+    let forged = format::record::Seal::new(s.entry, stamp, s.prev.as_deref()).unwrap();
     let mut out: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
     out[2] = forged.to_line().unwrap();
     // Re-chain the seals after it, so only the signature is wrong.
     for i in 3..out.len() {
         let t = format::record::Seal::parse(&out[i]).unwrap();
         let prev = format::record::Seal::parse(&out[i - 1]).unwrap().hash;
-        out[i] = format::record::Seal::new(
-            t.seq,
-            &t.entry_hash,
-            &t.date,
-            &t.author,
-            &t.sig,
-            Some(&prev),
-        )
-        .unwrap()
-        .to_line()
-        .unwrap();
+        out[i] = format::record::Seal::new(t.entry, t.stamp, Some(&prev))
+            .unwrap()
+            .to_line()
+            .unwrap();
     }
     fs::write(&p, out.join("\n") + "\n").unwrap();
     let e = check::check_dir(&dir).unwrap_err();
@@ -343,16 +329,18 @@ fn consistently_rewritten_journal_refused() {
     let old = chain::check_journal(&fs::read_to_string(&p).unwrap()).unwrap();
     let mut new: Vec<format::record::Entry> = vec![old[0].clone()];
     for e in &old[1..] {
-        let mut b = e.body.clone().unwrap();
+        let mut b = e.body().cloned().unwrap();
         if e.seq == 2 {
             b["text"] = json!("rewritten");
         }
-        let parent = e.parent.map(|p| (p, new[p as usize - 1].hash.clone()));
+        let parent = e
+            .parent_seq()
+            .map(|p| (p, new[p as usize - 1].hash.clone()));
         new.push(
             format::record::Entry::new(
                 e.seq,
                 parent.as_ref().map(|(p, h)| (*p, h.as_str())),
-                &e.kind,
+                e.kind(),
                 b,
             )
             .unwrap(),

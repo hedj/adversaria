@@ -23,7 +23,7 @@ pub fn facts(entries: &[Entry], head: u64) -> Result<Vec<(u64, Term)>, String> {
     while let Some(s) = at {
         let e = get(s)?;
         path.push(e);
-        at = e.parent;
+        at = e.parent_seq();
     }
     path.reverse();
     let mut on_path = std::collections::HashSet::new();
@@ -31,8 +31,8 @@ pub fn facts(entries: &[Entry], head: u64) -> Result<Vec<(u64, Term)>, String> {
     let mut retracted = std::collections::HashSet::new();
     for e in path {
         on_path.insert(e.seq);
-        let Some(body) = &e.body else { continue };
-        if e.kind == "retract" {
+        let Some(body) = &e.body() else { continue };
+        if e.kind() == "retract" {
             let t = body
                 .get("target")
                 .and_then(|t| t.as_u64())
@@ -43,7 +43,7 @@ pub fn facts(entries: &[Entry], head: u64) -> Result<Vec<(u64, Term)>, String> {
                     e.seq
                 ));
             }
-            if get(t)?.kind == "retract" {
+            if get(t)?.kind() == "retract" {
                 return Err(format!(
                     "entry {}: retracts a retraction; adopt the facts again instead",
                     e.seq

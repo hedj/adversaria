@@ -18,6 +18,13 @@ pub fn replay(dir: &Path) -> Result<Vec<Fact>, Error> {
     let entries = chain::check_journal(&text).map_err(Error::Format)?;
     Ok(entries
         .into_iter()
-        .map(|e| (e.seq, e.parent, e.kind, e.body))
+        .map(|e| {
+            (
+                e.seq,
+                e.parent_seq(),
+                e.kind().to_string(),
+                e.body().cloned(),
+            )
+        })
         .collect())
 }
