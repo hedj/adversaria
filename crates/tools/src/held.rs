@@ -23,7 +23,8 @@
 //! * The reader also holds each local that an earlier statement named and
 //!   a later one names again: it is carried across the statements between.
 //! * A field named in a struct literal or pattern is a piece of the
-//!   struct; written short (`Link { seq }`), it is the local alone.
+//!   struct; written short (`Link { seq }`), it is a piece that the local
+//!   of its name stands for, and is not counted beside the local.
 //!
 //! What it cannot see: types are known only for `self`, typed parameters
 //! and chains of fields from them. Elsewhere a method is found by name,
@@ -273,7 +274,8 @@ impl<'s, 'ast> Head<'s, 'ast> {
             return;
         }
         self.uses.sure.remove(&whole);
-        let each = pieces.iter().map(|p| format!("{name}.{p}"));
+        let full = pieces.iter().filter(|p| !p.starts_with(SHORT));
+        let each = full.map(|p| format!("{name}.{p}"));
         self.uses.sure.extend(each);
     }
 
@@ -370,13 +372,15 @@ impl<'s, 'ast> Head<'s, 'ast> {
         }
     }
 
-    /// A field named in a struct literal or pattern, written in full.
+    /// A field named in a struct literal or pattern: a piece of the
+    /// struct, marked where it is written short.
     fn named_field(&mut self, path: &syn::Path, member: &syn::Member, full: bool) {
         let owner = path.segments.last().map(|s| s.ident.to_string());
-        if let (true, Some(o), syn::Member::Named(f)) = (full, owner, member) {
+        if let (Some(o), syn::Member::Named(f)) = (owner, member) {
             let f = f.to_string();
+            let mark = if full { "" } else { SHORT };
             if self.scope.has(&o, &f) {
-                self.piece(&o, &f);
+                self.piece(&o, &format!("{mark}{f}"));
             }
         }
     }
@@ -402,6 +406,10 @@ impl<'s, 'ast> Head<'s, 'ast> {
         }
     }
 }
+
+/// Marks a piece written short in a literal or pattern: the local of its
+/// name is counted for it.
+const SHORT: &str = "=";
 
 /// What holds a piece reached through an expression of a known type: the
 /// local, if the expression is one (not `self`, the topic); else the type.
@@ -610,6 +618,17 @@ mod tests {
         let h = peak_of(src, "f");
         let all = vec!["local a", "local b", "local n", "type B"];
         assert_eq!((h.at, things(&h)), (0, all));
+    }
+
+    #[test]
+    fn two_short_fields_stand_for_the_struct_as_two_full_ones_do() {
+        // Catches the type counted beside its fields when they are
+        // written short, though not when written in full.
+        let src = "struct P { x: u8, y: u8 }\nfn f(x: u8, y: u8) { let _p = P { x, y }; }";
+        assert_eq!(
+            things(&peak_of(src, "f")),
+            ["local _p", "local x", "local y"]
+        );
     }
 
     #[test]
