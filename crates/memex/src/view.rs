@@ -2978,4 +2978,20 @@ mod tests {
         ];
         assert_eq!(drawn_and_found(&specs, 30, 8).1, places);
     }
+
+    #[test]
+    fn a_bars_label_is_centred_above_it() {
+        // Catches a bar's label moved off its centre, or drawn over the
+        // bar. The taller bar has no room for its label. The picture is
+        // what the code drew before the bars were given rectangles.
+        let want = [
+            "3 │                ████████",
+            "  │      1         ████████",
+            "  │  ████████      ████████",
+            "0 │  ████████      ████████",
+            "  └───────────────────────────",
+            "         a            b",
+        ];
+        assert_eq!(draw(&["bar x:a y:1", "bar x:b y:3"], 30, 6), want);
+    }
 }
