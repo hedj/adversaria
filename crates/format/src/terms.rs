@@ -53,6 +53,12 @@ impl fmt::Display for TermError {
 
 impl std::error::Error for TermError {}
 
+impl From<jcs::CanonicalError> for TermError {
+    fn from(e: jcs::CanonicalError) -> Self {
+        TermError(e.0)
+    }
+}
+
 fn err<T>(msg: impl Into<String>) -> Result<T, TermError> {
     Err(TermError(msg.into()))
 }
@@ -73,11 +79,9 @@ pub fn float_text(x: f64) -> Result<String, TermError> {
     if x == 0.0 {
         return Ok(if x.is_sign_negative() { "-0.0" } else { "0.0" }.into());
     }
-    let mut text = jcs::number(x).map_err(|e| TermError(e.0))?;
-    if !text.contains('.') && !text.contains('e') {
-        text.push_str(".0");
-    }
-    Ok(text)
+    let text = jcs::number(x)?;
+    let whole = !text.contains('.') && !text.contains('e');
+    Ok(if whole { text + ".0" } else { text })
 }
 
 /// Read a float's text; refuse any text that is not canonical.
@@ -128,49 +132,71 @@ fn keys(obj: &Map<String, Value>, want: &[&str]) -> Result<(), TermError> {
 /// A JSON value -> the term it encodes.
 pub fn decode(value: &Value) -> Result<Term, TermError> {
     match value {
-        Value::Number(n) => match n.as_i64() {
-            Some(i) => Ok(Term::Int(safe(i)?)),
-            None if n.is_u64() => err(format!("integer {n} exceeds 2^53 - 1")),
-            None => err(format!(
-                "bare number {n}: floats are written {{\"float\": text}}"
-            )),
-        },
+        Value::Number(n) => integer(n),
         Value::String(s) => Ok(Term::Str(s.clone())),
-        Value::Object(obj) => {
-            if let Some(text) = obj.get("float") {
-                keys(obj, &["float"])?;
-                let Value::String(text) = text else {
-                    return err("float text must be a string");
-                };
-                Ok(Term::Float(parse_float_text(text)?))
-            } else if let Some(name) = obj.get("a") {
-                keys(obj, &["a"])?;
-                let Value::String(name) = name else {
-                    return err("atom name must be a string");
-                };
-                Ok(Term::Atom(name.clone()))
-            } else if let Some(n) = obj.get("v") {
-                keys(obj, &["v"])?;
-                match n.as_u64() {
-                    Some(n) if n <= MAX_SAFE_INTEGER as u64 => Ok(Term::Var(n)),
-                    _ => err(format!(
-                        "variable number {n} is not a natural number below 2^53"
-                    )),
-                }
-            } else if let Some(name) = obj.get("f") {
-                keys(obj, &["f", "args"])?;
-                match (name, &obj["args"]) {
-                    (Value::String(name), Value::Array(args)) if !args.is_empty() => {
-                        let args: Result<Vec<Term>, TermError> = args.iter().map(decode).collect();
-                        Ok(Term::Compound(name.clone(), args?))
-                    }
-                    _ => err("compound needs a string name and a non-empty args list"),
-                }
-            } else {
-                err(format!("{value} is not a term"))
-            }
-        }
+        Value::Object(obj) => tagged(value, obj),
         _ => err(format!("{value} is not a term")),
+    }
+}
+
+/// A bare number is an integer a double holds exactly.
+fn integer(n: &serde_json::Number) -> Result<Term, TermError> {
+    match n.as_i64() {
+        Some(i) => Ok(Term::Int(safe(i)?)),
+        None if n.is_u64() => err(format!("integer {n} exceeds 2^53 - 1")),
+        None => err(format!(
+            "bare number {n}: floats are written {{\"float\": text}}"
+        )),
+    }
+}
+
+/// An object is a term of the kind its key names.
+fn tagged(value: &Value, obj: &Map<String, Value>) -> Result<Term, TermError> {
+    let mut tags = ["float", "a", "v", "f"].into_iter();
+    match tags.find(|k| obj.contains_key(*k)) {
+        Some("float") => float(obj),
+        Some("a") => atom(obj),
+        Some("v") => variable(obj),
+        Some("f") => compound(obj),
+        _ => err(format!("{value} is not a term")),
+    }
+}
+
+fn float(obj: &Map<String, Value>) -> Result<Term, TermError> {
+    keys(obj, &["float"])?;
+    match &obj["float"] {
+        Value::String(text) => Ok(Term::Float(parse_float_text(text)?)),
+        _ => err("float text must be a string"),
+    }
+}
+
+fn atom(obj: &Map<String, Value>) -> Result<Term, TermError> {
+    keys(obj, &["a"])?;
+    match &obj["a"] {
+        Value::String(name) => Ok(Term::Atom(name.clone())),
+        _ => err("atom name must be a string"),
+    }
+}
+
+fn variable(obj: &Map<String, Value>) -> Result<Term, TermError> {
+    keys(obj, &["v"])?;
+    let n = &obj["v"];
+    match n.as_u64() {
+        Some(v) if v <= MAX_SAFE_INTEGER as u64 => Ok(Term::Var(v)),
+        _ => err(format!(
+            "variable number {n} is not a natural number below 2^53"
+        )),
+    }
+}
+
+fn compound(obj: &Map<String, Value>) -> Result<Term, TermError> {
+    keys(obj, &["f", "args"])?;
+    match (&obj["f"], &obj["args"]) {
+        (Value::String(name), Value::Array(args)) if !args.is_empty() => {
+            let args: Result<Vec<Term>, TermError> = args.iter().map(decode).collect();
+            Ok(Term::Compound(name.clone(), args?))
+        }
+        _ => err("compound needs a string name and a non-empty args list"),
     }
 }
 
@@ -318,6 +344,7 @@ mod tests {
             r#"{"float":"NaN"}"#,
             r#"{"float":"inf"}"#,
             r#"{"float":""}"#,
+            r#"{"v":9007199254740992}"#,
             r#"{"a":1}"#,
             r#"{"a":"x","extra":1}"#,
             r#"{"v":-1}"#,
