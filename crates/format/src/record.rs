@@ -825,6 +825,17 @@ mod tests {
     }
 
     #[test]
+    fn a_key_of_another_algorithm_is_refused() {
+        // Catches a key read as Ed25519 whatever it says it is.
+        let key = [7u8; 32];
+        let fields = json!({
+            "alg": "ed448", "key": to_hex(&key), "fingerprint": sha256_hex(&key),
+        });
+        let refused = Key::parse(&hashed_line(fields, false));
+        assert_eq!(refused, Err("alg must be \"ed25519\"".into()));
+    }
+
+    #[test]
     fn dates() {
         // Catches malformed or impossible dates accepted, or valid ones refused.
         for good in [
