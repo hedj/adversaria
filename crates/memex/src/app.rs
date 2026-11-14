@@ -1639,6 +1639,7 @@ impl App {
             .into_iter()
             .filter(|i| {
                 self.outline.items[i]
+                    .block
                     .origin
                     .is_some_and(|o| earlier.contains(&o))
             })
@@ -1647,7 +1648,7 @@ impl App {
         let key = |style: &str, text: &str| (style.to_string(), text.to_string());
         let old_keys: Vec<(String, String)> = old
             .iter()
-            .map(|i| key(&self.outline.items[i].style, &self.outline.text(*i)))
+            .map(|i| key(&self.outline.items[i].block.style, &self.outline.text(*i)))
             .collect();
         let new_keys: Vec<(String, String)> =
             blocks.iter().map(|b| key(&b.style, &b.text)).collect();
@@ -1784,14 +1785,14 @@ impl App {
             let mut stack = vec![r];
             while let Some(id) = stack.pop() {
                 let item = &self.outline.items[&id];
-                let style = if item.style.is_empty() {
+                let style = if item.block.style.is_empty() {
                     if item.children.is_empty() {
                         "para"
                     } else {
                         "heading"
                     }
                 } else {
-                    item.style.as_str()
+                    item.block.style.as_str()
                 };
                 let text = self.outline.text(id);
                 blocks.push(crate::docs::Block {
@@ -1930,7 +1931,7 @@ impl App {
             }
             if !changed.is_empty() {
                 for (id, item) in &self.outline.items {
-                    if item.origin == Some(e.seq) {
+                    if item.block.origin == Some(e.seq) {
                         out.insert(*id, changed.clone());
                     }
                 }
@@ -1946,7 +1947,7 @@ impl App {
             .outline
             .items
             .get(&item)
-            .and_then(|i| i.origin)
+            .and_then(|i| i.block.origin)
             .ok_or("the target was not imported from a document")?;
         let e = self.entry(origin).ok_or("no import entry")?;
         let b = e.body().cloned().ok_or("the import was purged")?;

@@ -50,8 +50,14 @@ pub struct Item {
     pub parent: u64,
     pub children: Vec<u64>,
     pub spans: Vec<Span>,
-    /// What kind of block it is in a document: heading, para, bullet, ...
-    /// (empty for the user's own items).
+    pub block: Block,
+}
+
+/// What an item is as a block of a document.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Block {
+    /// What kind of block it is: heading, para, bullet, ... (empty for
+    /// the user's own items).
     pub style: String,
     /// The import entry that made it, if any.
     pub origin: Option<u64>,
@@ -114,6 +120,43 @@ pub struct Run {
     pub origin: u64,
 }
 
+impl Run {
+    /// Take in a run of the same origin; else give it back.
+    fn absorb(&mut self, next: Run) -> Option<Run> {
+        if self.origin != next.origin {
+            return Some(next);
+        }
+        self.text.push_str(&next.text);
+        None
+    }
+}
+
+impl Span {
+    /// The part of a span, which begins at `at` in its item's text, from
+    /// `from` to `to` in that text; none if they do not overlap.
+    fn part(&self, at: usize, from: usize, to: usize) -> Option<Span> {
+        let from = from.saturating_sub(at);
+        let to = to.saturating_sub(at).min(self.len);
+        let start = self.start + from;
+        (from < to).then_some(Span {
+            seq: self.seq,
+            start,
+            len: to - from,
+        })
+    }
+}
+
+/// Each span with the place in the text where it begins.
+fn with_offsets(spans: &[Span]) -> Vec<(usize, &Span)> {
+    let mut at = 0;
+    let placed = spans.iter().map(|s| {
+        let here = at;
+        at += s.len;
+        (here, s)
+    });
+    placed.collect()
+}
+
 pub fn span_json(spans: &[Span]) -> Value {
     json!(
         spans
@@ -165,6 +208,16 @@ impl<'a> Body<'a> {
             .collect()
     }
 
+    /// The block an item's entry makes: its style, and the import it came
+    /// from.
+    fn block(&self) -> Block {
+        let style = self.text("style").to_string();
+        Block {
+            style,
+            origin: self.num("import"),
+        }
+    }
+
     /// The spans the body gives for an item's text.
     fn spans(&self, seq: u64) -> Option<Vec<Span>> {
         parse_spans(&self.0["spans"], seq)
@@ -173,14 +226,13 @@ impl<'a> Body<'a> {
 
 impl Item {
     /// A new item under another, with the style and origin its entry gives.
-    fn new(id: u64, parent: u64, spans: Vec<Span>, b: &Body) -> Item {
+    fn new(id: u64, parent: u64, spans: Vec<Span>, block: Block) -> Item {
         Item {
             id,
             parent,
             children: vec![],
             spans,
-            style: b.text("style").to_string(),
-            origin: b.num("import"),
+            block,
         }
     }
 }
@@ -212,23 +264,36 @@ impl Outline {
 
     /// The runs of an item's text, with where each came from.
     pub fn runs(&self, id: u64) -> Vec<Run> {
-        let Some(item) = self.items.get(&id) else {
-            return vec![];
-        };
         let mut out: Vec<Run> = Vec::new();
-        for s in &item.spans {
-            let text: String = self
-                .added
-                .get(&s.seq)
-                .map(|cs| cs.iter().skip(s.start).take(s.len).collect())
-                .unwrap_or_default();
-            let origin = self.owner.get(&s.seq).copied().unwrap_or(id);
-            match out.last_mut() {
-                Some(r) if r.origin == origin => r.text.push_str(&text),
-                _ => out.push(Run { text, origin }),
-            }
+        for s in self.spans_of(id) {
+            let run = self.run_of(s, id);
+            let rest = match out.last_mut() {
+                Some(last) => last.absorb(run),
+                None => Some(run),
+            };
+            out.extend(rest);
         }
         out
+    }
+
+    /// A span of item id's text, as a run of the item it was written for.
+    fn run_of(&self, s: &Span, id: u64) -> Run {
+        let text = self.text_of(s);
+        let origin = self.written_for(s.seq).unwrap_or(id);
+        Run { text, origin }
+    }
+
+    /// The characters of a span.
+    fn text_of(&self, s: &Span) -> String {
+        let added = self.added.get(&s.seq);
+        added
+            .map(|cs| cs.iter().skip(s.start).take(s.len).collect())
+            .unwrap_or_default()
+    }
+
+    /// An item's spans; none if it is not there.
+    fn spans_of(&self, id: u64) -> &[Span] {
+        self.items.get(&id).map_or(&[], |i| &i.spans)
     }
 
     pub fn text(&self, id: u64) -> String {
@@ -237,20 +302,11 @@ impl Outline {
 
     /// Spans covering characters [from, to) of an item's text.
     pub fn slice(&self, id: u64, from: usize, to: usize) -> Vec<Span> {
-        let mut out = Vec::new();
-        let mut pos = 0;
-        for s in self.items.get(&id).map_or(&[][..], |i| &i.spans) {
-            let (a, b) = (pos.max(from), (pos + s.len).min(to));
-            if a < b {
-                out.push(Span {
-                    seq: s.seq,
-                    start: s.start + (a - pos),
-                    len: b - a,
-                });
-            }
-            pos += s.len;
-        }
-        out
+        let placed = with_offsets(self.spans_of(id));
+        placed
+            .into_iter()
+            .filter_map(|(at, s)| s.part(at, from, to))
+            .collect()
     }
 
     fn is_within(&self, id: u64, ancestor: u64) -> bool {
@@ -270,10 +326,15 @@ impl Outline {
     /// Put an item among another's children: after the one named, or
     /// first if none is named or the one named is not among them.
     fn place(&mut self, id: u64, under: u64, after: Option<u64>) {
-        let pos = after
-            .and_then(|s| self.children(under).iter().position(|c| *c == s))
-            .map_or(0, |p| p + 1);
+        let pos = self.index_after(under, after);
         self.children_mut(under).insert(pos, id);
+    }
+
+    /// The index under a parent just after one of its children: the
+    /// first, if there is none or it is not there.
+    fn index_after(&self, under: u64, after: Option<u64>) -> usize {
+        let at = after.and_then(|s| self.children(under).iter().position(|c| *c == s));
+        at.map_or(0, |p| p + 1)
     }
 
     fn unplace(&mut self, id: u64) {
@@ -353,7 +414,8 @@ impl Outline {
         if !self.spans_valid(&spans) {
             return None;
         }
-        self.items.insert(seq, Item::new(seq, under, spans, b));
+        self.items
+            .insert(seq, Item::new(seq, under, spans, b.block()));
         self.place(seq, under, b.num("after"));
         Some(())
     }
@@ -488,14 +550,25 @@ impl Outline {
 
     /// Items whose text shows some of this item's text in place.
     pub fn transcluded_in(&self, id: u64) -> Vec<u64> {
-        let mut out: Vec<u64> = self
-            .items
-            .values()
-            .filter(|i| i.id != id && i.spans.iter().any(|s| self.owner.get(&s.seq) == Some(&id)))
+        let others = self.items.values().filter(|i| i.id != id);
+        let mut out: Vec<u64> = others
+            .filter(|i| self.quotes(i, id))
             .map(|i| i.id)
             .collect();
         out.sort();
         out
+    }
+
+    /// Whether an item shows text written for another.
+    fn quotes(&self, item: &Item, id: u64) -> bool {
+        item.spans
+            .iter()
+            .any(|s| self.written_for(s.seq) == Some(id))
+    }
+
+    /// The item an entry's added text was written for.
+    fn written_for(&self, seq: u64) -> Option<u64> {
+        self.owner.get(&seq).copied()
     }
 
     /// Count of items below one.
