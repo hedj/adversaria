@@ -221,16 +221,27 @@ mod tests {
     }
 
     #[test]
-    fn append_reopen_and_branch() {
-        // Catches entries lost on reopening, or a branch written with the wrong parent.
-        let d = temp_dir("append");
+    fn a_branch_follows_its_parent() {
+        // Catches a branch written with the wrong parent.
+        let d = temp_dir("branch");
         let mut j = Journal::open(&d).unwrap();
         j.append("edit", json!({"t": "a"})).unwrap();
         j.append("edit", json!({"t": "b"})).unwrap();
         let c = j.append_after(Some(1), "undo", json!({})).unwrap();
         assert_eq!((c.seq, c.parent_seq()), (3, Some(1)));
-        let j2 = Journal::open(&d).unwrap();
-        assert_eq!(j2.entries(), j.entries());
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn reopening_keeps_every_entry() {
+        // Catches entries lost on reopening, a branch among them.
+        let d = temp_dir("reopen");
+        let mut j = Journal::open(&d).unwrap();
+        j.append("edit", json!({"t": "a"})).unwrap();
+        j.append("edit", json!({"t": "b"})).unwrap();
+        j.append_after(Some(1), "undo", json!({})).unwrap();
+        let reopened = Journal::open(&d).unwrap();
+        assert_eq!(reopened.entries(), j.entries());
         fs::remove_dir_all(&d).unwrap();
     }
 
