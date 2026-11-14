@@ -714,6 +714,45 @@ mod tests {
     }
 
     #[test]
+    fn a_slice_across_two_spans_cuts_each_at_its_end() {
+        // Catches a span's part running past its own end into the next.
+        let mut o = Outline::default();
+        create(&mut o, 2, TOP, None, "Buran flew in 1989");
+        let mut spans = o.slice(2, 0, 14);
+        spans.push(Span {
+            seq: 0,
+            start: 0,
+            len: 4,
+        });
+        let b = json!({"op":"text","item":2,"add":"1988","spans":span_json(&spans)});
+        assert!(o.apply(3, "edit", &b));
+        let want = [
+            Span {
+                seq: 2,
+                start: 10,
+                len: 4,
+            },
+            Span {
+                seq: 3,
+                start: 0,
+                len: 2,
+            },
+        ];
+        assert_eq!(o.slice(2, 10, 16), want);
+    }
+
+    #[test]
+    fn a_quote_from_inside_an_item_shows_its_own_characters() {
+        // Catches a quoted span read from the start of its entry's text.
+        let mut o = Outline::default();
+        create(&mut o, 2, TOP, None, "Buran flew once.");
+        let flew = span_json(&o.slice(2, 6, 10));
+        let b = json!({"op":"create","under":0,"after":2,"add":"","spans":flew});
+        assert!(o.apply(3, "edit", &b));
+        assert_eq!(o.text(3), "flew");
+    }
+
+    #[test]
     fn transclusion_shows_origin() {
         // Catches a transcluded run shown without its origin, or not found.
         let mut o = Outline::default();
