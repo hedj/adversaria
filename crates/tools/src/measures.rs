@@ -243,4 +243,15 @@ mod tests {
         ]);
         assert_eq!(measure(&es).violations_corrected, 1);
     }
+
+    #[test]
+    fn a_disagreement_shown_twice_is_seen_once() {
+        // Catches disagreements not counted, or counted at each showing.
+        let shown = || {
+            let b = json!({"op": "observed", "violations": [], "disagreements": ["d1"], "world": "actual"});
+            ("view", b)
+        };
+        let es = chain(&[("edit", json!({"op": "init"})), shown(), shown()]);
+        assert_eq!(measure(&es).disagreements_seen, 1);
+    }
 }
