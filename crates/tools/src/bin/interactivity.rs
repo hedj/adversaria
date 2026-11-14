@@ -9,167 +9,220 @@ use tools::interactivity::*;
 
 const LIMIT: usize = 4;
 
+/// The Prolog files measured.
+const PROLOG: [&str; 3] = [
+    "prolog/protocol.pl",
+    "prolog/server.pl",
+    "prolog/dataflow.pl",
+];
+
+/// The documents measured, where they are there.
+const DOCS: [&str; 8] = [
+    "README.md",
+    "docs/tutorial.md",
+    "docs/guide.md",
+    "docs/design.md",
+    "docs/plan.md",
+    "docs/log.md",
+    "docs/translator.md",
+    "docs/structure.md",
+];
+
+/// The project's Rust, measured: the functions of its sources and of its
+/// tests, and its source files as modules.
+struct Rust {
+    fns: Vec<Unit>,
+    tests: Vec<Unit>,
+    modules: Vec<Unit>,
+}
+
 fn main() {
     let root = std::env::args().nth(1).unwrap_or_else(|| ".".into());
     let root = Path::new(&root);
-    let crates: Vec<String> = std::fs::read_dir(root.join("crates"))
-        .map(|d| {
-            d.flatten()
-                .map(|e| e.file_name().to_string_lossy().into_owned())
-                .collect()
-        })
-        .unwrap_or_default();
-    let rel = |p: &Path| p.strip_prefix(root).unwrap_or(p).display().to_string();
-    let read = |p: &Path| std::fs::read_to_string(p).unwrap_or_default();
-    let (src, tests): (Vec<_>, Vec<_>) = rust_files(&root.join("crates"))
-        .into_iter()
-        .map(|p| (rel(&p), read(&p)))
-        .partition(|(n, _)| !n.contains("/tests/") && !n.ends_with("tests.rs"));
-    let mut all = src.clone();
-    all.extend(tests.clone());
-    let (fns, modules, blind) = match measure_rust(&all, &crates) {
+    let (rust, blind) = rust_units(root);
+    let (preds, sections) = prolog_and_markdown(root);
+    print_held_summaries(&rust);
+    let groups = groups(&rust, &preds, &sections);
+    print_summaries(&groups, &blind);
+    report_held("Rust functions (src)", &rust.fns);
+    report_held("Rust functions (tests)", &rust.tests);
+    report_over(&groups[2..]);
+    report_sections(&sections);
+}
+
+/// The Prolog predicates and the Markdown sections, measured.
+fn prolog_and_markdown(root: &Path) -> (Vec<Unit>, Vec<Unit>) {
+    let preds = prolog_units(root);
+    (preds, measure_markdown(&docs_of(root)))
+}
+
+/// A path as the report names it: from the root.
+fn rel(root: &Path, p: &Path) -> String {
+    p.strip_prefix(root).unwrap_or(p).display().to_string()
+}
+
+fn read(p: &Path) -> String {
+    std::fs::read_to_string(p).unwrap_or_default()
+}
+
+/// The workspace's crates, by name.
+fn crates_of(root: &Path) -> Vec<String> {
+    let names = |d: std::fs::ReadDir| {
+        d.flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect()
+    };
+    std::fs::read_dir(root.join("crates"))
+        .map(names)
+        .unwrap_or_default()
+}
+
+/// The Rust files of the crates, by name and text: the sources, and the
+/// tests.
+type Sources = Vec<(String, String)>;
+
+fn rust_sources(root: &Path) -> (Sources, Sources) {
+    let files = rust_files(&root.join("crates")).into_iter();
+    let named = files.map(|p| (rel(root, &p), read(&p)));
+    named.partition(|(n, _)| !n.contains("/tests/") && !n.ends_with("tests.rs"))
+}
+
+/// The Rust measured, and what the measure could not see; or the error,
+/// and exit 1.
+fn rust_units(root: &Path) -> (Rust, Blind) {
+    let (src, tests) = rust_sources(root);
+    let all: Sources = src.into_iter().chain(tests.iter().cloned()).collect();
+    Rust::split(measure_or_exit(&all, &crates_of(root)), &tests)
+}
+
+/// The functions measured, the files as modules, and what the measure
+/// could not see.
+type Measured = (Vec<Unit>, Vec<Unit>, Blind);
+
+fn measure_or_exit(all: &[(String, String)], crates: &[String]) -> Measured {
+    match measure_rust(all, crates) {
         Ok(x) => x,
         Err(e) => {
             eprintln!("interactivity: {e}");
             std::process::exit(1);
         }
-    };
-    let is_test = |u: &Unit| tests.iter().any(|(n, _)| *n == u.file);
-    let (test_fns, src_fns): (Vec<Unit>, Vec<Unit>) = fns.into_iter().partition(is_test);
-    let src_modules: Vec<Unit> = modules.into_iter().filter(|u| !is_test(u)).collect();
-    let pl: Vec<String> = [
-        "prolog/protocol.pl",
-        "prolog/server.pl",
-        "prolog/dataflow.pl",
-    ]
-    .iter()
-    .map(|p| root.join(p).display().to_string())
-    .collect();
+    }
+}
+
+impl Rust {
+    /// The units of the test files apart from the others; and only the
+    /// source files as modules.
+    fn split((fns, modules, blind): Measured, test_files: &[(String, String)]) -> (Rust, Blind) {
+        let modules = modules
+            .into_iter()
+            .filter(|u| !in_files(u, test_files))
+            .collect();
+        let (tests, fns) = split_off(fns, test_files);
+        (
+            Rust {
+                fns,
+                tests,
+                modules,
+            },
+            blind,
+        )
+    }
+}
+
+/// Whether a unit is of one of these files.
+fn in_files(u: &Unit, files: &[(String, String)]) -> bool {
+    files.iter().any(|(n, _)| *n == u.file)
+}
+
+/// The units of these files, and the rest.
+fn split_off(units: Vec<Unit>, files: &[(String, String)]) -> (Vec<Unit>, Vec<Unit>) {
+    units.into_iter().partition(|u| in_files(u, files))
+}
+
+/// The predicates of the Prolog files, from SWI-Prolog's cross-reference;
+/// none if it cannot be run.
+fn prolog_units(root: &Path) -> Vec<Unit> {
+    let files = PROLOG.map(|p| root.join(p).display().to_string());
     let xref = std::process::Command::new("swipl")
         .arg("-q")
         .args(["-g", "main", "-t", "halt"])
         .arg(root.join("crates/tools/prolog/measure_xref.pl"))
         .arg("--")
-        .args(&pl)
+        .args(&files)
         .output();
-    let preds: Vec<Unit> = match xref {
-        Ok(o) => parse_xref(&String::from_utf8_lossy(&o.stdout))
-            .into_iter()
-            .map(|mut u| {
-                u.file = rel(Path::new(&u.file));
-                u
-            })
-            .collect(),
+    match xref {
+        Ok(o) => from_root(root, parse_xref(&String::from_utf8_lossy(&o.stdout))),
         Err(e) => {
             eprintln!("interactivity: cannot run swipl: {e}");
             vec![]
         }
-    };
-    let docs: Vec<(String, String)> = [
-        "README.md",
-        "docs/tutorial.md",
-        "docs/guide.md",
-        "docs/design.md",
-        "docs/plan.md",
-        "docs/log.md",
-        "docs/translator.md",
-        "docs/structure.md",
-    ]
-    .iter()
-    .map(|p| (p.to_string(), read(&root.join(p))))
-    .filter(|(_, t)| !t.is_empty())
-    .collect();
-    let sections = measure_markdown(&docs);
+    }
+}
 
+/// Units with their files named from the root.
+fn from_root(root: &Path, units: Vec<Unit>) -> Vec<Unit> {
+    units.into_iter().map(|u| renamed(root, u)).collect()
+}
+
+/// A unit with its file named from the root.
+fn renamed(root: &Path, mut u: Unit) -> Unit {
+    u.file = rel(root, Path::new(&u.file));
+    u
+}
+
+/// The documents, by name and text, that are there.
+fn docs_of(root: &Path) -> Vec<(String, String)> {
+    let docs = DOCS.iter().map(|p| (p.to_string(), read(&root.join(p))));
+    docs.filter(|(_, t)| !t.is_empty()).collect()
+}
+
+fn print_held_summaries(rust: &Rust) {
     println!("Held at a statement: what a function's reader holds, read in order (limit {LIMIT}).");
     println!("Rules: crates/tools/src/held.rs. This is the measure for code.");
     println!();
-    println!("Rust functions (src): {}", held::summary(&src_fns, LIMIT));
+    println!("Rust functions (src): {}", held::summary(&rust.fns, LIMIT));
     println!(
         "Rust functions (tests): {}",
-        held::summary(&test_fns, LIMIT)
+        held::summary(&rust.tests, LIMIT)
     );
     println!();
+}
+
+/// The five groups of units, by title.
+fn groups<'a>(
+    rust: &'a Rust,
+    preds: &'a [Unit],
+    sections: &'a [Unit],
+) -> [(&'static str, &'a [Unit]); 5] {
+    [
+        ("Rust functions (src)", &rust.fns),
+        ("Rust functions (tests)", &rust.tests),
+        ("Rust modules (src files)", &rust.modules),
+        ("Prolog predicates", preds),
+        ("Markdown sections", sections),
+    ]
+}
+
+fn print_summaries(groups: &[(&str, &[Unit])], blind: &Blind) {
     println!("Interactivity: distinct project referents per unit (limit {LIMIT}).");
     println!(
         "Rules: crates/tools/src/interactivity.rs. Language and standard libraries are assumed known."
     );
     println!();
-    for (title, units) in [
-        ("Rust functions (src)", &src_fns),
-        ("Rust functions (tests)", &test_fns),
-        ("Rust modules (src files)", &src_modules),
-        ("Prolog predicates", &preds),
-        ("Markdown sections", &sections),
-    ] {
+    for (title, units) in groups {
         println!("{title}: {}", summary(units, LIMIT));
     }
     println!(
         "Ambiguous: {} method calls by names both std and project (in the upper bounds only). Not seen: {} macros whose arguments were not expressions.",
         blind.std_calls_skipped, blind.macros_unparsed
     );
-    report_held("Rust functions (src)", &src_fns);
-    report_held("Rust functions (tests)", &test_fns);
-    for (title, units) in [
-        ("Rust modules (src files)", &src_modules),
-        ("Prolog predicates", &preds),
-        ("Markdown sections", &sections),
-    ] {
-        let mut over: Vec<&Unit> = units
-            .iter()
-            .filter(|u| u.upper() > LIMIT || u.children > LIMIT)
-            .collect();
-        over.sort_by_key(|u| std::cmp::Reverse(u.load()));
-        println!();
-        println!("== {title}: over {LIMIT}, largest first");
-        for u in over {
-            let shown: Vec<&str> = u.referents.iter().map(String::as_str).take(12).collect();
-            let more = u.load().saturating_sub(12);
-            println!(
-                "{:>3}{:<4} {}  {}{}{}",
-                u.load(),
-                if u.upper() > u.load() {
-                    format!("–{}", u.upper())
-                } else {
-                    String::new()
-                },
-                u.file,
-                u.name,
-                if u.children > LIMIT {
-                    format!("  [{} children]", u.children)
-                } else {
-                    String::new()
-                },
-                if std::env::var_os("INTERACTIVITY_DETAIL").is_some() {
-                    format!(
-                        "\n       {}{}{}",
-                        shown.join(", "),
-                        if more > 0 {
-                            format!(", … {more} more")
-                        } else {
-                            String::new()
-                        },
-                        if u.ambiguous.is_empty() {
-                            String::new()
-                        } else {
-                            let a: Vec<&str> = u.ambiguous.iter().map(String::as_str).collect();
-                            format!("\n       ambiguous (std or project): {}", a.join(", "))
-                        }
-                    )
-                } else {
-                    String::new()
-                }
-            );
-        }
-    }
-    report_sections(&sections);
 }
 
 /// The functions that hold more than the limit at some statement, the
 /// highest first: the peak (to its upper bound), where, and the count of
 /// the function's distinct referents.
 fn report_held(title: &str, units: &[Unit]) {
-    let mut over: Vec<&Unit> = units.iter().filter(|u| held::upper(u) > LIMIT).collect();
+    let mut over = held_over(units);
     over.sort_by_key(|u| std::cmp::Reverse(held::lower(u)));
     println!();
     println!("== {title}: hold more than {LIMIT} at a statement, highest first");
@@ -178,28 +231,108 @@ fn report_held(title: &str, units: &[Unit]) {
     }
 }
 
+/// The units that may hold more than the limit at a statement.
+fn held_over(units: &[Unit]) -> Vec<&Unit> {
+    units.iter().filter(|u| held::upper(u) > LIMIT).collect()
+}
+
 fn held_row(u: &Unit) -> String {
     let Some(h) = &u.held else {
         return String::new();
     };
-    let peak = h.things.len();
-    let range = if h.upper > peak {
-        format!("{peak}–{}", h.upper)
-    } else {
-        peak.to_string()
-    };
-    let row = format!(
-        "{range:>5}  {}  {}  (statement {}; {} referents in all)",
-        u.file,
-        u.name,
-        h.at,
-        u.load()
-    );
+    let at = format!("(statement {}; {} referents in all)", h.at, u.load());
+    let row = format!("{:>5}  {}  {at}", range_of(h), where_of(u));
     if std::env::var_os("INTERACTIVITY_DETAIL").is_none() {
         return row;
     }
+    format!("{row}\n       {}", things_of(h))
+}
+
+/// A peak, to its upper bound if that is higher.
+fn range_of(h: &held::Held) -> String {
+    let peak = h.things.len();
+    if h.upper > peak {
+        return format!("{peak}–{}", h.upper);
+    }
+    peak.to_string()
+}
+
+/// A unit's file and its name.
+fn where_of(u: &Unit) -> String {
+    format!("{}  {}", u.file, u.name)
+}
+
+fn things_of(h: &held::Held) -> String {
     let things: Vec<&str> = h.things.iter().map(String::as_str).collect();
-    format!("{row}\n       {}", things.join(", "))
+    things.join(", ")
+}
+
+/// Each group's units over the limit, or with more children than it,
+/// largest first.
+fn report_over(groups: &[(&str, &[Unit])]) {
+    for (title, units) in groups {
+        let mut over = over_limit(units);
+        over.sort_by_key(|u| std::cmp::Reverse(u.load()));
+        println!();
+        println!("== {title}: over {LIMIT}, largest first");
+        for u in over {
+            println!("{}", over_row(u));
+        }
+    }
+}
+
+/// The units over the limit, or with more children than it.
+fn over_limit(units: &[Unit]) -> Vec<&Unit> {
+    units
+        .iter()
+        .filter(|u| u.upper() > LIMIT || u.children > LIMIT)
+        .collect()
+}
+
+fn over_row(u: &Unit) -> String {
+    let load = format!("{:>3}{:<4}", u.load(), upper_suffix(u));
+    let row = format!("{load} {}  {}{}", u.file, u.name, children_suffix(u));
+    if std::env::var_os("INTERACTIVITY_DETAIL").is_none() {
+        return row;
+    }
+    format!("{row}\n       {}{}", referents_shown(u), ambiguous_shown(u))
+}
+
+/// A unit's upper bound, where it is higher than its load.
+fn upper_suffix(u: &Unit) -> String {
+    if u.upper() > u.load() {
+        return format!("–{}", u.upper());
+    }
+    String::new()
+}
+
+/// How many children a unit has, where they are more than the limit.
+fn children_suffix(u: &Unit) -> String {
+    if u.children > LIMIT {
+        return format!("  [{} children]", u.children);
+    }
+    String::new()
+}
+
+/// A unit's first twelve referents, and how many more.
+fn referents_shown(u: &Unit) -> String {
+    let shown: Vec<&str> = u.referents.iter().map(String::as_str).take(12).collect();
+    let more = u.load().saturating_sub(12);
+    let more = if more > 0 {
+        format!(", … {more} more")
+    } else {
+        String::new()
+    };
+    format!("{}{more}", shown.join(", "))
+}
+
+/// A unit's calls by names both std's and the project's, if it has any.
+fn ambiguous_shown(u: &Unit) -> String {
+    if u.ambiguous.is_empty() {
+        return String::new();
+    }
+    let a: Vec<&str> = u.ambiguous.iter().map(String::as_str).collect();
+    format!("\n       ambiguous (std or project): {}", a.join(", "))
 }
 
 /// The Markdown sections that refer forward, or that are over the limit
