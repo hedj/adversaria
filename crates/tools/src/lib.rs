@@ -221,6 +221,17 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn text_in_english_is_kept_and_other_languages_are_not() {
+        // Catches a label tagged "en" dropped, or one in another language
+        // kept.
+        let text = |lang: &str| json!({"type": "literal", "value": "Buran", "xml:lang": lang});
+        assert_eq!(
+            (value(&text("en")), value(&text("fr"))),
+            (Some(string("Buran")), None)
+        );
+    }
+
+    #[test]
     fn values_become_terms() {
         // Catches a date, number, item or string written in a form Prolog
         // reads differently, or a value that should be left out kept.
