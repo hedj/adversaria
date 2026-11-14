@@ -2357,25 +2357,7 @@ mod tests {
     fn mk(spec: &str) -> Input {
         let mut words = spec.split_whitespace();
         let kind = words.next().unwrap();
-        let args = words
-            .map(|w| {
-                let (k, v) = w.split_once(':').unwrap();
-                let v = v.replace('_', " ");
-                let val = if let Ok(n) = v.parse::<i64>() {
-                    Term::Int(n)
-                } else if let Some(d) = v.strip_prefix("date") {
-                    let p: Vec<i64> = d
-                        .split('-')
-                        .filter(|x| !x.is_empty())
-                        .map(|x| x.parse().unwrap())
-                        .collect();
-                    t("date", p.into_iter().map(Term::Int).collect())
-                } else {
-                    Term::Atom(v)
-                };
-                t(k, vec![val])
-            })
-            .collect();
+        let args = words.map(channel).collect();
         Input {
             mark: t(kind, args),
             prov: vec![1],
@@ -2383,9 +2365,39 @@ mod tests {
         }
     }
 
+    /// A channel from name:value.
+    fn channel(word: &str) -> Term {
+        let (name, v) = word.split_once(':').unwrap();
+        t(name, vec![value(&v.replace('_', " "))])
+    }
+
+    /// A number, a date (date1988-11-15), or else an atom.
+    fn value(v: &str) -> Term {
+        if let Ok(n) = v.parse::<i64>() {
+            return Term::Int(n);
+        }
+        match v.strip_prefix("date") {
+            Some(d) => date_of(d),
+            None => Term::Atom(v.into()),
+        }
+    }
+
+    /// date(Y, M, D), from the parts of 1988-11-15 that are there.
+    fn date_of(d: &str) -> Term {
+        let parts = d.split('-').filter(|x| !x.is_empty());
+        t(
+            "date",
+            parts.map(|x| Term::Int(x.parse().unwrap())).collect(),
+        )
+    }
+
+    /// The marks of some specs.
+    fn marks_of(specs: &[&str]) -> Vec<Input> {
+        specs.iter().map(|s| mk(s)).collect()
+    }
+
     fn draw(specs: &[&str], w: usize, h: usize) -> Vec<String> {
-        let ins: Vec<Input> = specs.iter().map(|s| mk(s)).collect();
-        let f = render(&ins, w, h);
+        let f = render(&marks_of(specs), w, h);
         let mut out = f.text();
         out.extend(f.notes.iter().map(|n| format!("note: {n}")));
         out
@@ -2406,59 +2418,85 @@ mod tests {
         lines.iter().filter(|l| l.chars().nth(x) == Some(c)).count()
     }
 
+    /// Bars of a budget over three categories, and a rule at 1500.
+    fn budget_bars() -> Vec<String> {
+        let specs = [
+            "bar x:income y:2000",
+            "bar x:rent y:1200",
+            "bar x:food y:400",
+            "rule y:1500",
+        ];
+        draw(&specs, 40, 10)
+    }
+
+    /// The columns where these texts are found.
+    fn columns_of(l: &[String], texts: [&str; 3]) -> [usize; 3] {
+        texts.map(|t| at(l, t).0)
+    }
+
+    /// The rows where these texts are found.
+    fn rows_of(l: &[String], texts: [&str; 3]) -> [usize; 3] {
+        texts.map(|t| at(l, t).1)
+    }
+
+    /// Where a row's span starts.
+    fn span_start(row: &str) -> usize {
+        row.chars().position(|c| c == '━').unwrap()
+    }
+
+    fn rising(xs: [usize; 3]) -> bool {
+        xs[0] < xs[1] && xs[1] < xs[2]
+    }
+
+    // The next four catch bars of the wrong height, categories out of
+    // order, a reference rule not drawn, or a value label lost.
+
     #[test]
-    fn bars_rise_with_their_values_over_categories_in_order() {
-        // Catches bars of the wrong height, categories out of order, a
-        // reference rule not drawn, or a value label lost.
-        let l = draw(
-            &[
-                "bar x:income y:2000",
-                "bar x:rent y:1200",
-                "bar x:food y:400",
-                "rule y:1500",
-            ],
-            40,
-            10,
-        );
-        let (f, fy) = at(&l, "food");
-        let (i, _) = at(&l, "income");
-        let (r, _) = at(&l, "rent");
-        assert!(f < i && i < r, "categories in order:\n{}", l.join("\n"));
-        assert_eq!(fy, l.len() - 1, "labels on the last row");
-        let h = |x: usize| count(&l, x + 1, '█');
-        assert!(
-            h(i) > h(r) && h(r) > h(f) && h(f) > 0,
-            "{} {} {}",
-            h(i),
-            h(r),
-            h(f)
-        );
+    fn bars_lie_over_their_categories_in_order() {
+        let l = budget_bars();
+        let x = columns_of(&l, ["food", "income", "rent"]);
+        assert!(rising(x), "categories in order:\n{}", l.join("\n"));
+        assert_eq!(at(&l, "food").1, l.len() - 1, "labels on the last row");
+    }
+
+    #[test]
+    fn bars_rise_with_their_values() {
+        let l = budget_bars();
+        let bars = columns_of(&l, ["food", "rent", "income"]);
+        let h = bars.map(|x| count(&l, x + 1, '█'));
+        assert!(h[0] > 0 && rising(h), "{h:?}");
+    }
+
+    #[test]
+    fn a_rule_runs_across_the_bars() {
+        let l = budget_bars();
         assert!(l.iter().any(|x| x.contains("────────────")), "the rule");
+    }
+
+    #[test]
+    fn a_bar_is_labelled_with_its_value() {
+        let l = budget_bars();
         assert!(l.iter().any(|x| x.contains("400")), "a value label");
     }
 
     #[test]
     fn horizontal_bars_read_down_the_page() {
         // Catches category bands drawn bottom up, or bar lengths unordered.
-        let l = draw(
-            &[
-                "bar y:income x:2000",
-                "bar y:rent x:1200",
-                "bar y:food x:400",
-            ],
-            40,
-            6,
-        );
-        let (_, yf) = at(&l, "food");
-        let (_, yi) = at(&l, "income");
-        let (_, yr) = at(&l, "rent");
+        let specs = [
+            "bar y:income x:2000",
+            "bar y:rent x:1200",
+            "bar y:food x:400",
+        ];
+        let l = draw(&specs, 40, 6);
+        let top_down = rows_of(&l, ["food", "income", "rent"]);
         assert!(
-            yf < yi && yi < yr,
+            rising(top_down),
             "first category at the top:\n{}",
             l.join("\n")
         );
-        let len = |y: usize| l[y].matches('█').count();
-        assert!(len(yi) > len(yr) && len(yr) > len(yf));
+        let bars = rows_of(&l, ["food", "rent", "income"]);
+        let len = bars.map(|y| l[y].matches('█').count());
+        assert!(rising(len), "{len:?}");
     }
 
     #[test]
@@ -2516,21 +2554,16 @@ mod tests {
     #[test]
     fn spans_lie_on_lanes_between_their_ends() {
         // Catches lanes out of order, or a span not starting at its x1.
-        let l = draw(
-            &[
-                "span y:design x1:1 x2:4 text:design",
-                "span y:build x1:3 x2:9 text:build",
-                "span y:test x1:8 x2:10 text:test",
-            ],
-            40,
-            6,
-        );
-        let (_, yb) = at(&l, "build │");
-        let (_, yd) = at(&l, "design │");
-        let (_, yt) = at(&l, "test │");
-        assert!(yb < yd && yd < yt, "{}", l.join("\n"));
-        let start = |y: usize| l[y].chars().position(|c| c == '━').unwrap();
-        assert!(start(yd) < start(yb) && start(yb) < start(yt));
+        let specs = [
+            "span y:design x1:1 x2:4 text:design",
+            "span y:build x1:3 x2:9 text:build",
+            "span y:test x1:8 x2:10 text:test",
+        ];
+        let l = draw(&specs, 40, 6);
+        let lanes = rows_of(&l, ["build │", "design │", "test │"]);
+        assert!(rising(lanes), "{}", l.join("\n"));
+        let by_start = rows_of(&l, ["design │", "build │", "test │"]);
+        assert!(rising(by_start.map(|y| span_start(&l[y]))));
     }
 
     #[test]
@@ -2621,22 +2654,22 @@ mod tests {
     }
 
     #[test]
-    fn loud_marks_and_where_marks_landed() {
+    fn a_loud_bar_is_drawn_loud_and_found_where_it_landed() {
         // Catches a mark on a violated fact drawn quietly, or a click region
         // that misses its mark.
         let mut a = mk("bar x:a y:5");
         a.loud = true;
         a.prov = vec![7];
         let f = render(&[a, mk("bar x:b y:3")], 20, 8);
-        let loud: usize = f
-            .rows
-            .iter()
-            .flatten()
-            .filter(|(c, i)| *c == '█' && *i == Ink::Loud)
-            .count();
-        assert!(loud > 0);
-        let h = f.hits.iter().find(|h| h.prov == [7]).unwrap();
-        assert_eq!(f.rows[h.area.y][h.area.x].0, '█');
+        let loud_bar = |(c, i): &&(char, Ink)| *c == '█' && *i == Ink::Loud;
+        assert!(f.rows.iter().flatten().any(|c| loud_bar(&c)));
+        let at = f.hits.iter().find(|h| h.prov == [7]).unwrap().area;
+        assert_eq!(f.rows[at.y][at.x].0, '█');
+    }
+
+    #[test]
+    fn a_loud_cell_is_marked() {
+        // Catches a cell of a violated fact drawn quietly.
         let mut c = mk("cell x:a y:1 text:9");
         c.loud = true;
         let g = render(&[c], 20, 0);
@@ -2960,11 +2993,7 @@ mod tests {
         // wrong place. The places are what the code gave before grid was
         // restructured.
         let f = render(&[mk("cell x:a y:1"), mk("cell x:b y:2")], 30, 0);
-        let hit = |x, y| Hit {
-            area: Rect { x, y, w: 1, h: 1 },
-            prov: vec![1],
-        };
-        assert_eq!(f.hits, [hit(4, 2), hit(8, 3)]);
+        assert_eq!(f.hits, [found(4, 2, 1, 1), found(8, 3, 1, 1)]);
     }
 
     #[test]
@@ -3309,18 +3338,10 @@ mod tests {
             "LLLLL", "LLLLL", "LLLLL", "ppLpp", "ppLpp", "ppLpp", "ppppp", "ppppp", "ppppp",
             "ppdpp", "ppdpp", "ppdpp", "ppppp", "ppppp", "ppppp",
         ];
-        let place = |y| Hit {
-            area: Rect {
-                x: 0,
-                y,
-                w: 5,
-                h: 3,
-            },
-            prov: vec![1],
-        };
+        let places = vec![found(0, 0, 5, 3), found(0, 6, 5, 3)];
         assert_eq!(
             (inks(&f), f.hits),
-            (want.map(String::from).to_vec(), vec![place(0), place(6)])
+            (want.map(String::from).to_vec(), places)
         );
     }
 
@@ -3403,8 +3424,12 @@ mod tests {
 
     /// What a plot draws, and where its facts are found.
     fn drawn_and_found(specs: &[&str], w: usize, h: usize) -> (Vec<String>, Vec<Hit>) {
-        let marks: Vec<Input> = specs.iter().map(|s| mk(s)).collect();
-        (draw(specs, w, h), render(&marks, w, h).hits)
+        (draw(specs, w, h), hits_of(specs, w, h))
+    }
+
+    /// Where a plot's facts are found.
+    fn hits_of(specs: &[&str], w: usize, h: usize) -> Vec<Hit> {
+        render(&marks_of(specs), w, h).hits
     }
 
     #[test]
