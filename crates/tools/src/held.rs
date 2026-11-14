@@ -26,6 +26,8 @@
 //!   struct; written short (`Link { seq }`), it is a piece that the local
 //!   of its name stands for, and is not counted beside the local.
 //!
+//! * A local named in a format string (`format!("{n}")`) is named there.
+//!
 //! What it cannot see: types are known only for `self`, typed parameters
 //! and chains of fields from them. Elsewhere a method is found by name,
 //! and a name that is also a common library method gives an upper bound.
@@ -394,7 +396,20 @@ impl<'s, 'ast> Head<'s, 'ast> {
         };
         let mut flat = Head::new(self.scope, true);
         args.iter().for_each(|a| flat.visit_expr(a));
+        args.iter().for_each(|a| flat.format_string(a));
         self.absorb(flat);
+    }
+
+    /// The locals a string literal names as a format string does: {name}
+    /// or {name:...}, but not {{name}}.
+    fn format_string(&mut self, arg: &syn::Expr) {
+        let syn::Expr::Lit(lit) = arg else { return };
+        let syn::Lit::Str(text) = &lit.lit else {
+            return;
+        };
+        for name in captures(&text.value()) {
+            self.local(&name);
+        }
     }
 
     fn absorb(&mut self, other: Head) {
@@ -405,6 +420,16 @@ impl<'s, 'ast> Head<'s, 'ast> {
             self.pieces.entry(owner).or_default().extend(pieces);
         }
     }
+}
+
+/// The names a format string captures: what stands between a single {
+/// and the } or : after it, where that is a name.
+fn captures(text: &str) -> Vec<String> {
+    let unescaped = text.replace("{{", "");
+    let holes = unescaped.split('{').skip(1);
+    let names = holes.filter_map(|h| h.split(['}', ':']).next());
+    let is_name = |n: &&str| n.starts_with(|c: char| c.is_alphabetic() || c == '_');
+    names.filter(is_name).map(String::from).collect()
 }
 
 /// Marks a piece written short in a literal or pattern: the local of its
@@ -618,6 +643,15 @@ mod tests {
         let h = peak_of(src, "f");
         let all = vec!["local a", "local b", "local n", "type B"];
         assert_eq!((h.at, things(&h)), (0, all));
+    }
+
+    #[test]
+    fn a_local_named_in_a_format_string_is_held() {
+        // Catches {n} in a format string not seen: n would cost nothing,
+        // and would not be carried across g().
+        let src = "fn g() {}\nfn f(n: u8) -> String { g(); format!(\"{n:02} {{n}} {}\", 1) }";
+        let h = peak_of(src, "f");
+        assert_eq!((h.at, things(&h)), (1, vec!["fn g", "local n"]));
     }
 
     #[test]
