@@ -61,13 +61,7 @@ impl Journal {
         fs::create_dir_all(dir)?;
         let path = dir.join(JOURNAL);
         if !path.exists() {
-            let mut f = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&path)?;
-            f.write_all((record::header(JOURNAL_FORMAT) + "\n").as_bytes())?;
-            f.sync_all()?;
-            sync_dir(dir)?;
+            create(dir)?;
         }
         let text = fs::read_to_string(&path)?;
         let entries = chain::check_journal(&text)?;
@@ -197,6 +191,18 @@ impl Journal {
         sync_dir(&self.dir)?;
         Ok(())
     }
+}
+
+/// Start the journal file in `dir`, holding its header alone, and make it
+/// durable.
+fn create(dir: &Path) -> io::Result<()> {
+    let mut f = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(dir.join(JOURNAL))?;
+    f.write_all((record::header(JOURNAL_FORMAT) + "\n").as_bytes())?;
+    f.sync_all()?;
+    sync_dir(dir)
 }
 
 /// Make a rename or a new file in `dir` durable.
