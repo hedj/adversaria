@@ -621,3 +621,19 @@ fn a_command_on_an_item_needs_one() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_command_with_nothing_to_say_leaves_the_message() {
+    // Catches a silent command that clears the message line, and with it
+    // what a write inside the command reported.
+    let dir = temp("silent");
+    let mut app = App::open(&dir).unwrap();
+    typ(&mut app, "A");
+    app.flush();
+    command(&mut app, "undo");
+    let said = app.message.clone();
+    assert!(said.starts_with("undid entry"), "{said}");
+    command(&mut app, "fold");
+    assert_eq!(app.message, said);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
