@@ -2,8 +2,10 @@
 //! and derived text. Each definition is checked before it is kept.
 
 use super::{all_bound, encoded, functor_of, node_def, reserved, var_list};
+use crate::actions::worlds::with_left;
 use crate::app::App;
 use crate::outline::TOP;
+use crate::reason::direct_conflicts;
 use format::terms::Term;
 use serde_json::{Value, json};
 
@@ -189,4 +191,52 @@ fn query_def(item: u64, goal: Term) -> Term {
         item,
         Term::Compound("query".into(), vec![var_list(&goal), goal]),
     )
+}
+
+impl App {
+    /// `set`: find, before writing anything, the beliefs the fact directly
+    /// contradicts (see `direct_conflicts`), by evaluating the world with
+    /// it added in the preview engine; retract them; then state the fact on
+    /// the item that held the first of them, or on `target` if none.
+    pub(crate) fn set_fact(&mut self, fact: &Term, target: u64) -> Result<String, String> {
+        let (replaced, left) = self.replaced_by(fact)?;
+        let item = self.set_item(&replaced, target)?;
+        let said = self.replaced_said(&replaced, item);
+        self.retract_all(&replaced)?;
+        self.write_fact(item, fact, None)?;
+        Ok(with_left(said, &left))
+    }
+
+    /// The beliefs a fact directly contradicts that can be retracted, and
+    /// the violations it leaves, tried in the spare engine.
+    fn replaced_by(&mut self, fact: &Term) -> Result<(Vec<u64>, Vec<String>), String> {
+        let trial = self.notebook.trial(fact)?;
+        let evals = self.reason.try_out(&trial)?;
+        let (mut replaced, left) = direct_conflicts(&evals, trial.by);
+        replaced.retain(|t| self.retractable(*t).is_ok());
+        Ok((replaced, left))
+    }
+
+    /// The item a fact goes on: that of the first fact it replaces, else
+    /// the target.
+    fn set_item(&self, replaced: &[u64], target: u64) -> Result<u64, String> {
+        let on = |t: &u64| self.notebook.outline.fact_item.get(t).copied();
+        let item = replaced.iter().find_map(on).unwrap_or(target);
+        if item == TOP {
+            return Err("there is no item to put the fact on".into());
+        }
+        Ok(item)
+    }
+
+    /// What set says it replaced, before it does.
+    fn replaced_said(&self, replaced: &[u64], item: u64) -> String {
+        if replaced.is_empty() {
+            return format!(
+                "set at {}; nothing replaced",
+                self.notebook.outline.number(item)
+            );
+        }
+        let places: Vec<String> = replaced.iter().map(|t| self.fact_place(*t)).collect();
+        format!("set; replaced the fact at {}", places.join(", "))
+    }
 }

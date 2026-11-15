@@ -2,6 +2,8 @@
 //! (docs/guide.md, § 2.4, Worlds and history).
 
 use crate::app::{App, Mode};
+use crate::reason::direct_conflicts;
+use format::terms::{self, Term};
 use serde_json::{Value, json};
 
 impl App {
@@ -96,4 +98,70 @@ impl App {
 /// An entry's sequence number, as written after retract ("12" or "#12").
 fn entry_number(words: &[&str]) -> Option<u64> {
     words.first()?.trim_start_matches('#').parse().ok()
+}
+
+impl App {
+    /// Sprout a world in which `fact` holds; then set aside, in that world
+    /// only, each belief it directly contradicts (the supposition is
+    /// entrenched over them). See `direct_conflicts` for what "directly"
+    /// means; a violation it leaves is shown, for the user to resolve.
+    pub(crate) fn suppose(&mut self, name: &str, fact: &Term) -> Result<String, String> {
+        let f = terms::encode(fact).map_err(|e| e.0)?;
+        let s = self.write_here("suppose", json!({"name": name, "facts": [f]}))?;
+        let (set_aside, left) = self.set_aside_conflicts(s.seq)?;
+        self.evaluate()?;
+        let places: Vec<String> = set_aside.iter().map(|t| self.fact_place(*t)).collect();
+        Ok(with_left(supposed(&places), &left))
+    }
+
+    /// Retract, round by round, five at most, each belief that the fact of
+    /// an entry directly contradicts: those set aside, and the violations
+    /// left.
+    fn set_aside_conflicts(&mut self, seq: u64) -> Result<(Vec<u64>, Vec<String>), String> {
+        let mut set_aside = Vec::new();
+        let mut left = Vec::new();
+        for _ in 0..5 {
+            let targets;
+            (targets, left) = self.retractable_conflicts(seq)?;
+            if targets.is_empty() {
+                break;
+            }
+            self.retract_all(&targets)?;
+            set_aside.extend(targets);
+        }
+        Ok((set_aside, left))
+    }
+
+    /// After reasoning again, the beliefs that the fact of an entry directly
+    /// contradicts and that can be retracted, and the violations left.
+    fn retractable_conflicts(&mut self, seq: u64) -> Result<(Vec<u64>, Vec<String>), String> {
+        self.evaluate()?;
+        let eval = self.reason.eval[0].as_ref().ok_or("no evaluation")?;
+        let (mut targets, left) = direct_conflicts(&eval.constraints, seq);
+        targets.retain(|t| self.retractable(*t).is_ok());
+        Ok((targets, left))
+    }
+
+    pub(crate) fn retract_all(&mut self, targets: &[u64]) -> Result<(), String> {
+        for t in targets {
+            self.write_here("retract", json!({"target": t}))?;
+        }
+        Ok(())
+    }
+}
+
+/// What a supposition says it set aside, at these places.
+fn supposed(places: &[String]) -> String {
+    if places.is_empty() {
+        return "supposed; nothing set aside".into();
+    }
+    format!("supposed; set aside in this world: {}", places.join(", "))
+}
+
+/// A reply, and the violations left for the user, if any are.
+pub(crate) fn with_left(said: String, left: &[String]) -> String {
+    if left.is_empty() {
+        return said;
+    }
+    format!("{said}; left for you: {}", left.join(", "))
 }

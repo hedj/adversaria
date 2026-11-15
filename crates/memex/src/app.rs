@@ -19,7 +19,7 @@ use crate::engine::Engine;
 use crate::journal::{Error as JournalError, Journal};
 use crate::notebook::{CONTENT, Notebook};
 use crate::outline::{Outline, TOP, TextChange, span_json};
-use crate::reason::{self, Prov, WorldEval};
+use crate::reason::{self, WorldEval};
 use crate::reasoning::Reasoning;
 use crate::session::Session;
 use format::record::Entry;
@@ -898,100 +898,6 @@ impl App {
         }
     }
 
-    /// Sprout a world in which `fact` holds; then set aside, in that world
-    /// only, each belief it directly contradicts (the supposition is
-    /// entrenched over them). See `direct_conflicts` for what "directly"
-    /// means; a violation it leaves is shown, for the user to resolve.
-    fn suppose(&mut self, name: &str, fact: &Term) -> Result<String, String> {
-        let f = terms::encode(fact).map_err(|e| e.0)?;
-        let s = self.write_here("suppose", json!({"name": name, "facts": [f]}))?;
-        let (set_aside, left) = self.set_aside_conflicts(s.seq)?;
-        self.evaluate()?;
-        let places: Vec<String> = set_aside.iter().map(|t| self.fact_place(*t)).collect();
-        Ok(with_left(supposed(&places), &left))
-    }
-
-    /// Retract, round by round, five at most, each belief that the fact of
-    /// an entry directly contradicts: those set aside, and the violations
-    /// left.
-    fn set_aside_conflicts(&mut self, seq: u64) -> Result<(Vec<u64>, Vec<String>), String> {
-        let mut set_aside = Vec::new();
-        let mut left = Vec::new();
-        for _ in 0..5 {
-            let targets;
-            (targets, left) = self.retractable_conflicts(seq)?;
-            if targets.is_empty() {
-                break;
-            }
-            self.retract_all(&targets)?;
-            set_aside.extend(targets);
-        }
-        Ok((set_aside, left))
-    }
-
-    /// After reasoning again, the beliefs that the fact of an entry directly
-    /// contradicts and that can be retracted, and the violations left.
-    fn retractable_conflicts(&mut self, seq: u64) -> Result<(Vec<u64>, Vec<String>), String> {
-        self.evaluate()?;
-        let eval = self.reason.eval[0].as_ref().ok_or("no evaluation")?;
-        let (mut targets, left) = direct_conflicts(&eval.constraints, seq);
-        targets.retain(|t| self.retractable(*t).is_ok());
-        Ok((targets, left))
-    }
-
-    fn retract_all(&mut self, targets: &[u64]) -> Result<(), String> {
-        for t in targets {
-            self.write_here("retract", json!({"target": t}))?;
-        }
-        Ok(())
-    }
-
-    /// `set`: find, before writing anything, the beliefs the fact directly
-    /// contradicts (see `direct_conflicts`), by evaluating the world with
-    /// it added in the preview engine; retract them; then state the fact on
-    /// the item that held the first of them, or on `target` if none.
-    pub(crate) fn set_fact(&mut self, fact: &Term, target: u64) -> Result<String, String> {
-        let (replaced, left) = self.replaced_by(fact)?;
-        let item = self.set_item(&replaced, target)?;
-        let said = self.replaced_said(&replaced, item);
-        self.retract_all(&replaced)?;
-        self.write_fact(item, fact, None)?;
-        Ok(with_left(said, &left))
-    }
-
-    /// The beliefs a fact directly contradicts that can be retracted, and
-    /// the violations it leaves, tried in the spare engine.
-    fn replaced_by(&mut self, fact: &Term) -> Result<(Vec<u64>, Vec<String>), String> {
-        let trial = self.notebook.trial(fact)?;
-        let evals = self.reason.try_out(&trial)?;
-        let (mut replaced, left) = direct_conflicts(&evals, trial.by);
-        replaced.retain(|t| self.retractable(*t).is_ok());
-        Ok((replaced, left))
-    }
-
-    /// The item a fact goes on: that of the first fact it replaces, else
-    /// the target.
-    fn set_item(&self, replaced: &[u64], target: u64) -> Result<u64, String> {
-        let on = |t: &u64| self.notebook.outline.fact_item.get(t).copied();
-        let item = replaced.iter().find_map(on).unwrap_or(target);
-        if item == TOP {
-            return Err("there is no item to put the fact on".into());
-        }
-        Ok(item)
-    }
-
-    /// What set says it replaced, before it does.
-    fn replaced_said(&self, replaced: &[u64], item: u64) -> String {
-        if replaced.is_empty() {
-            return format!(
-                "set at {}; nothing replaced",
-                self.notebook.outline.number(item)
-            );
-        }
-        let places: Vec<String> = replaced.iter().map(|t| self.fact_place(*t)).collect();
-        format!("set; replaced the fact at {}", places.join(", "))
-    }
-
     /// Where a fact entry's fact is stated, in the actual world: its item's
     /// number, or "entry n".
     pub fn fact_place(&self, seq: u64) -> String {
@@ -1226,66 +1132,6 @@ fn continuation(text: &str, p: &str) -> String {
     after.chars().take_while(|c| !c.is_whitespace()).collect()
 }
 
-/// The beliefs a new fact (entry `new`) directly contradicts, and the
-/// violations it is part of that have no single repair. A violation that
-/// rests on the new fact and exactly one other belief is a direct
-/// contradiction: giving up that belief is the only way to keep the new
-/// fact and the constraint. A violation resting on two or more other
-/// beliefs could be repaired by giving up any of them; which one is the
-/// user's choice, so it is left, counted by constraint, as "1 violation
-/// of NAME".
-fn direct_conflicts(constraints: &[reason::ConstraintEval], new: u64) -> (Vec<u64>, Vec<String>) {
-    let found: Vec<_> = constraints.iter().map(|c| conflicts_of(c, new)).collect();
-    let mut direct: Vec<u64> = found.iter().flat_map(|(one, _)| one.clone()).collect();
-    direct.sort();
-    direct.dedup();
-    (
-        direct,
-        found.into_iter().filter_map(|(_, left)| left).collect(),
-    )
-}
-
-/// Of a constraint's violations that rest on a new fact: the beliefs that
-/// those resting on one other belief contradict, and how many rest on
-/// more, if any do.
-fn conflicts_of(c: &reason::ConstraintEval, new: u64) -> (Vec<u64>, Option<String>) {
-    let rests = c.violations.iter().filter_map(|v| others_beside(v, new));
-    let (one, many): (Vec<_>, Vec<_>) = rests.partition(|o| o.len() == 1);
-    (
-        one.concat(),
-        reason::violations_of(many.len(), &c.constraint.name),
-    )
-}
-
-/// The other beliefs a violation rests on, beside a new fact; none if it
-/// does not rest on the new fact, or rests on it alone.
-fn others_beside(v: &reason::Solution, new: u64) -> Option<Vec<u64>> {
-    let seqs = v.prov.iter().map(Prov::seq);
-    if !seqs.clone().any(|s| s == new) {
-        return None;
-    }
-    let mut others: Vec<u64> = seqs.filter(|s| *s != new).collect();
-    others.sort();
-    others.dedup();
-    (!others.is_empty()).then_some(others)
-}
-
-/// What a supposition says it set aside, at these places.
-fn supposed(places: &[String]) -> String {
-    if places.is_empty() {
-        return "supposed; nothing set aside".into();
-    }
-    format!("supposed; set aside in this world: {}", places.join(", "))
-}
-
-/// A reply, and the violations left for the user, if any are.
-fn with_left(said: String, left: &[String]) -> String {
-    if left.is_empty() {
-        return said;
-    }
-    format!("{said}; left for you: {}", left.join(", "))
-}
-
 /// What adopting a claim would raise, as interrogation shows it.
 fn adoption_preview(raised: &[String]) -> String {
     if raised.is_empty() {
@@ -1314,35 +1160,7 @@ pub(crate) fn word_at(text: &[char], pos: usize) -> (usize, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::outline::Constraint;
-    use crate::reason::{ConstraintEval, Solution, Suggestion};
-
-    /// A constraint, by name, violated once on each of these sets of
-    /// beliefs.
-    fn violated(name: &str, rests: &[&[u64]]) -> ConstraintEval {
-        let constraint = Constraint {
-            name: name.into(),
-            rule: String::new(),
-        };
-        let violations = rests.iter().map(|r| on_beliefs(r)).collect();
-        let disagreements = vec![];
-        ConstraintEval {
-            seq: 1,
-            constraint,
-            violations,
-            disagreements,
-        }
-    }
-
-    /// A solution resting on these beliefs.
-    fn on_beliefs(seqs: &[u64]) -> Solution {
-        let prov = seqs.iter().map(|s| Prov::Belief(*s)).collect();
-        Solution {
-            values: vec![],
-            prov,
-            facts: vec![],
-        }
-    }
+    use crate::reason::Suggestion;
 
     /// A memex in a directory of this test's own, with an item stating a
     /// fact about an entity x.
@@ -1395,35 +1213,5 @@ mod tests {
         let refused = accepting(&mut app, "reference", args);
         assert_eq!(refused, Err("no item is that work".into()));
         std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn a_belief_named_twice_in_one_violation_is_contradicted_directly() {
-        let c = violated("c", &[&[9, 3, 3]]);
-        assert_eq!(direct_conflicts(&[c], 9), (vec![3], vec![]));
-    }
-
-    #[test]
-    fn a_belief_contradicted_twice_is_named_once() {
-        let c = violated("c", &[&[9, 3], &[3, 9]]);
-        assert_eq!(direct_conflicts(&[c], 9).0, vec![3]);
-    }
-
-    #[test]
-    fn a_violation_without_the_new_fact_is_none_of_its_conflicts() {
-        let c = violated("c", &[&[1, 2]]);
-        assert_eq!(direct_conflicts(&[c], 9), (vec![], vec![]));
-    }
-
-    #[test]
-    fn a_violation_of_the_new_fact_alone_is_not_left() {
-        let c = violated("c", &[&[9]]);
-        assert_eq!(direct_conflicts(&[c], 9), (vec![], vec![]));
-    }
-
-    #[test]
-    fn the_violations_left_are_counted_by_constraint() {
-        let c = violated("one date", &[&[9, 1, 2], &[9, 3, 4]]);
-        assert_eq!(direct_conflicts(&[c], 9).1, ["2 violations of one date"]);
     }
 }
