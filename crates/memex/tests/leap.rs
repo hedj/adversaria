@@ -63,3 +63,10 @@ fn recognition_with_no_match_keeps_the_pattern() {
     let mut r = room("none");
     assert_eq!(recognised(&mut r, "zzz"), "zzz");
 }
+
+#[test]
+fn recognition_stops_where_the_matches_differ() {
+    let mut r = Room::new("differ");
+    r.items(&["Energia", "Enigma"]);
+    assert_eq!(recognised(&mut r, "en"), "en");
+}
