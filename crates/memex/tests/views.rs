@@ -597,3 +597,42 @@ fn the_view_panel_shows_the_views_notes_and_how_to_follow_a_mark() {
         "a click on a mark goes to the item that states its fact"
     ));
 }
+
+/// The view at the cursor, the room's chart, in world k, at a width.
+fn chart_figure(room: &Room, k: usize, width: usize) -> memex::view::Figure {
+    memex::ui::view_figure(&room.app, k, room.app.cursor(), width, 12)
+}
+
+/// Whether a figure draws any mark loudly.
+fn loud(fig: &memex::view::Figure) -> bool {
+    fig.rows
+        .concat()
+        .iter()
+        .any(|(_, ink)| *ink == memex::view::Ink::Loud)
+}
+
+#[test]
+fn an_item_without_a_view_draws_nothing() {
+    let room = chart("no-view", &["cell(rent, 1200)"]);
+    let budget = room.app.notebook.outline.in_order()[0];
+    let fig = memex::ui::view_figure(&room.app, 0, budget, 60, 12);
+    assert!(fig.rows.is_empty() && fig.notes.is_empty());
+}
+
+#[test]
+fn a_view_is_loud_only_in_the_world_whose_facts_are_violated() {
+    let mut room = chart("loud-world", &["cell(income, 2000)", "cell(food, 400)"]);
+    room.command("constraint within income: false :- cell(income, I), cell(food, F), F > I.");
+    room.command("suppose that famine");
+    room.command("fact cell(food, 3000)");
+    room.app.evaluate().unwrap();
+    assert!(loud(&chart_figure(&room, 0, 60)), "the supposed world");
+    assert!(!loud(&chart_figure(&room, 1, 60)), "the actual world");
+}
+
+#[test]
+fn a_view_is_drawn_in_the_width_it_is_given() {
+    let room = chart("view-width", &["cell(rent, 1200)", "cell(food, 400)"]);
+    let fig = chart_figure(&room, 0, 24);
+    assert!(fig.rows.iter().all(|row| row.len() <= 24));
+}
