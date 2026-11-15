@@ -6,6 +6,9 @@ use format::terms::Term;
 use memex::app::{App, Event, Key, Quasi};
 use std::path::{Path, PathBuf};
 
+mod support;
+use support::Room;
+
 fn temp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("adversaria-views-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
@@ -548,4 +551,49 @@ fn the_room_is_named_after_its_journal_directory() {
     let top = screen(&app).0.remove(0);
     assert!(top.contains(&format!("room {name}")), "{top}");
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A room with an item for each cell, stated as a fact, then a chart of
+/// them all, evaluated.
+fn chart(name: &str, cells: &[&str]) -> Room {
+    let mut room = Room::new(name);
+    room.items(&["Budget"]);
+    for cell in cells {
+        room.items(&["", cell]);
+        room.command(&format!("fact {cell}"));
+    }
+    room.items(&["", "Chart"]);
+    room.command("layer bar(x(C), y(V)) where cell(C, V)");
+    room.app.evaluate().unwrap();
+    room
+}
+
+/// Whether a line of the screen holds this text.
+fn shows(room: &Room, text: &str) -> bool {
+    room.lines_at(160, 40).iter().any(|l| l.contains(text))
+}
+
+#[test]
+fn the_view_panel_counts_a_layers_marks_by_its_entry() {
+    let room = chart("panel-marks", &["cell(rent, 1200)", "cell(food, 400)"]);
+    let layer = room.last("edit");
+    assert!(shows(&room, &format!("entry {layer} · 2 marks")));
+}
+
+#[test]
+fn the_view_panel_counts_one_mark_as_one() {
+    let room = chart("panel-mark", &["cell(rent, 1200)"]);
+    let layer = room.last("edit");
+    assert!(shows(&room, &format!("entry {layer} · 1 mark ")));
+}
+
+#[test]
+fn the_view_panel_shows_the_views_notes_and_how_to_follow_a_mark() {
+    let room = chart("panel-notes", &[]);
+    let notes = room.lines_at(160, 40).concat();
+    assert_eq!(notes.matches("(no marks: no solutions yet)").count(), 2);
+    assert!(shows(
+        &room,
+        "a click on a mark goes to the item that states its fact"
+    ));
 }
