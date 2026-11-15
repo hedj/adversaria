@@ -10,6 +10,7 @@ pub mod documents;
 pub mod engine;
 mod evaluation;
 pub mod journal;
+pub mod keys;
 pub mod notebook;
 pub mod outline;
 pub mod prolog;
