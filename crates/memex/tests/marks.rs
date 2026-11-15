@@ -6,8 +6,8 @@ use support::Room;
 
 /// Three items, each stating a cell, and a constraint that the three
 /// break together, evaluated.
-fn three_cells() -> Room {
-    let mut room = Room::new("marks-three");
+fn three_cells(name: &str) -> Room {
+    let mut room = Room::new(name);
     room.items(&["a"]);
     room.command("fact cell(a, 1)");
     for (name, cell) in [("b", "cell(b, 2)"), ("c", "cell(c, 9)")] {
@@ -29,10 +29,20 @@ fn first_marks(room: &Room) -> Vec<String> {
 
 #[test]
 fn an_items_marks_name_each_other_fact_of_a_finding_once() {
-    let room = three_cells();
+    let room = three_cells("marks-each");
     let marks = [
         "sum, violation: a, 1 here, b, 2 in 2",
         "sum, violation: a, 1 here, c, 9 in 3",
     ];
     assert_eq!(first_marks(&room), marks);
+}
+
+#[test]
+fn an_item_stating_two_facts_of_a_finding_is_marked_by_its_first() {
+    let mut room = three_cells("marks-first");
+    room.put_cursor(room.app.notebook.outline.in_order()[0]);
+    room.command("fact cell(b, 5)");
+    room.app.evaluate().unwrap();
+    let marks = first_marks(&room);
+    assert!(marks.iter().all(|m| m.contains(": a, 1 here")), "{marks:?}");
 }
