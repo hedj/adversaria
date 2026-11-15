@@ -88,3 +88,9 @@ fn the_top_bar_names_the_room_its_world_its_entries_and_the_pane() {
         "{top}"
     );
 }
+
+#[test]
+fn the_top_bar_draws_no_right_side_that_does_not_fit() {
+    let r = Room::new("top-narrow");
+    assert_eq!(r.lines_at(11, 4).remove(0), "room advers");
+}

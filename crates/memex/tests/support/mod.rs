@@ -74,11 +74,16 @@ impl Room {
 
     /// The lines drawn on a screen of 80 by 20.
     pub fn lines(&self) -> Vec<String> {
-        let mut t = Terminal::new(TestBackend::new(80, 20)).unwrap();
+        self.lines_at(80, 20)
+    }
+
+    /// The lines drawn on a screen of a width and a height.
+    pub fn lines_at(&self, width: u16, height: u16) -> Vec<String> {
+        let mut t = Terminal::new(TestBackend::new(width, height)).unwrap();
         t.draw(|f| memex::ui::draw(f, &self.app)).unwrap();
         let buf = t.backend().buffer().clone();
-        let row = |y| (0..80).map(|x| buf[(x, y)].symbol()).collect::<String>();
-        (0..20).map(row).collect()
+        let row = |y| (0..width).map(|x| buf[(x, y)].symbol()).collect::<String>();
+        (0..height).map(row).collect()
     }
 
     pub fn view(&self) -> &View {
