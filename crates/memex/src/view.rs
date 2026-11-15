@@ -28,6 +28,7 @@
 //! category, in standard order.
 
 use format::terms::Term;
+use std::collections::BTreeSet;
 
 /// A mark's channels, by name, in the order written.
 pub type Channels = Vec<(String, Term)>;
@@ -141,6 +142,18 @@ pub struct Input {
     pub mark: Term,
     pub prov: Vec<u64>,
     pub loud: bool,
+}
+
+impl Input {
+    /// A mark resting on facts, loud if any of them is in a violation.
+    pub fn of(mark: &Term, prov: &[u64], violated: &BTreeSet<u64>) -> Input {
+        let loud = prov.iter().any(|s| violated.contains(s));
+        Input {
+            mark: mark.clone(),
+            prov: prov.to_vec(),
+            loud,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -296,6 +309,14 @@ pub struct Figure {
 }
 
 impl Figure {
+    /// A figure of one note and nothing drawn.
+    pub fn noted(note: &str) -> Figure {
+        Figure {
+            notes: vec![note.to_string()],
+            ..Default::default()
+        }
+    }
+
     /// The figure with these notes before its own.
     fn noted_first(mut self, notes: Vec<String>) -> Figure {
         self.notes.splice(0..0, notes);

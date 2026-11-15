@@ -395,40 +395,41 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
     }
 }
 
-/// The facts in violations in world k, by seq: marks resting on them are
-/// drawn loudly.
-fn violated(app: &App, k: usize) -> std::collections::BTreeSet<u64> {
-    let eval = app.reason.eval[k].as_ref();
-    eval.map(WorldEval::violated_facts).unwrap_or_default()
-}
-
 /// The view at an item, drawn as world k computes it.
 pub fn view_figure(app: &App, k: usize, item: u64, width: usize, height: usize) -> view::Figure {
-    let Some(layers) = app.notebook.outline.views.get(&item) else {
-        return view::Figure::default();
-    };
-    let bad = violated(app, k);
-    let inputs: Vec<view::Input> = app.reason.eval[k]
-        .as_ref()
-        .map(|e| {
-            layers
-                .iter()
-                .flat_map(|l| e.nodes.layers.get(&l.seq).cloned().unwrap_or_default())
-                .map(|(mark, prov)| view::Input {
-                    loud: prov.iter().any(|s| bad.contains(s)),
-                    mark,
-                    prov,
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    if inputs.is_empty() {
-        return view::Figure {
-            notes: vec!["(no marks: no solutions yet)".into()],
-            ..Default::default()
-        };
+    match view_inputs(app, k, item) {
+        None => view::Figure::default(),
+        Some(inputs) if inputs.is_empty() => view::Figure::noted("(no marks: no solutions yet)"),
+        Some(inputs) => view::render(&inputs, width, height),
     }
-    view::render(&inputs, width, height)
+}
+
+/// The marks of the view at an item in world k, if the item has a view.
+fn view_inputs(app: &App, k: usize, item: u64) -> Option<Vec<view::Input>> {
+    let layers = app.notebook.outline.views.get(&item)?;
+    let Some(eval) = app.reason.eval[k].as_ref() else {
+        return Some(vec![]);
+    };
+    let bad = eval.violated_facts();
+    Some(
+        layers
+            .iter()
+            .flat_map(|l| layer_inputs(eval, l, &bad))
+            .collect(),
+    )
+}
+
+/// A layer's marks in a world, each loud if it rests on a violated fact.
+fn layer_inputs(
+    eval: &WorldEval,
+    layer: &Layer,
+    violated: &std::collections::BTreeSet<u64>,
+) -> Vec<view::Input> {
+    let marks = eval.nodes.marks(layer.seq);
+    let inputs = marks
+        .iter()
+        .map(|(mark, prov)| view::Input::of(mark, prov, violated));
+    inputs.collect()
 }
 
 /// A figure as lines, indented; notes after it, dim.
