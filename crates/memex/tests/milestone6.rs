@@ -568,3 +568,21 @@ fn a_retracted_change_of_a_revision_is_marked() {
     assert!(app.revision_changes()[0].2, "the change is retracted");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_changed_input_marks_only_its_own_results() {
+    // Catches the items of every import marked when one import's input
+    // changes.
+    let dir = temp("results-own");
+    let mut app = imported_results(&dir);
+    std::fs::write(dir.join("talk.md"), "# Talk\n\nIt flew.\n").unwrap();
+    command(
+        &mut app,
+        &format!("import document {}", dir.join("talk.md").display()),
+    );
+    std::fs::write(dir.join("data.csv"), "t,delay\n1,1.5\n2,1.9\n").unwrap();
+    app.evaluate().unwrap();
+    let flew = leap(&mut app, "It flew.");
+    assert!(!app.session.stale().contains_key(&flew));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
