@@ -312,37 +312,81 @@ fn a_revised_document_opens_a_world_of_changes() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-#[test]
-fn a_changed_input_marks_its_results() {
-    // Plan: "A changed input file marks the results that depended on it."
-    // The results file is written by the Python helper an analysis calls.
-    let dir = temp("results");
+/// A results file that an analysis of data.csv wrote with the Python
+/// helper, imported.
+fn imported_results(dir: &Path) -> App {
     std::fs::write(dir.join("data.csv"), "t,delay\n1,1.5\n2,1.6\n").unwrap();
     let helper = concat!(env!("CARGO_MANIFEST_DIR"), "/../../helpers/python");
     let script = format!(
         "import sys; sys.path.insert(0, {helper:?}); from memex_results import write_results; \
          write_results('results.json', [('mean_delay', 1.55, 0.05, 's')], ['data.csv'], script='analysis.py')"
     );
-    let ok = std::process::Command::new("python3")
-        .args(["-c", &script])
-        .current_dir(&dir)
-        .status()
-        .unwrap();
-    assert!(ok.success());
+    let mut python = std::process::Command::new("python3");
+    let run = python.args(["-c", &script]).current_dir(dir).status();
+    assert!(run.unwrap().success());
+    let mut app = open(dir);
+    let file = dir.join("results.json");
+    command(&mut app, &format!("import results {}", file.display()));
+    app
+}
+
+#[test]
+fn an_imported_result_keeps_its_source() {
+    let dir = temp("results-source");
+    let mut app = imported_results(&dir);
+    let result = leap(&mut app, "mean_delay");
+    let outline = &app.notebook.outline;
+    assert!(outline.source[&result].starts_with("analysis.py@"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_ruling_names_the_blob_it_read() {
+    let dir = temp("ruling-blob");
+    let src = dir.join("talk.md");
+    std::fs::write(&src, "# Talk\n\nThe 1989 flight was the only one.\n").unwrap();
     let mut app = open(&dir);
-    command(
-        &mut app,
-        &format!("import results {}", dir.join("results.json").display()),
-    );
+    command(&mut app, &format!("import document {}", src.display()));
+    leap(&mut app, "The 1989");
+    command(&mut app, "check quote");
+    let ruling = last_body(&app)["facts"][0].to_string();
+    assert!(ruling.contains(last_blob(&app).as_str()), "{ruling}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The body of the last entry.
+fn last_body(app: &App) -> serde_json::Value {
+    app.journal()
+        .entries()
+        .last()
+        .unwrap()
+        .body()
+        .unwrap()
+        .clone()
+}
+
+/// The blob of the last import.
+fn last_blob(app: &App) -> String {
+    let mut imports = app
+        .journal()
+        .entries()
+        .iter()
+        .filter(|e| e.kind() == "import");
+    imports.next_back().unwrap().body().unwrap()["blob"]
+        .as_str()
+        .unwrap()
+        .into()
+}
+
+#[test]
+fn a_changed_input_marks_its_results() {
+    // Plan: "A changed input file marks the results that depended on it."
+    // The results file is written by the Python helper an analysis calls.
+    let dir = temp("results");
+    let mut app = imported_results(&dir);
     app.evaluate().unwrap();
     assert!(app.session.stale().is_empty(), "nothing has changed yet");
-    let result = app
-        .notebook
-        .outline
-        .in_order()
-        .into_iter()
-        .find(|i| app.notebook.outline.text(*i).starts_with("mean_delay"))
-        .unwrap();
+    let result = leap(&mut app, "mean_delay");
     assert_eq!(
         app.notebook.outline.text(result),
         "mean_delay = 1.55 ± 0.05 s"
