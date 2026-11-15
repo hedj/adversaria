@@ -535,3 +535,14 @@ fn gallery_the_outline_itself_as_a_tree() {
     assert_eq!(app.outline.text(app.cursor()), "Interview");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn the_room_is_named_after_its_journal_directory() {
+    // Catches a top bar that names no room, or names another.
+    let dir = temp("room");
+    let app = App::open(&dir).unwrap();
+    let name = dir.file_name().unwrap().to_string_lossy().into_owned();
+    let top = screen(&app).0.remove(0);
+    assert!(top.contains(&format!("room {name}")), "{top}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

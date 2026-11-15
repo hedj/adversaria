@@ -105,3 +105,20 @@ impl Session {
         self.outside.observed = Some(now);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_source_check_asks_crossref_unless_pointed_elsewhere() {
+        let mut s = Session::new(Path::new("room"));
+        let doi = "10.1000/a b";
+        assert_eq!(
+            s.source_url(doi),
+            "https://api.crossref.org/works/10.1000/a%20b"
+        );
+        s.set_crossref("http://localhost:1/");
+        assert_eq!(s.source_url(doi), "http://localhost:1/10.1000/a%20b");
+    }
+}
