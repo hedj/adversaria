@@ -492,3 +492,35 @@ fn the_quote_check_reads_past_markup() {
     assert_eq!(app.session.message, "quote check: quoted");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// An essay of one line, imported, then revised and imported again: its
+/// revision opens a world.
+fn revised(dir: &Path) -> App {
+    let src = dir.join("essay.md");
+    std::fs::write(&src, "# Essay\n\nBuran flew in 1988.\n").unwrap();
+    let mut app = open(dir);
+    command(&mut app, &format!("import document {}", src.display()));
+    std::fs::write(&src, "# Essay\n\nBuran flew in 1989.\n").unwrap();
+    command(&mut app, &format!("import document {}", src.display()));
+    app
+}
+
+#[test]
+fn a_revision_lists_only_its_own_changes() {
+    // Catches the edits of the actual world listed among the revision's.
+    let dir = temp("revise-own");
+    let changes = revised(&dir).revision_changes();
+    assert_eq!(changes.len(), 1, "{changes:?}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_retracted_change_of_a_revision_is_marked() {
+    let dir = temp("revise-retracted");
+    let mut app = revised(&dir);
+    let change = app.revision_changes()[0].0;
+    command(&mut app, &format!("retract {change}"));
+    tap(&mut app, Key::Enter);
+    assert!(app.revision_changes()[0].2, "the change is retracted");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
