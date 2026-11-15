@@ -252,3 +252,41 @@ fn an_export_cites_the_entries_its_text_came_from() {
     let (said, _) = export(&mut r, "");
     assert_eq!(said, "exported 1 items to out.md, citing 2 source entries");
 }
+
+/// Whether a line of the screen is this, spaces at its end aside.
+fn shows(r: &Room, line: &str) -> bool {
+    r.lines().iter().any(|l| l.trim_end() == line)
+}
+
+#[test]
+fn a_revision_is_shown_change_by_change() {
+    let mut r = Room::new("rev-screen");
+    revised(&mut r, "# T\n\nOld text.\n", "# T\n\nNew text.\n");
+    let change = format!(
+        "#{}  changed 1.1: “Old text.” → “New text.”",
+        r.last("edit")
+    );
+    assert!(
+        shows(&r, "WORLD · REVISION OF D.MD") && shows(&r, &change),
+        "{:?}",
+        r.lines()
+    );
+}
+
+#[test]
+fn a_revision_without_changes_says_so() {
+    let mut r = Room::new("rev-screen-none");
+    revised(&mut r, "# T\n", "# T\n");
+    assert!(shows(&r, "no changes"), "{:?}", r.lines());
+}
+
+#[test]
+fn a_retracted_change_is_shown_retracted() {
+    let mut r = Room::new("rev-screen-retracted");
+    revised(&mut r, "# T\n\nOld text.\n", "# T\n\nNew text.\n");
+    let change = r.last("edit");
+    r.command(&format!("retract {change}"));
+    r.tap(&[memex::app::Key::Enter]);
+    let line = format!("#{change}  changed 1.1: “Old text.” → “New text.”  (retracted)");
+    assert!(shows(&r, &line), "{:?}", r.lines());
+}
