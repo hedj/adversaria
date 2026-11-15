@@ -32,7 +32,12 @@ impl App {
 
     /// Write an edit entry stating a fact of an item, from a source if one
     /// is given.
-    fn write_fact(&mut self, item: u64, fact: &Term, source: Option<&str>) -> Result<(), String> {
+    pub(crate) fn write_fact(
+        &mut self,
+        item: u64,
+        fact: &Term,
+        source: Option<&str>,
+    ) -> Result<(), String> {
         let mut body = json!({"op": "facts", "item": item, "facts": [encoded(fact)?]});
         if let Some(src) = source {
             body["source"] = json!(src);

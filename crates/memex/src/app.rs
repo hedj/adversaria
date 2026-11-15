@@ -944,8 +944,7 @@ impl App {
         for t in &replaced {
             self.write_here("retract", json!({"target": t}))?;
         }
-        let f = terms::encode(fact).map_err(|e| e.0)?;
-        self.write_here("edit", json!({"op": "facts", "item": item, "facts": [f]}))?;
+        self.write_fact(item, fact, None)?;
         let mut m = if places.is_empty() {
             format!(
                 "set at {}; nothing replaced",
@@ -1518,7 +1517,7 @@ impl App {
                     ),
                 ],
             );
-            self.write_here("edit", json!({"op": "facts", "item": id, "source": source, "facts": [terms::encode(&fact).map_err(|e| e.0)?]}))?;
+            self.write_fact(id, &fact, Some(&source))?;
         }
         Ok(format!("imported the results of {source}"))
     }
@@ -1655,21 +1654,8 @@ impl App {
         ruling: &str,
         hash: &str,
     ) -> Result<(), String> {
-        let c = |f: &str, a: Vec<Term>| Term::Compound(f.into(), a);
-        let fact = c(
-            "ruling",
-            vec![
-                Term::Int(item as i64),
-                Term::Atom(check.into()),
-                Term::Atom(ruling.into()),
-                Term::Str(hash.into()),
-            ],
-        );
-        self.write_here(
-            "edit",
-            json!({"op": "facts", "item": item, "facts": [terms::encode(&fact).map_err(|e| e.0)?]}),
-        )?;
-        Ok(())
+        let fact = ruling_fact(item, check, ruling, hash);
+        self.write_fact(item, &fact, None)
     }
 
     /// An item's claims: (entry seq, source, claimed fact).
@@ -1763,6 +1749,18 @@ fn continuation(text: &str, p: &str) -> String {
     let t = text.to_lowercase();
     let after = &t[t.find(p).unwrap() + p.len()..];
     after.chars().take_while(|c| !c.is_whitespace()).collect()
+}
+
+/// A check's ruling on an item, with the hash of what it read.
+fn ruling_fact(item: u64, check: &str, ruling: &str, hash: &str) -> Term {
+    let (check, ruling) = (Term::Atom(check.into()), Term::Atom(ruling.into()));
+    let args = vec![
+        Term::Int(item as i64),
+        check,
+        ruling,
+        Term::Str(hash.into()),
+    ];
+    Term::Compound("ruling".into(), args)
 }
 
 /// A DOI as a URL path: every byte but letters, digits, "-._~" and "/"
