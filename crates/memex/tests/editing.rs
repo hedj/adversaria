@@ -124,3 +124,47 @@ fn a_citation_is_shown_after_the_text_that_cites() {
     r.command("link 1 2 as cites");
     assert!(r.lines().iter().any(|l| l.contains("claim [source]")));
 }
+
+#[test]
+fn an_edit_keeps_the_entries_of_the_text_around_it() {
+    let mut r = Room::new("runs");
+    r.items(&["abc"]);
+    r.tap(&[Key::Home, Key::Right]);
+    r.typ("X");
+    r.app.flush();
+    let [(a, 1), (x, 1), (bc, 2)] = r.spans()[..] else {
+        panic!("{:?}", r.spans())
+    };
+    assert!(a == bc && x != a, "{:?}", r.spans());
+}
+
+#[test]
+fn an_erased_character_adds_no_span() {
+    let mut r = Room::new("erased");
+    r.items(&["abc"]);
+    r.tap(&[Key::Left, Key::Backspace]);
+    r.app.flush();
+    let lengths: Vec<usize> = r.spans().iter().map(|s| s.1).collect();
+    assert_eq!(lengths, [1, 1]);
+}
+
+#[test]
+fn a_character_repeated_at_the_end_is_added() {
+    let mut r = Room::new("repeated");
+    r.items(&["aa"]);
+    r.typ("a");
+    r.app.flush();
+    let lengths: Vec<usize> = r.spans().iter().map(|s| s.1).collect();
+    assert_eq!(lengths, [2, 1]);
+}
+
+#[test]
+fn text_typed_and_erased_writes_no_edit() {
+    let mut r = Room::new("unchanged");
+    r.items(&["abc"]);
+    let edits = r.count("edit");
+    r.typ("x");
+    r.tap(&[Key::Backspace]);
+    r.app.flush();
+    assert_eq!(r.count("edit"), edits);
+}

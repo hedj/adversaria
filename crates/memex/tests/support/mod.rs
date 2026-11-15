@@ -85,6 +85,19 @@ impl Room {
         &self.app.session.view
     }
 
+    /// The spans of the item at the cursor, as written: for each, the
+    /// entry it came from and its length.
+    pub fn spans(&self) -> Vec<(u64, usize)> {
+        let item = &self.app.notebook.outline.items[&self.app.cursor()];
+        item.spans.iter().map(|s| (s.seq, s.len)).collect()
+    }
+
+    /// How many entries of a kind the journal holds.
+    pub fn count(&self, kind: &str) -> usize {
+        let entries = self.app.journal().entries().iter();
+        entries.filter(|e| e.kind() == kind).count()
+    }
+
     /// The text of the item at the cursor, as shown.
     pub fn here(&self) -> String {
         self.text(self.app.cursor())
