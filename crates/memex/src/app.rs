@@ -198,6 +198,11 @@ impl std::ops::DerefMut for Panes {
 }
 
 impl View {
+    /// What pane i shows.
+    pub(crate) fn pane_kind(&self, i: usize) -> PaneKind {
+        self.panes[i].kind
+    }
+
     /// Whether a pane of a kind is shown.
     pub(crate) fn shows(&self, kind: PaneKind) -> bool {
         self.panes.iter().any(|p| p.kind == kind)
@@ -343,6 +348,16 @@ pub struct Active {
 }
 
 impl Active {
+    /// Whether it lists over the outline: a Leap or Command, listing
+    /// everything or with something typed.
+    pub(crate) fn lists(&self) -> bool {
+        let lister = matches!(
+            self.q,
+            Quasi::LeapForward | Quasi::LeapBack | Quasi::Command
+        );
+        lister && (self.listing || !self.input.is_empty())
+    }
+
     /// A quasimode whose key is held, nothing typed yet.
     pub(crate) fn held(q: Quasi) -> Active {
         let input = String::new();

@@ -2,7 +2,7 @@
 //! user sees and is in the middle of, how the session is set up, and what
 //! it has noticed outside the journal (docs/structure.md § The code's structure).
 
-use crate::app::{Key, Mode, PendingText, View};
+use crate::app::{Active, Key, Mode, PendingText, View};
 use crate::notebook::strings;
 use format::record::Entry;
 use serde_json::Value;
@@ -88,6 +88,14 @@ impl Keys {
 }
 
 impl Session {
+    /// The quasimode in progress, if it lists over the outline.
+    pub(crate) fn listed(&self) -> Option<&Active> {
+        match &self.mode {
+            Mode::Quasi(a) if a.lists() => Some(a),
+            _ => None,
+        }
+    }
+
     /// Apply a view entry: what it shows, and what it records of a leap or
     /// of what reasoning showed.
     pub(crate) fn apply(&mut self, e: &Entry) {

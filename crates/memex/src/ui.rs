@@ -3,7 +3,7 @@
 //! state always draws the same screen.
 
 use crate::actions::command_help;
-use crate::app::{App, Click, Mode, PaneKind, Quasi, ScopeLevel};
+use crate::app::{Active, App, Click, Mode, PaneKind, Quasi, ScopeLevel};
 use crate::outline::{Layer, Outline, Run, TOP};
 use crate::reason::{
     self, ConstraintEval, Finding, Prov, Solution, Sourced, Suggestion, WorldEval,
@@ -36,6 +36,12 @@ impl Hits {
             .find(|(r, _)| r.contains(Position { x, y }))
             .map(|(_, c)| c)
     }
+    /// The clicks outside an area.
+    fn outside(mut self, area: Rect) -> Hits {
+        self.0.retain(|(r, _)| r.intersection(area).is_empty());
+        self
+    }
+
     fn add(&mut self, area: Rect, r: Rect, c: Click) {
         let r = r.intersection(area);
         if r.width > 0 && r.height > 0 {
@@ -50,39 +56,64 @@ pub fn draw(f: &mut Frame, app: &App) {
 
 /// Draw the screen, and say where clicks would land.
 pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
-    let mut hits = Hits::default();
-    let [top, body, prompt, guide] = Layout::vertical([
+    let [top, body, foot @ ..] = screen_areas(f.area());
+    draw_top(f, app, top);
+    let hits = draw_body(f, app, body);
+    draw_prompt(f, app, foot[0], foot[1]);
+    hits
+}
+
+/// The screen's rows: the top bar, the body, and the foot's two lines.
+fn screen_areas(area: Rect) -> [Rect; 4] {
+    let rows = [
         Constraint::Length(1),
         Constraint::Min(3),
         Constraint::Length(1),
         Constraint::Length(1),
-    ])
-    .areas(f.area());
-    draw_top(f, app, top);
-    let [left, right] =
-        Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).areas(body);
+    ];
+    Layout::vertical(rows).areas(area)
+}
+
+/// The body: the two worlds while a supposition is open, else the panes.
+fn draw_body(f: &mut Frame, app: &App, area: Rect) -> Hits {
     if app.reason.supposition.is_some() {
-        draw_worlds(f, app, body);
-        draw_prompt(f, app, prompt, guide);
-        return hits;
+        draw_worlds(f, app, area);
+        return Hits::default();
     }
-    for (i, area) in [(0, left), (1, right)] {
-        match app.session.view.panes[i].kind {
-            PaneKind::Outline => draw_outline(f, app, i, area, &mut hits),
-            PaneKind::Links => draw_links(f, app, area, &mut hits),
-            PaneKind::Suggestions => draw_suggestions(f, app, area, &mut hits),
-        }
+    draw_panes(f, app, area)
+}
+
+/// The two panes, and a quasimode's list over the left one: no click
+/// lands on what it covers.
+fn draw_panes(f: &mut Frame, app: &App, area: Rect) -> Hits {
+    let [left, right] = pane_areas(area);
+    let mut hits = draw_pane(f, app, 1, right);
+    hits.0.extend(draw_pane(f, app, 0, left).0);
+    match app.session.listed() {
+        Some(a) => cover(f, app, a, left, hits),
+        None => hits,
     }
-    if let Mode::Quasi(a) = &app.session.mode
-        && matches!(a.q, Quasi::LeapForward | Quasi::LeapBack | Quasi::Command)
-        && (a.listing || !a.input.is_empty())
-    {
-        draw_list(f, app, a.q, &a.input, a.listing, left);
-        // The list covers the outline: no item under it is clickable.
-        hits.0.retain(|(r, _)| r.intersection(left).is_empty());
+}
+
+/// The body's panes: three fifths of it, then two fifths.
+fn pane_areas(area: Rect) -> [Rect; 2] {
+    let halves = [Constraint::Percentage(60), Constraint::Percentage(40)];
+    Layout::horizontal(halves).areas(area)
+}
+
+/// Pane i, as its kind is drawn.
+fn draw_pane(f: &mut Frame, app: &App, i: usize, area: Rect) -> Hits {
+    match app.session.view.pane_kind(i) {
+        PaneKind::Outline => draw_outline(f, app, i, area),
+        PaneKind::Links => draw_links(f, app, area),
+        PaneKind::Suggestions => draw_suggestions(f, app, area),
     }
-    draw_prompt(f, app, prompt, guide);
-    hits
+}
+
+/// A quasimode's list over an area, and the clicks outside it.
+fn cover(f: &mut Frame, app: &App, a: &Active, area: Rect, hits: Hits) -> Hits {
+    draw_list(f, app, a, area);
+    hits.outside(area)
 }
 
 fn draw_top(f: &mut Frame, app: &App, area: Rect) {
@@ -257,7 +288,8 @@ fn title(app: &App) -> String {
     }
 }
 
-fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hits) {
+fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Hits {
+    let mut hits = Hits::default();
     let block = Block::default().borders(if pane == 0 {
         Borders::RIGHT
     } else {
@@ -409,6 +441,7 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
             });
         }
     }
+    hits
 }
 
 /// The view at an item, drawn as world k computes it.
@@ -517,7 +550,8 @@ fn inverse(kind: &str) -> String {
     }
 }
 
-fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
+fn draw_links(f: &mut Frame, app: &App, area: Rect) -> Hits {
+    let mut hits = Hits::default();
     let inner = inset(area);
     let id = app.session.view.panes[0].cursor;
     if let Some(i) = app.session.view.interrogate {
@@ -550,14 +584,14 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
                 Click::Command("unadopt".into()),
             );
         }
-        return;
+        return hits;
     }
     if let Some(layers) = app.notebook.outline.views.get(&id) {
         f.render_widget(
             Paragraph::new(view_panel(app, id, layers)).wrap(Wrap { trim: false }),
             inner,
         );
-        return;
+        return hits;
     }
     if let Some(e) = app.reason.eval[0].as_ref()
         && !item_marks(e, &app.notebook.outline, id).is_empty()
@@ -566,7 +600,7 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
             Paragraph::new(constraint_panel(app, e, id)).wrap(Wrap { trim: false }),
             inner,
         );
-        return;
+        return hits;
     }
     let mut lines = vec![
         Line::styled("LINKS OF THE SELECTED ITEM", dim()),
@@ -620,11 +654,13 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
         }
     }
     f.render_widget(Paragraph::new(lines), inner);
+    hits
 }
 
 /// The matches of a Leap, or the commands a Command may be, in a box at the
 /// foot of the outline pane.
-fn draw_list(f: &mut Frame, app: &App, q: Quasi, input: &str, listing: bool, area: Rect) {
+fn draw_list(f: &mut Frame, app: &App, a: &Active, area: Rect) {
+    let (q, input, listing) = (a.q, a.input.as_str(), a.listing);
     let lines: Vec<Line> = match q {
         Quasi::Command => command_help(input).into_iter().map(Line::raw).collect(),
         _ => {
@@ -1329,16 +1365,19 @@ fn inset(area: Rect) -> Rect {
 
 /// The suggestion pane: few in view, ranked by evidence, each with why it
 /// was offered. It never takes the keyboard: accept or dismiss by command.
-fn draw_suggestions(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
+fn draw_suggestions(f: &mut Frame, app: &App, area: Rect) -> Hits {
     let inner = inset(area);
-    let column = Column::new(inner, hits);
-    let lines = suggestion_lines(app, column);
-    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+    let column = suggestion_lines(app, Column::new(inner));
+    f.render_widget(
+        Paragraph::new(column.lines).wrap(Wrap { trim: false }),
+        inner,
+    );
+    column.hits
 }
 
-/// The suggestion pane's lines: how many are shown of all, each shown
+/// The suggestion pane's column: how many are shown of all, each shown
 /// one, and how to act on them.
-fn suggestion_lines(app: &App, mut column: Column) -> Vec<Line<'static>> {
+fn suggestion_lines(app: &App, mut column: Column) -> Column {
     let suggestions = &app.reason.suggestions;
     let shown = suggestions.shown();
     let heading = format!(
@@ -1361,7 +1400,7 @@ fn suggestion_lines(app: &App, mut column: Column) -> Vec<Line<'static>> {
     column
         .lines
         .extend([Line::raw(""), Line::styled(hint, dim())]);
-    column.lines
+    column
 }
 
 /// The i-th suggestion shown, numbered from 1, with why it was offered; a
@@ -1377,18 +1416,18 @@ fn suggestion_block(i: usize, s: &Suggestion) -> (Vec<Line<'static>>, Click) {
 
 /// The lines of a pane, wrapped in its area, and what a click on them
 /// acts on.
-struct Column<'a> {
+struct Column {
     lines: Vec<Line<'static>>,
     area: Rect,
-    hits: &'a mut Hits,
+    hits: Hits,
 }
 
-impl<'a> Column<'a> {
-    fn new(area: Rect, hits: &'a mut Hits) -> Self {
+impl Column {
+    fn new(area: Rect) -> Self {
         Column {
             lines: vec![],
             area,
-            hits,
+            hits: Hits::default(),
         }
     }
 
