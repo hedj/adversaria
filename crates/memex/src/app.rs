@@ -1808,3 +1808,66 @@ pub(crate) fn word_at(text: &[char], pos: usize) -> (usize, usize) {
     }
     (a, b)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::reason::Solution;
+
+    /// A constraint, by name, violated once on each of these sets of
+    /// beliefs.
+    fn violated(name: &str, rests: &[&[u64]]) -> ConstraintEval {
+        let constraint = Constraint {
+            name: name.into(),
+            rule: String::new(),
+        };
+        let violations = rests.iter().map(|r| on_beliefs(r)).collect();
+        let disagreements = vec![];
+        ConstraintEval {
+            seq: 1,
+            constraint,
+            violations,
+            disagreements,
+        }
+    }
+
+    /// A solution resting on these beliefs.
+    fn on_beliefs(seqs: &[u64]) -> Solution {
+        let prov = seqs.iter().map(|s| Prov::Belief(*s)).collect();
+        Solution {
+            values: vec![],
+            prov,
+            facts: vec![],
+        }
+    }
+
+    #[test]
+    fn a_belief_named_twice_in_one_violation_is_contradicted_directly() {
+        let c = violated("c", &[&[9, 3, 3]]);
+        assert_eq!(direct_conflicts(&[c], 9), (vec![3], vec![]));
+    }
+
+    #[test]
+    fn a_belief_contradicted_twice_is_named_once() {
+        let c = violated("c", &[&[9, 3], &[3, 9]]);
+        assert_eq!(direct_conflicts(&[c], 9).0, vec![3]);
+    }
+
+    #[test]
+    fn a_violation_without_the_new_fact_is_none_of_its_conflicts() {
+        let c = violated("c", &[&[1, 2]]);
+        assert_eq!(direct_conflicts(&[c], 9), (vec![], vec![]));
+    }
+
+    #[test]
+    fn a_violation_of_the_new_fact_alone_is_not_left() {
+        let c = violated("c", &[&[9]]);
+        assert_eq!(direct_conflicts(&[c], 9), (vec![], vec![]));
+    }
+
+    #[test]
+    fn the_violations_left_are_counted_by_constraint() {
+        let c = violated("one date", &[&[9, 1, 2], &[9, 3, 4]]);
+        assert_eq!(direct_conflicts(&[c], 9).1, ["2 violations of one date"]);
+    }
+}
