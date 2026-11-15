@@ -1363,3 +1363,43 @@ fn change_line((seq, what, retracted): &(u64, String, bool)) -> Line<'static> {
         Line::raw(line)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use view::Ink;
+
+    fn figure(row: &str, ink: Ink) -> view::Figure {
+        let rows = vec![row.chars().map(|c| (c, ink)).collect()];
+        view::Figure {
+            rows,
+            hits: vec![],
+            notes: vec!["a note".into()],
+        }
+    }
+
+    fn texts(line: &Line) -> Vec<String> {
+        line.spans.iter().map(|s| s.content.to_string()).collect()
+    }
+
+    #[test]
+    fn a_figure_is_set_in_by_its_indent_rows_and_notes_alike() {
+        let lines = figure_lines(&figure("ab", Ink::Plain), 3);
+        assert_eq!(texts(&lines[0]), ["   ", "ab"]);
+        assert_eq!(texts(&lines[1]), ["   a note"]);
+    }
+
+    #[test]
+    fn a_row_ends_at_its_last_mark() {
+        let lines = figure_lines(&figure("ab  ", Ink::Plain), 0);
+        assert_eq!(texts(&lines[0]), ["", "ab"]);
+    }
+
+    #[test]
+    fn each_ink_has_its_style() {
+        let style = |ink| figure_lines(&figure("a", ink), 0)[0].spans[1].style;
+        assert_eq!(style(Ink::Dim), dim());
+        assert_eq!(style(Ink::Loud), bold());
+        assert_eq!(style(Ink::Plain), Style::default());
+    }
+}
