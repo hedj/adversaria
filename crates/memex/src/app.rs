@@ -1762,34 +1762,45 @@ pub fn encode_doi(doi: &str) -> String {
 /// user's choice, so it is left, counted by constraint, as "1 violation
 /// of NAME".
 fn direct_conflicts(constraints: &[reason::ConstraintEval], new: u64) -> (Vec<u64>, Vec<String>) {
-    let mut direct = Vec::new();
-    let mut left = Vec::new();
-    for c in constraints {
-        let mut n = 0;
-        for v in &c.violations {
-            if !v.prov.iter().any(|p| p.seq() == new) {
-                continue;
-            }
-            let mut others: Vec<u64> = v.prov.iter().map(Prov::seq).filter(|q| *q != new).collect();
-            others.sort();
-            others.dedup();
-            match others.as_slice() {
-                [one] => direct.push(*one),
-                [] => {}
-                _ => n += 1,
-            }
-        }
-        if n > 0 {
-            left.push(format!(
-                "{n} violation{} of {}",
-                if n == 1 { "" } else { "s" },
-                c.constraint.name
-            ));
-        }
-    }
+    let found: Vec<_> = constraints.iter().map(|c| conflicts_of(c, new)).collect();
+    let mut direct: Vec<u64> = found.iter().flat_map(|(one, _)| one.clone()).collect();
     direct.sort();
     direct.dedup();
-    (direct, left)
+    (
+        direct,
+        found.into_iter().filter_map(|(_, left)| left).collect(),
+    )
+}
+
+/// Of a constraint's violations that rest on a new fact: the beliefs that
+/// those resting on one other belief contradict, and how many rest on
+/// more, if any do.
+fn conflicts_of(c: &reason::ConstraintEval, new: u64) -> (Vec<u64>, Option<String>) {
+    let rests = c.violations.iter().filter_map(|v| others_beside(v, new));
+    let (one, many): (Vec<_>, Vec<_>) = rests.partition(|o| o.len() == 1);
+    (
+        one.concat(),
+        violations_left(many.len(), &c.constraint.name),
+    )
+}
+
+/// The other beliefs a violation rests on, beside a new fact; none if it
+/// does not rest on the new fact, or rests on it alone.
+fn others_beside(v: &reason::Solution, new: u64) -> Option<Vec<u64>> {
+    let seqs = v.prov.iter().map(Prov::seq);
+    if !seqs.clone().any(|s| s == new) {
+        return None;
+    }
+    let mut others: Vec<u64> = seqs.filter(|s| *s != new).collect();
+    others.sort();
+    others.dedup();
+    (!others.is_empty()).then_some(others)
+}
+
+/// How many violations of a constraint are left, if any are.
+fn violations_left(n: usize, name: &str) -> Option<String> {
+    let s = if n == 1 { "" } else { "s" };
+    (n > 0).then(|| format!("{n} violation{s} of {name}"))
 }
 
 /// The word around a text position: [start, end).
