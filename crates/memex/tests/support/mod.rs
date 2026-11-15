@@ -92,6 +92,18 @@ impl Room {
         item.spans.iter().map(|s| (s.seq, s.len)).collect()
     }
 
+    /// Bind keys as a configuration's [keys] section does.
+    pub fn bind(&mut self, keys: &str) {
+        let config = memex::config::Config::parse(&format!("[keys]\n{keys}\n"));
+        self.app.session.keys = config.unwrap().keys();
+    }
+
+    /// Put the focused pane's cursor on an item, or on none (TOP).
+    pub fn put_cursor(&mut self, item: u64) {
+        let view = &mut self.app.session.view;
+        view.panes[view.focus].cursor = item;
+    }
+
     /// The number of the last entry of a kind.
     pub fn last(&self, kind: &str) -> u64 {
         let mut entries = self.app.journal().entries().iter().rev();
