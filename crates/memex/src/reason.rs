@@ -167,6 +167,13 @@ pub struct Nodes {
     pub layers: BTreeMap<u64, Vec<(Term, Vec<u64>)>>,
 }
 
+impl Nodes {
+    /// A layer's marks, by the layer's seq: none if it has given none.
+    pub fn marks(&self, layer: u64) -> &[(Term, Vec<u64>)] {
+        self.layers.get(&layer).map_or(&[], Vec::as_slice)
+    }
+}
+
 impl WorldEval {
     pub fn fact(&self, seq: u64) -> Option<&Term> {
         self.facts.iter().find(|(s, _)| *s == seq).map(|(_, t)| t)

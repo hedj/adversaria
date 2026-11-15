@@ -4,7 +4,7 @@
 
 use crate::actions::command_help;
 use crate::app::{App, Click, Mode, PaneKind, Quasi, ScopeLevel};
-use crate::outline::{Outline, TOP};
+use crate::outline::{Layer, Outline, TOP};
 use crate::reason::{self, Prov, WorldEval};
 use crate::view;
 use format::terms::Term;
@@ -138,44 +138,39 @@ fn top_right(app: &App, width: u16) -> Option<Line<'static>> {
 
 /// The right pane for a view: its layers, each with its goal and how many
 /// marks it gives, and the view's notes.
-fn view_panel(app: &App, id: u64, layers: &[crate::outline::Layer]) -> Vec<Line<'static>> {
-    let mut lines = vec![
-        Line::styled(
-            format!(
-                "VIEW · {} LAYER{}",
-                layers.len(),
-                if layers.len() == 1 { "" } else { "S" }
-            ),
-            dim(),
-        ),
-        Line::raw(""),
-    ];
-    for l in layers {
-        let n = app.reason.eval[0]
-            .as_ref()
-            .and_then(|e| e.nodes.layers.get(&l.seq))
-            .map_or(0, |m| m.len());
-        lines.push(Line::raw(format!("layer {} where {}", l.mark, l.goal)));
-        lines.push(Line::styled(
-            format!(
-                "  entry {} · {n} mark{}",
-                l.seq,
-                if n == 1 { "" } else { "s" }
-            ),
-            dim(),
-        ));
-    }
-    let fig = view_figure(app, 0, id, 60, 12);
-    if !fig.notes.is_empty() {
-        lines.push(Line::raw(""));
-        lines.extend(fig.notes.into_iter().map(|n| Line::styled(n, dim())));
-    }
-    lines.push(Line::raw(""));
-    lines.push(Line::styled(
-        "a click on a mark goes to the item that states its fact",
-        dim(),
-    ));
+fn view_panel(app: &App, id: u64, layers: &[Layer]) -> Vec<Line<'static>> {
+    let mut lines = vec![layers_heading(layers), Line::raw("")];
+    lines.extend(layers.iter().flat_map(|l| layer_lines(app, l)));
+    lines.extend(view_notes(app, id));
+    let hint = "a click on a mark goes to the item that states its fact";
+    lines.extend([Line::raw(""), Line::styled(hint, dim())]);
     lines
+}
+
+/// The view panel's heading: how many layers the view has.
+fn layers_heading(layers: &[Layer]) -> Line<'static> {
+    let s = if layers.len() == 1 { "" } else { "S" };
+    Line::styled(format!("VIEW · {} LAYER{s}", layers.len()), dim())
+}
+
+/// A layer's goal, then its entry and how many marks it gives in the
+/// current world.
+fn layer_lines(app: &App, layer: &Layer) -> [Line<'static>; 2] {
+    let goal = Line::raw(format!("layer {} where {}", layer.mark, layer.goal));
+    let n = app.reason.mark_count(layer.seq);
+    let s = if n == 1 { "" } else { "s" };
+    let entry = format!("  entry {} · {n} mark{s}", layer.seq);
+    [goal, Line::styled(entry, dim())]
+}
+
+/// The notes of the view at an item, after a blank line, if it has any.
+fn view_notes(app: &App, id: u64) -> Vec<Line<'static>> {
+    let notes = view_figure(app, 0, id, 60, 12).notes;
+    if notes.is_empty() {
+        return vec![];
+    }
+    let lines = notes.into_iter().map(|n| Line::styled(n, dim()));
+    std::iter::once(Line::raw("")).chain(lines).collect()
 }
 
 /// The citations of an item, shown dimmed after its text.

@@ -114,6 +114,13 @@ impl Reasoning {
         Ok(found.collect())
     }
 
+    /// How many marks a layer, by its seq, gives in the current world.
+    pub(crate) fn mark_count(&self, layer: u64) -> usize {
+        self.eval[0]
+            .as_ref()
+            .map_or(0, |e| e.nodes.marks(layer).len())
+    }
+
     /// Whether the current world has an engine and facts.
     pub(crate) fn has_facts(&self) -> bool {
         let facts = self.eval[0].as_ref().is_some_and(|e| !e.facts.is_empty());
