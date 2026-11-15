@@ -325,6 +325,16 @@ fn surviving(outline: &Outline, before: &[u64], c: u64) -> u64 {
     earlier.copied().or_else(first).unwrap_or(TOP)
 }
 
+/// Where a key moves the text cursor, in a text of a length.
+fn text_pos(pos: usize, key: Key, len: usize) -> usize {
+    match key {
+        Key::Left => pos.saturating_sub(1),
+        Key::Right => (pos + 1).min(len),
+        Key::Home => 0,
+        _ => len,
+    }
+}
+
 /// A quasimode in progress, held or latched.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Active {
@@ -336,6 +346,31 @@ pub struct Active {
     pub used: bool,
     /// `?` was pressed: list everything that may come next.
     pub listing: bool,
+}
+
+impl Active {
+    /// A quasimode whose key is held, nothing typed yet.
+    fn held(q: Quasi) -> Active {
+        let input = String::new();
+        Active {
+            q,
+            input,
+            latched: false,
+            used: false,
+            listing: false,
+        }
+    }
+
+    /// The command palette: the Command quasimode, latched, listing what
+    /// may come next.
+    fn palette() -> Active {
+        let held = Active::held(Quasi::Command);
+        Active {
+            latched: true,
+            listing: true,
+            ..held
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -579,80 +614,86 @@ impl App {
             return Mode::Normal;
         }
         if let Key::Quasi(q) = ev.key {
-            self.flush();
-            if q == Quasi::Scope {
-                self.session.view.scope = ScopeLevel::Word;
-            }
-            return Mode::Quasi(Active {
-                q,
-                input: String::new(),
-                latched: false,
-                used: false,
-                listing: false,
-            });
+            return self.enter_quasi(q);
         }
         if let Some(line) = self.session.keys.command_for(ev.key) {
-            self.flush();
-            if line == "palette" {
-                return Mode::Quasi(Active {
-                    q: Quasi::Command,
-                    input: String::new(),
-                    latched: true,
-                    used: false,
-                    listing: true,
-                });
-            }
-            self.run_simple(&line);
-            // Keep what the command asked for, such as a confirmation.
-            return std::mem::replace(&mut self.session.mode, Mode::Normal);
+            return self.run_bound(&line);
         }
-        let f = self.session.view.focus;
-        if self.session.view.panes[f].kind == PaneKind::Links {
-            self.session.message = format!(
-                "this pane shows links; {} to edit",
-                self.session.keys.key_for("switch")
-            );
+        if self.session.view.focused().kind == PaneKind::Links {
+            let switch = self.session.keys.key_for("switch");
+            self.session.message = format!("this pane shows links; {switch} to edit");
             return Mode::Normal;
         }
         self.session.message.clear();
-        match ev.key {
+        self.edit_key(ev.key);
+        Mode::Normal
+    }
+
+    /// Hold a quasimode's key: the Scope quasimode starts at a word.
+    fn enter_quasi(&mut self, q: Quasi) -> Mode {
+        self.flush();
+        if q == Quasi::Scope {
+            self.session.view.scope = ScopeLevel::Word;
+        }
+        Mode::Quasi(Active::held(q))
+    }
+
+    /// Run the command line a key is bound to, keeping what it asks for,
+    /// such as a confirmation; "palette" opens the command palette.
+    fn run_bound(&mut self, line: &str) -> Mode {
+        self.flush();
+        if line == "palette" {
+            return Mode::Quasi(Active::palette());
+        }
+        self.run_simple(line);
+        std::mem::replace(&mut self.session.mode, Mode::Normal)
+    }
+
+    /// A key that edits the outline or moves within it.
+    fn edit_key(&mut self, key: Key) {
+        match key {
             Key::Char(c) => self.type_char(c),
             Key::Backspace => self.erase(true),
             Key::Delete => self.erase(false),
-            Key::Enter => {
-                self.flush();
-                let made = self.new_item_after(self.cursor());
-                self.session.report(made);
-            }
+            Key::Enter => self.enter_item(),
             Key::Tab => self.run_simple("indent"),
             Key::BackTab => self.run_simple("outdent"),
-            Key::Up | Key::Down => {
-                self.flush_text();
-                let rows = self.visible();
-                let i = rows.iter().position(|(id, _)| *id == self.cursor());
-                let j = match (i, ev.key) {
-                    (Some(i), Key::Up) => i.saturating_sub(1),
-                    (Some(i), _) => (i + 1).min(rows.len().saturating_sub(1)),
-                    (None, _) => 0,
-                };
-                if let Some((id, _)) = rows.get(j) {
-                    self.set_cursor(*id);
-                    self.session.view_dirty = true;
-                }
-            }
-            Key::Left | Key::Right | Key::Home | Key::End => {
-                let n = self.text_of(self.cursor()).len();
-                self.session.view.pos = match ev.key {
-                    Key::Left => self.session.view.pos.saturating_sub(1),
-                    Key::Right => (self.session.view.pos + 1).min(n),
-                    Key::Home => 0,
-                    _ => n,
-                };
-                self.session.view_dirty = true;
-            }
+            Key::Up | Key::Down => self.move_line(key == Key::Up),
+            Key::Left | Key::Right | Key::Home | Key::End => self.move_in_text(key),
             _ => {}
         }
-        Mode::Normal
+    }
+
+    /// Enter: a new item after the cursor's.
+    fn enter_item(&mut self) {
+        self.flush();
+        let made = self.new_item_after(self.cursor());
+        self.session.report(made);
+    }
+
+    /// Up or Down: the cursor to the item shown above or below; from no
+    /// item, to the first.
+    fn move_line(&mut self, up: bool) {
+        self.flush_text();
+        let rows = self.visible();
+        let at = rows.iter().position(|(id, _)| *id == self.cursor());
+        let to = match at {
+            Some(i) if up => i.saturating_sub(1),
+            Some(i) => i + 1,
+            None => 0,
+        };
+        if let Some((id, _)) = rows.get(to) {
+            self.set_cursor(*id);
+            self.session.view_dirty = true;
+        }
+    }
+
+    /// Left, Right, Home or End: the text cursor within its item.
+    fn move_in_text(&mut self, key: Key) {
+        let len = self.text_of(self.cursor()).len();
+        let view = &mut self.session.view;
+        view.pos = text_pos(view.pos, key, len);
+        self.session.view_dirty = true;
     }
 
     fn type_char(&mut self, c: char) {
