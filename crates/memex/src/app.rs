@@ -19,7 +19,7 @@ use crate::engine::Engine;
 use crate::journal::{Error as JournalError, Journal};
 use crate::notebook::{CONTENT, Notebook};
 use crate::outline::{Constraint, Outline, TOP, TextChange, span_json};
-use crate::reason::{self, ConstraintEval, Prov, Suggestion, solutions};
+use crate::reason::{self, Prov, Suggestion, WorldEval, solutions};
 use crate::reasoning::Reasoning;
 use crate::session::Session;
 use format::record::Entry;
@@ -201,6 +201,11 @@ impl std::ops::DerefMut for Panes {
 }
 
 impl View {
+    /// Whether a pane of a kind is shown.
+    pub(crate) fn shows(&self, kind: PaneKind) -> bool {
+        self.panes.iter().any(|p| p.kind == kind)
+    }
+
     /// The pane with focus.
     pub fn focused(&self) -> &Pane {
         &self.panes[self.focus]
@@ -961,48 +966,36 @@ impl App {
     /// shown for the first time. A query and its answer are journal entries
     /// (§ The journal, rule 6), so the measures report can count them.
     pub(crate) fn record_observations(&mut self) {
-        let Some(e) = &self.reason.eval[0] else {
+        self.record_shown();
+        self.record_offers();
+    }
+
+    /// Record what reasoning shows of the current world, when it changes.
+    fn record_shown(&mut self) {
+        let Some(now) = self.reason.eval[0].as_ref().map(WorldEval::observed) else {
             return;
         };
-        let key = |c: &ConstraintEval, s: &reason::Solution| {
-            let mut f: Vec<String> = s.facts.iter().map(reason::show).collect();
-            f.sort();
-            format!("{}: {}", c.constraint.name, f.join(" · "))
-        };
-        let mut v: Vec<String> = e
-            .constraints
-            .iter()
-            .flat_map(|c| c.violations.iter().map(move |s| key(c, s)))
-            .collect();
-        let mut d: Vec<String> = e
-            .constraints
-            .iter()
-            .flat_map(|c| c.disagreements.iter().map(move |s| key(c, s)))
-            .collect();
-        v.sort();
-        d.sort();
-        let now = (v, d);
-        if self.session.observed_changed(&now) {
-            let world = self.reason.world().to_string();
-            self.write_view(
-                "observed",
-                json!({"violations": now.0, "disagreements": now.1, "world": world}),
-            );
-            self.session.set_observed(now);
+        if !self.session.observed_changed(&now) {
+            return;
         }
-        if self
-            .session
-            .view
-            .panes
-            .iter()
-            .any(|p| p.kind == PaneKind::Suggestions)
-        {
-            let new = self.reason.suggestions.unoffered();
-            if !new.is_empty() {
-                self.write_view("offer", json!({"keys": new}));
-                self.reason.suggestions.offer(new);
-            }
+        let world = self.reason.world().to_string();
+        let body = json!({"violations": now.0, "disagreements": now.1, "world": world});
+        self.write_view("observed", body);
+        self.session.set_observed(now);
+    }
+
+    /// Record the suggestions shown for the first time, while the pane
+    /// shows them.
+    fn record_offers(&mut self) {
+        if !self.session.view.shows(PaneKind::Suggestions) {
+            return;
         }
+        let new = self.reason.suggestions.unoffered();
+        if new.is_empty() {
+            return;
+        }
+        self.write_view("offer", json!({"keys": new}));
+        self.reason.suggestions.offer(new);
     }
 
     /// What adopting an item's claims would raise, computed in a spare
@@ -1666,7 +1659,7 @@ pub(crate) fn word_at(text: &[char], pos: usize) -> (usize, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reason::Solution;
+    use crate::reason::{ConstraintEval, Solution};
 
     /// A constraint, by name, violated once on each of these sets of
     /// beliefs.

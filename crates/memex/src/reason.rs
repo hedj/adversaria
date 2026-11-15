@@ -76,6 +76,35 @@ pub struct WorldEval {
     pub at: usize,
 }
 
+impl ConstraintEval {
+    /// A finding of this constraint, named: the constraint, and the facts
+    /// it rests on, sorted.
+    fn name_of(&self, s: &Solution) -> String {
+        let mut facts: Vec<String> = s.facts.iter().map(show).collect();
+        facts.sort();
+        format!("{}: {}", self.constraint.name, facts.join(" · "))
+    }
+}
+
+impl WorldEval {
+    /// What the world shows: its violations, and its disagreements, each
+    /// named, sorted.
+    pub fn observed(&self) -> (Vec<String>, Vec<String>) {
+        let violations = self.named(|c| &c.violations);
+        (violations, self.named(|c| &c.disagreements))
+    }
+
+    /// The findings of one kind, each named, sorted.
+    fn named(&self, kind: fn(&ConstraintEval) -> &Vec<Solution>) -> Vec<String> {
+        let found = self.constraints.iter();
+        let mut names: Vec<String> = found
+            .flat_map(|c| kind(c).iter().map(|s| c.name_of(s)))
+            .collect();
+        names.sort();
+        names
+    }
+}
+
 /// What derived items and layers found.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Nodes {
@@ -572,6 +601,68 @@ mod tests {
             "label".into(),
             vec![Term::Atom(e.into()), Term::Str(s.into())],
         )
+    }
+
+    /// A world in which each constraint, by name, has these findings, of
+    /// these atoms: violations first, then disagreements.
+    fn world(found: &[(&str, &[&str], &[&str])]) -> WorldEval {
+        let constraints = found.iter().map(|(n, v, d)| finding(n, v, d)).collect();
+        WorldEval {
+            facts: vec![],
+            constraints,
+            nodes: Nodes::default(),
+            at: 0,
+        }
+    }
+
+    /// A constraint with a violation resting on some atoms, and a
+    /// disagreement resting on others; none for no atoms.
+    fn finding(name: &str, violated: &[&str], disagreed: &[&str]) -> ConstraintEval {
+        let constraint = Constraint {
+            name: name.into(),
+            rule: String::new(),
+        };
+        let (violations, disagreements) = (resting(violated), resting(disagreed));
+        ConstraintEval {
+            seq: 1,
+            constraint,
+            violations,
+            disagreements,
+        }
+    }
+
+    /// A solution resting on facts that are these atoms; none for none.
+    fn resting(atoms: &[&str]) -> Vec<Solution> {
+        let facts: Vec<Term> = atoms.iter().map(|a| Term::Atom(a.to_string())).collect();
+        let solution = Solution {
+            values: vec![],
+            prov: vec![],
+            facts,
+        };
+        if atoms.is_empty() {
+            vec![]
+        } else {
+            vec![solution]
+        }
+    }
+
+    #[test]
+    fn a_finding_is_named_by_its_constraint_and_its_facts_sorted() {
+        let w = world(&[("c", &["b", "a"], &[])]);
+        assert_eq!(w.observed(), (vec!["c: a · b".to_string()], vec![]));
+    }
+
+    #[test]
+    fn the_findings_of_a_kind_are_sorted() {
+        let w = world(&[("z", &["x"], &["y"]), ("a", &["x"], &["y"])]);
+        let (v, d) = w.observed();
+        assert_eq!(
+            (v, d),
+            (
+                vec!["a: x".into(), "z: x".into()],
+                vec!["a: y".into(), "z: y".into()]
+            )
+        );
     }
 
     #[test]
