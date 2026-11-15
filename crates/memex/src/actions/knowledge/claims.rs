@@ -1,12 +1,12 @@
 //! Claims, with their sources: stating one, interrogating it, adopting it
 //! as a belief, and taking up or dismissing suggestions.
 
-use super::{encoded, functor_of, reserved};
+use super::{encoded, functor_of, node_def, reserved};
 use crate::app::App;
-use crate::reason::Suggestion;
+use crate::reason::{Suggestion, show};
 use format::record::Entry;
 use format::terms::Term;
-use serde_json::json;
+use serde_json::{Value, json};
 
 impl App {
     /// State a claim: a fact, then from and its source.
@@ -135,4 +135,86 @@ fn check_adoptable(claims: &[(u64, String, Term)]) -> Result<(), String> {
 /// Whether an entry adopts a claim of an item.
 fn adopts(e: &Entry, item: u64) -> bool {
     e.kind() == "adopt" && e.body().and_then(|b| b["item"].as_u64()) == Some(item)
+}
+
+impl App {
+    /// Adopt a suggestion: one entry, marked as an adopted suggestion and
+    /// carrying its evidence, so it can be found and retracted later. A
+    /// constraint is tried against a planted violation first.
+    pub(crate) fn accept(&mut self, s: &Suggestion) -> Result<(), String> {
+        let mark = s.mark();
+        match (s.kind_name(), &s.kind) {
+            ("constraint", Term::Compound(_, a)) if a.len() == 3 => self.adopt_constraint(a, mark),
+            ("rule", Term::Compound(_, a)) if a.len() == 2 => self.adopt_rule(a, mark),
+            ("reference", Term::Compound(_, a)) if a.len() == 2 => self.adopt_reference(a, mark),
+            _ => self.adopt_facts(&s.facts, mark),
+        }
+    }
+
+    /// A suggested constraint, its name, variables and body, once it fires
+    /// on a planted violation.
+    fn adopt_constraint(&mut self, a: &[Term], mark: Value) -> Result<(), String> {
+        if let Some(found) = self.misfire(&a[1], &a[2])? {
+            return Err(format!(
+                "not adopted: tried against a planted violation, it did not fire ({found})"
+            ));
+        }
+        let name = name_of(&a[0]);
+        let defines = Term::Compound(
+            "constraint".into(),
+            vec![Term::Str(name.clone()), a[1].clone(), a[2].clone()],
+        );
+        let rule = format!("false :- {}", show(&a[2]));
+        let fact = encoded(&node_def(self.next_seq(), defines))?;
+        let body = json!({"suggestion": mark, "op": "constraint", "name": name, "rule": rule, "facts": [fact]});
+        self.write_here("adopt", body)?;
+        Ok(())
+    }
+
+    /// A suggested rule, its head and body, numbered by its own entry.
+    fn adopt_rule(&mut self, a: &[Term], mark: Value) -> Result<(), String> {
+        let seq = Term::Int(self.next_seq() as i64);
+        let def = Term::Compound("rule_def".into(), vec![seq, a[0].clone(), a[1].clone()]);
+        self.write_adopted(mark, vec![encoded(&def)?])
+    }
+
+    /// A suggested reference, an entity and a work: the item about the
+    /// entity cites the item that is the work.
+    fn adopt_reference(&mut self, a: &[Term], mark: Value) -> Result<(), String> {
+        let from = *self
+            .items_about(&a[0])
+            .first()
+            .ok_or("no item states facts about that entity")?;
+        let to = *self
+            .items_about(&a[1])
+            .first()
+            .ok_or("no item is that work")?;
+        let cites = Term::Compound(
+            "cites".into(),
+            vec![Term::Int(from as i64), Term::Int(to as i64)],
+        );
+        let body = json!({"from": from, "to": to, "type": "cites", "facts": [encoded(&cites)?], "suggestion": mark});
+        self.write_here("link", body)?;
+        Ok(())
+    }
+
+    /// A suggestion's own facts.
+    fn adopt_facts(&mut self, facts: &[Term], mark: Value) -> Result<(), String> {
+        let facts = facts.iter().map(encoded).collect::<Result<_, _>>()?;
+        self.write_adopted(mark, facts)
+    }
+
+    fn write_adopted(&mut self, mark: Value, facts: Vec<Value>) -> Result<(), String> {
+        self.write_here("adopt", json!({"suggestion": mark, "facts": facts}))?;
+        Ok(())
+    }
+}
+
+/// A constraint's name, as a suggestion gives it: a string's text, or
+/// any other term shown, as an atom is by its own text.
+fn name_of(t: &Term) -> String {
+    match t {
+        Term::Str(x) => x.clone(),
+        t => show(t),
+    }
 }

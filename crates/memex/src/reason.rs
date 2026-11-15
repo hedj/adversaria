@@ -160,6 +160,11 @@ pub struct Suggestion {
 }
 
 impl Suggestion {
+    /// How an adoption records the suggestion it accepted.
+    pub fn mark(&self) -> serde_json::Value {
+        serde_json::json!({"kind": show(&self.kind), "evidence": self.evidence, "score": self.score})
+    }
+
     pub fn from_term(t: &Term) -> Option<Suggestion> {
         // Variables are numbered within the whole answer; number them from 0
         // within this suggestion, so its key does not depend on its place.

@@ -57,18 +57,21 @@ impl App {
 
     /// A constraint is tried against a planted violation before it is kept.
     fn check_fires(&mut self, vars: &Term, body: &Term) -> Result<(), String> {
-        let planted = self
-            .reason
-            .engine(0)?
-            .plant(vars, body)
-            .map_err(|e| e.to_string())?;
-        if matches!(&planted, Term::Compound(n, _) if n == "fires") {
-            return Ok(());
+        match self.misfire(vars, body)? {
+            None => Ok(()),
+            Some(found) => Err(format!(
+                "constraint not kept: tried against a planted violation, it did not fire ({found})"
+            )),
         }
-        Err(format!(
-            "constraint not kept: tried against a planted violation, it did not fire ({})",
-            show(&planted)
-        ))
+    }
+
+    /// Try a constraint against a planted violation: what it found, shown,
+    /// if it did not fire.
+    fn misfire(&mut self, vars: &Term, body: &Term) -> Result<Option<String>, String> {
+        let engine = self.reason.engine(0)?;
+        let planted = engine.plant(vars, body).map_err(|e| e.to_string())?;
+        let fired = matches!(&planted, Term::Compound(n, _) if n == "fires");
+        Ok((!fired).then(|| show(&planted)))
     }
 
     /// Write an edit entry that defines a node, numbered by the entry's own
@@ -124,7 +127,7 @@ fn encoded(t: &Term) -> Result<Value, String> {
 }
 
 /// node_def(Seq, Defines): what a node, numbered Seq, defines.
-fn node_def(seq: u64, defines: Term) -> Term {
+pub(crate) fn node_def(seq: u64, defines: Term) -> Term {
     Term::Compound("node_def".into(), vec![Term::Int(seq as i64), defines])
 }
 

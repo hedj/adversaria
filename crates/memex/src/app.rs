@@ -19,7 +19,7 @@ use crate::engine::Engine;
 use crate::journal::{Error as JournalError, Journal};
 use crate::notebook::{CONTENT, Notebook};
 use crate::outline::{Constraint, Outline, TOP, TextChange, span_json};
-use crate::reason::{self, Prov, Suggestion, WorldEval, solutions};
+use crate::reason::{self, Prov, WorldEval, solutions};
 use crate::reasoning::Reasoning;
 use crate::session::Session;
 use format::record::Entry;
@@ -1025,7 +1025,7 @@ impl App {
     }
 
     /// The items whose facts are about an entity: facts with it first.
-    fn items_about(&self, entity: &Term) -> Vec<u64> {
+    pub(crate) fn items_about(&self, entity: &Term) -> Vec<u64> {
         let facts = self
             .notebook
             .facts_at(self.notebook.tip)
@@ -1037,74 +1037,6 @@ impl App {
             .collect();
         out.dedup();
         out
-    }
-
-    /// Adopt a suggestion: one entry, marked as an adopted suggestion and
-    /// carrying its evidence, so it can be found and retracted later. A
-    /// constraint is tried against a planted violation first.
-    pub(crate) fn accept(&mut self, s: &Suggestion) -> Result<(), String> {
-        let mark = json!({"kind": reason::show(&s.kind), "evidence": s.evidence, "score": s.score});
-        let enc = |t: &Term| terms::encode(t).map_err(|e| e.0);
-        let seq = self.notebook.journal.entries().len() as u64 + 1;
-        let c = |f: &str, args: Vec<Term>| Term::Compound(f.into(), args);
-        match (s.kind_name(), &s.kind) {
-            ("constraint", Term::Compound(_, a)) if a.len() == 3 => {
-                let planted = self
-                    .reason
-                    .engine(0)?
-                    .plant(&a[1], &a[2])
-                    .map_err(|e| e.to_string())?;
-                if !matches!(&planted, Term::Compound(n, _) if n == "fires") {
-                    return Err(format!(
-                        "not adopted: tried against a planted violation, it did not fire ({})",
-                        reason::show(&planted)
-                    ));
-                }
-                let name = match &a[0] {
-                    Term::Str(x) | Term::Atom(x) => x.clone(),
-                    t => reason::show(t),
-                };
-                let def = c(
-                    "node_def",
-                    vec![
-                        Term::Int(seq as i64),
-                        c(
-                            "constraint",
-                            vec![Term::Str(name.clone()), a[1].clone(), a[2].clone()],
-                        ),
-                    ],
-                );
-                self.write_here(
-                    "adopt",
-                    json!({"suggestion": mark, "op": "constraint", "name": name, "rule": format!("false :- {}", reason::show(&a[2])), "facts": [enc(&def)?]}),
-                )?;
-            }
-            ("rule", Term::Compound(_, a)) if a.len() == 2 => {
-                let def = c(
-                    "rule_def",
-                    vec![Term::Int(seq as i64), a[0].clone(), a[1].clone()],
-                );
-                self.write_here("adopt", json!({"suggestion": mark, "facts": [enc(&def)?]}))?;
-            }
-            ("reference", Term::Compound(_, a)) if a.len() == 2 => {
-                let from = *self
-                    .items_about(&a[0])
-                    .first()
-                    .ok_or("no item states facts about that entity")?;
-                let to = *self
-                    .items_about(&a[1])
-                    .first()
-                    .ok_or("no item is that work")?;
-                let fact = c("cites", vec![Term::Int(from as i64), Term::Int(to as i64)]);
-                self.write_here("link", json!({"from": from, "to": to, "type": "cites", "facts": [enc(&fact)?], "suggestion": mark}))?;
-            }
-            _ => {
-                let facts: Vec<serde_json::Value> =
-                    s.facts.iter().map(enc).collect::<Result<_, _>>()?;
-                self.write_here("adopt", json!({"suggestion": mark, "facts": facts}))?;
-            }
-        }
-        Ok(())
     }
 
     /// The depth of an item in the outline: a top-level item is 0.
@@ -1650,7 +1582,7 @@ pub(crate) fn word_at(text: &[char], pos: usize) -> (usize, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reason::{ConstraintEval, Solution};
+    use crate::reason::{ConstraintEval, Solution, Suggestion};
 
     /// A constraint, by name, violated once on each of these sets of
     /// beliefs.
