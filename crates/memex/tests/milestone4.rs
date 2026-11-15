@@ -453,6 +453,22 @@ fn a_second_adoption_is_the_one_retracted() {
 }
 
 #[test]
+fn a_disagreement_shown_first_is_recorded() {
+    // Catches the first observation written only when it shows a
+    // violation: the scene's first shows a disagreement alone.
+    let dir = temp("observed-first");
+    let app = scene(&dir);
+    let entries = app.journal().entries();
+    let first = entries
+        .iter()
+        .find_map(|e| e.body().filter(|b| b["op"] == "observed"));
+    let first = first.expect("an observation was recorded");
+    assert_eq!(first["violations"], serde_json::json!([]));
+    assert_ne!(first["disagreements"], serde_json::json!([]));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn replay_reproduces_claims_constraints_and_worlds() {
     // Catches state of milestone 4 that lives outside the journal: a replay
     // must give the same outline, view, world and reasoning.
