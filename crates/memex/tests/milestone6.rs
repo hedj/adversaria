@@ -318,7 +318,7 @@ fn a_changed_input_marks_its_results() {
         &format!("import results {}", dir.join("results.json").display()),
     );
     app.evaluate().unwrap();
-    assert!(app.stale.is_empty(), "nothing has changed yet");
+    assert!(app.session.stale().is_empty(), "nothing has changed yet");
     let result = app
         .outline
         .in_order()
@@ -335,7 +335,10 @@ fn a_changed_input_marks_its_results() {
     );
     std::fs::write(dir.join("data.csv"), "t,delay\n1,1.5\n2,1.9\n").unwrap();
     app.evaluate().unwrap();
-    assert_eq!(app.stale.get(&result), Some(&vec!["data.csv".to_string()]));
+    assert_eq!(
+        app.session.stale().get(&result),
+        Some(&vec!["data.csv".to_string()])
+    );
     let mut t = ratatui::Terminal::new(ratatui::backend::TestBackend::new(140, 30)).unwrap();
     t.draw(|f| memex::ui::draw(f, &app)).unwrap();
     let buf = t.backend().buffer().clone();
@@ -427,7 +430,8 @@ fn the_source_check() {
     });
     assert!(up, "the fake Crossref did not start within 10 s");
     let mut app = open(&dir);
-    app.set_crossref(&format!("http://127.0.0.1:{port}/"));
+    app.session
+        .set_crossref(&format!("http://127.0.0.1:{port}/"));
     let rule = |app: &mut App, doi: &str, title: &str| -> String {
         tap(app, Key::Enter);
         for c in "a claim".chars() {

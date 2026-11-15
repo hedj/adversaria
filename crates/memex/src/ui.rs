@@ -99,7 +99,7 @@ fn draw_top(f: &mut Frame, app: &App, area: Rect) {
     };
     let mut parts = vec![
         Span::styled("room ", dim()),
-        Span::styled(app.workspace.clone(), bold()),
+        Span::styled(app.session.workspace.clone(), bold()),
         Span::raw("   "),
     ];
     parts.extend(world);
@@ -309,7 +309,8 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
         }
         lines.push(line);
         let stale = app
-            .stale
+            .session
+            .stale()
             .get(id)
             .map(|files| (true, format!("input changed since: {}", files.join(", "))));
         for (violation, m) in marks.into_iter().chain(stale) {
@@ -501,8 +502,8 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
         f.render_widget(p, inner);
         // The hint on its own line after the answers, each part clickable.
         let (a, u) = (
-            format!("{} adopts", app.key_for("adopt")),
-            format!("{} retracts an adoption", app.key_for("unadopt")),
+            format!("{} adopts", app.session.key_for("adopt")),
+            format!("{} retracts an adoption", app.session.key_for("unadopt")),
         );
         let y = inner.y.saturating_add(used);
         if y < inner.y + inner.height {

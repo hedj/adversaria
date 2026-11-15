@@ -297,7 +297,7 @@ impl App {
     }
 
     pub(crate) fn cmd_quit(&mut self, _: &[&str], _: u64) -> Result<(), String> {
-        self.quit = true;
+        self.session.quit = true;
         Ok(())
     }
 

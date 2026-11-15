@@ -210,7 +210,7 @@ fn the_tutorial_works_as_written() {
 
     // Step 16: leave. The journal, opened again, replays to the same budget.
     t.key(Key::F(10));
-    assert!(t.app.quit);
+    assert!(t.app.session.quit);
     t.app.flush();
     let mut app = App::open(&dir).unwrap();
     app.set_durable(false);

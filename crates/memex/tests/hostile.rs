@@ -195,7 +195,7 @@ fn a_doi_is_one_request_for_that_doi() {
     let dir = temp("doi");
     let (base, seen) = fake_crossref();
     let mut app = open(&dir);
-    app.set_crossref(&base);
+    app.session.set_crossref(&base);
     typ(&mut app, "A paper.");
     app.flush();
     command(&mut app, "fact doi(p, \"10.1002/x[1-5]{a,b} y\")");

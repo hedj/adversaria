@@ -19,6 +19,7 @@ use crate::engine::Engine;
 use crate::journal::{Error as JournalError, Journal};
 use crate::outline::{Constraint, Outline, Span, TOP, span_json};
 use crate::reason::{self, ConstraintEval, Prov, Suggestion, WorldEval, solutions};
+use crate::session::Session;
 use format::record::Entry;
 use format::terms::{self, Term};
 use serde_json::{Value, json};
@@ -334,11 +335,10 @@ pub struct App {
     /// The name of the current world: "actual", or the last Suppose.
     pub world: String,
     pub message: String,
-    pub workspace: String,
+    pub session: Session,
     pub(crate) pending_text: Option<PendingText>,
     pub(crate) view_dirty: bool,
     pub(crate) last_leap: Option<(String, bool)>,
-    pub quit: bool,
     pub supposition: Option<Supposition>,
     /// Reasoning: the current world's engine, the actual world's while a
     /// supposition is open, and one for previews.
@@ -356,17 +356,8 @@ pub struct App {
     /// While the suggestion pane has focus, its order is kept: a suggestion
     /// never moves under the pointer. Not journaled, like a held key.
     pub(crate) frozen: Option<Vec<String>>,
-    /// Where the source check asks Crossref: its works API, unless a test
-    /// points it elsewhere.
-    pub(crate) crossref: String,
-    /// Results whose input files changed since: item -> those files.
-    pub stale: BTreeMap<u64, Vec<String>>,
-    /// The last violations and disagreements recorded in the journal.
-    pub(crate) observed: Option<(Vec<String>, Vec<String>)>,
     /// Suggestions recorded as offered (shown in the pane), by identity.
     pub offered: BTreeSet<String>,
-    /// Keys bound to command lines, from the configuration.
-    pub bindings: Vec<(Key, String)>,
 }
 
 const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
@@ -376,10 +367,6 @@ impl App {
     /// replay it.
     pub fn open(dir: &Path) -> Result<App, JournalError> {
         let journal = Journal::open(dir)?;
-        let workspace = dir
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
         let mut app = App {
             journal,
             outline: Outline::default(),
@@ -389,12 +376,10 @@ impl App {
             redo: vec![],
             world: "actual".into(),
             message: String::new(),
-            workspace,
+            session: Session::new(dir),
             pending_text: None,
-            bindings: crate::config::Config::default().bindings,
             view_dirty: false,
             last_leap: None,
-            quit: false,
             supposition: None,
             engines: [None, None, None],
             eval: [None, None],
@@ -402,9 +387,6 @@ impl App {
             suggestions: vec![],
             dismissed: BTreeSet::new(),
             frozen: None,
-            crossref: "https://api.crossref.org/works/".into(),
-            stale: BTreeMap::new(),
-            observed: None,
             offered: BTreeSet::new(),
         };
         if app.journal.entries().is_empty() {
@@ -421,11 +403,6 @@ impl App {
 
     pub fn journal(&self) -> &Journal {
         &self.journal
-    }
-
-    /// Point the source check at another Crossref-like service (for tests).
-    pub fn set_crossref(&mut self, base: &str) {
-        self.crossref = base.to_string();
     }
 
     pub fn set_durable(&mut self, d: bool) {
@@ -481,7 +458,8 @@ impl App {
                                 })
                                 .unwrap_or_default()
                         };
-                        self.observed = Some((keys("violations"), keys("disagreements")));
+                        self.session
+                            .set_observed((keys("violations"), keys("disagreements")));
                     }
                     if b["op"] == "offer" {
                         self.offered.extend(
@@ -859,14 +837,6 @@ impl App {
         }
     }
 
-    /// How to run a command by key: its bound key, else by name.
-    pub fn key_for(&self, command: &str) -> String {
-        match self.bindings.iter().find(|(_, c)| c == command) {
-            Some((k, _)) => crate::config::key_name(*k),
-            None => format!("command {command}"),
-        }
-    }
-
     fn normal(&mut self, ev: Event) -> Mode {
         if ev.press == Press::Up {
             return Mode::Normal;
@@ -884,12 +854,7 @@ impl App {
                 listing: false,
             });
         }
-        if let Some(line) = self
-            .bindings
-            .iter()
-            .find(|(k, _)| *k == ev.key)
-            .map(|(_, l)| l.clone())
-        {
+        if let Some(line) = self.session.command_for(ev.key) {
             self.flush();
             if line == "palette" {
                 return Mode::Quasi(Active {
@@ -906,7 +871,10 @@ impl App {
         }
         let f = self.view.focus;
         if self.view.panes[f].kind == PaneKind::Links {
-            self.message = format!("this pane shows links; {} to edit", self.key_for("switch"));
+            self.message = format!(
+                "this pane shows links; {} to edit",
+                self.session.key_for("switch")
+            );
             return Mode::Normal;
         }
         self.message.clear();
@@ -1293,17 +1261,13 @@ impl App {
         v.sort();
         d.sort();
         let now = (v, d);
-        let changed = match &self.observed {
-            Some(o) => *o != now,
-            None => !now.0.is_empty() || !now.1.is_empty(),
-        };
-        if changed {
+        if self.session.observed_changed(&now) {
             let world = self.world.clone();
             self.write_view(
                 "observed",
                 json!({"violations": now.0, "disagreements": now.1, "world": world}),
             );
-            self.observed = Some(now);
+            self.session.set_observed(now);
         }
         if self
             .view
@@ -1990,7 +1954,7 @@ impl App {
             })
         };
         let doi = field("doi").ok_or("the target states no doi(Entity, \"10.…\") fact")?;
-        let url = format!("{}{}", self.crossref, encode_doi(&doi));
+        let url = self.session.source_url(&doi);
         let out = std::process::Command::new("curl")
             .args([
                 // No URL patterns ([1-9], {a,b}): one request, for this DOI.

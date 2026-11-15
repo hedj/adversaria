@@ -205,7 +205,7 @@ pub fn run(dir: &Path, config: Config) -> Result<(), String> {
 /// The memex on a journal directory, with the configuration's keys.
 fn open(dir: &Path, config: &Config) -> Result<App, String> {
     let mut app = App::open(dir).map_err(|e| e.to_string())?;
-    app.bindings = config.bindings.clone();
+    app.session.bindings = config.bindings.clone();
     Ok(app)
 }
 
@@ -284,7 +284,7 @@ impl<'a> Session<'a> {
     /// Reason, draw and wait for an event, until the user quits; then
     /// write what is pending.
     fn run(&mut self, term: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
-        while !self.app.quit {
+        while !self.app.session.quit {
             self.reason_if_moved();
             term.draw(|f| self.hits = ui::draw_hits(f, &self.app))?;
             self.wait()?;
