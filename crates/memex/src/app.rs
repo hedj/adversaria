@@ -198,6 +198,20 @@ impl std::ops::DerefMut for Panes {
 }
 
 impl View {
+    /// The selected item: the cursor of the outline with focus, else of
+    /// the other pane. A pane that is not an outline has no cursor of its
+    /// own: it shows what is selected.
+    pub(crate) fn selected(&self) -> u64 {
+        self.panes[self.selecting()].cursor
+    }
+
+    /// The pane whose cursor is the selection: the one with focus if it is
+    /// an outline, else the other.
+    fn selecting(&self) -> usize {
+        let outline = self.panes[self.focus].kind == PaneKind::Outline;
+        if outline { self.focus } else { 1 - self.focus }
+    }
+
     /// What pane i shows.
     pub(crate) fn pane_kind(&self, i: usize) -> PaneKind {
         self.panes[i].kind
@@ -213,10 +227,10 @@ impl View {
         &self.panes[self.focus]
     }
 
-    /// Put the focused pane's cursor on an item, the text cursor at a
-    /// place in it.
+    /// Select an item, the text cursor at a place in it.
     pub(crate) fn set_cursor(&mut self, id: u64, pos: usize) {
-        self.panes[self.focus].cursor = id;
+        let i = self.selecting();
+        self.panes[i].cursor = id;
         self.pos = pos;
     }
 
@@ -228,7 +242,7 @@ impl View {
             pane.cursor = surviving(outline, before, pane.cursor);
         }
         self.folded.retain(|f| outline.items.contains_key(f));
-        let n = outline.text(self.focused().cursor).chars().count();
+        let n = outline.text(self.selected()).chars().count();
         self.pos = self.pos.min(n);
     }
 
@@ -519,8 +533,9 @@ impl App {
     // ------------------------------------------------------------------
     // What is shown.
 
+    /// The selected item (View::selected).
     pub fn cursor(&self) -> u64 {
-        self.session.view.focused().cursor
+        self.session.view.selected()
     }
 
     pub(crate) fn set_cursor(&mut self, id: u64) {

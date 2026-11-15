@@ -553,7 +553,7 @@ fn inverse(kind: &str) -> String {
 fn draw_links(f: &mut Frame, app: &App, area: Rect) -> Hits {
     let mut hits = Hits::default();
     let inner = inset(area);
-    let id = app.session.view.panes[0].cursor;
+    let id = app.session.view.selected();
     if let Some(i) = app.session.view.interrogate {
         let p = Paragraph::new(interrogation(app, i)).wrap(Wrap { trim: false });
         let used = p.line_count(inner.width) as u16;
