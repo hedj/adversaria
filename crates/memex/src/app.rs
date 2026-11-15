@@ -1217,7 +1217,6 @@ impl App {
                     .is_some_and(|o| earlier.contains(&o))
             })
             .collect();
-        let base = old.iter().map(|i| self.depth_of(*i)).min().unwrap_or(0);
         let key = |style: &str, text: &str| (style.to_string(), text.to_string());
         let old_keys: Vec<(String, String)> = old
             .iter()
@@ -1273,22 +1272,19 @@ impl App {
             let d = blocks[n].depth;
             let parent = (0..n)
                 .rev()
-                .find(|j| blocks[*j].depth + 1 == d)
-                .and_then(|j| id_of[j])
-                .unwrap_or(TOP);
+                .find(|j| blocks[*j].depth < d)
+                .and_then(|j| id_of[j]);
             let after = (0..n)
                 .rev()
                 .take_while(|j| blocks[*j].depth >= d)
                 .filter(|j| blocks[*j].depth == d)
                 .find_map(|j| id_of[j]);
-            let parent = if d == 0 || base > 0 && parent == TOP {
+            let parent = parent.unwrap_or_else(|| {
                 self.notebook
                     .outline
                     .parent(old.first().copied().unwrap_or(TOP))
                     .unwrap_or(TOP)
-            } else {
-                parent
-            };
+            });
             id_of[n] = Some(self.write_block(&blocks[n], parent, after, imp.seq)?);
         }
         let kept: HashSet<u64> = id_of.iter().flatten().copied().collect();

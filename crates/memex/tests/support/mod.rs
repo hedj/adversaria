@@ -111,6 +111,12 @@ impl Room {
         facts.iter().map(|(_, f)| memex::reason::show(f)).collect()
     }
 
+    /// The body of an entry, by its number.
+    pub fn body_of(&self, seq: u64) -> serde_json::Value {
+        let entry = &self.app.journal().entries()[seq as usize - 1];
+        entry.body().cloned().unwrap_or_default()
+    }
+
     /// The number of the last entry of a kind.
     pub fn last(&self, kind: &str) -> u64 {
         let mut entries = self.app.journal().entries().iter().rev();

@@ -144,14 +144,7 @@ fn a_revision_names_the_import_it_revises() {
     import(&mut r, "d.md", "# A\n");
     let first = r.last("import");
     import(&mut r, "d.md", "# B\n");
-    let revision = r
-        .app
-        .journal()
-        .entries()
-        .iter()
-        .rev()
-        .find(|e| e.kind() == "import");
-    assert_eq!(revision.unwrap().body().unwrap()["revises"], first);
+    assert_eq!(r.body_of(r.last("import"))["revises"], first);
 }
 
 #[test]
@@ -187,5 +180,21 @@ fn a_new_block_stays_with_a_document_the_user_moved() {
             ("holder", "A"),
             ("A", "Text.")
         ])
+    );
+}
+
+#[test]
+fn a_new_block_two_levels_down_goes_under_the_block_before_it() {
+    // As an import of the same file puts it: under the nearest block
+    // shallower than it, not first in the outline.
+    let mut r = Room::new("rev-jump");
+    let after = revised(
+        &mut r,
+        "# T\n\nText one.\n",
+        "# T\n\n### Deep\n\nText one.\n",
+    );
+    assert_eq!(
+        after,
+        items(&[("", "T"), ("T", "Deep"), ("T", "Text one.")])
     );
 }
