@@ -42,6 +42,32 @@ pub struct ConstraintEval {
     pub disagreements: Vec<Solution>,
 }
 
+impl Solution {
+    /// Whether it rests on beliefs alone, no claim among them.
+    fn on_beliefs(&self) -> bool {
+        self.prov.iter().all(|p| matches!(p, Prov::Belief(_)))
+    }
+
+    /// Whether it rests on what an entry states.
+    fn rests_on(&self, seq: u64) -> bool {
+        self.prov.iter().any(|p| p.seq() == seq)
+    }
+}
+
+/// How many violations of a constraint there are, if there are any:
+/// "1 violation of NAME", "2 violations of NAME".
+pub(crate) fn violations_of(n: usize, name: &str) -> Option<String> {
+    let s = if n == 1 { "" } else { "s" };
+    (n > 0).then(|| format!("{n} violation{s} of {name}"))
+}
+
+/// How many of a node's solutions are violations an entry raises: resting
+/// on beliefs alone, the entry's among them.
+pub(crate) fn raised_by(node: &Term, seq: u64) -> usize {
+    let found = solutions(node).into_iter();
+    found.filter(|s| s.on_beliefs() && s.rests_on(seq)).count()
+}
+
 impl ConstraintEval {
     /// Read a constraint's node from an engine the world is loaded in.
     pub fn read(engine: &mut Engine, seq: u64, c: &Constraint) -> Result<Self, String> {

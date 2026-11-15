@@ -1001,48 +1001,15 @@ impl App {
     /// What adopting an item's claims would raise, computed in a spare
     /// engine: a preview of adopting it, as a world.
     pub(crate) fn preview_adoption(&mut self, item: u64) -> Result<String, String> {
-        let mut facts = self.notebook.facts_at(self.notebook.tip)?;
-        let next = self.notebook.journal.entries().len() as u64 + 1;
-        let claims: Vec<Term> = self
-            .claims_of(item)
-            .into_iter()
-            .map(|(_, _, p)| p)
-            .collect();
+        let claims: Vec<Term> = self.claims_of(item).into_iter().map(|c| c.2).collect();
         if claims.is_empty() {
             return Ok("no claims to adopt".into());
         }
-        facts.extend(claims.into_iter().map(|p| (next, p)));
-        let constraints: Vec<(u64, String)> = self
-            .notebook
-            .outline
-            .constraints
-            .iter()
-            .map(|(s, c)| (*s, c.name.clone()))
-            .collect();
-        let engine = self.reason.engine(2)?;
-        engine.sync(&facts).map_err(|e| e.to_string())?;
-        let mut raised = Vec::new();
-        for (seq, name) in constraints {
-            let Ok(v) = engine.node(seq) else { continue };
-            let n = solutions(&v)
-                .iter()
-                .filter(|s| {
-                    s.prov.iter().all(|p| matches!(p, Prov::Belief(_)))
-                        && s.prov.iter().any(|p| p.seq() == next)
-                })
-                .count();
-            if n > 0 {
-                raised.push(format!(
-                    "{n} violation{} of {name}",
-                    if n == 1 { "" } else { "s" }
-                ));
-            }
-        }
-        Ok(if raised.is_empty() {
-            "adopting it raises no violation".into()
-        } else {
-            format!("adopting it would raise {}", raised.join(", "))
-        })
+        let next = self.notebook.entry_count() as u64 + 1;
+        let facts = self.notebook.facts_adopting(next, claims)?;
+        let constraints = self.notebook.outline.constraint_names();
+        let raised = self.reason.raised(&facts, &constraints, next)?;
+        Ok(adoption_preview(&raised))
     }
 
     /// Keep the suggestion pane's order while it has focus.
@@ -1616,7 +1583,7 @@ fn conflicts_of(c: &reason::ConstraintEval, new: u64) -> (Vec<u64>, Option<Strin
     let (one, many): (Vec<_>, Vec<_>) = rests.partition(|o| o.len() == 1);
     (
         one.concat(),
-        violations_left(many.len(), &c.constraint.name),
+        reason::violations_of(many.len(), &c.constraint.name),
     )
 }
 
@@ -1633,10 +1600,12 @@ fn others_beside(v: &reason::Solution, new: u64) -> Option<Vec<u64>> {
     (!others.is_empty()).then_some(others)
 }
 
-/// How many violations of a constraint are left, if any are.
-fn violations_left(n: usize, name: &str) -> Option<String> {
-    let s = if n == 1 { "" } else { "s" };
-    (n > 0).then(|| format!("{n} violation{s} of {name}"))
+/// What adopting a claim would raise, as interrogation shows it.
+fn adoption_preview(raised: &[String]) -> String {
+    if raised.is_empty() {
+        return "adopting it raises no violation".into();
+    }
+    format!("adopting it would raise {}", raised.join(", "))
 }
 
 /// The word around a text position: [start, end).

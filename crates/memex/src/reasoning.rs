@@ -4,9 +4,10 @@
 
 use crate::engine::Engine;
 use crate::notebook::strings;
-use crate::reason::{Suggestion, WorldEval};
+use crate::reason::{Suggestion, WorldEval, raised_by, violations_of};
 use crate::world::World;
 use format::record::Entry;
+use format::terms::Term;
 use serde_json::Value;
 use std::collections::BTreeSet;
 
@@ -85,11 +86,32 @@ impl Reasoning {
         world.evaluate(&mut self.engines[k])
     }
 
+    /// The violations that facts would raise, each resting on the entry
+    /// `by`, counted by constraint: worked out in the spare engine.
+    pub(crate) fn raised(
+        &mut self,
+        facts: &[(u64, Term)],
+        constraints: &[(u64, String)],
+        by: u64,
+    ) -> Result<Vec<String>, String> {
+        let engine = self.engine(2)?;
+        engine.sync(facts).map_err(|e| e.to_string())?;
+        let raised = constraints.iter().filter_map(|c| raised_in(engine, c, by));
+        Ok(raised.collect())
+    }
+
     /// Whether the current world has an engine and facts.
     pub(crate) fn has_facts(&self) -> bool {
         let facts = self.eval[0].as_ref().is_some_and(|e| !e.facts.is_empty());
         self.engines[0].is_some() && facts
     }
+}
+
+/// The violations of one constraint, by its entry and name, that the
+/// entry `by` raises in an engine, if it raises any.
+fn raised_in(engine: &mut Engine, constraint: &(u64, String), by: u64) -> Option<String> {
+    let node = engine.node(constraint.0).ok()?;
+    violations_of(raised_by(&node, by), &constraint.1)
 }
 
 /// The suggestions for the current world, and what the user has done with

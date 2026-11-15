@@ -749,6 +749,14 @@ impl Outline {
         out
     }
 
+    /// Each constraint, by its entry, and its name.
+    pub fn constraint_names(&self) -> Vec<(u64, String)> {
+        self.constraints
+            .iter()
+            .map(|(s, c)| (*s, c.name.clone()))
+            .collect()
+    }
+
     /// The items an import entry brought in.
     pub fn items_from(&self, import: u64) -> impl Iterator<Item = u64> + '_ {
         let from = self

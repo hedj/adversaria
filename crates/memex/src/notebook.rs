@@ -189,6 +189,18 @@ impl Notebook {
         crate::store::facts(self.journal.entries(), head)
     }
 
+    /// The facts at the tip, and these claims adopted as beliefs by the
+    /// entry `by`.
+    pub(crate) fn facts_adopting(
+        &self,
+        by: u64,
+        claims: Vec<Term>,
+    ) -> Result<Vec<(u64, Term)>, String> {
+        let mut facts = self.facts_at(self.tip)?;
+        facts.extend(claims.into_iter().map(|p| (by, p)));
+        Ok(facts)
+    }
+
     /// The facts stated on an item, in the world at the tip.
     pub(crate) fn facts_of(&self, item: u64) -> Result<Vec<Term>, String> {
         let facts = self.facts_at(self.tip)?.into_iter();
