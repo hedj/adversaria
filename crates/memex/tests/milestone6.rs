@@ -447,79 +447,136 @@ fn the_quote_check() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-#[test]
-fn the_source_check() {
-    // § Testing claims, the source: fetched by DOI, never trusting a copy
-    // that came with the claim. A local server stands in for Crossref.
-    let dir = temp("source");
-    let www = dir.join("www").join("10.5555");
-    std::fs::create_dir_all(&www).unwrap();
-    std::fs::write(
-        www.join("good"),
-        r#"{"status":"ok","message":{"title":["Buran's flight software"]}}"#,
-    )
-    .unwrap();
-    std::fs::write(
-        www.join("retracted"),
-        r#"{"status":"ok","message":{"title":["Bad"],"updated-by":[{"type":"retraction"}]}}"#,
-    )
-    .unwrap();
+/// A local server that stands in for Crossref, holding these records by
+/// their DOI under 10.5555/, and its port.
+fn crossref(dir: &Path, records: &[(&str, &str)]) -> (std::process::Child, u16) {
+    let www = dir.join("www");
+    std::fs::create_dir_all(www.join("10.5555")).unwrap();
+    for (name, record) in records {
+        std::fs::write(www.join("10.5555").join(name), record).unwrap();
+    }
     let port = std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
         .local_addr()
         .unwrap()
         .port();
-    let mut server = std::process::Command::new("python3")
-        .args([
-            "-m",
-            "http.server",
-            &port.to_string(),
-            "--bind",
-            "127.0.0.1",
-        ])
-        .current_dir(dir.join("www"))
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+    let server = http_server(&www, port);
+    wait_until_listening(port);
+    (server, port)
+}
+
+/// Python's web server of a directory, on a port.
+fn http_server(www: &Path, port: u16) -> std::process::Child {
+    let mut python = std::process::Command::new("python3");
+    let args = [
+        "-m",
+        "http.server",
+        &port.to_string(),
+        "--bind",
+        "127.0.0.1",
+    ];
+    let quiet = std::process::Stdio::null;
+    python
+        .args(args)
+        .current_dir(www)
+        .stdout(quiet())
+        .stderr(quiet())
         .spawn()
-        .unwrap();
-    // Wait until the server listens: a fixed pause was too short under the
-    // load of the whole suite (seen in nix develop: "unavailable").
+        .unwrap()
+}
+
+/// Wait until a server listens on a port: a fixed pause was too short
+/// under the load of the whole suite (seen in nix develop: "unavailable").
+fn wait_until_listening(port: u16) {
+    let listening = || std::net::TcpStream::connect(("127.0.0.1", port)).is_ok();
     let up = (0..200).any(|_| {
         std::thread::sleep(std::time::Duration::from_millis(50));
-        std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
+        listening()
     });
     assert!(up, "the fake Crossref did not start within 10 s");
-    let mut app = open(&dir);
+}
+
+/// A memex whose source check asks the fake Crossref at a port.
+fn asking(dir: &Path, port: u16) -> App {
+    let mut app = open(dir);
     app.session
         .set_crossref(&format!("http://127.0.0.1:{port}/"));
-    let rule = |app: &mut App, doi: &str, title: &str| -> String {
-        tap(app, Key::Enter);
-        for c in "a claim".chars() {
-            tap(app, Key::Char(c));
-        }
-        app.flush();
-        command(app, &format!("fact doi(paper, \"{doi}\")"));
-        command(app, &format!("fact title(paper, \"{title}\")"));
-        command(app, "check source");
-        app.session
-            .message
-            .trim_start_matches("source check: ")
-            .to_string()
-    };
+    app
+}
+
+/// The source check's ruling on a new claim with a DOI and a title.
+fn ruling(app: &mut App, doi: &str, title: &str) -> String {
+    tap(app, Key::Enter);
+    typ(app, "a claim");
+    app.flush();
+    command(app, &format!("fact doi(paper, \"{doi}\")"));
+    command(app, &format!("fact title(paper, \"{title}\")"));
+    command(app, "check source");
+    let said = app.session.message.as_str();
+    said.trim_start_matches("source check: ").to_string()
+}
+
+const GOOD: (&str, &str) = (
+    "good",
+    r#"{"status":"ok","message":{"title":["Buran's flight software"]}}"#,
+);
+
+#[test]
+fn the_source_check() {
+    // § Testing claims, the source: fetched by DOI, never trusting a copy
+    // that came with the claim. A local server stands in for Crossref.
+    let dir = temp("source");
+    let retracted =
+        r#"{"status":"ok","message":{"title":["Bad"],"updated-by":[{"type":"retraction"}]}}"#;
+    let (mut server, port) = crossref(&dir, &[GOOD, ("retracted", retracted)]);
+    let mut app = asking(&dir, port);
+    let alike = ruling(&mut app, "10.5555/good", "buran's flight-software");
     assert_eq!(
-        rule(&mut app, "10.5555/good", "buran's flight-software"),
-        "found",
+        alike, "found",
         "title alike, spaces, hyphens and case aside"
     );
     assert_eq!(
-        rule(&mut app, "10.5555/good", "Something else"),
+        ruling(&mut app, "10.5555/good", "Something else"),
         "misattributed"
     );
-    assert_eq!(rule(&mut app, "10.5555/retracted", "Bad"), "retracted");
-    assert_eq!(rule(&mut app, "10.5555/missing", "x"), "not_found");
+    assert_eq!(ruling(&mut app, "10.5555/retracted", "Bad"), "retracted");
+    assert_eq!(ruling(&mut app, "10.5555/missing", "x"), "not_found");
     server.kill().unwrap();
     server.wait().unwrap();
-    assert_eq!(rule(&mut app, "10.5555/good", "x"), "unavailable");
+    assert_eq!(ruling(&mut app, "10.5555/good", "x"), "unavailable");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_source_retracted_by_a_relation_is_retracted() {
+    let dir = temp("source-relation");
+    let record = r#"{"message":{"title":["Bad"],"relation":{"is-retracted-by":[{"id":"x"}]}}}"#;
+    let (mut server, port) = crossref(&dir, &[("bad", record)]);
+    let said = ruling(&mut asking(&dir, port), "10.5555/bad", "Bad");
+    server.kill().unwrap();
+    assert_eq!(said, "retracted");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_record_that_is_no_json_is_unavailable() {
+    let dir = temp("source-garbled");
+    let (mut server, port) = crossref(&dir, &[("garbled", "<html>")]);
+    let said = ruling(&mut asking(&dir, port), "10.5555/garbled", "x");
+    server.kill().unwrap();
+    assert_eq!(said, "unavailable");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_source_ruling_names_the_hash_of_the_record() {
+    let dir = temp("source-hash");
+    let (mut server, port) = crossref(&dir, &[GOOD]);
+    let mut app = asking(&dir, port);
+    ruling(&mut app, "10.5555/good", "x");
+    server.kill().unwrap();
+    let hash = format::record::sha256_hex(GOOD.1.as_bytes());
+    assert!(last_body(&app)["facts"][0].to_string().contains(&hash));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
