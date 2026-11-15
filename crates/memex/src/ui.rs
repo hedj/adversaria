@@ -438,38 +438,49 @@ pub fn view_figure(app: &App, k: usize, item: u64, width: usize, height: usize) 
 
 /// A figure as lines, indented; notes after it, dim.
 fn figure_lines(fig: &view::Figure, indent: usize) -> Vec<Line<'static>> {
-    let mut out: Vec<Line<'static>> = fig
-        .rows
-        .iter()
-        .map(|row| {
-            let mut spans = vec![Span::raw(" ".repeat(indent))];
-            let mut run = String::new();
-            let mut ink = view::Ink::Plain;
-            let style = |i: view::Ink| match i {
-                view::Ink::Plain => Style::default(),
-                view::Ink::Dim => dim(),
-                view::Ink::Loud => bold(),
-            };
-            for (c, i) in row {
-                if *i != ink && !run.is_empty() {
-                    spans.push(Span::styled(std::mem::take(&mut run), style(ink)));
-                }
-                ink = *i;
-                run.push(*c);
-            }
-            let run = run.trim_end().to_string();
-            if !run.is_empty() {
-                spans.push(Span::styled(run, style(ink)));
-            }
-            Line::from(spans)
-        })
-        .collect();
-    out.extend(
+    let pad = " ".repeat(indent);
+    let mut lines: Vec<Line> = fig.rows.iter().map(|row| row_line(row, &pad)).collect();
+    lines.extend(
         fig.notes
             .iter()
-            .map(|n| Line::styled(format!("{}{n}", " ".repeat(indent)), dim())),
+            .map(|n| Line::styled(format!("{pad}{n}"), dim())),
     );
-    out
+    lines
+}
+
+/// A row of a figure as a line: a pad, then its runs of one ink.
+fn row_line(row: &[(char, view::Ink)], pad: &str) -> Line<'static> {
+    let mut line = vec![Span::raw(pad.to_string())];
+    line.extend(ink_spans(row));
+    Line::from(line)
+}
+
+/// A row's runs of one ink, to its last mark, each in its style.
+fn ink_spans(row: &[(char, view::Ink)]) -> Vec<Span<'static>> {
+    let mut runs: Vec<(String, view::Ink)> = vec![];
+    for &(c, ink) in row {
+        match runs.last_mut() {
+            Some((run, i)) if *i == ink => run.push(c),
+            _ => runs.push((c.to_string(), ink)),
+        }
+    }
+    if let Some((run, _)) = runs.last_mut() {
+        run.truncate(run.trim_end().len());
+    }
+    runs.retain(|(run, _)| !run.is_empty());
+    let spans = runs
+        .into_iter()
+        .map(|(run, ink)| Span::styled(run, ink_style(ink)));
+    spans.collect()
+}
+
+/// The style each ink is drawn in.
+fn ink_style(ink: view::Ink) -> Style {
+    match ink {
+        view::Ink::Plain => Style::default(),
+        view::Ink::Dim => dim(),
+        view::Ink::Loud => bold(),
+    }
 }
 
 /// The item a click on a mark goes to: the item stating the first fact
