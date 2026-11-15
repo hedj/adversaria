@@ -614,7 +614,9 @@ impl Outline {
         Some(())
     }
 
-    /// Links that leave or reach an item and its target or source still exist.
+    /// Links that leave or reach an item and its target or source still
+    /// exist, each grouped by kind in the order the kinds first appear:
+    /// the order the links pane lists them and `follow` numbers them.
     pub fn links_of(&self, id: u64) -> (Vec<&Link>, Vec<&Link>) {
         let live = |l: &&Link| self.items.contains_key(&l.from) && self.items.contains_key(&l.to);
         let out = self
@@ -629,7 +631,7 @@ impl Outline {
             .filter(|l| l.to == id)
             .filter(live)
             .collect();
-        (out, into)
+        (by_kind(out), by_kind(into))
     }
 
     /// Items whose text shows some of this item's text in place.
@@ -951,6 +953,14 @@ impl Outline {
         }
         out
     }
+}
+
+/// Links grouped by kind, in the order the kinds first appear; within a
+/// kind, in their own order.
+fn by_kind(mut links: Vec<&Link>) -> Vec<&Link> {
+    let kinds: Vec<String> = links.iter().map(|l| l.kind.clone()).collect();
+    links.sort_by_key(|l| kinds.iter().position(|k| *k == l.kind));
+    links
 }
 
 #[cfg(test)]
