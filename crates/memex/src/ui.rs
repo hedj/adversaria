@@ -99,7 +99,7 @@ fn draw_top(f: &mut Frame, app: &App, area: Rect) {
     };
     let mut parts = vec![
         Span::styled("room ", dim()),
-        Span::styled(app.session.workspace.clone(), bold()),
+        Span::styled(app.journal().room(), bold()),
         Span::raw("   "),
     ];
     parts.extend(world);

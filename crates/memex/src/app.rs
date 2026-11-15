@@ -350,7 +350,7 @@ impl App {
             tip: 0,
             redo: vec![],
             message: String::new(),
-            session: Session::new(dir),
+            session: Session::default(),
             pending_text: None,
             view_dirty: false,
             last_leap: None,

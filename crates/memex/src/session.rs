@@ -3,16 +3,14 @@
 
 use crate::app::Key;
 use std::collections::BTreeMap;
-use std::path::Path;
 
 /// The violations and the disagreements shown, by key.
 pub type Observed = (Vec<String>, Vec<String>);
 
-/// The room's name, the keys bound to commands, whether the user has
-/// quit, and what the session has noticed outside the journal.
+/// The keys bound to commands, whether the user has quit, and what the
+/// session has noticed outside the journal.
 #[derive(Default)]
 pub struct Session {
-    pub workspace: String,
     pub keys: Keys,
     pub quit: bool,
     outside: Outside,
@@ -30,12 +28,6 @@ struct Outside {
     stale: BTreeMap<u64, Vec<String>>,
     /// The last violations and disagreements recorded in the journal.
     observed: Option<Observed>,
-}
-
-/// A room is named after its journal's directory.
-fn room_name(dir: &Path) -> String {
-    let name = dir.file_name().map(|n| n.to_string_lossy().into_owned());
-    name.unwrap_or_default()
 }
 
 impl Default for Outside {
@@ -71,16 +63,6 @@ impl Keys {
 }
 
 impl Session {
-    /// A session in a journal directory, the room named after it, with the
-    /// default keys.
-    pub fn new(dir: &Path) -> Session {
-        let workspace = room_name(dir);
-        Session {
-            workspace,
-            ..Session::default()
-        }
-    }
-
     /// Point the source check at another Crossref-like service (for tests).
     pub fn set_crossref(&mut self, base: &str) {
         self.outside.crossref = base.to_string();
@@ -121,7 +103,7 @@ mod tests {
 
     #[test]
     fn the_source_check_asks_crossref_unless_pointed_elsewhere() {
-        let mut s = Session::new(Path::new("room"));
+        let mut s = Session::default();
         let doi = "10.1000/a b";
         assert_eq!(
             s.source_url(doi),

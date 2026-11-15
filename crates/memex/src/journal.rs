@@ -76,6 +76,12 @@ impl Journal {
         &self.dir
     }
 
+    /// The room the journal is kept for, named after its directory.
+    pub fn room(&self) -> String {
+        let name = self.dir.file_name().map(|n| n.to_string_lossy());
+        name.unwrap_or_default().into_owned()
+    }
+
     pub fn entries(&self) -> &[Entry] {
         &self.entries
     }
