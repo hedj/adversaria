@@ -1,7 +1,10 @@
-//! Typing and erasing in an item, and where the cursors go when the
-//! outline changes (docs/plan.md, Milestone 3).
+//! Editing the outline: typing and erasing in an item, folding and
+//! linking, and where the cursors go when the outline changes (docs/plan.md,
+//! Milestone 3).
 
-use memex::app::{App, Event, Key, Quasi};
+use memex::app::{App, Event, Key, Quasi, View};
+use ratatui::Terminal;
+use ratatui::backend::TestBackend;
 use std::path::PathBuf;
 
 /// A memex in a directory of this test's own, removed after it.
@@ -52,6 +55,19 @@ impl Room {
     /// The text of an item, as shown.
     fn text(&self, item: u64) -> String {
         self.app.text_of(item).iter().collect()
+    }
+
+    /// The lines drawn on a screen of 80 by 20.
+    fn lines(&self) -> Vec<String> {
+        let mut t = Terminal::new(TestBackend::new(80, 20)).unwrap();
+        t.draw(|f| memex::ui::draw(f, &self.app)).unwrap();
+        let buf = t.backend().buffer().clone();
+        let row = |y| (0..80).map(|x| buf[(x, y)].symbol()).collect::<String>();
+        (0..20).map(row).collect()
+    }
+
+    fn view(&self) -> &View {
+        &self.app.session.view
     }
 
     /// The text of the item at the cursor, as shown.
@@ -135,7 +151,7 @@ fn a_deleted_item_leaves_the_folds() {
     let two = r.app.cursor();
     r.command("fold");
     r.command("delete");
-    assert!(!r.app.session.view.folded.contains(&two));
+    assert!(!r.view().folded.contains(&two));
 }
 
 #[test]
@@ -143,7 +159,7 @@ fn the_text_cursor_keeps_within_the_item_it_moves_to() {
     let mut r = Room::new("pos");
     r.items(&["a", "bcdef"]);
     r.command("delete");
-    assert_eq!(r.app.session.view.pos, 1);
+    assert_eq!(r.view().pos, 1);
 }
 
 #[test]
@@ -157,4 +173,29 @@ fn a_write_that_fails_is_shown() {
         "{}",
         r.app.session.message
     );
+}
+
+#[test]
+fn a_folded_item_hides_its_branch() {
+    let mut r = Room::new("fold");
+    r.items(&["one", "two"]);
+    r.tap(&[Key::Tab, Key::Up]);
+    r.command("fold");
+    assert_eq!(r.app.visible().len(), 1);
+}
+
+#[test]
+fn a_link_says_what_it_joined() {
+    let mut r = Room::new("link");
+    r.items(&["claim", "source"]);
+    r.command("link 1 2 as cites");
+    assert_eq!(r.app.session.message, "linked 1 to 2 as cites");
+}
+
+#[test]
+fn a_citation_is_shown_after_the_text_that_cites() {
+    let mut r = Room::new("cites");
+    r.items(&["claim", "source"]);
+    r.command("link 1 2 as cites");
+    assert!(r.lines().iter().any(|l| l.contains("claim [source]")));
 }

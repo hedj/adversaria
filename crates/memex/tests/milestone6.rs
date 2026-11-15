@@ -39,6 +39,20 @@ fn command(app: &mut App, line: &str) {
     );
 }
 
+fn typ(app: &mut App, text: &str) {
+    for c in text.chars() {
+        tap(app, Key::Char(c));
+    }
+}
+
+/// Leap to the next item whose text holds a pattern; that item.
+fn leap(app: &mut App, pattern: &str) -> u64 {
+    app.handle(Event::down(Key::Quasi(Quasi::LeapForward)));
+    typ(app, pattern);
+    app.handle(Event::up(Key::Quasi(Quasi::LeapForward)));
+    app.cursor()
+}
+
 fn open(dir: &Path) -> App {
     let mut app = App::open(&dir.join("journal")).unwrap();
     app.set_durable(false);
@@ -364,19 +378,14 @@ fn the_quote_check() {
     std::fs::write(&src, "# Talk\n\nThe 1989 flight was the only one.\n").unwrap();
     let mut app = open(&dir);
     command(&mut app, &format!("import document {}", src.display()));
-    let item = app
-        .outline
-        .in_order()
-        .into_iter()
-        .find(|i| app.outline.text(*i).starts_with("The 1989"))
-        .unwrap();
-    app.session.view.panes[0].cursor = item;
+    let item = leap(&mut app, "The 1989");
     command(&mut app, "check quote");
     assert_eq!(app.session.message, "quote check: quoted");
-    app.session.view.pos = 4;
-    for c in "first ".chars() {
-        tap(&mut app, Key::Char(c));
+    tap(&mut app, Key::Home);
+    for _ in 0.."The ".len() {
+        tap(&mut app, Key::Right);
     }
+    typ(&mut app, "first ");
     app.flush();
     command(&mut app, "check quote");
     assert_eq!(app.session.message, "quote check: misquoted");
@@ -461,5 +470,19 @@ fn the_source_check() {
     server.kill().unwrap();
     server.wait().unwrap();
     assert_eq!(rule(&mut app, "10.5555/good", "x"), "unavailable");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn the_quote_check_reads_past_markup() {
+    // Catches the item's Markdown compared with the document's plain text.
+    let dir = temp("quote-markup");
+    let src = dir.join("talk.md");
+    std::fs::write(&src, "# Talk\n\nThe *1989* flight was the only one.\n").unwrap();
+    let mut app = open(&dir);
+    command(&mut app, &format!("import document {}", src.display()));
+    leap(&mut app, "The *1989*");
+    command(&mut app, "check quote");
+    assert_eq!(app.session.message, "quote check: quoted");
     std::fs::remove_dir_all(&dir).unwrap();
 }
