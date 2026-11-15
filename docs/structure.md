@@ -169,10 +169,10 @@ workspace
 ├── record: format (jcs, terms, record, chain), check, sealer
 ├── reasoning: protocol; prolog (vetting, nodes, wikidata, suggestions)
 ├── memex
-│   ├── state: journal, outline, store and replay, configuration
-│   ├── reasoner: client, engine, readings and solutions
-│   ├── actions: dispatch, editing, knowledge, worlds and history
-│   └── screen: terminal, panels, views
+│   ├── state: journal, notebook (the outline replayed), store, configuration
+│   ├── reasoner: client, engine, readings and solutions, what reasoning found
+│   ├── actions: dispatch, editing, knowledge, checks, worlds and history
+│   └── screen: session, terminal, panels, views
 └── tools: wikidata, measures, interactivity; acceptance tests
 ```
 
@@ -180,8 +180,11 @@ How the code is to be written, after the book in hedj/bcw3
 (`next/book/framework.rst`), from the bottom up: the record, the
 outline, reasoning, then the screen.
 
-1. Shapes are small first: a struct has about four fields, an enum about
-   four cases. The functions follow from the shapes.
+1. Shapes are small first: a struct has three fields or fewer, as each
+   structure of the book has, and an enum about four cases. The
+   functions follow from the shapes. The memex is three parts: the
+   notebook, what reasoning found in it, and the session, which holds
+   all the journal does not.
 2. An operation lives on the struct that owns the data it changes, and
    touches one or two of its fields.
 3. A step only chooses: one line for each case, each a call to a named
@@ -190,7 +193,10 @@ outline, reasoning, then the screen.
 5. What has no present use goes; no helper for fewer than three uses,
    and no function that only passes its work on.
 6. A test checks one thing, through helpers named for the question they
-   ask, as `quasi(config, "RightAlt")`.
+   ask, as `quasi(config, "RightAlt")`; the memex's tests share a `Room`
+   (`crates/memex/tests/support`).
+7. Every function, a test's too, holds 6 things or fewer at each
+   statement, by the upper bound of `crates/tools`' held count.
 
 The proof so far: `config.rs` was restructured by these rules (commit
 e3276ca). It had 5 functions over 4 (the largest 13); it has none at the
