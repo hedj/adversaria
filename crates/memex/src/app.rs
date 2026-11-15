@@ -833,8 +833,8 @@ impl App {
         match ev.key {
             Key::Enter => {
                 let fact = readings[at].clone();
-                let supposed = self.suppose(&text, &fact);
-                self.session.report(supposed);
+                let said = self.suppose(&text, &fact).unwrap_or_else(|m| m);
+                self.session.message = said;
                 Mode::Normal
             }
             Key::Tab => {
@@ -853,36 +853,47 @@ impl App {
     /// only, each belief it directly contradicts (the supposition is
     /// entrenched over them). See `direct_conflicts` for what "directly"
     /// means; a violation it leaves is shown, for the user to resolve.
-    fn suppose(&mut self, name: &str, fact: &Term) -> Result<(), String> {
+    fn suppose(&mut self, name: &str, fact: &Term) -> Result<String, String> {
         let f = terms::encode(fact).map_err(|e| e.0)?;
         let s = self.write_here("suppose", json!({"name": name, "facts": [f]}))?;
+        let (set_aside, left) = self.set_aside_conflicts(s.seq)?;
+        self.evaluate()?;
+        let places: Vec<String> = set_aside.iter().map(|t| self.fact_place(*t)).collect();
+        Ok(with_left(supposed(&places), &left))
+    }
+
+    /// Retract, round by round, five at most, each belief that the fact of
+    /// an entry directly contradicts: those set aside, and the violations
+    /// left.
+    fn set_aside_conflicts(&mut self, seq: u64) -> Result<(Vec<u64>, Vec<String>), String> {
         let mut set_aside = Vec::new();
         let mut left = Vec::new();
         for _ in 0..5 {
-            self.evaluate()?;
-            let eval = self.reason.eval[0].as_ref().ok_or("no evaluation")?;
-            let (mut targets, l) = direct_conflicts(&eval.constraints, s.seq);
-            left = l;
-            targets.retain(|t| self.retractable(*t).is_ok());
+            let targets;
+            (targets, left) = self.retractable_conflicts(seq)?;
             if targets.is_empty() {
                 break;
             }
-            for t in targets {
-                self.write_here("retract", json!({"target": t}))?;
-                set_aside.push(t);
-            }
+            self.retract_all(&targets)?;
+            set_aside.extend(targets);
         }
+        Ok((set_aside, left))
+    }
+
+    /// After reasoning again, the beliefs that the fact of an entry directly
+    /// contradicts and that can be retracted, and the violations left.
+    fn retractable_conflicts(&mut self, seq: u64) -> Result<(Vec<u64>, Vec<String>), String> {
         self.evaluate()?;
-        let places: Vec<String> = set_aside.iter().map(|t| self.fact_place(*t)).collect();
-        let mut m = if places.is_empty() {
-            "supposed; nothing set aside".to_string()
-        } else {
-            format!("supposed; set aside in this world: {}", places.join(", "))
-        };
-        if !left.is_empty() {
-            m.push_str(&format!("; left for you: {}", left.join(", ")));
+        let eval = self.reason.eval[0].as_ref().ok_or("no evaluation")?;
+        let (mut targets, left) = direct_conflicts(&eval.constraints, seq);
+        targets.retain(|t| self.retractable(*t).is_ok());
+        Ok((targets, left))
+    }
+
+    fn retract_all(&mut self, targets: &[u64]) -> Result<(), String> {
+        for t in targets {
+            self.write_here("retract", json!({"target": t}))?;
         }
-        self.session.message = m;
         Ok(())
     }
 
@@ -927,11 +938,9 @@ impl App {
             return Err("there is no item to put the fact on".into());
         }
         let places: Vec<String> = replaced.iter().map(|t| self.fact_place(*t)).collect();
-        for t in &replaced {
-            self.write_here("retract", json!({"target": t}))?;
-        }
+        self.retract_all(&replaced)?;
         self.write_fact(item, fact, None)?;
-        let mut m = if places.is_empty() {
+        let m = if places.is_empty() {
             format!(
                 "set at {}; nothing replaced",
                 self.notebook.outline.number(item)
@@ -939,10 +948,7 @@ impl App {
         } else {
             format!("set; replaced the fact at {}", places.join(", "))
         };
-        if !left.is_empty() {
-            m.push_str(&format!("; left for you: {}", left.join(", ")));
-        }
-        Ok(m)
+        Ok(with_left(m, &left))
     }
 
     /// Where a fact entry's fact is stated, in the actual world: its item's
@@ -1598,6 +1604,22 @@ fn others_beside(v: &reason::Solution, new: u64) -> Option<Vec<u64>> {
     others.sort();
     others.dedup();
     (!others.is_empty()).then_some(others)
+}
+
+/// What a supposition says it set aside, at these places.
+fn supposed(places: &[String]) -> String {
+    if places.is_empty() {
+        return "supposed; nothing set aside".into();
+    }
+    format!("supposed; set aside in this world: {}", places.join(", "))
+}
+
+/// A reply, and the violations left for the user, if any are.
+fn with_left(said: String, left: &[String]) -> String {
+    if left.is_empty() {
+        return said;
+    }
+    format!("{said}; left for you: {}", left.join(", "))
 }
 
 /// What adopting a claim would raise, as interrogation shows it.
