@@ -22,3 +22,17 @@ fn a_supposition_that_contradicts_nothing_sets_nothing_aside() {
     suppose(&mut r, "the ant 2");
     assert_eq!(r.app.session.message, "supposed; nothing set aside");
 }
+
+#[test]
+fn a_supposition_that_cannot_be_written_says_why() {
+    let mut r = Room::new("aside-fails");
+    r.items(&["ants"]);
+    r.command("fact date(ant, 1)");
+    std::fs::remove_dir_all(&r.dir).unwrap();
+    suppose(&mut r, "the ant 2");
+    assert!(
+        r.app.session.message.contains("os error"),
+        "{}",
+        r.app.session.message
+    );
+}
