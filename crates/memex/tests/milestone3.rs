@@ -672,3 +672,22 @@ fn a_purge_leaves_what_can_be_redone() {
     assert_eq!((App::open(&dir).unwrap().redo, redo.len()), (redo, 1));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn leaping_again_after_reopening_repeats_the_last_pattern() {
+    // Catches a last leap kept only while the memex runs: the journal
+    // holds it.
+    let dir = temp("leap-again");
+    let mut app = essay(&dir);
+    hold(&mut app, Quasi::LeapBack, "energia");
+    release(&mut app, Quasi::LeapBack);
+    app.flush();
+    drop(app);
+    let mut app = App::open(&dir).unwrap();
+    tap(&mut app, Key::Down);
+    assert!(!app.text_of(app.cursor()).starts_with(&['E', 'n', 'e']));
+    tap(&mut app, Key::Quasi(Quasi::LeapForward));
+    tap(&mut app, Key::Quasi(Quasi::LeapForward));
+    assert!(app.text_of(app.cursor()).starts_with(&['E', 'n', 'e']));
+    std::fs::remove_dir_all(&dir).unwrap();
+}

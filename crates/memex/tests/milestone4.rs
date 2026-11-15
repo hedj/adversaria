@@ -600,3 +600,15 @@ fn a_retracted_constraint_is_not_read() {
     assert_eq!((before, count(&mut app)), (1, 0));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn an_observation_is_not_recorded_again_after_reopening() {
+    // Catches the last observation kept only while the memex runs: after a
+    // replay, what is shown unchanged is not written again.
+    let dir = temp("observed-again");
+    let entries = scene(&dir).journal().entries().len();
+    let mut app = App::open(&dir).unwrap();
+    app.evaluate().unwrap();
+    assert_eq!(app.journal().entries().len(), entries);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
