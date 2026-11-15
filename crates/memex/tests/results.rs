@@ -92,3 +92,16 @@ fn results_follow_the_outline_in_their_order() {
         ]
     );
 }
+
+#[test]
+fn a_malformed_results_file_writes_nothing() {
+    // An import is all or nothing: a result refused after others were
+    // written would leave half a file in a journal kept for good.
+    let mut r = Room::new("results-nothing");
+    let entries = r.app.journal().entries().len();
+    import(
+        &mut r,
+        &results(r#"{"name": "x", "value": 1.0, "uncertainty": 0.1}, {"value": 2.0}"#),
+    );
+    assert_eq!(r.app.journal().entries().len(), entries);
+}

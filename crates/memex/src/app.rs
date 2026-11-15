@@ -1093,7 +1093,18 @@ impl App {
     }
 
     /// Write an item for a document block, with its citations as facts.
-    fn write_block(
+    /// Write a block last under an item.
+    pub(crate) fn append_block(
+        &mut self,
+        b: &crate::docs::Block,
+        under: u64,
+        origin: u64,
+    ) -> Result<u64, String> {
+        let after = self.notebook.outline.last_child(under);
+        self.write_block(b, under, after, origin)
+    }
+
+    pub(crate) fn write_block(
         &mut self,
         b: &crate::docs::Block,
         under: u64,
@@ -1367,80 +1378,6 @@ impl App {
             blocks.len(),
             hashes.len()
         ))
-    }
-
-    /// Import results: an exchange file of values with their provenance (W3C
-    /// PROV terms), as claims whose source is the analysis.
-    pub(crate) fn import_results(&mut self, file: &str) -> Result<String, String> {
-        let path = std::path::Path::new(file);
-        let bytes = std::fs::read(path).map_err(|e| format!("{file}: {e}"))?;
-        let v: serde_json::Value =
-            serde_json::from_slice(&bytes).map_err(|e| format!("not a results file: {e}"))?;
-        if v["format"] != "memex-results" {
-            return Err("not a results file: its format is not memex-results".into());
-        }
-        let hash = self.notebook.store_blob(&bytes)?;
-        let act = &v["prov"]["activity"];
-        let source = format!(
-            "{}@{}",
-            act["script"].as_str().unwrap_or("analysis"),
-            act["commit"].as_str().unwrap_or("uncommitted")
-        );
-        let base = std::fs::canonicalize(path)
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.to_string_lossy().into_owned()))
-            .unwrap_or_default();
-        let imp = self.write_here("import", json!({"blob": hash, "format": "memex-results", "source": source, "base": base, "prov": v["prov"]}))?;
-        let head = crate::docs::Block {
-            depth: 0,
-            style: "heading".into(),
-            text: format!("Results of {source}"),
-            cites: vec![],
-        };
-        let top = self.write_block(
-            &head,
-            TOP,
-            self.notebook.outline.top.last().copied(),
-            imp.seq,
-        )?;
-        let mut after = None;
-        for r in v["results"].as_array().cloned().unwrap_or_default() {
-            let name = r["name"].as_str().ok_or("a result needs a name")?;
-            let num = |k: &str| {
-                r[k].as_f64()
-                    .ok_or(format!("result {name}: {k} must be a number"))
-            };
-            let (value, u) = (num("value")?, num("uncertainty")?);
-            let unit = r["unit"].as_str().unwrap_or("");
-            let text = format!("{name} = {value} ± {u} {unit}");
-            let b = crate::docs::Block {
-                depth: 1,
-                style: "para".into(),
-                text,
-                cites: vec![],
-            };
-            let id = self.write_block(&b, top, after, imp.seq)?;
-            after = Some(id);
-            let c = |f: &str, a: Vec<Term>| Term::Compound(f.into(), a);
-            let fact = c(
-                "claims",
-                vec![
-                    Term::Str(source.clone()),
-                    c(
-                        "result",
-                        vec![
-                            Term::Atom(name.into()),
-                            c(
-                                "measured",
-                                vec![Term::Float(value), Term::Float(u), Term::Str(unit.into())],
-                            ),
-                        ],
-                    ),
-                ],
-            );
-            self.write_fact(id, &fact, Some(&source))?;
-        }
-        Ok(format!("imported the results of {source}"))
     }
 
     /// An item's claims: (entry seq, source, claimed fact).

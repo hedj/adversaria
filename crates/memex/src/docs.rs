@@ -26,6 +26,18 @@ pub struct Block {
     pub cites: Vec<String>,
 }
 
+impl Block {
+    /// A block of a style at a depth, citing nothing.
+    pub fn plain(depth: usize, style: &str, text: String) -> Block {
+        Block {
+            depth,
+            style: style.into(),
+            text,
+            cites: vec![],
+        }
+    }
+}
+
 /// What a document held that the outline does not, by kind: counts.
 pub type Losses = BTreeMap<String, usize>;
 
