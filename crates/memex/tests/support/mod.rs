@@ -104,6 +104,13 @@ impl Room {
         view.panes[view.focus].cursor = item;
     }
 
+    /// The facts stated in the world at the tip, as shown.
+    pub fn facts(&self) -> Vec<String> {
+        let entries = self.app.journal().entries();
+        let facts = memex::store::facts(entries, self.app.notebook.tip).unwrap();
+        facts.iter().map(|(_, f)| memex::reason::show(f)).collect()
+    }
+
     /// The number of the last entry of a kind.
     pub fn last(&self, kind: &str) -> u64 {
         let mut entries = self.app.journal().entries().iter().rev();

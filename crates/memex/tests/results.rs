@@ -63,3 +63,32 @@ fn a_result_is_its_name_value_uncertainty_and_unit() {
     r.leap(memex::app::Quasi::LeapForward, "x =");
     assert_eq!(r.here(), "x = 1.5 ± 0.1 s");
 }
+
+#[test]
+fn a_result_is_claimed_by_its_source() {
+    let mut r = Room::new("results-claim");
+    import(
+        &mut r,
+        &results(r#"{"name": "x", "value": 1.5, "uncertainty": 0.1, "unit": "s"}"#),
+    );
+    let claim = "claims(\"analysis.py@abc\", result(x, measured(1.5, 0.1, \"s\")))";
+    assert!(r.facts().contains(&claim.to_string()), "{:?}", r.facts());
+}
+
+#[test]
+fn results_follow_the_outline_in_their_order() {
+    let mut r = Room::new("results-order");
+    r.items(&["before"]);
+    let two = r#"{"name": "a", "value": 1, "uncertainty": 0}, {"name": "b", "value": 2, "uncertainty": 0}"#;
+    import(&mut r, &results(two));
+    let texts: Vec<String> = r.app.visible().iter().map(|(id, _)| r.text(*id)).collect();
+    assert_eq!(
+        texts,
+        [
+            "before",
+            "Results of analysis.py@abc",
+            "a = 1 ± 0 ",
+            "b = 2 ± 0 "
+        ]
+    );
+}
