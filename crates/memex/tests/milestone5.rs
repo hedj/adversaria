@@ -99,6 +99,12 @@ fn accept(app: &mut App, start: &str) {
     command(app, &format!("accept {n}"));
 }
 
+/// The number of the last entry of a kind.
+fn last_of(app: &App, kind: &str) -> u64 {
+    let entries = app.journal().entries().iter();
+    entries.rev().find(|e| e.kind() == kind).unwrap().seq
+}
+
 fn open(dir: &Path) -> App {
     let mut app = App::open(dir).unwrap();
     app.set_durable(false);
@@ -437,4 +443,25 @@ fn offered_keys(app: &App) -> Vec<String> {
     let offers = offers.filter(|b| b["op"] == "offer");
     let keys = offers.flat_map(|b| b["keys"].as_array().cloned().unwrap_or_default());
     keys.map(|k| k.as_str().unwrap().to_string()).collect()
+}
+
+#[test]
+fn a_retracted_import_is_not_read() {
+    // Catches a world that still reads a Wikidata import retracted from it.
+    let dir = temp("retracted-import");
+    let mut app = open(&dir);
+    typ(&mut app, "Buran flew once, unmanned, in 1989.");
+    app.flush();
+    command(&mut app, "fact date(buran_flight, 1989)");
+    command(&mut app, &format!("import wikidata {FIXTURE}"));
+    assert!(
+        !described(&app).is_empty(),
+        "the test needs the import read"
+    );
+    let retract = format!("retract {}", last_of(&app, "import"));
+    command(&mut app, &retract);
+    tap(&mut app, Key::Enter);
+    app.evaluate().unwrap();
+    assert_eq!(described(&app), Vec::<String>::new());
+    std::fs::remove_dir_all(&dir).unwrap();
 }

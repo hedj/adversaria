@@ -643,3 +643,32 @@ fn a_command_with_nothing_to_say_leaves_the_message() {
     assert_eq!(app.session.message, said);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn closing_a_world_shows_the_actual_outline_again() {
+    // Catches a view entry that leaves a world without replaying the
+    // outline of the world it returns to.
+    let dir = temp("close");
+    let mut app = App::open(&dir).unwrap();
+    typ(&mut app, "actual");
+    command(&mut app, "suppose maybe");
+    item(&mut app, "supposed");
+    command(&mut app, "close");
+    assert_eq!(app.outline.in_order().len(), 1, "only the actual item");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_purge_leaves_what_can_be_redone() {
+    // Catches a purge, which Journal::purge writes, that forgets the
+    // entries undone before it.
+    let dir = temp("purge-redo");
+    let mut app = App::open(&dir).unwrap();
+    typ(&mut app, "A");
+    command(&mut app, "undo");
+    let redo = std::mem::take(&mut app.redo);
+    drop(app);
+    Journal::open(&dir).unwrap().purge(1, "privacy").unwrap();
+    assert_eq!((App::open(&dir).unwrap().redo, redo.len()), (redo, 1));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
