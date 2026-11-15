@@ -818,7 +818,7 @@ impl App {
                 listing: false,
             });
         }
-        if let Some(line) = self.session.command_for(ev.key) {
+        if let Some(line) = self.session.keys.command_for(ev.key) {
             self.flush();
             if line == "palette" {
                 return Mode::Quasi(Active {
@@ -837,7 +837,7 @@ impl App {
         if self.view.panes[f].kind == PaneKind::Links {
             self.message = format!(
                 "this pane shows links; {} to edit",
-                self.session.key_for("switch")
+                self.session.keys.key_for("switch")
             );
             return Mode::Normal;
         }

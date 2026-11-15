@@ -2,6 +2,7 @@
 //! constraints and worlds, with a real SWI-Prolog behind each world.
 
 use memex::app::{App, Event, Key, Mode, Quasi};
+use memex::config::Config;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::style::Modifier;
@@ -234,19 +235,25 @@ fn interrogation_answers_its_five_questions() {
     s.assert("0 of its claims adopted, 0 of them retracted since");
     s.assert("adopting it would raise 1 violation of one date per event");
     s.assert("F3 adopts · F4 retracts an adoption");
-    // The hint follows the configuration, not the default keys.
-    app.session.bindings =
-        memex::config::Config::parse("[keys]\nF3 = \"\"\nInsert = \"adopt\"\nF4 = \"\"\n")
-            .unwrap()
-            .bindings;
-    let s2 = screen(&app);
-    s2.assert("Insert adopts · command unadopt retracts an adoption");
-    app.session.bindings = memex::config::Config::default().bindings;
     assert_eq!(
         app.journal().entries().last().unwrap().body().unwrap()["op"],
         "interrogate",
         "interrogation is journaled as an action"
     );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn the_interrogation_hint_follows_the_configured_keys() {
+    // Catches a hint that names the default keys after they are rebound.
+    let dir = temp("interrogate-keys");
+    let mut app = scene(&dir);
+    leap(&mut app, "talk notes");
+    tap(&mut app, Key::F(2));
+    app.evaluate().unwrap();
+    let config = Config::parse("[keys]\nF3 = \"\"\nInsert = \"adopt\"\nF4 = \"\"\n");
+    app.session.keys = config.unwrap().keys();
+    screen(&app).assert("Insert adopts · command unadopt retracts an adoption");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

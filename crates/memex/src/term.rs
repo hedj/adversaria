@@ -205,7 +205,7 @@ pub fn run(dir: &Path, config: Config) -> Result<(), String> {
 /// The memex on a journal directory, with the configuration's keys.
 fn open(dir: &Path, config: &Config) -> Result<App, String> {
     let mut app = App::open(dir).map_err(|e| e.to_string())?;
-    app.session.bindings = config.bindings.clone();
+    app.session.keys = config.keys();
     Ok(app)
 }
 

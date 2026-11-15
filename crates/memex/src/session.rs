@@ -10,13 +10,16 @@ pub type Observed = (Vec<String>, Vec<String>);
 
 /// The room's name, the keys bound to commands, whether the user has
 /// quit, and what the session has noticed outside the journal.
+#[derive(Default)]
 pub struct Session {
     pub workspace: String,
-    /// Keys bound to command lines, from the configuration.
-    pub bindings: Vec<(Key, String)>,
+    pub keys: Keys,
     pub quit: bool,
     outside: Outside,
 }
+
+/// Keys bound to command lines, from the configuration.
+pub struct Keys(pub Vec<(Key, String)>);
 
 /// What the session knows that the journal does not hold.
 struct Outside {
@@ -35,13 +38,35 @@ fn room_name(dir: &Path) -> String {
     name.unwrap_or_default()
 }
 
-impl Outside {
-    fn new() -> Outside {
+impl Default for Outside {
+    fn default() -> Outside {
         Outside {
             crossref: "https://api.crossref.org/works/".into(),
             stale: BTreeMap::new(),
             observed: None,
         }
+    }
+}
+
+impl Default for Keys {
+    fn default() -> Keys {
+        crate::config::Config::default().keys()
+    }
+}
+
+impl Keys {
+    /// How to run a command by key: its bound key, else by name.
+    pub fn key_for(&self, command: &str) -> String {
+        match self.0.iter().find(|(_, c)| c == command) {
+            Some((k, _)) => crate::config::key_name(*k),
+            None => format!("command {command}"),
+        }
+    }
+
+    /// The command line a key is bound to, if it is bound.
+    pub(crate) fn command_for(&self, key: Key) -> Option<String> {
+        let bound = self.0.iter().find(|(k, _)| *k == key);
+        bound.map(|(_, line)| line.clone())
     }
 }
 
@@ -52,24 +77,8 @@ impl Session {
         let workspace = room_name(dir);
         Session {
             workspace,
-            bindings: crate::config::Config::default().bindings,
-            quit: false,
-            outside: Outside::new(),
+            ..Session::default()
         }
-    }
-
-    /// How to run a command by key: its bound key, else by name.
-    pub fn key_for(&self, command: &str) -> String {
-        match self.bindings.iter().find(|(_, c)| c == command) {
-            Some((k, _)) => crate::config::key_name(*k),
-            None => format!("command {command}"),
-        }
-    }
-
-    /// The command line a key is bound to, if it is bound.
-    pub(crate) fn command_for(&self, key: Key) -> Option<String> {
-        let bound = self.bindings.iter().find(|(k, _)| *k == key);
-        bound.map(|(_, line)| line.clone())
     }
 
     /// Point the source check at another Crossref-like service (for tests).

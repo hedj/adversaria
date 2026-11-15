@@ -10,6 +10,7 @@
 
 use crate::actions::COMMANDS;
 use crate::app::{Key, Quasi, Special};
+use crate::session::Keys;
 use std::path::{Path, PathBuf};
 
 /// The defaults, as a file: what `memex --print-config` writes, and
@@ -207,6 +208,11 @@ fn quasi_named(name: &str) -> Option<Quasi> {
 }
 
 impl Config {
+    /// The keys it binds, for a session.
+    pub fn keys(&self) -> Keys {
+        Keys(self.bindings.clone())
+    }
+
     /// Read a configuration over the defaults: a quasimode or key named
     /// replaces its default, and the rest keep theirs. Every error names what
     /// is wrong.

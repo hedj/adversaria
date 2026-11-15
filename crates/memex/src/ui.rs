@@ -502,8 +502,11 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
         f.render_widget(p, inner);
         // The hint on its own line after the answers, each part clickable.
         let (a, u) = (
-            format!("{} adopts", app.session.key_for("adopt")),
-            format!("{} retracts an adoption", app.session.key_for("unadopt")),
+            format!("{} adopts", app.session.keys.key_for("adopt")),
+            format!(
+                "{} retracts an adoption",
+                app.session.keys.key_for("unadopt")
+            ),
         );
         let y = inner.y.saturating_add(used);
         if y < inner.y + inner.height {
