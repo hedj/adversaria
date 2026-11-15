@@ -42,7 +42,36 @@ pub struct ConstraintEval {
     pub disagreements: Vec<Solution>,
 }
 
+/// A fact a solution rests on, with its provenance.
+pub type Sourced<'a> = (&'a Prov, &'a Term);
+
+/// A finding of a constraint: its name, the solution, and whether it is
+/// a violation (else sources disagree).
+pub struct Finding<'a> {
+    pub name: &'a str,
+    pub sol: &'a Solution,
+    pub violation: bool,
+}
+
+impl Finding<'_> {
+    /// A mark of it: whether it is a violation, and a text after the
+    /// constraint's name and the kind.
+    pub fn mark(&self, text: &str) -> (bool, String) {
+        let kind = if self.violation {
+            "violation"
+        } else {
+            "sources disagree"
+        };
+        (self.violation, format!("{}, {kind}: {text}", self.name))
+    }
+}
+
 impl Solution {
+    /// The facts it rests on, each with its provenance.
+    pub fn sourced(&self) -> impl Iterator<Item = Sourced<'_>> {
+        self.prov.iter().zip(&self.facts)
+    }
+
     /// Whether it rests on beliefs alone, no claim among them.
     fn on_beliefs(&self) -> bool {
         self.prov.iter().all(|p| matches!(p, Prov::Belief(_)))
@@ -84,6 +113,20 @@ impl ConstraintEval {
             violations,
             disagreements,
         }
+    }
+
+    /// Its findings: the violations, then the disagreements.
+    pub fn findings(&self) -> impl Iterator<Item = Finding<'_>> {
+        let name = self.constraint.name.as_str();
+        let found = |violation| {
+            move |sol| Finding {
+                name,
+                sol,
+                violation,
+            }
+        };
+        let violations = self.violations.iter().map(found(true));
+        violations.chain(self.disagreements.iter().map(found(false)))
     }
 
     /// Read a constraint's node from an engine the world is loaded in.

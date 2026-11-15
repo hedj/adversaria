@@ -317,6 +317,11 @@ impl Item {
 }
 
 impl Outline {
+    /// Whether an item states the fact of an entry.
+    pub fn states(&self, item: u64, seq: u64) -> bool {
+        self.fact_item.get(&seq) == Some(&item)
+    }
+
     pub fn contains(&self, id: u64) -> bool {
         id == TOP || self.items.contains_key(&id)
     }

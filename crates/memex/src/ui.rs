@@ -5,7 +5,7 @@
 use crate::actions::command_help;
 use crate::app::{App, Click, Mode, PaneKind, Quasi, ScopeLevel};
 use crate::outline::{Layer, Outline, TOP};
-use crate::reason::{self, Prov, WorldEval};
+use crate::reason::{self, ConstraintEval, Finding, Prov, Solution, Sourced, WorldEval};
 use crate::view;
 use format::terms::Term;
 use ratatui::Frame;
@@ -809,34 +809,55 @@ fn place(outline: &Outline, seq: u64) -> String {
 /// The marks under an item: (is a violation, text) for each constraint
 /// solution that rests on one of its facts.
 pub fn item_marks(e: &WorldEval, outline: &Outline, item: u64) -> Vec<(bool, String)> {
-    let mut out = Vec::new();
-    for c in &e.constraints {
-        for (sols, violation) in [(&c.violations, true), (&c.disagreements, false)] {
-            for sol in sols {
-                let mine = |p: &Prov| outline.fact_item.get(&p.seq()) == Some(&item);
-                let Some(h) = sol.prov.iter().position(mine) else {
-                    continue;
-                };
-                let kind = if violation {
-                    "violation"
-                } else {
-                    "sources disagree"
-                };
-                for (o, p) in sol.prov.iter().enumerate().filter(|(_, p)| !mine(p)) {
-                    let (a, b) = difference(&sol.facts[h], &sol.facts[o]);
-                    out.push((
-                        violation,
-                        format!(
-                            "{}, {kind}: {a} here, {b} in {}",
-                            c.constraint.name,
-                            where_from(outline, p)
-                        ),
-                    ));
-                }
-            }
-        }
+    let findings: Vec<Finding> = e
+        .constraints
+        .iter()
+        .flat_map(ConstraintEval::findings)
+        .collect();
+    let against = findings.iter().flat_map(|f| against_item(f, outline, item));
+    against.map(|a| a.mark(outline)).collect()
+}
+
+/// A fact of an item against another fact of a finding that rests on both.
+struct Against<'a> {
+    finding: &'a Finding<'a>,
+    here: &'a Term,
+    there: Sourced<'a>,
+}
+
+impl Against<'_> {
+    /// The mark: how the facts differ, and where the other comes from.
+    fn mark(&self, outline: &Outline) -> (bool, String) {
+        let (a, b) = difference(self.here, self.there.1);
+        let from = where_from(outline, self.there.0);
+        self.finding.mark(&format!("{a} here, {b} in {from}"))
     }
-    out
+}
+
+/// A finding against an item, if it rests on one of the item's facts:
+/// the first of them against each other fact.
+fn against_item<'a>(f: &'a Finding, outline: &Outline, item: u64) -> Vec<Against<'a>> {
+    let (mine, others) = split_by_item(f.sol, outline, item);
+    let Some((_, here)) = mine.first() else {
+        return vec![];
+    };
+    let against = |there| Against {
+        finding: f,
+        here,
+        there,
+    };
+    others.into_iter().map(against).collect()
+}
+
+/// A solution's facts, each with its provenance: those an item states,
+/// and the rest.
+fn split_by_item<'a>(
+    sol: &'a Solution,
+    outline: &Outline,
+    item: u64,
+) -> (Vec<Sourced<'a>>, Vec<Sourced<'a>>) {
+    sol.sourced()
+        .partition(|(p, _)| outline.states(item, p.seq()))
 }
 
 /// Where a fact comes from: its item's number; else a claim's source; else
