@@ -4,6 +4,7 @@
 //! the memex) and checks that it does not.
 
 use memex::app::{App, Event, Key, Quasi};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 fn temp(name: &str) -> PathBuf {
@@ -370,6 +371,15 @@ fn the_reasoner_runs_no_side_effect_however_a_definition_arrives() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// Import a results file into a new memex: what the memex says, and the
+/// results it marks as resting on changed inputs.
+fn import_and_mark(journal: &Path, results: &Path) -> (String, BTreeMap<u64, Vec<String>>) {
+    let mut app = App::open(journal).unwrap();
+    app.set_durable(false);
+    let said = command(&mut app, &format!("import results {}", results.display()));
+    (said, app.notebook.stale_results())
+}
+
 #[test]
 fn a_results_file_cannot_make_the_memex_read_forever() {
     // The stale-result check reads each input the results file names, on
@@ -400,13 +410,7 @@ fn a_results_file_cannot_make_the_memex_read_forever() {
     let journal = dir.join("journal");
     let (tx, rx) = std::sync::mpsc::channel();
     let res = results.clone();
-    std::thread::spawn(move || {
-        let mut app = App::open(&journal).unwrap();
-        app.set_durable(false);
-        let m = command(&mut app, &format!("import results {}", res.display()));
-        let stale = app.stale_results();
-        let _ = tx.send((m, stale));
-    });
+    std::thread::spawn(move || tx.send(import_and_mark(&journal, &res)));
     let (m, stale) = rx
         .recv_timeout(std::time::Duration::from_secs(20))
         .expect("the memex was still reading after 20 s");

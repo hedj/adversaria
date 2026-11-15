@@ -749,6 +749,15 @@ impl Outline {
         out
     }
 
+    /// The items an import entry brought in.
+    pub fn items_from(&self, import: u64) -> impl Iterator<Item = u64> + '_ {
+        let from = self
+            .items
+            .iter()
+            .filter(move |(_, i)| i.block.origin == Some(import));
+        from.map(|(id, _)| *id)
+    }
+
     /// The items, of these, whose text holds a pattern, ignoring case.
     pub fn holding(&self, items: Vec<u64>, pattern: &str) -> Vec<u64> {
         let p = pattern.to_lowercase();

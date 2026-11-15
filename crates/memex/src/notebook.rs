@@ -8,7 +8,7 @@ use crate::outline::Outline;
 use format::record::Entry;
 use format::terms::Term;
 use serde_json::{Value, json};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// Entry kinds that change the outline.
@@ -28,6 +28,32 @@ pub struct Notebook {
 pub(crate) fn strings(list: &Value) -> Vec<String> {
     let items = list.as_array().into_iter().flatten();
     items.filter_map(|x| x.as_str().map(String::from)).collect()
+}
+
+/// The inputs of a results import whose files no longer match the hashes
+/// it recorded; none if it is no results import, or none changed.
+fn changed_inputs(b: &Value) -> Option<Vec<String>> {
+    if b["format"] != "memex-results" {
+        return None;
+    }
+    let base = Path::new(b["base"].as_str().unwrap_or(""));
+    let used = b["prov"]["used"].as_array().into_iter().flatten();
+    let changed = used.filter(|input| input_changed(base, input));
+    let paths: Vec<String> = changed
+        .map(|input| input["path"].as_str().unwrap_or("").into())
+        .collect();
+    (!paths.is_empty()).then_some(paths)
+}
+
+/// Whether an input's file no longer matches the hash recorded for it.
+/// Only a regular file is read: a pipe would block forever, and a device
+/// such as /dev/zero never ends. Anything else counts as changed.
+fn input_changed(base: &Path, input: &Value) -> bool {
+    let path = base.join(input["path"].as_str().unwrap_or(""));
+    let regular = std::fs::metadata(&path).is_ok_and(|m| m.is_file());
+    let bytes = regular.then(|| std::fs::read(&path).ok()).flatten();
+    let now = bytes.map(|x| format::record::sha256_hex(&x));
+    now.as_deref() != input["sha256"].as_str()
 }
 
 /// The entry a retract entry retracts.
@@ -243,6 +269,22 @@ impl Notebook {
             "delete" => Some(format!("deleted {}", was())),
             _ => None,
         }
+    }
+
+    /// Items whose results rest on input files that changed since: each
+    /// with the files that no longer match their recorded hashes.
+    pub fn stale_results(&self) -> BTreeMap<u64, Vec<String>> {
+        let imports = self
+            .path(self.tip)
+            .into_iter()
+            .filter(|e| e.kind() == "import");
+        let changed = imports.filter_map(|e| Some((e.seq, changed_inputs(e.body()?)?)));
+        let marked = changed.flat_map(|(seq, files)| {
+            self.outline
+                .items_from(seq)
+                .map(move |id| (id, files.clone()))
+        });
+        marked.collect()
     }
 
     /// The order of the items before an entry is applied, if it may remove

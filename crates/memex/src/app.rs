@@ -25,7 +25,7 @@ use crate::session::Session;
 use format::record::Entry;
 use format::terms::{self, Term};
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1497,45 +1497,6 @@ impl App {
             self.write_fact(id, &fact, Some(&source))?;
         }
         Ok(format!("imported the results of {source}"))
-    }
-
-    /// Items whose results rest on input files that changed since: each with
-    /// the files that no longer match their recorded hashes.
-    pub fn stale_results(&self) -> BTreeMap<u64, Vec<String>> {
-        let mut out = BTreeMap::new();
-        for e in self.notebook.path(self.notebook.tip) {
-            let Some(b) = e
-                .body()
-                .filter(|b| e.kind() == "import" && b["format"] == "memex-results")
-            else {
-                continue;
-            };
-            let base = std::path::Path::new(b["base"].as_str().unwrap_or(""));
-            let mut changed = Vec::new();
-            for input in b["prov"]["used"].as_array().cloned().unwrap_or_default() {
-                let p = input["path"].as_str().unwrap_or("");
-                // Only a regular file is read: a pipe would block forever,
-                // and a device such as /dev/zero never ends. Anything else
-                // counts as changed.
-                let path = base.join(p);
-                let now = std::fs::metadata(&path)
-                    .ok()
-                    .filter(|m| m.is_file())
-                    .and_then(|_| std::fs::read(&path).ok())
-                    .map(|x| format::record::sha256_hex(&x));
-                if now.as_deref() != input["sha256"].as_str() {
-                    changed.push(p.to_string());
-                }
-            }
-            if !changed.is_empty() {
-                for (id, item) in &self.notebook.outline.items {
-                    if item.block.origin == Some(e.seq) {
-                        out.insert(*id, changed.clone());
-                    }
-                }
-            }
-        }
-        out
     }
 
     /// The quote check: does the item's text still appear in the document it

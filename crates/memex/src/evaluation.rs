@@ -82,7 +82,7 @@ impl App {
 
     fn after_evaluation(&mut self) {
         self.update_frozen();
-        let stale = self.stale_results();
+        let stale = self.notebook.stale_results();
         self.session.set_stale(stale);
         self.record_observations();
     }
