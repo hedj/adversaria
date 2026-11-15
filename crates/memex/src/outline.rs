@@ -157,6 +157,46 @@ fn with_offsets(spans: &[Span]) -> Vec<(usize, &Span)> {
     placed.collect()
 }
 
+/// How one text becomes another: the characters it keeps at its start
+/// and at its end, and those added between.
+pub struct TextChange {
+    pub start: usize,
+    pub added: String,
+    pub end: usize,
+}
+
+impl TextChange {
+    /// The change from one text to another; none if they are the same.
+    /// The end kept never overlaps the start kept.
+    pub fn between(old: &[char], new: &[char]) -> Option<TextChange> {
+        if old == new {
+            return None;
+        }
+        let start = shared_len(old.iter(), new.iter());
+        let room = old.len().min(new.len()) - start;
+        let end = shared_len(old.iter().rev(), new.iter().rev()).min(room);
+        let added = new[start..new.len() - end].iter().collect();
+        Some(TextChange { start, added, end })
+    }
+
+    /// The span of what the change adds, of no entry yet; none if it adds
+    /// nothing.
+    fn added_span(&self) -> Vec<Span> {
+        let len = self.added.chars().count();
+        let span = Span {
+            seq: 0,
+            start: 0,
+            len,
+        };
+        if len > 0 { vec![span] } else { vec![] }
+    }
+}
+
+/// How many characters two texts share before they differ.
+fn shared_len<'a>(a: impl Iterator<Item = &'a char>, b: impl Iterator<Item = &'a char>) -> usize {
+    a.zip(b).take_while(|(x, y)| x == y).count()
+}
+
 pub fn span_json(spans: &[Span]) -> Value {
     json!(
         spans
@@ -728,6 +768,15 @@ impl Outline {
             round.extend(order.iter().find(|x| **x == at));
         }
         round
+    }
+
+    /// The spans of an item's text after a change: those of the start and
+    /// the end it keeps, and one, of no entry yet, for what it adds.
+    pub fn spans_after(&self, item: u64, change: &TextChange) -> Vec<Span> {
+        let len = self.text(item).chars().count();
+        let start = self.slice(item, 0, change.start);
+        let end = self.slice(item, len - change.end, len);
+        [start, change.added_span(), end].concat()
     }
 
     pub fn in_order(&self) -> Vec<u64> {

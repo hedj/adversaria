@@ -18,7 +18,7 @@ use crate::actions::dispatch::{complete_command, in_quotes};
 use crate::engine::Engine;
 use crate::journal::{Error as JournalError, Journal};
 use crate::notebook::{CONTENT, Notebook};
-use crate::outline::{Constraint, Outline, Span, TOP, span_json};
+use crate::outline::{Constraint, Outline, TOP, TextChange, span_json};
 use crate::reason::{self, ConstraintEval, Prov, Suggestion, solutions};
 use crate::reasoning::Reasoning;
 use crate::session::Session;
@@ -452,37 +452,14 @@ impl App {
     /// Write an item's new text: unchanged characters at the start and end
     /// keep their spans; the middle is added by this entry.
     pub(crate) fn write_text(&mut self, item: u64, new: &[char]) -> Result<(), String> {
-        let old: Vec<char> = self.notebook.outline.text(item).chars().collect();
-        if old == new {
+        let outline = &self.notebook.outline;
+        let old: Vec<char> = outline.text(item).chars().collect();
+        let Some(change) = TextChange::between(&old, new) else {
             return Ok(());
-        }
-        let pre = old.iter().zip(new).take_while(|(a, b)| a == b).count();
-        let max_suf = old.len().min(new.len()) - pre;
-        let suf = old
-            .iter()
-            .rev()
-            .zip(new.iter().rev())
-            .take(max_suf)
-            .take_while(|(a, b)| a == b)
-            .count();
-        let added: String = new[pre..new.len() - suf].iter().collect();
-        let mut spans = self.notebook.outline.slice(item, 0, pre);
-        if !added.is_empty() {
-            spans.push(Span {
-                seq: 0,
-                start: 0,
-                len: added.chars().count(),
-            });
-        }
-        spans.extend(
-            self.notebook
-                .outline
-                .slice(item, old.len() - suf, old.len()),
-        );
-        self.write_here(
-            "edit",
-            json!({"op": "text", "item": item, "add": added, "spans": span_json(&spans)}),
-        )?;
+        };
+        let spans = span_json(&outline.spans_after(item, &change));
+        let body = json!({"op": "text", "item": item, "add": change.added, "spans": spans});
+        self.write_here("edit", body)?;
         Ok(())
     }
 
