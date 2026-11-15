@@ -92,6 +92,12 @@ impl Room {
         item.spans.iter().map(|s| (s.seq, s.len)).collect()
     }
 
+    /// The number of the last entry of a kind.
+    pub fn last(&self, kind: &str) -> u64 {
+        let mut entries = self.app.journal().entries().iter().rev();
+        entries.find(|e| e.kind() == kind).unwrap().seq
+    }
+
     /// How many entries of a kind the journal holds.
     pub fn count(&self, kind: &str) -> usize {
         let entries = self.app.journal().entries().iter();
