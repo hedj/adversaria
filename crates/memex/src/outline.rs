@@ -709,6 +709,27 @@ impl Outline {
         out
     }
 
+    /// The items, of these, whose text holds a pattern, ignoring case.
+    pub fn holding(&self, items: Vec<u64>, pattern: &str) -> Vec<u64> {
+        let p = pattern.to_lowercase();
+        let holds = |id: &u64| self.text(*id).to_lowercase().contains(&p);
+        items.into_iter().filter(holds).collect()
+    }
+
+    /// The items in order after one, forward or back, wrapping round to
+    /// it last.
+    pub fn round_from(&self, at: u64, forward: bool) -> Vec<u64> {
+        let order = self.in_order();
+        let next = order.iter().position(|x| *x == at).map_or(0, |i| i + 1);
+        let mut round = [&order[next..], &order[..next]].concat();
+        if !forward {
+            round.pop();
+            round.reverse();
+            round.extend(order.iter().find(|x| **x == at));
+        }
+        round
+    }
+
     pub fn in_order(&self) -> Vec<u64> {
         let mut out = Vec::with_capacity(self.items.len());
         let mut stack: Vec<u64> = self.top.iter().rev().copied().collect();

@@ -522,55 +522,17 @@ impl App {
         if pattern.is_empty() {
             return vec![];
         }
-        let p = pattern.to_lowercase();
-        let order = self.notebook.outline.in_order();
-        let at = order
-            .iter()
-            .position(|x| *x == self.cursor())
-            .map_or(0, |i| i + 1);
-        let mut rotated: Vec<u64> = order[at.min(order.len())..]
-            .iter()
-            .chain(&order[..at.min(order.len())])
-            .copied()
-            .collect();
-        if !forward {
-            rotated.pop();
-            rotated.reverse();
-            if let Some(c) = order.iter().find(|x| **x == self.cursor()) {
-                rotated.push(*c);
-            }
-        }
-        rotated
-            .into_iter()
-            .filter(|id| self.notebook.outline.text(*id).to_lowercase().contains(&p))
-            .collect()
+        let outline = &self.notebook.outline;
+        let round = outline.round_from(self.cursor(), forward);
+        outline.holding(round, pattern)
     }
 
-    /// Recognition: the longest continuation every match shares, up to a space.
+    /// Recognition: the pattern, and the longest continuation every match
+    /// shares, up to a space.
     fn leap_complete(&self, pattern: &str, forward: bool) -> String {
-        let p = pattern.to_lowercase();
-        let conts: Vec<String> = self
-            .leap_matches(pattern, forward)
-            .iter()
-            .map(|id| {
-                let t = self.notebook.outline.text(*id).to_lowercase();
-                let i = t.find(&p).unwrap();
-                t[i + p.len()..]
-                    .chars()
-                    .take_while(|c| !c.is_whitespace())
-                    .collect()
-            })
-            .collect();
-        let Some(first) = conts.first() else {
-            return pattern.to_string();
-        };
-        let common: String = first
-            .chars()
-            .enumerate()
-            .take_while(|(i, c)| conts.iter().all(|x| x.chars().nth(*i) == Some(*c)))
-            .map(|(_, c)| c)
-            .collect();
-        format!("{pattern}{common}")
+        let matches = self.leap_matches(pattern, forward).into_iter();
+        let texts: Vec<String> = matches.map(|id| self.notebook.outline.text(id)).collect();
+        recognised(pattern, &texts)
     }
 
     pub(crate) fn unfold_to(&mut self, id: u64) {
@@ -1770,6 +1732,37 @@ impl App {
             .filter(|s| !with.contains(s) && *s != t)
             .collect())
     }
+}
+
+/// A pattern, and the longest continuation after it that every text
+/// shares, up to a space; each text holds the pattern.
+fn recognised(pattern: &str, texts: &[String]) -> String {
+    let p = pattern.to_lowercase();
+    let conts: Vec<String> = texts.iter().map(|t| continuation(t, &p)).collect();
+    format!("{pattern}{}", common_prefix(&conts))
+}
+
+/// The longest start that every word shares; none for no words.
+fn common_prefix(words: &[String]) -> String {
+    let Some(first) = words.first() else {
+        return String::new();
+    };
+    let rest = words.iter().skip(1);
+    rest.fold(first.clone(), |prefix, w| shared_start(&prefix, w))
+}
+
+/// The longest start that two words share.
+fn shared_start(a: &str, b: &str) -> String {
+    let pairs = a.chars().zip(b.chars());
+    pairs.take_while(|(x, y)| x == y).map(|(x, _)| x).collect()
+}
+
+/// What follows a lower-case pattern in a text, ignoring case, up to a
+/// space.
+fn continuation(text: &str, p: &str) -> String {
+    let t = text.to_lowercase();
+    let after = &t[t.find(p).unwrap() + p.len()..];
+    after.chars().take_while(|c| !c.is_whitespace()).collect()
 }
 
 /// A DOI as a URL path: every byte but letters, digits, "-._~" and "/"
