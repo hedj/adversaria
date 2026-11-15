@@ -2,6 +2,7 @@
 //! suggestions without a model. tests/fixtures/wikidata-buran.pl is real
 //! Wikidata (CC0), made by `wikidata --items Q2548,Q4273185,Q1010251,Q80811`.
 
+use format::terms::Term;
 use memex::app::{App, Event, Key, PaneKind, Quasi};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -172,13 +173,10 @@ fn a_planted_wrong_date_is_reported_against_wikidata() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-#[test]
-fn wikidata_offers_its_own_constraint() {
-    // Plan: "Wikidata's property constraints offered as constraints". On
-    // real data: P619 (UTC date of spacecraft launch) has a single-value
-    // constraint. Tried against a planted violation before it is kept.
-    let dir = temp("wd-constraint");
-    let mut app = open(&dir);
+/// Sputnik 1's launch, its Wikidata mappings accepted, and Wikidata's
+/// constraint of one launch per entity adopted.
+fn launch_constraint(dir: &Path) -> App {
+    let mut app = open(dir);
     typ(&mut app, "Sputnik 1 was launched in 1957.");
     app.flush();
     command(&mut app, "fact launched(sputnik_1, 1957)");
@@ -190,6 +188,16 @@ fn wikidata_offers_its_own_constraint() {
         &mut app,
         "constraint one launched per entity (Wikidata P619)",
     );
+    app
+}
+
+#[test]
+fn wikidata_offers_its_own_constraint() {
+    // Plan: "Wikidata's property constraints offered as constraints". On
+    // real data: P619 (UTC date of spacecraft launch) has a single-value
+    // constraint. Tried against a planted violation before it is kept.
+    let dir = temp("wd-constraint");
+    let app = launch_constraint(&dir);
     assert!(
         app.notebook
             .outline
@@ -209,13 +217,9 @@ fn wikidata_offers_its_own_constraint() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-#[test]
-fn a_mined_rule_shows_its_evidence_and_derives_once_adopted() {
-    // Plan: "rules mined from the facts (... a simpler miner with support
-    // and confidence)". Catches a rule offered without its support and
-    // exceptions, or one that derives nothing once adopted.
-    let dir = temp("rules");
-    let mut app = open(&dir);
+/// Places, each part of a country and located in it: a rule to mine.
+fn mined(dir: &Path) -> App {
+    let mut app = open(dir);
     typ(&mut app, "Places");
     app.flush();
     for f in [
@@ -226,6 +230,16 @@ fn a_mined_rule_shows_its_evidence_and_derives_once_adopted() {
     ] {
         command(&mut app, &format!("fact {f}"));
     }
+    app
+}
+
+#[test]
+fn a_mined_rule_shows_its_evidence_and_derives_once_adopted() {
+    // Plan: "rules mined from the facts (... a simpler miner with support
+    // and confidence)". Catches a rule offered without its support and
+    // exceptions, or one that derives nothing once adopted.
+    let dir = temp("rules");
+    let mut app = mined(&dir);
     accept(&mut app, "rule located_in(_");
     let e = app.journal().entries().last().unwrap();
     assert!(
@@ -245,14 +259,12 @@ fn a_mined_rule_shows_its_evidence_and_derives_once_adopted() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-#[test]
-fn no_suggested_reference_names_a_work_outside_the_store() {
-    // Plan: "No suggested reference names a work outside the store (test
-    // with a store that lacks the obvious answer)." The works here are
-    // synthetic, ids QTEST1 to QTEST3: QTEST3 is about Buran and cited by
-    // both others, the obvious answer, and it is not in the store.
-    let dir = temp("refs");
-    let subset = dir.with_extension("pl");
+/// Buran's flight and two papers, each the same as a work of a Wikidata
+/// subset of synthetic works, QTEST1 to QTEST3: QTEST3 is about Buran and
+/// cited by both others, and it is not in the store.
+fn references(dir: &Path) -> App {
+    std::fs::create_dir_all(dir).unwrap();
+    let subset = dir.join("subset.pl");
     std::fs::write(
         &subset,
         "wd('Q2548', 'P606', date(1988, 11, 15)).\nwd_label('Q2548', \"Buran\").\n\
@@ -261,7 +273,7 @@ fn no_suggested_reference_names_a_work_outside_the_store() {
          wd('QTEST3', 'P31', 'Q13442814').\nwd('QTEST3', 'P921', 'Q2548').\nwd_label('QTEST3', \"The obvious answer\").\n",
     )
     .unwrap();
-    let mut app = open(&dir);
+    let mut app = open(dir);
     typ(&mut app, "Buran flew once, in 1988.");
     app.flush();
     command(&mut app, "fact date(buran_flight, 1988)");
@@ -271,6 +283,17 @@ fn no_suggested_reference_names_a_work_outside_the_store() {
     item(&mut app, "Paper B");
     command(&mut app, "fact same_as(paper_b, 'QTEST2')");
     command(&mut app, &format!("import wikidata {}", subset.display()));
+    app
+}
+
+#[test]
+fn no_suggested_reference_names_a_work_outside_the_store() {
+    // Plan: "No suggested reference names a work outside the store (test
+    // with a store that lacks the obvious answer)." The works here are
+    // synthetic, ids QTEST1 to QTEST3: QTEST3 is about Buran and cited by
+    // both others, the obvious answer, and it is not in the store.
+    let dir = temp("refs");
+    let mut app = references(&dir);
     let refs: Vec<String> = app
         .reason
         .suggestions
@@ -300,7 +323,6 @@ fn no_suggested_reference_names_a_work_outside_the_store() {
         )
     );
     std::fs::remove_dir_all(&dir).unwrap();
-    std::fs::remove_file(&subset).unwrap();
 }
 
 #[test]
@@ -465,4 +487,46 @@ fn a_retracted_import_is_not_read() {
     app.evaluate().unwrap();
     assert_eq!(described(&app), Vec::<String>::new());
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn an_adopted_constraint_keeps_its_rule() {
+    let dir = temp("wd-constraint-rule");
+    let app = launch_constraint(&dir);
+    let rules = app.notebook.outline.constraints.values();
+    assert!(rules.into_iter().any(|c| c.rule.starts_with("false :- ")));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn an_adopted_rule_is_numbered_by_its_own_entry() {
+    let dir = temp("rule-number");
+    let mut app = mined(&dir);
+    accept(&mut app, "rule located_in(_");
+    let seq = Term::Int(last_of(&app, "adopt") as i64);
+    assert!(matches!(last_fact(&app), Term::Compound(_, a) if a[0] == seq));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn an_accepted_reference_cites_the_work_from_the_item_it_is_about() {
+    let dir = temp("refs-accepted");
+    let mut app = references(&dir);
+    accept(&mut app, "cite paper_a for the claims about buran_flight");
+    assert_eq!(last_fact(&app), cites(&app, 0, 1));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The fact that the item at one place in the outline cites the item at
+/// another.
+fn cites(app: &App, from: usize, to: usize) -> Term {
+    let order = app.notebook.outline.in_order();
+    let item = |k: usize| Term::Int(order[k] as i64);
+    Term::Compound("cites".into(), vec![item(from), item(to)])
+}
+
+/// The first fact of the last entry.
+fn last_fact(app: &App) -> Term {
+    let e = app.journal().entries().last().unwrap();
+    format::terms::decode(&e.body().unwrap()["facts"][0]).unwrap()
 }

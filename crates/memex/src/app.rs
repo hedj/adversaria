@@ -1679,6 +1679,59 @@ mod tests {
         }
     }
 
+    /// A memex in a directory of this test's own, with an item stating a
+    /// fact about an entity x.
+    fn about_x(name: &str) -> (std::path::PathBuf, App) {
+        let dir =
+            std::env::temp_dir().join(format!("adversaria-app-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut app = App::open(&dir).unwrap();
+        app.new_item_after(TOP).unwrap();
+        app.write_fact(
+            app.cursor(),
+            &Term::Compound("p".into(), vec![Term::Atom("x".into())]),
+            None,
+        )
+        .unwrap();
+        (dir, app)
+    }
+
+    /// Accept a suggestion of a kind, with nothing else.
+    fn accepting(app: &mut App, kind: &str, args: Vec<Term>) -> Result<(), String> {
+        let kind = Term::Compound(kind.into(), args);
+        let (facts, evidence) = (vec![], String::new());
+        app.accept(&Suggestion {
+            kind,
+            facts,
+            evidence,
+            score: 0,
+        })
+    }
+
+    #[test]
+    fn a_suggested_constraint_that_does_not_fire_is_not_adopted() {
+        let (dir, mut app) = about_x("misfire");
+        let x = Term::Var(0);
+        let never = Term::Compound("<".into(), vec![x.clone(), x.clone()]);
+        let body = Term::Compound(",".into(), vec![Term::Compound("p".into(), vec![x]), never]);
+        let args = vec![Term::Str("never".into()), Term::Atom("[]".into()), body];
+        let refused = accepting(&mut app, "constraint", args);
+        assert!(
+            matches!(&refused, Err(e) if e.starts_with("not adopted: tried against a planted")),
+            "{refused:?}"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_reference_to_a_work_with_no_item_is_not_adopted() {
+        let (dir, mut app) = about_x("no-work");
+        let args = vec![Term::Atom("x".into()), Term::Atom("y".into())];
+        let refused = accepting(&mut app, "reference", args);
+        assert_eq!(refused, Err("no item is that work".into()));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn a_belief_named_twice_in_one_violation_is_contradicted_directly() {
         let c = violated("c", &[&[9, 3, 3]]);
