@@ -375,7 +375,7 @@ impl App {
     /// An item named by its outline number ("3.2"), its name, "#seq", or the
     /// start of its text if only one item's text starts so.
     pub fn resolve(&self, addr: &str) -> Option<u64> {
-        self.outline.addressed(addr.trim())
+        self.notebook.outline.addressed(addr.trim())
     }
 
     /// The one item that words address.

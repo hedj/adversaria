@@ -128,7 +128,7 @@ fn markdown_round_trip_keeps_structure_citations_and_mathematics() {
         "losses recorded"
     );
     // Citations became facts; mathematics stayed LaTeX.
-    let facts = memex::store::facts(app.journal().entries(), app.tip).unwrap();
+    let facts = memex::store::facts(app.journal().entries(), app.notebook.tip).unwrap();
     assert!(facts.iter().any(|(_, f)| {
         format::terms::encode(f)
             .unwrap()
@@ -136,10 +136,11 @@ fn markdown_round_trip_keeps_structure_citations_and_mathematics() {
             .contains("buran1988")
     }));
     let texts: Vec<String> = app
+        .notebook
         .outline
         .in_order()
         .iter()
-        .map(|i| app.outline.text(*i))
+        .map(|i| app.notebook.outline.text(*i))
         .collect();
     assert!(
         texts.contains(&"\\int_0^1 x \\, dx = \\frac{1}{2}".to_string()),
@@ -247,7 +248,7 @@ fn a_revised_document_opens_a_world_of_changes() {
     .unwrap();
     let mut app = open(&dir);
     command(&mut app, &format!("import document {}", src.display()));
-    let actual = app.outline.clone();
+    let actual = app.notebook.outline.clone();
     std::fs::write(
         &src,
         "# Essay\n\nBuran flew in 1989.\n\nThe end.\n\nA new closing line.\n",
@@ -291,10 +292,11 @@ fn a_revised_document_opens_a_world_of_changes() {
     command(&mut app, "commit");
     assert!(app.reason.supposition.is_none());
     let texts: Vec<String> = app
+        .notebook
         .outline
         .in_order()
         .iter()
-        .map(|i| app.outline.text(*i))
+        .map(|i| app.notebook.outline.text(*i))
         .collect();
     assert_eq!(
         texts,
@@ -306,7 +308,7 @@ fn a_revised_document_opens_a_world_of_changes() {
             "A new closing line."
         ]
     );
-    assert_ne!(app.outline, actual);
+    assert_ne!(app.notebook.outline, actual);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -335,13 +337,17 @@ fn a_changed_input_marks_its_results() {
     app.evaluate().unwrap();
     assert!(app.session.stale().is_empty(), "nothing has changed yet");
     let result = app
+        .notebook
         .outline
         .in_order()
         .into_iter()
-        .find(|i| app.outline.text(*i).starts_with("mean_delay"))
+        .find(|i| app.notebook.outline.text(*i).starts_with("mean_delay"))
         .unwrap();
-    assert_eq!(app.outline.text(result), "mean_delay = 1.55 ± 0.05 s");
-    let facts = memex::store::facts(app.journal().entries(), app.tip).unwrap();
+    assert_eq!(
+        app.notebook.outline.text(result),
+        "mean_delay = 1.55 ± 0.05 s"
+    );
+    let facts = memex::store::facts(app.journal().entries(), app.notebook.tip).unwrap();
     assert!(
         facts
             .iter()

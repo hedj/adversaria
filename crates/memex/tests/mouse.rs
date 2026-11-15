@@ -128,12 +128,15 @@ fn a_click_on_an_item_moves_the_cursor_there() {
     let talk = app.cursor();
     let c = click_on(&mut app, "The programme");
     assert!(matches!(c, Click::Item { pane: 0, .. }));
-    assert_eq!(app.outline.text(app.cursor()), "The programme");
+    assert_eq!(app.notebook.outline.text(app.cursor()), "The programme");
     // The Buran item has a mark line under it; the next row is still Talk notes.
     click_on(&mut app, "Talk notes");
     assert_eq!(app.cursor(), talk);
     click_on(&mut app, "Buran flew");
-    assert_eq!(app.outline.text(app.cursor()), "Buran flew once, in 1988.");
+    assert_eq!(
+        app.notebook.outline.text(app.cursor()),
+        "Buran flew once, in 1988."
+    );
     // A click on the mark line itself acts on nothing.
     let (lines, hits) = draw(&app);
     let (x, y) = find(&lines, "⚑ one date per event");
@@ -142,7 +145,7 @@ fn a_click_on_an_item_moves_the_cursor_there() {
     typ(&mut app, " Once.");
     app.flush();
     assert_eq!(
-        app.outline.text(app.cursor()),
+        app.notebook.outline.text(app.cursor()),
         "Buran flew once, in 1988. Once."
     );
     // The click is a view change in the journal, so replay agrees.
@@ -247,7 +250,7 @@ fn a_click_does_nothing_while_a_quasimode_or_question_is_open() {
     assert!(matches!(app.session.mode, Mode::Normal));
     app.click(&c);
     assert_eq!(
-        app.outline.text(app.cursor()),
+        app.notebook.outline.text(app.cursor()),
         "The programme",
         "and acts once it is closed"
     );

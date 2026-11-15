@@ -631,6 +631,24 @@ pub fn markdown_to_plain(md: &str) -> Result<String, String> {
     .to_string())
 }
 
+/// An item imported from a document, beside that document: the item's
+/// text, in Markdown, the document's plain text, and the hash of its blob.
+pub struct Quote {
+    pub span: String,
+    pub source: String,
+    pub blob: String,
+}
+
+impl Quote {
+    /// Whether the span still appears in the document: quoted, or
+    /// misquoted. Spaces, hyphens and case are ignored.
+    pub fn ruling(&self) -> Result<&'static str, String> {
+        let span = markdown_to_plain(&self.span)?;
+        let kept = normal(&self.source).contains(&normal(&span));
+        Ok(if kept { "quoted" } else { "misquoted" })
+    }
+}
+
 /// Text for the quote check: lower case, without spaces or hyphens.
 pub fn normal(s: &str) -> String {
     s.chars()

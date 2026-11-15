@@ -22,7 +22,7 @@ impl App {
     fn import_wikidata(&mut self, file: &str) -> Result<String, String> {
         let bytes = std::fs::read(file).map_err(|e| format!("{file}: {e}"))?;
         self.vet_wikidata(file)?;
-        let hash = self.store_blob(&bytes)?;
+        let hash = self.notebook.store_blob(&bytes)?;
         self.write_wikidata_import(file, &hash)?;
         Ok(format!(
             "imported wikidata: {} bytes, blob {}",
@@ -65,8 +65,10 @@ impl App {
     /// item's number and there are words before it.
     fn export_args(&self, words: &[&str]) -> (String, Option<u64>) {
         match words.split_last() {
-            Some((last, rest)) if !rest.is_empty() && self.outline.by_number(last).is_some() => {
-                (rest.join(" "), self.outline.by_number(last))
+            Some((last, rest))
+                if !rest.is_empty() && self.notebook.outline.by_number(last).is_some() =>
+            {
+                (rest.join(" "), self.notebook.outline.by_number(last))
             }
             _ => (words.join(" "), None),
         }

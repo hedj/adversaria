@@ -80,7 +80,7 @@ impl App {
 
     /// The sequence number the next entry will have.
     fn next_seq(&self) -> u64 {
-        self.journal.entries().len() as u64 + 1
+        self.notebook.journal.entries().len() as u64 + 1
     }
 }
 

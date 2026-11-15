@@ -41,10 +41,11 @@ fn open(dir: &Path) -> App {
 
 /// Every item's text, joined.
 fn all_text(app: &App) -> String {
-    app.outline
+    app.notebook
+        .outline
         .in_order()
         .into_iter()
-        .map(|id| app.outline.text(id))
+        .map(|id| app.notebook.outline.text(id))
         .collect::<Vec<_>>()
         .join("\n")
 }

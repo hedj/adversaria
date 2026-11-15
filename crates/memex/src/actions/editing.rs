@@ -2,6 +2,7 @@
 //! (docs/guide.md, § 2.4, Editing the outline).
 
 use crate::app::{App, PaneKind, word_at};
+use crate::outline::Outline;
 use format::terms::{self, Term};
 use serde_json::{Value, json};
 
@@ -50,6 +51,7 @@ impl App {
 
     pub(crate) fn cmd_indent(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         let under = self
+            .notebook
             .outline
             .previous_sibling(target)
             .ok_or("the first item of a list cannot be indented")?;
@@ -60,10 +62,11 @@ impl App {
 
     pub(crate) fn cmd_outdent(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         let p = self
+            .notebook
             .outline
             .parent_item(target)
             .ok_or("a top-level item cannot be outdented")?;
-        self.move_item(target, self.outline.parent_or_top(p), Some(p))?;
+        self.move_item(target, self.notebook.outline.parent_or_top(p), Some(p))?;
         Ok(String::new())
     }
 
@@ -71,7 +74,7 @@ impl App {
         let to = self
             .address(words)
             .ok_or("move (after) an item: a number, a name, or the start of its text")?;
-        if self.outline.within(to, target) {
+        if self.notebook.outline.within(to, target) {
             return Err("an item cannot move into its own branch".into());
         }
         self.move_after(target, to)?;
@@ -80,12 +83,12 @@ impl App {
 
     /// Move an item's branch to follow another item.
     fn move_after(&mut self, item: u64, to: u64) -> Result<(), String> {
-        self.move_item(item, self.outline.parent_or_top(to), Some(to))
+        self.move_item(item, self.notebook.outline.parent_or_top(to), Some(to))
     }
 
     /// Move an item's branch to the end of another item's children.
     fn move_to_end(&mut self, item: u64, under: u64) -> Result<(), String> {
-        self.move_item(item, under, self.outline.last_child(under))
+        self.move_item(item, under, self.notebook.outline.last_child(under))
     }
 
     fn move_item(&mut self, item: u64, under: u64, after: Option<u64>) -> Result<(), String> {
@@ -105,7 +108,7 @@ impl App {
 
     pub(crate) fn cmd_copy(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let to = self.address(words).ok_or("copy (after) an item")?;
-        let text = self.outline.text(target);
+        let text = self.notebook.outline.text(target);
         let n = text.chars().count();
         self.create_after(to, &text, json!([[0, 0, n]]))?;
         Ok(String::new())
@@ -120,13 +123,13 @@ impl App {
 
     /// A new item after one, showing another's text in place.
     fn transclusion_after(&mut self, from: u64, after: u64) -> Result<u64, String> {
-        let spans = self.outline.spans_json(from);
+        let spans = self.notebook.outline.spans_json(from);
         self.create_after(after, "", spans)
     }
 
     /// A new item after one, with text and spans; its sequence number.
     fn create_after(&mut self, after: u64, add: &str, spans: Value) -> Result<u64, String> {
-        let under = self.outline.parent_or_top(after);
+        let under = self.notebook.outline.parent_or_top(after);
         let body =
             json!({"op": "create", "under": under, "after": after, "add": add, "spans": spans});
         Ok(self.write_here("edit", body)?.seq)
@@ -161,17 +164,12 @@ impl App {
             "link",
             json!({"from": from, "to": to, "type": kind, "facts": [fact]}),
         )?;
-        Ok(self.linked(from, to, kind))
-    }
-
-    fn linked(&self, from: u64, to: u64, kind: &str) -> String {
-        let n = |id| self.outline.number(id);
-        format!("linked {} to {} as {kind}", n(from), n(to))
+        Ok(linked(&self.notebook.outline, from, to, kind))
     }
 
     pub(crate) fn cmd_follow(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let k: usize = words.first().and_then(|w| w.parse().ok()).unwrap_or(1);
-        let ends = self.outline.neighbours(target);
+        let ends = self.notebook.outline.neighbours(target);
         let to = *ends
             .get(k.wrapping_sub(1))
             .ok_or(format!("the target has {} links", ends.len()))?;
@@ -237,4 +235,10 @@ fn link_fact(kind: &str, from: u64, to: u64) -> Result<Value, String> {
         vec![Term::Int(from as i64), Term::Int(to as i64)],
     );
     terms::encode(&fact).map_err(|e| e.0)
+}
+
+/// What a link command says it did.
+fn linked(outline: &Outline, from: u64, to: u64, kind: &str) -> String {
+    let n = |id| outline.number(id);
+    format!("linked {} to {} as {kind}", n(from), n(to))
 }

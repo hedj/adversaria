@@ -172,19 +172,19 @@ fn view_panel(app: &App, id: u64, layers: &[crate::outline::Layer]) -> Vec<Line<
 }
 
 /// The citations of an item, shown dimmed after its text.
-fn cites(app: &App, id: u64) -> String {
-    let (out, _) = app.outline.links_of(id);
+fn cites(outline: &Outline, id: u64) -> String {
+    let (out, _) = outline.links_of(id);
     out.iter()
         .filter(|l| l.kind == "cites")
-        .map(|l| format!(" [{}]", app.outline.text(l.to)))
+        .map(|l| format!(" [{}]", outline.text(l.to)))
         .collect()
 }
 
 fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
     let pending = app.text_of(id);
-    let runs = app.outline.runs(id);
+    let runs = app.notebook.outline.runs(id);
     let mut out = Vec::new();
-    if pending.iter().collect::<String>() != app.outline.text(id) {
+    if pending.iter().collect::<String>() != app.notebook.outline.text(id) {
         out.push(Span::raw(pending.iter().collect::<String>()));
     } else {
         for r in runs {
@@ -196,7 +196,7 @@ fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
                     Style::default().add_modifier(Modifier::ITALIC | Modifier::UNDERLINED),
                 ));
                 out.push(Span::styled(
-                    format!("↖{}", app.outline.number(r.origin)),
+                    format!("↖{}", app.notebook.outline.number(r.origin)),
                     dim(),
                 ));
             }
@@ -209,18 +209,20 @@ fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
             Style::default().add_modifier(Modifier::UNDERLINED),
         )];
     }
-    if let (Some(d), Some(e)) = (app.outline.derived.get(&id), app.reason.eval[0].as_ref())
-        && let Some(v) = e.nodes.derived.get(&id)
+    if let (Some(d), Some(e)) = (
+        app.notebook.outline.derived.get(&id),
+        app.reason.eval[0].as_ref(),
+    ) && let Some(v) = e.nodes.derived.get(&id)
     {
         out = vec![
             Span::raw(reason::fill(&d.template, &d.names, v, &e.facts)),
             Span::styled(" [derived]", dim()),
         ];
     }
-    if let Some(src) = app.outline.source.get(&id) {
+    if let Some(src) = app.notebook.outline.source.get(&id) {
         out.push(Span::styled(format!(" [{src}]"), dim()));
     }
-    let c = cites(app, id);
+    let c = cites(&app.notebook.outline, id);
     if !c.is_empty() {
         out.push(Span::styled(c, dim()));
     }
@@ -228,8 +230,11 @@ fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
 }
 
 fn title(app: &App) -> String {
-    match app.outline.names.get("title") {
-        Some(id) => format!("OUTLINE · {}", app.outline.text(*id).to_uppercase()),
+    match app.notebook.outline.names.get("title") {
+        Some(id) => format!(
+            "OUTLINE · {}",
+            app.notebook.outline.text(*id).to_uppercase()
+        ),
         None => "OUTLINE".into(),
     }
 }
@@ -274,7 +279,7 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
             rows_area.width as usize,
             Click::Item { pane, id: *id },
         ));
-        let kids = app.outline.children(*id).len();
+        let kids = app.notebook.outline.children(*id).len();
         let folded = app.session.view.folded.contains(id);
         let mark = match (kids, folded) {
             (0, _) => "•",
@@ -286,19 +291,19 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
             Span::styled(format!("{mark} "), dim()),
         ];
         if *depth == 0 {
-            spans.push(Span::raw(format!("{}. ", app.outline.number(*id))));
+            spans.push(Span::raw(format!("{}. ", app.notebook.outline.number(*id))));
         }
         let is_cursor = *id == cursor;
         spans.extend(item_spans(app, *id, is_cursor && focused));
         if folded {
             spans.push(Span::styled(
-                format!(" {}", app.outline.descendants(*id)),
+                format!(" {}", app.notebook.outline.descendants(*id)),
                 dim(),
             ));
         }
         let marks = app.reason.eval[0]
             .as_ref()
-            .map(|e| item_marks(e, &app.outline, *id))
+            .map(|e| item_marks(e, &app.notebook.outline, *id))
             .unwrap_or_default();
         let mut line = Line::from(spans);
         if is_cursor {
@@ -326,7 +331,7 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
             ));
         }
         // A view, drawn under its item.
-        if app.outline.views.contains_key(id) {
+        if app.notebook.outline.views.contains_key(id) {
             let indent = 2 * depth + 2;
             let width = (rows_area.width as usize).saturating_sub(indent + 1);
             let fig = view_figure(app, 0, *id, width, 12);
@@ -374,7 +379,7 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
             .filter(|r| *r < h)
     {
         let num = if cursor_depth == 0 {
-            app.outline.number(cursor).len() + 2
+            app.notebook.outline.number(cursor).len() + 2
         } else {
             0
         };
@@ -405,7 +410,7 @@ fn violated(app: &App, k: usize) -> std::collections::BTreeSet<u64> {
 
 /// The view at an item, drawn as world k computes it.
 pub fn view_figure(app: &App, k: usize, item: u64, width: usize, height: usize) -> view::Figure {
-    let Some(layers) = app.outline.views.get(&item) else {
+    let Some(layers) = app.notebook.outline.views.get(&item) else {
         return view::Figure::default();
     };
     let bad = violated(app, k);
@@ -473,10 +478,10 @@ fn figure_lines(fig: &view::Figure, indent: usize) -> Vec<Line<'static>> {
 fn hit_item(app: &App, hit: &view::Hit) -> Option<u64> {
     hit.prov.iter().find_map(|s| {
         // A fact from the outline itself rests on the item's own entry.
-        if app.outline.items.contains_key(s) {
+        if app.notebook.outline.items.contains_key(s) {
             Some(*s)
         } else {
-            app.outline.fact_item.get(s).copied()
+            app.notebook.outline.fact_item.get(s).copied()
         }
     })
 }
@@ -529,7 +534,7 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
         }
         return;
     }
-    if let Some(layers) = app.outline.views.get(&id) {
+    if let Some(layers) = app.notebook.outline.views.get(&id) {
         f.render_widget(
             Paragraph::new(view_panel(app, id, layers)).wrap(Wrap { trim: false }),
             inner,
@@ -537,7 +542,7 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
         return;
     }
     if let Some(e) = app.reason.eval[0].as_ref()
-        && !item_marks(e, &app.outline, id).is_empty()
+        && !item_marks(e, &app.notebook.outline, id).is_empty()
     {
         f.render_widget(
             Paragraph::new(constraint_panel(app, e, id)).wrap(Wrap { trim: false }),
@@ -550,10 +555,16 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
         Line::raw(""),
     ];
     if id != TOP {
-        lines.push(Line::raw(app.outline.text(id)));
+        lines.push(Line::raw(app.notebook.outline.text(id)));
         lines.push(Line::raw(""));
-        let (out, into) = app.outline.links_of(id);
-        let label = |l: u64| format!("  {}. {}", app.outline.number(l), app.outline.text(l));
+        let (out, into) = app.notebook.outline.links_of(id);
+        let label = |l: u64| {
+            format!(
+                "  {}. {}",
+                app.notebook.outline.number(l),
+                app.notebook.outline.text(l)
+            )
+        };
         let mut kinds: Vec<&str> = out.iter().map(|l| l.kind.as_str()).collect();
         kinds.dedup();
         let mut n = 0;
@@ -573,13 +584,17 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
                 lines.push(Line::raw(format!("{}  {n}", label(l.from))));
             }
         }
-        let tr = app.outline.transcluded_in(id);
+        let tr = app.notebook.outline.transcluded_in(id);
         if !tr.is_empty() {
             lines.push(Line::styled("transcluded in ←", dim()));
             for t in tr {
                 // The container shows where the text appears.
-                let path = match app.outline.parent(t).filter(|p| *p != TOP) {
-                    Some(p) => format!("  {} › {}", app.outline.text(p), app.outline.text(t)),
+                let path = match app.notebook.outline.parent(t).filter(|p| *p != TOP) {
+                    Some(p) => format!(
+                        "  {} › {}",
+                        app.notebook.outline.text(p),
+                        app.notebook.outline.text(t)
+                    ),
                     None => label(t),
                 };
                 lines.push(Line::raw(path));
@@ -601,18 +616,21 @@ fn draw_list(f: &mut Frame, app: &App, q: Quasi, input: &str, listing: bool, are
             for (k, id) in m.iter().take(shown).enumerate() {
                 let mut spans = Vec::new();
                 let mut chain = Vec::new();
-                let mut at = app.outline.parent(*id).filter(|p| *p != TOP);
+                let mut at = app.notebook.outline.parent(*id).filter(|p| *p != TOP);
                 while let Some(p) = at.filter(|p| *p != TOP) {
                     chain.push(p);
-                    at = app.outline.parent(p);
+                    at = app.notebook.outline.parent(p);
                 }
                 chain.reverse();
-                let num = app.outline.number(chain.first().copied().unwrap_or(*id));
+                let num = app
+                    .notebook
+                    .outline
+                    .number(chain.first().copied().unwrap_or(*id));
                 spans.push(Span::raw(format!("{num}. ")));
                 for p in chain {
-                    spans.push(Span::raw(format!("{} › ", app.outline.text(p))));
+                    spans.push(Span::raw(format!("{} › ", app.notebook.outline.text(p))));
                 }
-                let t = app.outline.text(*id);
+                let t = app.notebook.outline.text(*id);
                 let lt = t.to_lowercase();
                 match lt
                     .find(&input.to_lowercase())
@@ -726,7 +744,8 @@ fn draw_prompt(f: &mut Frame, app: &App, prompt: Rect, guide: Rect) {
                 ),
                 Span::raw(format!(" {text}")),
             ]);
-            let facts = crate::store::facts(app.journal().entries(), app.tip).unwrap_or_default();
+            let facts =
+                crate::store::facts(app.journal().entries(), app.notebook.tip).unwrap_or_default();
             let r = reason::restate(&facts, &readings[*at]);
             let more = if readings.len() > 1 {
                 " · Tab next reading"
@@ -877,7 +896,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
             sols.iter().any(|s| {
                 s.prov
                     .iter()
-                    .any(|p| app.outline.fact_item.get(&p.seq()) == Some(&item))
+                    .any(|p| app.notebook.outline.fact_item.get(&p.seq()) == Some(&item))
             })
         };
         if !touches(&c.violations) && !touches(&c.disagreements) {
@@ -926,7 +945,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
                             f,
                             facts.iter().find(|(t, _)| t != s).map(|x| x.1).unwrap_or(f),
                         );
-                        format!("{d} ({})", where_from(&app.outline, &sol.prov[*s]))
+                        format!("{d} ({})", where_from(&app.notebook.outline, &sol.prov[*s]))
                     })
                     .collect();
                 lines.push(Line::styled(format!("{key}: {}", parts.join(" · ")), style));
@@ -940,6 +959,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
             predicates(&a[2], &mut reads);
         }
         let mut deps: Vec<u64> = app
+            .notebook
             .outline
             .derived
             .keys()
@@ -952,18 +972,21 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
             })
             .copied()
             .collect();
-        deps.sort_by_key(|d| app.outline.in_order().iter().position(|x| x == d));
+        deps.sort_by_key(|d| app.notebook.outline.in_order().iter().position(|x| x == d));
         if !deps.is_empty() {
             lines.push(Line::styled("depends on these facts", dim()));
             for d in deps {
-                let text = match (app.outline.derived.get(&d), e.nodes.derived.get(&d)) {
+                let text = match (
+                    app.notebook.outline.derived.get(&d),
+                    e.nodes.derived.get(&d),
+                ) {
                     (Some(t), Some(v)) => reason::fill(&t.template, &t.names, v, &e.facts),
-                    _ => app.outline.text(d),
+                    _ => app.notebook.outline.text(d),
                 };
                 let short: String = text.chars().take(40).collect();
                 lines.push(Line::raw(format!(
                     "  {} {short}{}",
-                    app.outline.number(d),
+                    app.notebook.outline.number(d),
                     if text.chars().count() > 40 {
                         " …"
                     } else {
@@ -984,7 +1007,7 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
     let mut lines = vec![
         Line::styled("INTERROGATE · WHAT IS CLAIMED HERE", dim()),
         Line::raw(""),
-        Line::raw(app.outline.text(item)),
+        Line::raw(app.notebook.outline.text(item)),
         Line::raw(""),
     ];
     for (seq, src, p) in app.claims_of(item) {
@@ -1000,9 +1023,13 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
             .filter(|(s, f)| *s != seq && inner(f) == &p)
             .map(|(s, f)| match f {
                 Term::Compound(n, a) if n == "claims" => {
-                    format!("  {} ({})", place(&app.outline, *s), reason::show(&a[0]))
+                    format!(
+                        "  {} ({})",
+                        place(&app.notebook.outline, *s),
+                        reason::show(&a[0])
+                    )
                 }
-                _ => format!("  {} (a belief)", place(&app.outline, *s)),
+                _ => format!("  {} (a belief)", place(&app.notebook.outline, *s)),
             })
             .collect();
         if others.is_empty() {
@@ -1021,7 +1048,7 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
                         let f = &sol.facts[k];
                         contrary.push(format!(
                             "  {}: {} ({})",
-                            where_from(&app.outline, o),
+                            where_from(&app.notebook.outline, o),
                             reason::restate(&e.facts, inner(f)),
                             c.constraint.name
                         ));
@@ -1073,7 +1100,7 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
 /// other reading; it stops once Suppose has been used four times.
 fn hint(app: &App) -> Option<(String, String)> {
     let e = app.reason.eval[0].as_ref()?;
-    if item_marks(e, &app.outline, app.cursor()).is_empty() {
+    if item_marks(e, &app.notebook.outline, app.cursor()).is_empty() {
         return None;
     }
     let used = app
@@ -1101,7 +1128,7 @@ fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
     }
     let [l, r] =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area);
-    let actual = app.outline_at(sup.actual);
+    let actual = app.notebook.outline_at(sup.actual);
     let worlds = [
         (
             &actual,
@@ -1109,7 +1136,7 @@ fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
             "WORLD · ACTUAL".to_string(),
         ),
         (
-            &app.outline,
+            &app.notebook.outline,
             app.reason.eval[0].as_ref(),
             format!("WORLD · SUPPOSE {}", sup.name.to_uppercase()),
         ),
@@ -1119,8 +1146,9 @@ fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
         .into_iter()
         .filter(|i| actual.fact_item.values().any(|x| x == i) || actual.derived.contains_key(i))
         .collect();
-    for i in app.outline.in_order() {
-        if (app.outline.fact_item.values().any(|x| *x == i) || app.outline.derived.contains_key(&i))
+    for i in app.notebook.outline.in_order() {
+        if (app.notebook.outline.fact_item.values().any(|x| *x == i)
+            || app.notebook.outline.derived.contains_key(&i))
             && !rows.contains(&i)
         {
             rows.push(i);
@@ -1204,7 +1232,7 @@ fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
         let views: Vec<u64> = o
             .in_order()
             .into_iter()
-            .filter(|i| app.outline.views.contains_key(i))
+            .filter(|i| app.notebook.outline.views.contains_key(i))
             .collect();
         for i in views {
             lines.push(Line::raw(""));

@@ -272,7 +272,7 @@ fn scene_three_as_written() {
     // world is untouched. Then close the supposition.
     let dir = temp("scene3");
     let mut app = scene(&dir);
-    let actual_head = app.tip;
+    let actual_head = app.notebook.tip;
     let actual_facts = memex::store::facts(app.journal().entries(), actual_head).unwrap();
     app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
     typ(&mut app, "the flight was in 1989");
@@ -320,7 +320,7 @@ fn scene_three_as_written() {
     s.assert("1 disagreement between sources");
     s.assert("The flight came a year after Energia's first launch.");
     assert_eq!(
-        memex::store::facts(app.journal().entries(), app.tip).unwrap(),
+        memex::store::facts(app.journal().entries(), app.notebook.tip).unwrap(),
         actual_facts
     );
     assert!(
@@ -403,18 +403,19 @@ fn recomputation_touches_only_dependent_nodes() {
     app.flush();
     app.evaluate().unwrap();
     let constraints: Vec<(u64, String)> = app
+        .notebook
         .outline
         .constraints
         .iter()
         .map(|(s, c)| (*s, c.name.clone()))
         .collect();
-    let derived: Vec<u64> = app.outline.derived.keys().copied().collect();
+    let derived: Vec<u64> = app.notebook.outline.derived.keys().copied().collect();
     let nodes: Vec<(u64, String)> = constraints
         .into_iter()
         .chain(derived.iter().map(|d| {
             (
                 *d,
-                app.outline.derived[d]
+                app.notebook.outline.derived[d]
                     .template
                     .chars()
                     .take(16)
@@ -501,11 +502,15 @@ fn replay_reproduces_claims_constraints_and_worlds() {
     app.evaluate().unwrap();
     let mut r = App::open(&dir).unwrap();
     r.evaluate().unwrap();
-    assert_eq!(r.outline, app.outline);
+    assert_eq!(r.notebook.outline, app.notebook.outline);
     assert_eq!(r.session.view, app.session.view);
     assert_eq!(
-        (r.tip, &r.reason.world(), &r.reason.supposition),
-        (app.tip, &app.reason.world(), &app.reason.supposition)
+        (r.notebook.tip, &r.reason.world(), &r.reason.supposition),
+        (
+            app.notebook.tip,
+            &app.reason.world(),
+            &app.reason.supposition
+        )
     );
     assert_eq!(r.reason.eval, app.reason.eval);
     let n = screen(&app).lines.len() - 1;

@@ -32,7 +32,7 @@
 //! say) is skipped.
 
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// The top of the outline: the parent of the top-level items.
 pub const TOP: u64 = 0;
@@ -695,6 +695,20 @@ impl Outline {
     }
 
     /// All items in outline order, depth first.
+    /// The items shown, in order, with their depth: the children of a
+    /// folded item are not shown.
+    pub fn visible(&self, folded: &BTreeSet<u64>) -> Vec<(u64, usize)> {
+        let mut out = Vec::new();
+        let mut stack: Vec<(u64, usize)> = self.top.iter().rev().map(|i| (*i, 0)).collect();
+        while let Some((id, d)) = stack.pop() {
+            out.push((id, d));
+            if !folded.contains(&id) {
+                stack.extend(self.children(id).iter().rev().map(|c| (*c, d + 1)));
+            }
+        }
+        out
+    }
+
     pub fn in_order(&self) -> Vec<u64> {
         let mut out = Vec::with_capacity(self.items.len());
         let mut stack: Vec<u64> = self.top.iter().rev().copied().collect();

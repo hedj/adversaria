@@ -153,7 +153,7 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
     let dir = temp("set");
     let mut app = budget(&dir);
     // The cursor is on the last item ("Left over"), not on Food.
-    assert!(app.outline.text(app.cursor()).starts_with("left"));
+    assert!(app.notebook.outline.text(app.cursor()).starts_with("left"));
     let m = command(&mut app, "set cell(food, 900)");
     assert!(m.contains("replaced the fact at 1.3"), "{m}");
     assert!(
@@ -172,9 +172,9 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
         .find(|e| e.kind() == "edit")
         .unwrap()
         .seq;
-    let food = app.outline.fact_item[&new];
+    let food = app.notebook.outline.fact_item[&new];
     assert_eq!(
-        app.outline.text(food),
+        app.notebook.outline.text(food),
         "food",
         "the new value is on the Food box"
     );
@@ -195,11 +195,11 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
     let m = command(&mut app, "set cell(savings, 300)");
     assert!(m.contains("nothing replaced"), "{m}");
     // The journal replays to the same values.
-    let tip = app.tip;
+    let tip = app.notebook.tip;
     drop(app);
     let mut again = App::open(&dir).unwrap();
     again.evaluate().unwrap();
-    assert_eq!(again.tip, tip);
+    assert_eq!(again.notebook.tip, tip);
     shows(&again, "Food: 500 [derived]");
     shows(&again, "Left over: 300 [derived]");
     std::fs::remove_dir_all(&dir).unwrap();

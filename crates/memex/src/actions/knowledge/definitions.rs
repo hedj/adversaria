@@ -58,7 +58,7 @@ impl App {
     }
 
     fn sync_engine(&mut self) -> Result<(), String> {
-        let facts = self.facts_at(self.tip)?;
+        let facts = self.notebook.facts_at(self.notebook.tip)?;
         self.reason
             .engine(0)?
             .sync(&facts)

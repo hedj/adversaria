@@ -3,8 +3,11 @@
 //! (docs/structure.md § The code's structure).
 
 use crate::engine::Engine;
+use crate::notebook::strings;
 use crate::reason::{Suggestion, WorldEval};
 use crate::world::World;
+use format::record::Entry;
+use serde_json::Value;
 use std::collections::BTreeSet;
 
 /// An open supposition: a world sprouted from the actual one.
@@ -13,6 +16,15 @@ pub struct Supposition {
     pub name: String,
     /// The head of the actual world it was sprouted from.
     pub actual: u64,
+}
+
+impl Supposition {
+    /// The supposition a suppose entry opens, from the world at its parent.
+    fn of(e: &Entry, b: &Value) -> Supposition {
+        let name = b["name"].as_str().unwrap_or("supposed").to_string();
+        let actual = e.parent_seq().unwrap_or(1);
+        Supposition { name, actual }
+    }
 }
 
 /// The worlds being reasoned over, and what reasoning found in them.
@@ -31,6 +43,19 @@ pub struct Reasoning {
 }
 
 impl Reasoning {
+    /// Apply an entry: a supposition opens or closes, and a suggestion is
+    /// dismissed or offered.
+    pub(crate) fn apply(&mut self, e: &Entry) {
+        let Some(b) = e.body() else { return };
+        match (e.kind(), b["op"].as_str()) {
+            ("view", Some("world")) => self.supposition = None,
+            ("view", Some("dismiss")) => self.suggestions.dismiss(b["key"].as_str()),
+            ("view", Some("offer")) => self.suggestions.offer(strings(&b["keys"])),
+            ("suppose", _) => self.supposition = Some(Supposition::of(e, b)),
+            _ => {}
+        }
+    }
+
     /// The current world's name: "actual", or the open supposition's.
     pub fn world(&self) -> &str {
         self.supposition.as_ref().map_or("actual", |s| &s.name)
@@ -120,8 +145,8 @@ impl Suggestions {
             .collect();
     }
 
-    pub(crate) fn dismiss(&mut self, key: String) {
-        self.dismissed.insert(key);
+    pub(crate) fn dismiss(&mut self, key: Option<&str>) {
+        self.dismissed.extend(key.map(String::from));
     }
 
     pub(crate) fn offer(&mut self, keys: impl IntoIterator<Item = String>) {

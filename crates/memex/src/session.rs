@@ -3,6 +3,9 @@
 //! it has noticed outside the journal (docs/structure.md § The code's structure).
 
 use crate::app::{Key, Mode, PendingText, View};
+use crate::notebook::strings;
+use format::record::Entry;
+use serde_json::Value;
 use std::collections::BTreeMap;
 
 /// The violations and the disagreements shown, by key.
@@ -25,6 +28,17 @@ pub struct Session {
     pub keys: Keys,
     pub quit: bool,
     outside: Outside,
+}
+
+/// The pattern and direction of a leap entry.
+fn leap_of(b: &Value) -> Option<(String, bool)> {
+    let pattern = b["pattern"].as_str()?;
+    Some((pattern.to_string(), b["forward"] != false))
+}
+
+/// The violations and the disagreements an observed entry records.
+fn observed_of(b: &Value) -> Observed {
+    (strings(&b["violations"]), strings(&b["disagreements"]))
 }
 
 /// Keys bound to command lines, from the configuration.
@@ -74,6 +88,20 @@ impl Keys {
 }
 
 impl Session {
+    /// Apply a view entry: what it shows, and what it records of a leap or
+    /// of what reasoning showed.
+    pub(crate) fn apply(&mut self, e: &Entry) {
+        let Some(b) = e.body().filter(|_| e.kind() == "view") else {
+            return;
+        };
+        self.view.restore(b);
+        match b["op"].as_str() {
+            Some("leap") => self.last_leap = leap_of(b),
+            Some("observed") => self.set_observed(observed_of(b)),
+            _ => {}
+        }
+    }
+
     /// Show what went wrong, if anything did.
     pub(crate) fn report<T>(&mut self, result: Result<T, String>) {
         if let Err(m) = result {

@@ -169,7 +169,13 @@ fn the_tutorial_works_as_written() {
     // Step 6: Leap, from the end of the outline, wrapping to the top.
     t.hold(Quasi::LeapForward, "buran");
     t.look("leap");
-    assert!(t.app.outline.text(t.app.cursor()).starts_with("Buran"));
+    assert!(
+        t.app
+            .notebook
+            .outline
+            .text(t.app.cursor())
+            .starts_with("Buran")
+    );
     t.shows("CONSTRAINT · ONE DATE PER EVENT");
 
     // Step 7: interrogate, adopt, unadopt.
@@ -355,9 +361,9 @@ fn part_three(t: &mut T) {
 }
 
 fn find(app: &App, text: &str) -> u64 {
-    app.outline
-        .in_order()
-        .into_iter()
-        .find(|i| app.outline.text(*i) == text)
+    let outline = &app.notebook.outline;
+    let mut items = outline.in_order().into_iter();
+    items
+        .find(|i| outline.text(*i) == text)
         .unwrap_or_else(|| panic!("no item {text:?}"))
 }

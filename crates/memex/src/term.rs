@@ -307,7 +307,7 @@ impl<'a> Session<'a> {
 
     /// Where the journal is: the tip, and how many entries it has.
     fn place(&self) -> (u64, usize) {
-        (self.app.tip, self.app.journal().entries().len())
+        (self.app.notebook.tip, self.app.journal().entries().len())
     }
 
     /// Take the next event, or after a second without one, write what is

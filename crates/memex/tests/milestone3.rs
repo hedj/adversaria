@@ -123,7 +123,7 @@ fn scene_one_as_written() {
     let dir = temp("scene1");
     let mut app = essay(&dir);
     assert_eq!(
-        app.outline.text(app.cursor()),
+        app.notebook.outline.text(app.cursor()),
         "Buran flew once, unmanned, on 15 November 1988."
     );
     let before = app.journal().entries().len();
@@ -149,7 +149,7 @@ fn scene_one_as_written() {
     );
 
     release(&mut app, Quasi::LeapForward);
-    assert_eq!(app.outline.text(app.cursor()), "DRAKON");
+    assert_eq!(app.notebook.outline.text(app.cursor()), "DRAKON");
     assert_eq!(app.session.mode, Mode::Normal);
     let after = app.journal().entries();
     assert_eq!(after.len(), before + 1, "one entry, for the Leap");
@@ -198,18 +198,26 @@ fn leap_recognition_listing_latching_and_repeat() {
         m => panic!("{m:?}"),
     }
     release(&mut app, Quasi::LeapForward);
-    assert_eq!(app.outline.text(app.cursor()), "Sources");
+    assert_eq!(app.notebook.outline.text(app.cursor()), "Sources");
     // A tap latches; typing then Enter goes.
     tap(&mut app, Key::Quasi(Quasi::LeapBack));
     assert!(matches!(&app.session.mode, Mode::Quasi(a) if a.latched));
     typ(&mut app, "energia");
     tap(&mut app, Key::Enter);
-    assert!(app.outline.text(app.cursor()).starts_with("Energia"));
+    assert!(
+        app.notebook
+            .outline
+            .text(app.cursor())
+            .starts_with("Energia")
+    );
     // Leap again repeats the last pattern: a tap to latch, a tap to go.
     tap(&mut app, Key::Quasi(Quasi::LeapForward));
     tap(&mut app, Key::Quasi(Quasi::LeapForward));
     assert!(
-        app.outline.text(app.cursor()).starts_with("Energia"),
+        app.notebook
+            .outline
+            .text(app.cursor())
+            .starts_with("Energia"),
         "the only match is where we are"
     );
     // ? lists every match.
@@ -273,20 +281,23 @@ fn undo_redo_and_branches() {
     app.flush();
     let second = app.cursor();
     command(&mut app, "undo"); // the text of "second"
-    assert_eq!(app.outline.text(second), "");
+    assert_eq!(app.notebook.outline.text(second), "");
     command(&mut app, "undo"); // the creation of "second"
-    assert!(!app.outline.items.contains_key(&second));
+    assert!(!app.notebook.outline.items.contains_key(&second));
     command(&mut app, "redo");
     command(&mut app, "redo");
-    assert_eq!(app.outline.text(second), "second");
+    assert_eq!(app.notebook.outline.text(second), "second");
     command(&mut app, "redo");
     assert!(app.session.message.contains("nothing to redo"));
     command(&mut app, "undo");
     command(&mut app, "undo");
-    let undo_seq = app.tip;
+    let undo_seq = app.notebook.tip;
     item(&mut app, "another");
     app.flush();
-    assert!(app.redo.is_empty(), "an edit after undo clears redo");
+    assert!(
+        app.notebook.redo.is_empty(),
+        "an edit after undo clears redo"
+    );
     let e = app
         .journal()
         .entries()
@@ -319,7 +330,7 @@ fn retraction_lists_dependents_then_keeps_later_work() {
     typ(&mut app, "a claim");
     item(&mut app, "independent work");
     app.flush();
-    let claim = app.outline.by_number("1").unwrap();
+    let claim = app.notebook.outline.by_number("1").unwrap();
     command(&mut app, "link 1 2 as supports");
     hold(&mut app, Quasi::LeapBack, "claim");
     release(&mut app, Quasi::LeapBack);
@@ -344,18 +355,23 @@ fn retraction_lists_dependents_then_keeps_later_work() {
         "nothing written before confirming"
     );
     tap(&mut app, Key::Escape);
-    assert!(app.outline.items.contains_key(&claim), "Escape keeps it");
+    assert!(
+        app.notebook.outline.items.contains_key(&claim),
+        "Escape keeps it"
+    );
     command(&mut app, &format!("retract {claim}"));
     tap(&mut app, Key::Enter);
-    assert!(!app.outline.items.contains_key(&claim));
+    assert!(!app.notebook.outline.items.contains_key(&claim));
     assert_eq!(
-        app.outline.text(app.outline.by_number("1").unwrap()),
+        app.notebook
+            .outline
+            .text(app.notebook.outline.by_number("1").unwrap()),
         "independent work"
     );
     command(&mut app, &format!("retract {claim}"));
     assert!(app.session.message.contains("already retracted"));
     command(&mut app, "undo"); // undoing the retraction brings the claim back
-    assert_eq!(app.outline.text(claim), "a claim (revised)");
+    assert_eq!(app.notebook.outline.text(claim), "a claim (revised)");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -405,11 +421,15 @@ fn replay_reproduces_the_screen() {
     let n = live.len() - 1; // the last line holds messages
     assert_eq!(live[..n], again[..n]);
     assert_eq!(
-        (replayed.tip, &replayed.redo, &replayed.reason.world()),
-        (app.tip, &app.redo, &app.reason.world())
+        (
+            replayed.notebook.tip,
+            &replayed.notebook.redo,
+            &replayed.reason.world()
+        ),
+        (app.notebook.tip, &app.notebook.redo, &app.reason.world())
     );
     assert_eq!(replayed.session.view, app.session.view);
-    assert_eq!(replayed.outline, app.outline);
+    assert_eq!(replayed.notebook.outline, app.notebook.outline);
     assert_eq!(app.reason.world(), "the flight was in 1989");
     // Every kind the session used is in the journal.
     let kinds: std::collections::BTreeSet<&str> =
@@ -456,7 +476,7 @@ fn keystroke_to_visible_change_on_ten_thousand_items() {
     let mut app = App::open(&dir).unwrap();
     let opened = t0.elapsed();
     app.set_durable(false);
-    assert_eq!(app.outline.items.len(), 10_000);
+    assert_eq!(app.notebook.outline.items.len(), 10_000);
     let mut term = Terminal::new(TestBackend::new(160, 50)).unwrap();
     let mut worst = Duration::ZERO;
     let mut total = Duration::ZERO;
@@ -487,7 +507,7 @@ fn keystroke_to_visible_change_on_ten_thousand_items() {
         "10,000 items: replayed in {opened:?}; {n} keystrokes, mean {mean:?}, worst {worst:?} (handle + draw, 160x50)"
     );
     assert!(
-        app.outline.text(app.cursor()).is_empty(),
+        app.notebook.outline.text(app.cursor()).is_empty(),
         "Enter made a new item"
     );
     assert!(
@@ -539,10 +559,13 @@ fn replay_matches_after_every_action() {
             r.session.view, app.session.view,
             "view differs after step {i}"
         );
-        assert_eq!(r.outline, app.outline, "outline differs after step {i}");
         assert_eq!(
-            (r.tip, &r.redo, &r.reason.world()),
-            (app.tip, &app.redo, &app.reason.world()),
+            r.notebook.outline, app.notebook.outline,
+            "outline differs after step {i}"
+        );
+        assert_eq!(
+            (r.notebook.tip, &r.notebook.redo, &r.reason.world()),
+            (app.notebook.tip, &app.notebook.redo, &app.reason.world()),
             "after step {i}"
         );
     }
@@ -654,7 +677,11 @@ fn closing_a_world_shows_the_actual_outline_again() {
     command(&mut app, "suppose maybe");
     item(&mut app, "supposed");
     command(&mut app, "close");
-    assert_eq!(app.outline.in_order().len(), 1, "only the actual item");
+    assert_eq!(
+        app.notebook.outline.in_order().len(),
+        1,
+        "only the actual item"
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -666,10 +693,13 @@ fn a_purge_leaves_what_can_be_redone() {
     let mut app = App::open(&dir).unwrap();
     typ(&mut app, "A");
     command(&mut app, "undo");
-    let redo = std::mem::take(&mut app.redo);
+    let redo = std::mem::take(&mut app.notebook.redo);
     drop(app);
     Journal::open(&dir).unwrap().purge(1, "privacy").unwrap();
-    assert_eq!((App::open(&dir).unwrap().redo, redo.len()), (redo, 1));
+    assert_eq!(
+        (App::open(&dir).unwrap().notebook.redo, redo.len()),
+        (redo, 1)
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

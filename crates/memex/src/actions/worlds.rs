@@ -14,15 +14,15 @@ impl App {
     /// The entry undo would undo: the last on this branch that changed
     /// content, unless it is the journal's first.
     fn undoable(&self) -> Option<u64> {
-        self.content_tip(self.tip).filter(|t| *t > 1)
+        self.content_tip(self.notebook.tip).filter(|t| *t > 1)
     }
 
     fn parent_of(&self, seq: u64) -> Option<u64> {
-        self.entry(seq).and_then(|e| e.parent_seq())
+        self.notebook.entry(seq).and_then(|e| e.parent_seq())
     }
 
     pub(crate) fn cmd_redo(&mut self, _: &[&str], _: u64) -> Result<String, String> {
-        let Some(&t) = self.redo.last() else {
+        let Some(&t) = self.notebook.redo.last() else {
             return Err("nothing to redo".into());
         };
         self.write(Some(t), "redo", json!({"redoes": t}))?;
@@ -62,7 +62,7 @@ impl App {
     /// Make the supposed world the actual one.
     pub(crate) fn cmd_commit(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let (name, _) = self.supposed()?;
-        self.leave_world(self.tip, "commit")?;
+        self.leave_world(self.notebook.tip, "commit")?;
         Ok(format!("“{name}” is now the actual world"))
     }
 

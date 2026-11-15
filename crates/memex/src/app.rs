@@ -17,9 +17,10 @@
 use crate::actions::dispatch::{complete_command, in_quotes};
 use crate::engine::Engine;
 use crate::journal::{Error as JournalError, Journal};
+use crate::notebook::{CONTENT, Notebook};
 use crate::outline::{Constraint, Outline, Span, TOP, span_json};
 use crate::reason::{self, ConstraintEval, Prov, Suggestion, solutions};
-use crate::reasoning::{Reasoning, Supposition};
+use crate::reasoning::Reasoning;
 use crate::session::Session;
 use format::record::Entry;
 use format::terms::{self, Term};
@@ -276,7 +277,7 @@ impl View {
         v
     }
 
-    fn restore(&mut self, b: &Value) {
+    pub(crate) fn restore(&mut self, b: &Value) {
         if let Some(ps) = b.get("panes").and_then(|p| p.as_array()) {
             for (i, p) in ps.iter().take(2).enumerate() {
                 self.panes[i].kind = match p["kind"].as_str() {
@@ -354,215 +355,53 @@ pub(crate) struct PendingText {
     pub(crate) text: Vec<char>,
 }
 
+/// The memex: the notebook, what reasoning found in it, and what this
+/// session holds that the journal does not.
 pub struct App {
-    pub(crate) journal: Journal,
-    pub outline: Outline,
-    /// The entry the current state is at.
-    pub tip: u64,
-    /// Entries undone and not redone, most recent last.
-    pub redo: Vec<u64>,
-    pub session: Session,
+    pub notebook: Notebook,
     pub reason: Reasoning,
+    pub session: Session,
 }
-
-const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
 
 impl App {
     /// Open a journal directory, writing its first entry if it is new, and
     /// replay it.
     pub fn open(dir: &Path) -> Result<App, JournalError> {
-        let journal = Journal::open(dir)?;
+        let notebook = Notebook::open(dir)?;
         let mut app = App {
-            journal,
-            outline: Outline::default(),
-            tip: 0,
-            redo: vec![],
-            session: Session::default(),
+            notebook,
             reason: Reasoning::default(),
+            session: Session::default(),
         };
-        if app.journal.entries().is_empty() {
-            let e = app.journal.append("edit", json!({"op": "init"}))?;
-            app.apply(&e);
-        } else {
-            let entries: Vec<Entry> = app.journal.entries().to_vec();
-            for e in &entries {
-                app.apply(e);
-            }
-        }
+        app.apply_all();
         Ok(app)
     }
 
+    /// Apply each entry of the journal, in order.
+    fn apply_all(&mut self) {
+        let entries = self.notebook.journal.entries().to_vec();
+        for e in &entries {
+            self.apply(e);
+        }
+    }
+
     pub fn journal(&self) -> &Journal {
-        &self.journal
+        &self.notebook.journal
     }
 
     pub fn set_durable(&mut self, d: bool) {
-        self.journal.durable = d;
-    }
-
-    pub(crate) fn entry(&self, seq: u64) -> Option<&Entry> {
-        self.journal.entries().get((seq as usize).wrapping_sub(1))
+        self.notebook.journal.durable = d;
     }
 
     // ------------------------------------------------------------------
     // Applying entries: the one way state changes.
 
     pub fn apply(&mut self, e: &Entry) {
-        // The order before the change is needed only if an item may vanish.
-        let may_remove = match e.kind() {
-            "view" => false,
-            k if CONTENT.contains(&k) && e.parent_seq() == Some(self.tip) => {
-                e.body().is_some_and(|b| b["op"] == "delete")
-            }
-            _ => true,
-        };
-        let before = if may_remove {
-            self.outline.in_order()
-        } else {
-            vec![]
-        };
-        match e.kind() {
-            "view" => {
-                let jump = e.parent_seq() != Some(self.tip);
-                if let Some(b) = &e.body() {
-                    self.session.view.restore(b);
-                    if b["op"] == "leap" {
-                        self.session.last_leap = b["pattern"]
-                            .as_str()
-                            .map(|p| (p.to_string(), b["forward"] != false));
-                    }
-                    if b["op"] == "world" {
-                        self.reason.supposition = None;
-                    }
-                    if b["op"] == "dismiss"
-                        && let Some(k) = b["key"].as_str()
-                    {
-                        self.reason.suggestions.dismiss(k.to_string());
-                    }
-                    if b["op"] == "observed" {
-                        let keys = |k: &str| {
-                            b[k].as_array()
-                                .map(|a| {
-                                    a.iter()
-                                        .filter_map(|x| x.as_str().map(String::from))
-                                        .collect()
-                                })
-                                .unwrap_or_default()
-                        };
-                        self.session
-                            .set_observed((keys("violations"), keys("disagreements")));
-                    }
-                    if b["op"] == "offer" {
-                        self.reason.suggestions.offer(
-                            b["keys"]
-                                .as_array()
-                                .into_iter()
-                                .flatten()
-                                .filter_map(|x| x.as_str().map(String::from)),
-                        );
-                    }
-                }
-                self.tip = e.seq;
-                if jump {
-                    self.rebuild();
-                }
-            }
-            "undo" => {
-                if let Some(t) = e.body().and_then(|b| b["undoes"].as_u64()) {
-                    self.redo.push(t);
-                }
-                self.tip = e.seq;
-                self.rebuild();
-            }
-            "redo" => {
-                self.redo.pop();
-                self.tip = e.seq;
-                self.rebuild();
-            }
-            _ => {
-                let incremental = e.parent_seq() == Some(self.tip) && CONTENT.contains(&e.kind());
-                self.tip = e.seq;
-                if incremental {
-                    if let Some(b) = &e.body() {
-                        self.outline.apply(e.seq, e.kind(), b);
-                    }
-                } else {
-                    self.rebuild();
-                }
-                if e.kind() != "purge" {
-                    self.redo.clear();
-                }
-                if e.kind() == "suppose"
-                    && let Some(b) = &e.body()
-                {
-                    let actual = e.parent_seq().unwrap_or(1);
-                    let name = b["name"].as_str().unwrap_or("supposed").to_string();
-                    self.reason.supposition = Some(Supposition { name, actual });
-                }
-            }
-        }
-        self.session.view.repair(&self.outline, &before);
-    }
-
-    /// The entries on the path from the tip back to the root, oldest first.
-    pub(crate) fn path(&self, tip: u64) -> Vec<&Entry> {
-        let mut out = Vec::new();
-        let mut at = Some(tip);
-        while let Some(s) = at {
-            let Some(e) = self.entry(s) else { break };
-            out.push(e);
-            at = e.parent_seq();
-        }
-        out.reverse();
-        out
-    }
-
-    /// Replay the content of a world, leaving out `skip`; returns the
-    /// outline, the world's name, and the entries that no longer applied.
-    fn replay(&self, tip: u64, skip: Option<u64>) -> (Outline, String, Vec<u64>) {
-        let path = self.path(tip);
-        let mut retracted: HashSet<u64> = path
-            .iter()
-            .filter(|e| e.kind() == "retract")
-            .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
-            .collect();
-        retracted.extend(skip);
-        let mut o = Outline::default();
-        let mut world = "actual".to_string();
-        let mut failed = Vec::new();
-        for e in path {
-            if !CONTENT.contains(&e.kind()) || retracted.contains(&e.seq) {
-                continue;
-            }
-            let Some(b) = &e.body() else { continue };
-            if e.kind() == "suppose" {
-                world = b["name"].as_str().unwrap_or("supposed").to_string();
-            }
-            if !o.apply(e.seq, e.kind(), b) && !matches!(e.kind(), "suppose" | "adopt" | "import") {
-                failed.push(e.seq);
-            }
-        }
-        (o, world, failed)
-    }
-
-    fn rebuild(&mut self) {
-        let (o, _, _) = self.replay(self.tip, None);
-        self.outline = o;
-    }
-
-    /// How many entries the journal has.
-    pub(crate) fn entry_count(&self) -> usize {
-        self.journal.entries().len()
-    }
-
-    /// The facts stated in the world whose head is an entry.
-    pub(crate) fn facts_at(&self, head: u64) -> Result<Vec<(u64, Term)>, String> {
-        crate::store::facts(self.journal.entries(), head)
-    }
-
-    /// The outline of another world, by its head.
-    pub fn outline_at(&self, head: u64) -> Outline {
-        self.replay(head, None).0
+        let before = self.notebook.order_before(e);
+        self.notebook.apply(e);
+        self.reason.apply(e);
+        self.session.apply(e);
+        self.session.view.repair(&self.notebook.outline, &before);
     }
 
     // ------------------------------------------------------------------
@@ -574,16 +413,13 @@ impl App {
         kind: &str,
         body: Value,
     ) -> Result<Entry, String> {
-        let e = self
-            .journal
-            .append_after(parent, kind, body)
-            .map_err(|e| e.to_string())?;
+        let e = self.notebook.append(parent, kind, body)?;
         self.apply(&e);
         Ok(e)
     }
 
     pub(crate) fn write_here(&mut self, kind: &str, body: Value) -> Result<Entry, String> {
-        self.write(Some(self.tip), kind, body)
+        self.write(Some(self.notebook.tip), kind, body)
     }
 
     /// Write whatever is pending: typed text, then cursor moves.
@@ -616,7 +452,7 @@ impl App {
     /// Write an item's new text: unchanged characters at the start and end
     /// keep their spans; the middle is added by this entry.
     pub(crate) fn write_text(&mut self, item: u64, new: &[char]) -> Result<(), String> {
-        let old: Vec<char> = self.outline.text(item).chars().collect();
+        let old: Vec<char> = self.notebook.outline.text(item).chars().collect();
         if old == new {
             return Ok(());
         }
@@ -630,7 +466,7 @@ impl App {
             .take_while(|(a, b)| a == b)
             .count();
         let added: String = new[pre..new.len() - suf].iter().collect();
-        let mut spans = self.outline.slice(item, 0, pre);
+        let mut spans = self.notebook.outline.slice(item, 0, pre);
         if !added.is_empty() {
             spans.push(Span {
                 seq: 0,
@@ -638,7 +474,11 @@ impl App {
                 len: added.chars().count(),
             });
         }
-        spans.extend(self.outline.slice(item, old.len() - suf, old.len()));
+        spans.extend(
+            self.notebook
+                .outline
+                .slice(item, old.len() - suf, old.len()),
+        );
         self.write_here(
             "edit",
             json!({"op": "text", "item": item, "add": added, "spans": span_json(&spans)}),
@@ -662,7 +502,7 @@ impl App {
     pub fn text_of(&self, id: u64) -> Vec<char> {
         match self.session.typed(id) {
             Some(text) => text.to_vec(),
-            None => self.outline.text(id).chars().collect(),
+            None => self.notebook.outline.text(id).chars().collect(),
         }
     }
 
@@ -672,15 +512,8 @@ impl App {
 
     /// The items shown in an outline pane, in order, with their depth.
     pub fn visible(&self) -> Vec<(u64, usize)> {
-        let mut out = Vec::new();
-        let mut stack: Vec<(u64, usize)> = self.outline.top.iter().rev().map(|i| (*i, 0)).collect();
-        while let Some((id, d)) = stack.pop() {
-            out.push((id, d));
-            if !self.session.view.folded.contains(&id) {
-                stack.extend(self.outline.children(id).iter().rev().map(|c| (*c, d + 1)));
-            }
-        }
-        out
+        let folded = &self.session.view.folded;
+        self.notebook.outline.visible(folded)
     }
 
     /// Leap's matches for a pattern: items whose text holds it, ignoring
@@ -690,7 +523,7 @@ impl App {
             return vec![];
         }
         let p = pattern.to_lowercase();
-        let order = self.outline.in_order();
+        let order = self.notebook.outline.in_order();
         let at = order
             .iter()
             .position(|x| *x == self.cursor())
@@ -709,7 +542,7 @@ impl App {
         }
         rotated
             .into_iter()
-            .filter(|id| self.outline.text(*id).to_lowercase().contains(&p))
+            .filter(|id| self.notebook.outline.text(*id).to_lowercase().contains(&p))
             .collect()
     }
 
@@ -720,7 +553,7 @@ impl App {
             .leap_matches(pattern, forward)
             .iter()
             .map(|id| {
-                let t = self.outline.text(*id).to_lowercase();
+                let t = self.notebook.outline.text(*id).to_lowercase();
                 let i = t.find(&p).unwrap();
                 t[i + p.len()..]
                     .chars()
@@ -741,10 +574,10 @@ impl App {
     }
 
     pub(crate) fn unfold_to(&mut self, id: u64) {
-        let mut at = self.outline.parent(id);
+        let mut at = self.notebook.outline.parent(id);
         while let Some(p) = at {
             self.session.view.folded.remove(&p);
-            at = self.outline.parent(p);
+            at = self.notebook.outline.parent(p);
         }
     }
 
@@ -773,7 +606,7 @@ impl App {
         }
         match c {
             Click::Item { pane, id } => {
-                if !self.outline.items.contains_key(id) || *pane > 1 {
+                if !self.notebook.outline.items.contains_key(id) || *pane > 1 {
                     return;
                 }
                 self.flush_text();
@@ -899,7 +732,7 @@ impl App {
         let (under, after) = if id == TOP {
             (TOP, None)
         } else {
-            (self.outline.parent(id).unwrap_or(TOP), Some(id))
+            (self.notebook.outline.parent(id).unwrap_or(TOP), Some(id))
         };
         let e = self.write_here(
             "edit",
@@ -1000,7 +833,10 @@ impl App {
                 if text.is_empty() {
                     return Mode::Normal;
                 }
-                let facts = self.facts_at(self.tip).unwrap_or_default();
+                let facts = self
+                    .notebook
+                    .facts_at(self.notebook.tip)
+                    .unwrap_or_default();
                 let readings = reason::readings(&facts, &text);
                 if readings.is_empty() {
                     // No reading: a named world, with nothing supposed in it.
@@ -1107,11 +943,12 @@ impl App {
     /// it added in the preview engine; retract them; then state the fact on
     /// the item that held the first of them, or on `target` if none.
     pub(crate) fn set_fact(&mut self, fact: &Term, target: u64) -> Result<String, String> {
-        let mut facts = self.facts_at(self.tip)?;
-        facts.extend(crate::world::outline_facts(&self.outline));
-        let next = self.journal.entries().len() as u64 + 1;
+        let mut facts = self.notebook.facts_at(self.notebook.tip)?;
+        facts.extend(crate::world::outline_facts(&self.notebook.outline));
+        let next = self.notebook.journal.entries().len() as u64 + 1;
         facts.push((next, fact.clone()));
         let constraints: Vec<(u64, String, String)> = self
+            .notebook
             .outline
             .constraints
             .iter()
@@ -1136,7 +973,7 @@ impl App {
         replaced.retain(|t| self.retractable(*t).is_ok());
         let item = replaced
             .iter()
-            .find_map(|t| self.outline.fact_item.get(t).copied())
+            .find_map(|t| self.notebook.outline.fact_item.get(t).copied())
             .unwrap_or(target);
         if item == TOP {
             return Err("there is no item to put the fact on".into());
@@ -1148,7 +985,10 @@ impl App {
         let f = terms::encode(fact).map_err(|e| e.0)?;
         self.write_here("edit", json!({"op": "facts", "item": item, "facts": [f]}))?;
         let mut m = if places.is_empty() {
-            format!("set at {}; nothing replaced", self.outline.number(item))
+            format!(
+                "set at {}; nothing replaced",
+                self.notebook.outline.number(item)
+            )
         } else {
             format!("set; replaced the fact at {}", places.join(", "))
         };
@@ -1161,8 +1001,8 @@ impl App {
     /// Where a fact entry's fact is stated, in the actual world: its item's
     /// number, or "entry n".
     pub fn fact_place(&self, seq: u64) -> String {
-        let head = self.reason.actual_head(self.tip);
-        let o = self.outline_at(head);
+        let head = self.reason.actual_head(self.notebook.tip);
+        let o = self.notebook.outline_at(head);
         match o.fact_item.get(&seq) {
             Some(i) => o.number(*i),
             None => format!("entry {seq}"),
@@ -1226,8 +1066,8 @@ impl App {
     /// What adopting an item's claims would raise, computed in a spare
     /// engine: a preview of adopting it, as a world.
     pub(crate) fn preview_adoption(&mut self, item: u64) -> Result<String, String> {
-        let mut facts = self.facts_at(self.tip)?;
-        let next = self.journal.entries().len() as u64 + 1;
+        let mut facts = self.notebook.facts_at(self.notebook.tip)?;
+        let next = self.notebook.journal.entries().len() as u64 + 1;
         let claims: Vec<Term> = self
             .claims_of(item)
             .into_iter()
@@ -1238,6 +1078,7 @@ impl App {
         }
         facts.extend(claims.into_iter().map(|p| (next, p)));
         let constraints: Vec<(u64, String)> = self
+            .notebook
             .outline
             .constraints
             .iter()
@@ -1269,30 +1110,6 @@ impl App {
         })
     }
 
-    /// The Wikidata import in a world: the last import entry on its path,
-    /// not retracted, and the file its blob is in.
-    pub(crate) fn import_on(&self, head: u64) -> Option<(u64, std::path::PathBuf)> {
-        let path = self.path(head);
-        let retracted: HashSet<u64> = path
-            .iter()
-            .filter(|e| e.kind() == "retract")
-            .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
-            .collect();
-        path.iter()
-            .rev()
-            .filter(|e| e.kind() == "import" && !retracted.contains(&e.seq))
-            .find_map(|e| {
-                let b = e.body()?;
-                let blob = b["blob"].as_str()?;
-                (b["source"] == "Wikidata").then(|| {
-                    (
-                        e.seq,
-                        self.journal.dir().join(format::record::BLOBS).join(blob),
-                    )
-                })
-            })
-    }
-
     /// Keep the suggestion pane's order while it has focus.
     pub(crate) fn update_frozen(&mut self) {
         let focused = self.session.view.focused().kind == PaneKind::Suggestions;
@@ -1301,11 +1118,14 @@ impl App {
 
     /// The items whose facts are about an entity: facts with it first.
     fn items_about(&self, entity: &Term) -> Vec<u64> {
-        let facts = self.facts_at(self.tip).unwrap_or_default();
+        let facts = self
+            .notebook
+            .facts_at(self.notebook.tip)
+            .unwrap_or_default();
         let mut out: Vec<u64> = facts
             .iter()
             .filter(|(_, f)| matches!(f, Term::Compound(_, a) if a.first() == Some(entity)))
-            .filter_map(|(s, _)| self.outline.fact_item.get(s).copied())
+            .filter_map(|(s, _)| self.notebook.outline.fact_item.get(s).copied())
             .collect();
         out.dedup();
         out
@@ -1317,7 +1137,7 @@ impl App {
     pub(crate) fn accept(&mut self, s: &Suggestion) -> Result<(), String> {
         let mark = json!({"kind": reason::show(&s.kind), "evidence": s.evidence, "score": s.score});
         let enc = |t: &Term| terms::encode(t).map_err(|e| e.0);
-        let seq = self.journal.entries().len() as u64 + 1;
+        let seq = self.notebook.journal.entries().len() as u64 + 1;
         let c = |f: &str, args: Vec<Term>| Term::Compound(f.into(), args);
         match (s.kind_name(), &s.kind) {
             ("constraint", Term::Compound(_, a)) if a.len() == 3 => {
@@ -1379,25 +1199,13 @@ impl App {
         Ok(())
     }
 
-    /// Copy a file into blobs/, named by its SHA-256; return the hash.
-    pub(crate) fn store_blob(&self, bytes: &[u8]) -> Result<String, String> {
-        let hash = format::record::sha256_hex(bytes);
-        let blobs = self.journal.dir().join(format::record::BLOBS);
-        std::fs::create_dir_all(&blobs).map_err(|e| e.to_string())?;
-        let dest = blobs.join(&hash);
-        if !dest.exists() {
-            std::fs::write(&dest, bytes).map_err(|e| e.to_string())?;
-        }
-        Ok(hash)
-    }
-
     /// The depth of an item in the outline: a top-level item is 0.
     fn depth_of(&self, id: u64) -> usize {
         let mut d = 0;
-        let mut at = self.outline.parent(id);
+        let mut at = self.notebook.outline.parent(id);
         while let Some(p) = at.filter(|p| *p != TOP) {
             d += 1;
-            at = self.outline.parent(p);
+            at = self.notebook.outline.parent(p);
         }
         d
     }
@@ -1442,13 +1250,14 @@ impl App {
         let path = std::path::Path::new(file);
         let (blocks, losses, _) = crate::docs::read(path)?;
         let bytes = std::fs::read(path).map_err(|e| format!("{file}: {e}"))?;
-        let hash = self.store_blob(&bytes)?;
+        let hash = self.notebook.store_blob(&bytes)?;
         let name = path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
         let earlier: Vec<u64> = self
-            .path(self.tip)
+            .notebook
+            .path(self.notebook.tip)
             .iter()
             .filter(|e| {
                 e.kind() == "import"
@@ -1466,7 +1275,7 @@ impl App {
             json!({"blob": hash, "format": "document", "file": name, "source": name, "losses": losses,
                    "prov": {"prov:wasDerivedFrom": name, "prov:wasGeneratedBy": "pandoc"}}),
         )?;
-        let mut last_at: Vec<Option<u64>> = vec![self.outline.top.last().copied()];
+        let mut last_at: Vec<Option<u64>> = vec![self.notebook.outline.top.last().copied()];
         let mut parents: Vec<u64> = vec![TOP];
         for b in &blocks {
             let d = b.depth.min(parents.len() - 1);
@@ -1504,11 +1313,12 @@ impl App {
         losses: &crate::docs::Losses,
     ) -> Result<String, String> {
         let old: Vec<u64> = self
+            .notebook
             .outline
             .in_order()
             .into_iter()
             .filter(|i| {
-                self.outline.items[i]
+                self.notebook.outline.items[i]
                     .block
                     .origin
                     .is_some_and(|o| earlier.contains(&o))
@@ -1518,7 +1328,12 @@ impl App {
         let key = |style: &str, text: &str| (style.to_string(), text.to_string());
         let old_keys: Vec<(String, String)> = old
             .iter()
-            .map(|i| key(&self.outline.items[i].block.style, &self.outline.text(*i)))
+            .map(|i| {
+                key(
+                    &self.notebook.outline.items[i].block.style,
+                    &self.notebook.outline.text(*i),
+                )
+            })
             .collect();
         let new_keys: Vec<(String, String)> =
             blocks.iter().map(|b| key(&b.style, &b.text)).collect();
@@ -1574,7 +1389,8 @@ impl App {
                 .filter(|j| blocks[*j].depth == d)
                 .find_map(|j| id_of[j]);
             let parent = if d == 0 || base > 0 && parent == TOP {
-                self.outline
+                self.notebook
+                    .outline
                     .parent(old.first().copied().unwrap_or(TOP))
                     .unwrap_or(TOP)
             } else {
@@ -1584,14 +1400,14 @@ impl App {
         }
         let kept: HashSet<u64> = id_of.iter().flatten().copied().collect();
         for o in deletes {
-            if !self.outline.items.contains_key(&o) {
+            if !self.notebook.outline.items.contains_key(&o) {
                 continue;
             }
-            let mut stack = self.outline.children(o).to_vec();
+            let mut stack = self.notebook.outline.children(o).to_vec();
             let mut keeps_something = false;
             while let Some(x) = stack.pop() {
                 keeps_something |= kept.contains(&x);
-                stack.extend(self.outline.children(x));
+                stack.extend(self.notebook.outline.children(x));
             }
             if !keeps_something {
                 self.write_here("edit", json!({"op": "delete", "item": o}))?;
@@ -1608,13 +1424,13 @@ impl App {
         let Some(s) = &self.reason.supposition else {
             return vec![];
         };
-        let path = self.path(self.tip);
+        let path = self.notebook.path(self.notebook.tip);
         let retracted: HashSet<u64> = path
             .iter()
             .filter(|e| e.kind() == "retract")
             .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
             .collect();
-        let actual = self.outline_at(s.actual);
+        let actual = self.notebook.outline_at(s.actual);
         let mut out = Vec::new();
         for e in path
             .iter()
@@ -1628,7 +1444,7 @@ impl App {
                     "changed {}: “{}” → “{}”",
                     num(&actual),
                     actual.text(item),
-                    self.outline_at(e.seq).text(item)
+                    self.notebook.outline_at(e.seq).text(item)
                 ),
                 Some("create") => format!("added: “{}”", b["add"].as_str().unwrap_or("")),
                 Some("delete") => format!("deleted {}: “{}”", num(&actual), actual.text(item)),
@@ -1645,7 +1461,7 @@ impl App {
     pub(crate) fn export(&mut self, file: &str, section: Option<u64>) -> Result<String, String> {
         let roots: Vec<u64> = match section {
             Some(s) => vec![s],
-            None => self.outline.top.clone(),
+            None => self.notebook.outline.top.clone(),
         };
         let mut blocks = Vec::new();
         let mut seqs = std::collections::BTreeSet::new();
@@ -1653,7 +1469,7 @@ impl App {
             let base = self.depth_of(r);
             let mut stack = vec![r];
             while let Some(id) = stack.pop() {
-                let item = &self.outline.items[&id];
+                let item = &self.notebook.outline.items[&id];
                 let style = if item.block.style.is_empty() {
                     if item.children.is_empty() {
                         "para"
@@ -1663,7 +1479,7 @@ impl App {
                 } else {
                     item.block.style.as_str()
                 };
-                let text = self.outline.text(id);
+                let text = self.notebook.outline.text(id);
                 blocks.push(crate::docs::Block {
                     depth: self.depth_of(id) - base,
                     style: style.into(),
@@ -1677,7 +1493,7 @@ impl App {
         }
         let hashes: Vec<String> = seqs
             .iter()
-            .filter_map(|s| self.entry(*s).map(|e| e.hash.clone()))
+            .filter_map(|s| self.notebook.entry(*s).map(|e| e.hash.clone()))
             .collect();
         crate::docs::write(
             &crate::docs::markdown(&blocks),
@@ -1709,7 +1525,7 @@ impl App {
         if v["format"] != "memex-results" {
             return Err("not a results file: its format is not memex-results".into());
         }
-        let hash = self.store_blob(&bytes)?;
+        let hash = self.notebook.store_blob(&bytes)?;
         let act = &v["prov"]["activity"];
         let source = format!(
             "{}@{}",
@@ -1727,7 +1543,12 @@ impl App {
             text: format!("Results of {source}"),
             cites: vec![],
         };
-        let top = self.write_block(&head, TOP, self.outline.top.last().copied(), imp.seq)?;
+        let top = self.write_block(
+            &head,
+            TOP,
+            self.notebook.outline.top.last().copied(),
+            imp.seq,
+        )?;
         let mut after = None;
         for r in v["results"].as_array().cloned().unwrap_or_default() {
             let name = r["name"].as_str().ok_or("a result needs a name")?;
@@ -1772,7 +1593,7 @@ impl App {
     /// the files that no longer match their recorded hashes.
     pub fn stale_results(&self) -> BTreeMap<u64, Vec<String>> {
         let mut out = BTreeMap::new();
-        for e in self.path(self.tip) {
+        for e in self.notebook.path(self.notebook.tip) {
             let Some(b) = e
                 .body()
                 .filter(|b| e.kind() == "import" && b["format"] == "memex-results")
@@ -1797,7 +1618,7 @@ impl App {
                 }
             }
             if !changed.is_empty() {
-                for (id, item) in &self.outline.items {
+                for (id, item) in &self.notebook.outline.items {
                     if item.block.origin == Some(e.seq) {
                         out.insert(*id, changed.clone());
                     }
@@ -1810,30 +1631,9 @@ impl App {
     /// The quote check: does the item's text still appear in the document it
     /// was imported from? Spaces, hyphens and case are ignored.
     pub(crate) fn check_quote(&mut self, item: u64) -> Result<String, String> {
-        let origin = self
-            .outline
-            .items
-            .get(&item)
-            .and_then(|i| i.block.origin)
-            .ok_or("the target was not imported from a document")?;
-        let e = self.entry(origin).ok_or("no import entry")?;
-        let b = e.body().cloned().ok_or("the import was purged")?;
-        let file = b["file"].as_str().unwrap_or("");
-        let fmt = crate::docs::format_of(std::path::Path::new(file))
-            .ok_or("the import is not a document")?;
-        let blob = self
-            .journal
-            .dir()
-            .join(format::record::BLOBS)
-            .join(b["blob"].as_str().unwrap_or(""));
-        let source = crate::docs::plain_text(&blob, fmt)?;
-        let span = crate::docs::markdown_to_plain(&self.outline.text(item))?;
-        let ruling = if crate::docs::normal(&source).contains(&crate::docs::normal(&span)) {
-            "quoted"
-        } else {
-            "misquoted"
-        };
-        self.write_ruling(item, "quote", ruling, b["blob"].as_str().unwrap_or(""))?;
+        let quote = self.notebook.quote(item)?;
+        let ruling = quote.ruling()?;
+        self.write_ruling(item, "quote", ruling, &quote.blob)?;
         Ok(ruling.into())
     }
 
@@ -1841,10 +1641,10 @@ impl App {
     /// copy that came with the claim, and rule: found, misattributed (the
     /// title differs from the one claimed), not_found, unavailable, retracted.
     pub(crate) fn check_source(&mut self, item: u64) -> Result<String, String> {
-        let facts = self.facts_at(self.tip)?;
+        let facts = self.notebook.facts_at(self.notebook.tip)?;
         let mine: Vec<&Term> = facts
             .iter()
-            .filter(|(s, _)| self.outline.fact_item.get(s) == Some(&item))
+            .filter(|(s, _)| self.notebook.outline.fact_item.get(s) == Some(&item))
             .map(|(_, f)| f)
             .collect();
         let field = |name: &str| {
@@ -1940,10 +1740,13 @@ impl App {
 
     /// An item's claims: (entry seq, source, claimed fact).
     pub fn claims_of(&self, item: u64) -> Vec<(u64, String, Term)> {
-        let facts = self.facts_at(self.tip).unwrap_or_default();
+        let facts = self
+            .notebook
+            .facts_at(self.notebook.tip)
+            .unwrap_or_default();
         facts
             .into_iter()
-            .filter(|(s, _)| self.outline.fact_item.get(s) == Some(&item))
+            .filter(|(s, _)| self.notebook.outline.fact_item.get(s) == Some(&item))
             .filter_map(|(s, f)| match f {
                 Term::Compound(n, a) if n == "claims" && a.len() == 2 => {
                     let src = match &a[0] {
@@ -1964,7 +1767,7 @@ impl App {
     pub(crate) fn content_tip(&self, from: u64) -> Option<u64> {
         let mut at = Some(from);
         while let Some(s) = at {
-            let e = self.entry(s)?;
+            let e = self.notebook.entry(s)?;
             if CONTENT.contains(&e.kind()) || e.kind() == "retract" {
                 return Some(s);
             }
@@ -1976,7 +1779,7 @@ impl App {
     /// Check that an entry can be retracted; return the entries that depend
     /// on it: those that would no longer apply without it.
     pub fn retractable(&self, t: u64) -> Result<Vec<u64>, String> {
-        let path = self.path(self.tip);
+        let path = self.notebook.path(self.notebook.tip);
         let e = path
             .iter()
             .find(|e| e.seq == t)
@@ -1990,8 +1793,8 @@ impl App {
         if already {
             return Err(format!("entry {t} is already retracted"));
         }
-        let (_, _, with) = self.replay(self.tip, None);
-        let (_, _, without) = self.replay(self.tip, Some(t));
+        let (_, _, with) = self.notebook.replay(self.notebook.tip, None);
+        let (_, _, without) = self.notebook.replay(self.notebook.tip, Some(t));
         Ok(without
             .into_iter()
             .filter(|s| !with.contains(s) && *s != t)

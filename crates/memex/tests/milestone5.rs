@@ -191,7 +191,8 @@ fn wikidata_offers_its_own_constraint() {
         "constraint one launched per entity (Wikidata P619)",
     );
     assert!(
-        app.outline
+        app.notebook
+            .outline
             .constraints
             .values()
             .any(|c| c.name == "one launched per entity (Wikidata P619)")
@@ -289,12 +290,12 @@ fn no_suggested_reference_names_a_work_outside_the_store() {
         );
     }
     accept(&mut app, "cite paper_a");
-    let link = app.outline.links.last().unwrap();
+    let link = app.notebook.outline.links.last().unwrap();
     assert_eq!(
         (link.from, link.to, link.kind.as_str()),
         (
-            app.outline.by_number("1").unwrap(),
-            app.outline.by_number("2").unwrap(),
+            app.notebook.outline.by_number("1").unwrap(),
+            app.notebook.outline.by_number("2").unwrap(),
             "cites"
         )
     );
@@ -338,7 +339,7 @@ fn the_pane_keeps_its_rules() {
     // It never takes the keyboard: typing goes to the outline.
     typ(&mut app, " here");
     app.flush();
-    assert_eq!(app.outline.text(app.cursor()), "Places here");
+    assert_eq!(app.notebook.outline.text(app.cursor()), "Places here");
     // Dismissed suggestions do not come back, and the dismissal is journaled.
     let first = described(&app)[0].clone();
     command(&mut app, "dismiss 1");

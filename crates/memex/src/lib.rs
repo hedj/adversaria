@@ -8,6 +8,7 @@ pub mod docs;
 pub mod engine;
 mod evaluation;
 pub mod journal;
+pub mod notebook;
 pub mod outline;
 pub mod prolog;
 pub mod reason;

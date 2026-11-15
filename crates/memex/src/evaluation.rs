@@ -20,7 +20,12 @@ impl App {
 
     fn evaluate_worlds(&mut self) -> Result<(), String> {
         self.reason.eval = [None, None];
-        for (k, head) in self.reason.shown_heads(self.tip).into_iter().enumerate() {
+        for (k, head) in self
+            .reason
+            .shown_heads(self.notebook.tip)
+            .into_iter()
+            .enumerate()
+        {
             self.reason.eval[k] = Some(self.evaluate_world(k, head)?);
         }
         Ok(())
@@ -33,26 +38,26 @@ impl App {
     }
 
     fn world(&self, k: usize, head: u64) -> Result<World, String> {
-        let facts = self.facts_at(head)?;
+        let facts = self.notebook.facts_at(head)?;
         let (outline, import) = self.world_parts(k, head);
         Ok(World {
             facts,
             outline,
             import,
-            at: self.entry_count(),
+            at: self.notebook.entry_count(),
         })
     }
 
     fn world_parts(&self, k: usize, head: u64) -> (Outline, Option<(u64, PathBuf)>) {
-        (self.world_outline(k, head), self.import_on(head))
+        (self.world_outline(k, head), self.notebook.import_on(head))
     }
 
     /// The outline of the world at a head: the current one's is kept.
     fn world_outline(&self, k: usize, head: u64) -> Outline {
         if k == 0 {
-            self.outline.clone()
+            self.notebook.outline.clone()
         } else {
-            self.outline_at(head)
+            self.notebook.outline_at(head)
         }
     }
 
