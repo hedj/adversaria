@@ -32,7 +32,7 @@
 //! say) is skipped.
 
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// The top of the outline: the parent of the top-level items.
 pub const TOP: u64 = 0;
@@ -42,6 +42,29 @@ pub struct Span {
     pub seq: u64,
     pub start: usize,
     pub len: usize,
+}
+
+/// A revision of a document in items: the item each new block keeps, if
+/// any; the blocks whose text changes; the items dropped; and where the
+/// document is.
+pub struct Revised {
+    pub kept: Vec<Option<u64>>,
+    pub changed: Vec<usize>,
+    pub dropped: Vec<u64>,
+    pub home: u64,
+}
+
+impl Revised {
+    fn of(r: crate::docs::Revision, old: &[u64], home: u64) -> Revised {
+        let kept = r.kept.iter().map(|k| k.map(|o| old[o])).collect();
+        let dropped = r.dropped.iter().map(|o| old[*o]).collect();
+        Revised {
+            kept,
+            changed: r.changed,
+            dropped,
+            home,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -755,6 +778,48 @@ impl Outline {
             .iter()
             .map(|(s, c)| (*s, c.name.clone()))
             .collect()
+    }
+
+    /// The items any of these imports brought in, in order.
+    pub fn items_from_any(&self, imports: &[u64]) -> Vec<u64> {
+        let from = |i: &u64| self.origin(*i).is_some_and(|o| imports.contains(&o));
+        self.in_order().into_iter().filter(from).collect()
+    }
+
+    /// The import entry an item came from, if any.
+    pub fn origin(&self, id: u64) -> Option<u64> {
+        self.items.get(&id).and_then(|i| i.block.origin)
+    }
+
+    /// How a new version of a document, by its blocks' styles and texts,
+    /// meets the items its earlier imports brought in.
+    pub fn revised(&self, earlier: &[u64], new: &[(String, String)]) -> Revised {
+        let old = self.items_from_any(earlier);
+        let r = crate::docs::Revision::of(&self.keys_of(&old), new);
+        let home = self
+            .parent(old.first().copied().unwrap_or(TOP))
+            .unwrap_or(TOP);
+        Revised::of(r, &old, home)
+    }
+
+    /// Each item's style and text.
+    pub fn keys_of(&self, items: &[u64]) -> Vec<(String, String)> {
+        items
+            .iter()
+            .map(|i| (self.items[i].block.style.clone(), self.text(*i)))
+            .collect()
+    }
+
+    /// Whether the branch under an item holds any of these items.
+    pub fn branch_holds(&self, id: u64, any: &HashSet<u64>) -> bool {
+        let mut stack = self.children(id).to_vec();
+        while let Some(x) = stack.pop() {
+            if any.contains(&x) {
+                return true;
+            }
+            stack.extend(self.children(x));
+        }
+        false
     }
 
     /// The items an import entry brought in.

@@ -6,6 +6,7 @@ pub mod app;
 pub mod checks;
 pub mod config;
 pub mod docs;
+pub mod documents;
 pub mod engine;
 mod evaluation;
 pub mod journal;

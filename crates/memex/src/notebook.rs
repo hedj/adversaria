@@ -201,6 +201,15 @@ impl Notebook {
         Ok(facts)
     }
 
+    /// The imports of a document of this file's name, in the world at the
+    /// tip.
+    pub(crate) fn document_imports(&self, name: &str) -> Vec<u64> {
+        let path = self.path(self.tip).into_iter();
+        let of = |b: &Value| b["format"] == "document" && b["file"] == name;
+        let imports = path.filter(|e| e.kind() == "import" && e.body().is_some_and(of));
+        imports.map(|e| e.seq).collect()
+    }
+
     /// The facts stated on an item, in the world at the tip.
     pub(crate) fn facts_of(&self, item: u64) -> Result<Vec<Term>, String> {
         let facts = self.facts_at(self.tip)?.into_iter();
@@ -227,6 +236,12 @@ impl Notebook {
         let b = e.body()?;
         let blob = b["blob"].as_str()?;
         (b["source"] == "Wikidata").then(|| (e.seq, self.blob(blob)))
+    }
+
+    /// Keep a file as a blob; its hash.
+    pub(crate) fn store_file(&self, file: &str) -> Result<String, String> {
+        let bytes = std::fs::read(file).map_err(|e| format!("{file}: {e}"))?;
+        self.store_blob(&bytes)
     }
 
     /// Copy a file into blobs/, named by its SHA-256; return the hash.

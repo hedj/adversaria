@@ -25,7 +25,7 @@ use crate::session::Session;
 use format::record::Entry;
 use format::terms::{self, Term};
 use serde_json::{Value, json};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -333,6 +333,13 @@ fn text_pos(pos: usize, key: Key, len: usize) -> usize {
         Key::Home => 0,
         _ => len,
     }
+}
+
+/// Where a new item goes: under an item, and after one of its children,
+/// or first.
+pub(crate) struct Spot {
+    pub(crate) under: u64,
+    pub(crate) after: Option<u64>,
 }
 
 /// A quasimode in progress, held or latched.
@@ -1101,17 +1108,17 @@ impl App {
         origin: u64,
     ) -> Result<u64, String> {
         let after = self.notebook.outline.last_child(under);
-        self.write_block(b, under, after, origin)
+        self.write_block(b, Spot { under, after }, origin)
     }
 
     pub(crate) fn write_block(
         &mut self,
         b: &crate::docs::Block,
-        under: u64,
-        after: Option<u64>,
+        spot: Spot,
         import: u64,
     ) -> Result<u64, String> {
         let n = b.text.chars().count();
+        let (under, after) = (spot.under, spot.after);
         let e = self.write_here(
             "edit",
             json!({"op": "create", "under": under, "after": after, "add": b.text, "spans": [[0, 0, n]], "style": b.style, "import": import}),
@@ -1134,177 +1141,6 @@ impl App {
             )?;
         }
         Ok(e.seq)
-    }
-
-    /// Import a document: its blocks become items, its citations facts, and
-    /// what the outline cannot hold is listed as losses. Importing a file of
-    /// the same name again is a revision: it opens a world (see `revise`).
-    pub(crate) fn import_document(&mut self, file: &str) -> Result<String, String> {
-        let path = std::path::Path::new(file);
-        let (blocks, losses, _) = crate::docs::read(path)?;
-        let bytes = std::fs::read(path).map_err(|e| format!("{file}: {e}"))?;
-        let hash = self.notebook.store_blob(&bytes)?;
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let earlier: Vec<u64> = self
-            .notebook
-            .path(self.notebook.tip)
-            .iter()
-            .filter(|e| {
-                e.kind() == "import"
-                    && e.body()
-                        .is_some_and(|b| b["format"] == "document" && b["file"] == name.as_str())
-            })
-            .map(|e| e.seq)
-            .collect();
-        let lost: Vec<String> = losses.iter().map(|(k, n)| format!("{k} {n}")).collect();
-        if !earlier.is_empty() {
-            return self.revise(&name, &hash, &blocks, &earlier, &losses);
-        }
-        let imp = self.write_here(
-            "import",
-            json!({"blob": hash, "format": "document", "file": name, "source": name, "losses": losses,
-                   "prov": {"prov:wasDerivedFrom": name, "prov:wasGeneratedBy": "pandoc"}}),
-        )?;
-        let mut last_at: Vec<Option<u64>> = vec![self.notebook.outline.top.last().copied()];
-        let mut parents: Vec<u64> = vec![TOP];
-        for b in &blocks {
-            let d = b.depth.min(parents.len() - 1);
-            parents.truncate(d + 1);
-            last_at.truncate(d + 1);
-            if last_at.len() <= d {
-                last_at.resize(d + 1, None);
-            }
-            let under = parents[d];
-            let id = self.write_block(b, under, last_at[d], imp.seq)?;
-            last_at[d] = Some(id);
-            parents.push(id);
-            last_at.push(None);
-        }
-        Ok(format!(
-            "imported {name}: {} items; losses: {}",
-            blocks.len(),
-            if lost.is_empty() {
-                "none".into()
-            } else {
-                lost.join(", ")
-            }
-        ))
-    }
-
-    /// A revised document: align its blocks with the items of the earlier
-    /// imports, and write the changes in a supposed world, one entry each,
-    /// so each can be kept or retracted before the world is committed.
-    fn revise(
-        &mut self,
-        name: &str,
-        hash: &str,
-        blocks: &[crate::docs::Block],
-        earlier: &[u64],
-        losses: &crate::docs::Losses,
-    ) -> Result<String, String> {
-        let old: Vec<u64> = self
-            .notebook
-            .outline
-            .in_order()
-            .into_iter()
-            .filter(|i| {
-                self.notebook.outline.items[i]
-                    .block
-                    .origin
-                    .is_some_and(|o| earlier.contains(&o))
-            })
-            .collect();
-        let key = |style: &str, text: &str| (style.to_string(), text.to_string());
-        let old_keys: Vec<(String, String)> = old
-            .iter()
-            .map(|i| {
-                key(
-                    &self.notebook.outline.items[i].block.style,
-                    &self.notebook.outline.text(*i),
-                )
-            })
-            .collect();
-        let new_keys: Vec<(String, String)> =
-            blocks.iter().map(|b| key(&b.style, &b.text)).collect();
-        let matched = crate::docs::align(&old_keys, &new_keys);
-        self.write_here("suppose", json!({"name": format!("revision of {name}")}))?;
-        let imp = self.write_here(
-            "import",
-            json!({"blob": hash, "format": "document", "file": name, "source": name, "losses": losses, "revises": earlier.last(),
-                   "prov": {"prov:wasDerivedFrom": name, "prov:wasGeneratedBy": "pandoc"}}),
-        )?;
-        let mut id_of: Vec<Option<u64>> = vec![None; blocks.len()];
-        let mut deletes = Vec::new();
-        let mut creates = Vec::new();
-        let (mut po, mut pn) = (0, 0);
-        for &(oi, nj) in matched
-            .iter()
-            .chain(std::iter::once(&(old.len(), blocks.len())))
-        {
-            let (olds, news): (Vec<usize>, Vec<usize>) = ((po..oi).collect(), (pn..nj).collect());
-            for k in 0..olds.len().max(news.len()) {
-                match (olds.get(k), news.get(k)) {
-                    (Some(&o), Some(&n)) if old_keys[o].0 == blocks[n].style => {
-                        // Changed text: keep the item, write its new text.
-                        let new_text: Vec<char> = blocks[n].text.chars().collect();
-                        self.write_text(old[o], &new_text)?;
-                        id_of[n] = Some(old[o]);
-                    }
-                    (o, n) => {
-                        if let Some(&o) = o {
-                            deletes.push(old[o]);
-                        }
-                        if let Some(&n) = n {
-                            creates.push(n);
-                        }
-                    }
-                }
-            }
-            if oi < old.len() {
-                id_of[nj] = Some(old[oi]);
-            }
-            (po, pn) = (oi + 1, nj + 1);
-        }
-        for n in creates.iter().copied() {
-            let d = blocks[n].depth;
-            let parent = (0..n)
-                .rev()
-                .find(|j| blocks[*j].depth < d)
-                .and_then(|j| id_of[j]);
-            let after = (0..n)
-                .rev()
-                .take_while(|j| blocks[*j].depth >= d)
-                .filter(|j| blocks[*j].depth == d)
-                .find_map(|j| id_of[j]);
-            let parent = parent.unwrap_or_else(|| {
-                self.notebook
-                    .outline
-                    .parent(old.first().copied().unwrap_or(TOP))
-                    .unwrap_or(TOP)
-            });
-            id_of[n] = Some(self.write_block(&blocks[n], parent, after, imp.seq)?);
-        }
-        let kept: HashSet<u64> = id_of.iter().flatten().copied().collect();
-        for o in deletes {
-            if !self.notebook.outline.items.contains_key(&o) {
-                continue;
-            }
-            let mut stack = self.notebook.outline.children(o).to_vec();
-            let mut keeps_something = false;
-            while let Some(x) = stack.pop() {
-                keeps_something |= kept.contains(&x);
-                stack.extend(self.notebook.outline.children(x));
-            }
-            if !keeps_something {
-                self.write_here("edit", json!({"op": "delete", "item": o}))?;
-            }
-        }
-        Ok(format!(
-            "revision of {name}: the changes are in a supposed world; retract any with retract N, then commit or close"
-        ))
     }
 
     /// The changes of a document revision, from the supposition on: (entry

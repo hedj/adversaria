@@ -11,6 +11,7 @@
 
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::ops::Range;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
@@ -597,6 +598,82 @@ fn safe_link(url: &str) -> bool {
             matches!(scheme, "http" | "https" | "mailto" | "doi")
         }
         _ => true,
+    }
+}
+
+/// The stretches between pairs alike of two lists, and after the last
+/// pair: each a range of the first list and one of the
+/// second.
+fn gaps<T>(alike: &[(usize, usize)], a: &[T], b: &[T]) -> Vec<(Range<usize>, Range<usize>)> {
+    let ends: Vec<(usize, usize)> = alike.iter().copied().chain([(a.len(), b.len())]).collect();
+    let starts = after_each(alike);
+    starts
+        .into_iter()
+        .zip(ends)
+        .map(|((i0, j0), (i, j))| (i0..i, j0..j))
+        .collect()
+}
+
+/// Where each stretch starts: at the first of each list, then after each
+/// pair alike.
+fn after_each(alike: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    let next = alike.iter().map(|(i, j)| (i + 1, j + 1));
+    [(0, 0)].into_iter().chain(next).collect()
+}
+
+/// How the blocks of a new version meet the items of an earlier one:
+/// the earlier item each block keeps, if any; the blocks whose text
+/// changes; and the earlier items dropped. A block that keeps no item is
+/// new.
+pub struct Revision {
+    pub kept: Vec<Option<usize>>,
+    pub changed: Vec<usize>,
+    pub dropped: Vec<usize>,
+}
+
+impl Revision {
+    /// Align the earlier items with the new blocks, each by its style and
+    /// text: those alike are kept; between them, each pair of the same
+    /// style is kept with a new text, and any other item is dropped.
+    pub fn of(old: &[(String, String)], new: &[(String, String)]) -> Revision {
+        let alike = align(old, new);
+        let mut r = Revision::none(new.len());
+        for gap in gaps(&alike, old, new) {
+            r.pair(gap, old, new);
+        }
+        for (o, n) in alike {
+            r.kept[n] = Some(o);
+        }
+        r
+    }
+
+    /// No change yet, for these many blocks.
+    fn none(blocks: usize) -> Revision {
+        let kept = vec![None; blocks];
+        Revision {
+            kept,
+            changed: vec![],
+            dropped: vec![],
+        }
+    }
+
+    /// The items and blocks between two that are alike, paired in order.
+    fn pair(
+        &mut self,
+        gap: (Range<usize>, Range<usize>),
+        old: &[(String, String)],
+        new: &[(String, String)],
+    ) {
+        let (olds, news): (Vec<usize>, Vec<usize>) = (gap.0.collect(), gap.1.collect());
+        for k in 0..olds.len().max(news.len()) {
+            match (olds.get(k), news.get(k)) {
+                (Some(&o), Some(&n)) if old[o].0 == new[n].0 => {
+                    self.kept[n] = Some(o);
+                    self.changed.push(n);
+                }
+                (o, _) => self.dropped.extend(o.copied()),
+            }
+        }
     }
 }
 

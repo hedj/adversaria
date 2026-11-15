@@ -198,3 +198,17 @@ fn a_new_block_two_levels_down_goes_under_the_block_before_it() {
         items(&[("", "T"), ("T", "Deep"), ("T", "Text one.")])
     );
 }
+
+#[test]
+fn a_revision_leaves_the_items_of_other_documents() {
+    let mut r = Room::new("rev-others");
+    import(&mut r, "other.md", "# Other\n\nOther text.\n");
+    let after = revised(&mut r, "# T\n\nOld text.\n", "# T\n\nNew text.\n");
+    let expected = items(&[
+        ("", "Other"),
+        ("Other", "Other text."),
+        ("", "T"),
+        ("T", "New text."),
+    ]);
+    assert_eq!(after, expected);
+}
