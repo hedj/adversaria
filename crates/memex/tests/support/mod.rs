@@ -6,6 +6,8 @@ use memex::app::{App, Event, Key, Quasi, View};
 use memex::ui::Hits;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
+use ratatui::buffer::Buffer;
+use ratatui::style::Style;
 use std::path::PathBuf;
 
 /// A memex in a directory of this test's own, removed after it.
@@ -78,13 +80,25 @@ impl Room {
         self.lines_at(80, 20)
     }
 
-    /// The lines drawn on a screen of a width and a height.
-    pub fn lines_at(&self, width: u16, height: u16) -> Vec<String> {
+    /// What is drawn on a screen of a width and a height.
+    pub fn screen(&self, width: u16, height: u16) -> Buffer {
         let mut t = Terminal::new(TestBackend::new(width, height)).unwrap();
         t.draw(|f| memex::ui::draw(f, &self.app)).unwrap();
-        let buf = t.backend().buffer().clone();
+        t.backend().buffer().clone()
+    }
+
+    /// The lines drawn on a screen of a width and a height.
+    pub fn lines_at(&self, width: u16, height: u16) -> Vec<String> {
+        let buf = self.screen(width, height);
         let row = |y| (0..width).map(|x| buf[(x, y)].symbol()).collect::<String>();
         (0..height).map(row).collect()
+    }
+
+    /// The style a text is first drawn in on a wide screen: its first
+    /// cell's.
+    pub fn style_of(&self, text: &str) -> Style {
+        let (x, y) = self.find(text);
+        self.screen(160, 40)[(x, y)].style()
     }
 
     /// Where a text is first drawn on a wide screen: its column and row.

@@ -3,7 +3,7 @@
 //! English, and derived text (docs/design.md § Claims and beliefs, § Dataflow).
 
 use crate::engine::Engine;
-use crate::outline::Constraint;
+use crate::outline::{Constraint, Derive};
 use format::terms::Term;
 use std::collections::BTreeMap;
 
@@ -218,6 +218,12 @@ impl Nodes {
 }
 
 impl WorldEval {
+    /// A derived item's text in this world, if its node has answered.
+    pub fn derived_text(&self, id: u64, d: &Derive) -> Option<String> {
+        let answer = self.nodes.derived.get(&id)?;
+        Some(fill(&d.template, &d.names, answer, &self.facts))
+    }
+
     pub fn fact(&self, seq: u64) -> Option<&Term> {
         self.facts.iter().find(|(s, _)| *s == seq).map(|(_, t)| t)
     }

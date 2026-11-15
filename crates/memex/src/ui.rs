@@ -4,7 +4,7 @@
 
 use crate::actions::command_help;
 use crate::app::{App, Click, Mode, PaneKind, Quasi, ScopeLevel};
-use crate::outline::{Layer, Outline, TOP};
+use crate::outline::{Layer, Outline, Run, TOP};
 use crate::reason::{
     self, ConstraintEval, Finding, Prov, Solution, Sourced, Suggestion, WorldEval,
 };
@@ -184,53 +184,67 @@ fn cites(outline: &Outline, id: u64) -> String {
         .collect()
 }
 
+/// An item as drawn in the outline: its text, then its source and what
+/// it cites, dim.
 fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
-    let pending = app.text_of(id);
-    let runs = app.notebook.outline.runs(id);
-    let mut out = Vec::new();
-    if pending.iter().collect::<String>() != app.notebook.outline.text(id) {
-        out.push(Span::raw(pending.iter().collect::<String>()));
-    } else {
-        for r in runs {
-            if r.origin == id {
-                out.push(Span::raw(r.text));
-            } else {
-                out.push(Span::styled(
-                    r.text,
-                    Style::default().add_modifier(Modifier::ITALIC | Modifier::UNDERLINED),
-                ));
-                out.push(Span::styled(
-                    format!("↖{}", app.notebook.outline.number(r.origin)),
-                    dim(),
-                ));
-            }
-        }
+    let mut spans = item_text(app, id, focused);
+    spans.extend(item_notes(&app.notebook.outline, id));
+    spans
+}
+
+/// An item's text as drawn: derived text filled in; else, with focus at
+/// the cursor in word scope, the text underlined as the target; else the
+/// text as typed, if it is not yet written; else its runs.
+fn item_text(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
+    if let Some(derived) = derived_spans(app, id) {
+        return derived;
     }
-    if focused && app.session.view.scope == ScopeLevel::Word {
-        // Scope: show the word as the target.
-        out = vec![Span::styled(
-            pending.iter().collect::<String>(),
+    let target = focused && app.session.view.in_word();
+    let typed: String = app.text_of(id).iter().collect();
+    if target {
+        return vec![Span::styled(
+            typed,
             Style::default().add_modifier(Modifier::UNDERLINED),
         )];
     }
-    if let (Some(d), Some(e)) = (
-        app.notebook.outline.derived.get(&id),
-        app.reason.eval[0].as_ref(),
-    ) && let Some(v) = e.nodes.derived.get(&id)
-    {
-        out = vec![
-            Span::raw(reason::fill(&d.template, &d.names, v, &e.facts)),
-            Span::styled(" [derived]", dim()),
-        ];
+    if typed != app.notebook.outline.text(id) {
+        return vec![Span::raw(typed)];
     }
-    if let Some(src) = app.notebook.outline.source.get(&id) {
-        out.push(Span::styled(format!(" [{src}]"), dim()));
+    run_spans(&app.notebook.outline, id)
+}
+
+/// A derived item's text, filled in from the current world, if it has
+/// been evaluated.
+fn derived_spans(app: &App, id: u64) -> Option<Vec<Span<'static>>> {
+    let d = app.notebook.outline.derived.get(&id)?;
+    let e = app.reason.eval[0].as_ref()?;
+    let text = e.derived_text(id, d)?;
+    Some(vec![Span::raw(text), Span::styled(" [derived]", dim())])
+}
+
+/// An item's runs: its own text plain, and text from other items marked
+/// with where it is from.
+fn run_spans(outline: &Outline, id: u64) -> Vec<Span<'static>> {
+    let runs = outline.runs(id).into_iter();
+    runs.flat_map(|r| run_span(outline, id, r)).collect()
+}
+
+/// A run of an item: plain if it is the item's own, else marked.
+fn run_span(outline: &Outline, id: u64, run: Run) -> Vec<Span<'static>> {
+    if run.origin == id {
+        return vec![Span::raw(run.text)];
     }
-    let c = cites(&app.notebook.outline, id);
-    if !c.is_empty() {
-        out.push(Span::styled(c, dim()));
-    }
-    out
+    let from = Span::styled(format!("↖{}", outline.number(run.origin)), dim());
+    let style = Style::default().add_modifier(Modifier::ITALIC | Modifier::UNDERLINED);
+    vec![Span::styled(run.text, style), from]
+}
+
+/// What follows an item's text, dim: its source, and what it cites.
+fn item_notes(outline: &Outline, id: u64) -> Vec<Span<'static>> {
+    let source = outline.source.get(&id).map(|src| format!(" [{src}]"));
+    let cites = Some(cites(outline, id)).filter(|c| !c.is_empty());
+    let notes = source.into_iter().chain(cites);
+    notes.map(|n| Span::styled(n, dim())).collect()
 }
 
 fn title(app: &App) -> String {
