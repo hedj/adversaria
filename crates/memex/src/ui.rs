@@ -1396,6 +1396,19 @@ mod tests {
     }
 
     #[test]
+    fn a_row_is_split_where_its_ink_changes() {
+        let mut fig = figure("ab", Ink::Plain);
+        fig.rows[0][1].1 = Ink::Dim;
+        assert_eq!(texts(&figure_lines(&fig, 0)[0]), ["", "a", "b"]);
+    }
+
+    #[test]
+    fn a_row_of_blanks_is_its_pad_alone() {
+        let lines = figure_lines(&figure("  ", Ink::Dim), 1);
+        assert_eq!(texts(&lines[0]), [" "]);
+    }
+
+    #[test]
     fn each_ink_has_its_style() {
         let style = |ink| figure_lines(&figure("a", ink), 0)[0].spans[1].style;
         assert_eq!(style(Ink::Dim), dim());
