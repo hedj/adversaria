@@ -617,3 +617,19 @@ fn an_observation_is_not_recorded_again_after_reopening() {
     assert_eq!(app.journal().entries().len(), entries);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn an_observation_names_each_finding_by_its_constraint_and_facts() {
+    // The measures read observations, so what they hold is the journal's:
+    // each finding as its constraint and the facts it rests on, sorted,
+    // and the world they were seen in.
+    let dir = temp("observed-names");
+    let app = scene(&dir);
+    let entries = app.journal().entries().iter();
+    let observed = entries.filter_map(|e| e.body().filter(|b| b["op"] == "observed"));
+    let first = observed.into_iter().next().unwrap();
+    let names = "one date per event: date(buran_flight, 1988) · date(buran_flight, 1989)";
+    assert_eq!(first["disagreements"], serde_json::json!([names]));
+    assert_eq!(first["world"], "actual");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
