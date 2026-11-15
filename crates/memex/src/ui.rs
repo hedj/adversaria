@@ -396,16 +396,8 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
 /// The facts in violations in world k, by seq: marks resting on them are
 /// drawn loudly.
 fn violated(app: &App, k: usize) -> std::collections::BTreeSet<u64> {
-    app.reason.eval[k]
-        .as_ref()
-        .map(|e| {
-            e.constraints
-                .iter()
-                .flat_map(|c| &c.violations)
-                .flat_map(|v| v.prov.iter().map(|p| p.seq()))
-                .collect()
-        })
-        .unwrap_or_default()
+    let eval = app.reason.eval[k].as_ref();
+    eval.map(WorldEval::violated_facts).unwrap_or_default()
 }
 
 /// The view at an item, drawn as world k computes it.
@@ -1327,26 +1319,40 @@ fn draw_suggestions(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
 /// A document revision's world: each change, one entry each, to keep or
 /// retract (retract N) before the world is committed or closed.
 fn draw_revision(f: &mut Frame, app: &App, area: Rect) {
-    let Some(sup) = &app.reason.supposition else {
+    let Some(lines) = revision_panel(app) else {
         return;
     };
+    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
+}
+
+/// The panel of the world a supposition opened, if one is open.
+fn revision_panel(app: &App) -> Option<Vec<Line<'static>>> {
+    let sup = app.reason.supposition.as_ref()?;
+    Some(revision_lines(&sup.name, &app.revision_changes()))
+}
+
+/// The lines of a revision's panel: its name, each change, and how to
+/// keep or undo them.
+fn revision_lines(name: &str, changes: &[(u64, String, bool)]) -> Vec<Line<'static>> {
     let mut lines = vec![
-        Line::styled(format!("WORLD · {}", sup.name.to_uppercase()), dim()),
+        Line::styled(format!("WORLD · {}", name.to_uppercase()), dim()),
         Line::raw(""),
     ];
-    let changes = app.revision_changes();
-    for (seq, what, retracted) in &changes {
-        let line = format!("#{seq}  {what}");
-        lines.push(if *retracted {
-            Line::styled(format!("{line}  (retracted)"), dim())
-        } else {
-            Line::raw(line)
-        });
-    }
+    lines.extend(changes.iter().map(change_line));
     if changes.is_empty() {
         lines.push(Line::styled("no changes", dim()));
     }
     lines.push(Line::raw(""));
     lines.push(Line::styled("retract N undoes one change here · commit makes the rest real · close leaves the actual world as it was", dim()));
-    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
+    lines
+}
+
+/// One change of a revision: its entry and what it does, dim if retracted.
+fn change_line((seq, what, retracted): &(u64, String, bool)) -> Line<'static> {
+    let line = format!("#{seq}  {what}");
+    if *retracted {
+        Line::styled(format!("{line}  (retracted)"), dim())
+    } else {
+        Line::raw(line)
+    }
 }

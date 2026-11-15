@@ -130,6 +130,15 @@ impl ConstraintEval {
 }
 
 impl WorldEval {
+    /// The entries whose facts are in violations: what rests on them is
+    /// shown loud.
+    pub fn violated_facts(&self) -> std::collections::BTreeSet<u64> {
+        let violations = self.constraints.iter().flat_map(|c| &c.violations);
+        violations
+            .flat_map(|v| v.prov.iter().map(|p| p.seq()))
+            .collect()
+    }
+
     /// What the world shows: its violations, and its disagreements, each
     /// named, sorted.
     pub fn observed(&self) -> (Vec<String>, Vec<String>) {
