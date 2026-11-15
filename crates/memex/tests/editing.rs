@@ -2,85 +2,10 @@
 //! linking, and where the cursors go when the outline changes (docs/plan.md,
 //! Milestone 3).
 
-use memex::app::{App, Event, Key, Quasi, View};
-use ratatui::Terminal;
-use ratatui::backend::TestBackend;
-use std::path::PathBuf;
+mod support;
 
-/// A memex in a directory of this test's own, removed after it.
-struct Room {
-    dir: PathBuf,
-    app: App,
-}
-
-impl Room {
-    fn new(name: &str) -> Room {
-        let id = std::process::id();
-        let dir = std::env::temp_dir().join(format!("adversaria-editing-{name}-{id}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        let app = App::open(&dir).unwrap();
-        Room { dir, app }
-    }
-
-    fn tap(&mut self, keys: &[Key]) {
-        for k in keys {
-            self.app.handle(Event::down(*k));
-            self.app.handle(Event::up(*k));
-        }
-    }
-
-    fn typ(&mut self, text: &str) {
-        for c in text.chars() {
-            self.tap(&[Key::Char(c)]);
-        }
-    }
-
-    fn command(&mut self, line: &str) {
-        self.app.handle(Event::down(Key::Quasi(Quasi::Command)));
-        self.typ(line);
-        self.app.handle(Event::up(Key::Quasi(Quasi::Command)));
-    }
-
-    /// Items of these texts, each after the last, written.
-    fn items(&mut self, texts: &[&str]) {
-        for (i, text) in texts.iter().enumerate() {
-            if i > 0 {
-                self.tap(&[Key::Enter]);
-            }
-            self.typ(text);
-        }
-        self.app.flush();
-    }
-
-    /// The text of an item, as shown.
-    fn text(&self, item: u64) -> String {
-        self.app.text_of(item).iter().collect()
-    }
-
-    /// The lines drawn on a screen of 80 by 20.
-    fn lines(&self) -> Vec<String> {
-        let mut t = Terminal::new(TestBackend::new(80, 20)).unwrap();
-        t.draw(|f| memex::ui::draw(f, &self.app)).unwrap();
-        let buf = t.backend().buffer().clone();
-        let row = |y| (0..80).map(|x| buf[(x, y)].symbol()).collect::<String>();
-        (0..20).map(row).collect()
-    }
-
-    fn view(&self) -> &View {
-        &self.app.session.view
-    }
-
-    /// The text of the item at the cursor, as shown.
-    fn here(&self) -> String {
-        self.text(self.app.cursor())
-    }
-}
-
-impl Drop for Room {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
-}
+use memex::app::Key;
+use support::Room;
 
 #[test]
 fn backspace_erases_before_the_text_cursor_and_moves_it_back() {
