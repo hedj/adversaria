@@ -84,9 +84,9 @@ impl App {
 
     /// While a claim is interrogated, the preview of adopting it.
     fn refresh_preview(&mut self) -> Result<(), String> {
-        self.preview = None;
+        self.reason.preview = None;
         if let Some(item) = self.view.interrogate {
-            self.preview = Some(self.preview_adoption(item)?);
+            self.reason.preview = Some(self.preview_adoption(item)?);
         }
         Ok(())
     }

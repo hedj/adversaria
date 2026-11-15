@@ -331,8 +331,6 @@ pub struct App {
     pub(crate) view_dirty: bool,
     pub(crate) last_leap: Option<(String, bool)>,
     pub reason: Reasoning,
-    /// Interrogation's preview of adopting a claim: violations it would raise.
-    pub preview: Option<String>,
 }
 
 const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
@@ -355,7 +353,6 @@ impl App {
             view_dirty: false,
             last_leap: None,
             reason: Reasoning::default(),
-            preview: None,
         };
         if app.journal.entries().is_empty() {
             let e = app.journal.append("edit", json!({"op": "init"}))?;

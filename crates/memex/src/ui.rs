@@ -1058,7 +1058,8 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
     lines.push(Line::styled("if adopted", dim()));
     lines.push(Line::raw(format!(
         "  {}",
-        app.preview
+        app.reason
+            .preview
             .clone()
             .unwrap_or_else(|| "not yet computed".into())
     )));

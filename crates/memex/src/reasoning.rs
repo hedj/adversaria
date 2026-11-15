@@ -25,6 +25,8 @@ pub struct Reasoning {
     /// What reasoning found: [0] the current world, [1] the actual world
     /// while a supposition is open.
     pub eval: [Option<WorldEval>; 2],
+    /// Interrogation's preview of adopting a claim: violations it would raise.
+    pub preview: Option<String>,
     pub suggestions: Suggestions,
 }
 
