@@ -212,3 +212,43 @@ fn a_revision_leaves_the_items_of_other_documents() {
     ]);
     assert_eq!(after, expected);
 }
+
+/// Export, with these words after the file: what the memex says, and what
+/// the file holds.
+fn export(r: &mut Room, words: &str) -> (String, String) {
+    let file = r.dir.join("out.md");
+    r.command(&format!("export {} {words}", file.display()));
+    let text = std::fs::read_to_string(&file).unwrap_or_default();
+    (r.app.session.message.clone(), text)
+}
+
+#[test]
+fn an_item_of_the_users_with_children_exports_as_a_heading() {
+    let mut r = Room::new("export-heading");
+    r.items(&["Top", "Child"]);
+    r.tap(&[memex::app::Key::Tab]);
+    let (_, text) = export(&mut r, "");
+    assert!(
+        text.contains("# Top\n") && text.contains("\nChild\n"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_section_exports_alone_from_its_own_depth() {
+    let mut r = Room::new("export-section");
+    r.items(&["A", "B", "Below B"]);
+    r.tap(&[memex::app::Key::Tab]);
+    r.tap(&[memex::app::Key::Up, memex::app::Key::Tab]);
+    let (_, text) = export(&mut r, "1.1");
+    let lines: Vec<&str> = text.lines().collect();
+    assert!(lines.contains(&"# B") && !lines.contains(&"# A"), "{text}");
+}
+
+#[test]
+fn an_export_cites_the_entries_its_text_came_from() {
+    let mut r = Room::new("export-sources");
+    r.items(&["A"]);
+    let (said, _) = export(&mut r, "");
+    assert_eq!(said, "exported 1 items to out.md, citing 2 source entries");
+}
