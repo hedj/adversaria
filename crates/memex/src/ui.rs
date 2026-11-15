@@ -84,8 +84,33 @@ pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
 }
 
 fn draw_top(f: &mut Frame, app: &App, area: Rect) {
+    f.render_widget(Paragraph::new(top_left(app)), area);
+    if let Some(right) = top_right(app, area.width) {
+        f.render_widget(Paragraph::new(right), area);
+    }
+}
+
+/// The top bar's left: the room, its world or worlds, and how many
+/// entries the journal holds.
+fn top_left(app: &App) -> Line<'static> {
+    let mut spans = vec![
+        Span::styled("room ", dim()),
+        Span::styled(app.journal().room(), bold()),
+        Span::raw("   "),
+    ];
+    spans.extend(world_spans(app));
     let n = app.journal().entries().len();
-    let world = match &app.reason.supposition {
+    spans.extend([
+        Span::raw("   "),
+        Span::styled("journal ", dim()),
+        Span::styled(n.to_string(), bold()),
+    ]);
+    Line::from(spans)
+}
+
+/// The world shown: the actual one, or both while a supposition is open.
+fn world_spans(app: &App) -> Vec<Span<'static>> {
+    match &app.reason.supposition {
         Some(s) => vec![
             Span::styled("worlds ", dim()),
             Span::styled("actual", bold()),
@@ -96,37 +121,18 @@ fn draw_top(f: &mut Frame, app: &App, area: Rect) {
             Span::styled("world ", dim()),
             Span::styled(app.reason.world().to_string(), bold()),
         ],
-    };
-    let mut parts = vec![
-        Span::styled("room ", dim()),
-        Span::styled(app.journal().room(), bold()),
-        Span::raw("   "),
-    ];
-    parts.extend(world);
-    let left = Line::from(vec![
-        Span::raw(""),
-        Span::raw("   "),
-        Span::styled("journal ", dim()),
-        Span::styled(n.to_string(), bold()),
-    ]);
-    let mut left = left;
-    left.spans.splice(0..1, parts);
-    f.render_widget(Paragraph::new(left), area);
-    let right = match app.reason.eval[0].as_ref().map(status) {
+    }
+}
+
+/// The top bar's right: the world's status, else the pane with focus,
+/// at the right, dim, if it fits.
+fn top_right(app: &App, width: u16) -> Option<Line<'static>> {
+    let text = match app.reason.eval[0].as_ref().map(status) {
         Some(s) if !s.is_empty() => s,
         _ => format!("pane {} of 2", app.session.view.focus + 1),
     };
-    let w = right.chars().count() as u16;
-    if area.width > w {
-        f.render_widget(
-            Paragraph::new(Span::styled(right, dim())),
-            Rect {
-                x: area.x + area.width - w,
-                width: w,
-                ..area
-            },
-        );
-    }
+    let fits = (text.chars().count() as u16) < width;
+    fits.then(|| Line::styled(text, dim()).right_aligned())
 }
 
 /// The right pane for a view: its layers, each with its goal and how many
