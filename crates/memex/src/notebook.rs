@@ -189,6 +189,13 @@ impl Notebook {
         crate::store::facts(self.journal.entries(), head)
     }
 
+    /// The facts stated on an item, in the world at the tip.
+    pub(crate) fn facts_of(&self, item: u64) -> Result<Vec<Term>, String> {
+        let facts = self.facts_at(self.tip)?.into_iter();
+        let on_item = facts.filter(|(s, _)| self.outline.fact_item.get(s) == Some(&item));
+        Ok(on_item.map(|(_, f)| f).collect())
+    }
+
     /// The outline of another world, by its head.
     pub fn outline_at(&self, head: u64) -> Outline {
         self.replay(head, None).outline

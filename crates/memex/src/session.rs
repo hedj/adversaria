@@ -162,7 +162,11 @@ impl Session {
 
     /// Where the source check asks for a DOI's record.
     pub(crate) fn source_url(&self, doi: &str) -> String {
-        format!("{}{}", self.outside.crossref, crate::app::encode_doi(doi))
+        format!(
+            "{}{}",
+            self.outside.crossref,
+            crate::checks::encode_doi(doi)
+        )
     }
 
     /// Results whose input files changed since: item -> those files.
