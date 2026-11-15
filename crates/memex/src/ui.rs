@@ -5,7 +5,9 @@
 use crate::actions::command_help;
 use crate::app::{App, Click, Mode, PaneKind, Quasi, ScopeLevel};
 use crate::outline::{Layer, Outline, TOP};
-use crate::reason::{self, ConstraintEval, Finding, Prov, Solution, Sourced, WorldEval};
+use crate::reason::{
+    self, ConstraintEval, Finding, Prov, Solution, Sourced, Suggestion, WorldEval,
+};
 use crate::view;
 use format::terms::Term;
 use ratatui::Frame;
@@ -502,11 +504,7 @@ fn inverse(kind: &str) -> String {
 }
 
 fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
-    let inner = Rect {
-        x: area.x + 2,
-        width: area.width.saturating_sub(2),
-        ..area
-    };
+    let inner = inset(area);
     let id = app.session.view.panes[0].cursor;
     if let Some(i) = app.session.view.interrogate {
         let p = Paragraph::new(interrogation(app, i)).wrap(Wrap { trim: false });
@@ -1305,50 +1303,104 @@ fn rule_lines(rule: &str) -> Vec<String> {
     out
 }
 
+/// A pane's area less a margin of two on the left, where its text goes.
+fn inset(area: Rect) -> Rect {
+    let width = area.width.saturating_sub(2);
+    Rect {
+        x: area.x + 2,
+        width,
+        ..area
+    }
+}
+
 /// The suggestion pane: few in view, ranked by evidence, each with why it
 /// was offered. It never takes the keyboard: accept or dismiss by command.
 fn draw_suggestions(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
-    let inner = Rect {
-        x: area.x + 2,
-        width: area.width.saturating_sub(2),
-        ..area
-    };
-    let shown = app.reason.suggestions.shown();
-    let mut lines = vec![
-        Line::styled(
-            format!(
-                "SUGGESTIONS · {} OF {}",
-                shown.len(),
-                app.reason.suggestions.list.len()
-            ),
-            dim(),
-        ),
-        Line::raw(""),
-    ];
-    let mut y = inner.y.saturating_add(lines.len() as u16);
-    for (i, s) in shown.iter().enumerate() {
-        let these = vec![
-            Line::raw(format!("{}. {}", i + 1, s.describe())),
-            Line::styled(format!("   {}", s.evidence), dim()),
-        ];
-        // A click anywhere on a suggestion, wrapped lines included, accepts it.
-        let h = Paragraph::new(these.clone())
-            .wrap(Wrap { trim: false })
-            .line_count(inner.width) as u16;
-        hits.add(
-            inner,
-            Rect::new(inner.x, y, inner.width, h),
-            Click::Command(format!("accept {}", i + 1)),
-        );
-        y = y.saturating_add(h);
-        lines.extend(these);
+    let inner = inset(area);
+    let column = Column::new(inner, hits);
+    let lines = suggestion_lines(app, column);
+    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+/// The suggestion pane's lines: how many are shown of all, each shown
+/// one, and how to act on them.
+fn suggestion_lines(app: &App, mut column: Column) -> Vec<Line<'static>> {
+    let suggestions = &app.reason.suggestions;
+    let shown = suggestions.shown();
+    let heading = format!(
+        "SUGGESTIONS · {} OF {}",
+        shown.len(),
+        suggestions.list.len()
+    );
+    column.lines = vec![Line::styled(heading, dim()), Line::raw("")];
+    let blocks = shown
+        .iter()
+        .enumerate()
+        .map(|(i, s)| suggestion_block(i, s));
+    for (block, click) in blocks {
+        column.clickable(block, click);
     }
     if shown.is_empty() {
-        lines.push(Line::styled("nothing to suggest", dim()));
+        column.lines.push(Line::styled("nothing to suggest", dim()));
     }
-    lines.push(Line::raw(""));
-    lines.push(Line::styled("accept N adopts · dismiss N dismisses", dim()));
-    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+    let hint = "accept N adopts · dismiss N dismisses";
+    column
+        .lines
+        .extend([Line::raw(""), Line::styled(hint, dim())]);
+    column.lines
+}
+
+/// The i-th suggestion shown, numbered from 1, with why it was offered; a
+/// click on it accepts it.
+fn suggestion_block(i: usize, s: &Suggestion) -> (Vec<Line<'static>>, Click) {
+    let title = Line::raw(format!("{}. {}", i + 1, s.describe()));
+    let why = Line::styled(format!("   {}", s.evidence), dim());
+    (
+        vec![title, why],
+        Click::Command(format!("accept {}", i + 1)),
+    )
+}
+
+/// The lines of a pane, wrapped in its area, and what a click on them
+/// acts on.
+struct Column<'a> {
+    lines: Vec<Line<'static>>,
+    area: Rect,
+    hits: &'a mut Hits,
+}
+
+impl<'a> Column<'a> {
+    fn new(area: Rect, hits: &'a mut Hits) -> Self {
+        Column {
+            lines: vec![],
+            area,
+            hits,
+        }
+    }
+
+    /// Add lines that a click on any of them, wrapped lines too, acts on.
+    fn clickable(&mut self, block: Vec<Line<'static>>, click: Click) {
+        let rows = self.rows_of(&block);
+        self.hits.add(self.area, rows, click);
+        self.lines.extend(block);
+    }
+
+    /// The rows that lines would take after those already added.
+    fn rows_of(&self, block: &[Line<'static>]) -> Rect {
+        let top = wrapped_height(&self.lines, self.area.width);
+        let height = wrapped_height(block, self.area.width);
+        Rect {
+            y: self.area.y.saturating_add(top),
+            height,
+            ..self.area
+        }
+    }
+}
+
+/// How many rows lines take, wrapped to a width.
+fn wrapped_height(lines: &[Line<'static>], width: u16) -> u16 {
+    let p = Paragraph::new(lines.to_vec()).wrap(Wrap { trim: false });
+    p.line_count(width) as u16
 }
 
 /// A document revision's world: each change, one entry each, to keep or

@@ -568,23 +568,18 @@ fn chart(name: &str, cells: &[&str]) -> Room {
     room
 }
 
-/// Whether a line of the screen holds this text.
-fn shows(room: &Room, text: &str) -> bool {
-    room.lines_at(160, 40).iter().any(|l| l.contains(text))
-}
-
 #[test]
 fn the_view_panel_counts_a_layers_marks_by_its_entry() {
     let room = chart("panel-marks", &["cell(rent, 1200)", "cell(food, 400)"]);
     let layer = room.last("edit");
-    assert!(shows(&room, &format!("entry {layer} · 2 marks")));
+    assert!(room.shows(&format!("entry {layer} · 2 marks")));
 }
 
 #[test]
 fn the_view_panel_counts_one_mark_as_one() {
     let room = chart("panel-mark", &["cell(rent, 1200)"]);
     let layer = room.last("edit");
-    assert!(shows(&room, &format!("entry {layer} · 1 mark ")));
+    assert!(room.shows(&format!("entry {layer} · 1 mark ")));
 }
 
 #[test]
@@ -592,10 +587,7 @@ fn the_view_panel_shows_the_views_notes_and_how_to_follow_a_mark() {
     let room = chart("panel-notes", &[]);
     let notes = room.lines_at(160, 40).concat();
     assert_eq!(notes.matches("(no marks: no solutions yet)").count(), 2);
-    assert!(shows(
-        &room,
-        "a click on a mark goes to the item that states its fact"
-    ));
+    assert!(room.shows("a click on a mark goes to the item that states its fact"));
 }
 
 /// The view at the cursor, the room's chart, in world k, at a width.

@@ -213,6 +213,12 @@ fn a_click_on_a_suggestion_accepts_it() {
     // Click the second suggestion's last line: its evidence, not its title.
     let (lines, hits) = draw(&app);
     let (x, y) = find(&lines, &format!("2. {}", shown[1]));
+    let accept_2 = Click::Command("accept 2".into());
+    assert_eq!(
+        hits.at(x, y),
+        Some(&accept_2),
+        "the title is part of suggestion 2"
+    );
     let evidence_row = (y + 1..y + 6)
         .rev()
         .find(|r| hits.at(x, *r) == Some(&Click::Command("accept 2".into())))

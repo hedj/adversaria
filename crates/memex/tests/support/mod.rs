@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 
 use memex::app::{App, Event, Key, Quasi, View};
+use memex::ui::Hits;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use std::path::PathBuf;
@@ -84,6 +85,28 @@ impl Room {
         let buf = t.backend().buffer().clone();
         let row = |y| (0..width).map(|x| buf[(x, y)].symbol()).collect::<String>();
         (0..height).map(row).collect()
+    }
+
+    /// Where a text is first drawn on a wide screen: its column and row.
+    pub fn find(&self, text: &str) -> (u16, u16) {
+        let lines = self.lines_at(160, 40);
+        let y = lines.iter().position(|l| l.contains(text)).expect(text);
+        let before = lines[y].split(text).next().unwrap_or_default();
+        (before.chars().count() as u16, y as u16)
+    }
+
+    /// What a click would act on where, on a wide screen.
+    pub fn hits(&self) -> Hits {
+        let mut t = Terminal::new(TestBackend::new(160, 40)).unwrap();
+        let mut hits = Hits::default();
+        t.draw(|f| hits = memex::ui::draw_hits(f, &self.app))
+            .unwrap();
+        hits
+    }
+
+    /// Whether a line of a wide screen holds this text.
+    pub fn shows(&self, text: &str) -> bool {
+        self.lines_at(160, 40).iter().any(|l| l.contains(text))
     }
 
     pub fn view(&self) -> &View {
