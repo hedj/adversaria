@@ -148,9 +148,10 @@ impl PaneKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ScopeLevel {
     Word,
+    #[default]
     Statement,
     Branch,
 }
@@ -161,10 +162,15 @@ pub struct Pane {
     pub cursor: u64,
 }
 
-/// What is shown. Restored whole from each `view` entry.
+/// The two panes, side by side: at first the outline, and beside it its
+/// links.
 #[derive(Debug, Clone, PartialEq)]
+pub struct Panes(pub [Pane; 2]);
+
+/// What is shown. Restored whole from each `view` entry.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct View {
-    pub panes: [Pane; 2],
+    pub panes: Panes,
     pub focus: usize,
     /// Text cursor in the focused item, in characters.
     pub pos: usize,
@@ -174,25 +180,23 @@ pub struct View {
     pub interrogate: Option<u64>,
 }
 
-impl Default for View {
-    fn default() -> Self {
-        View {
-            panes: [
-                Pane {
-                    kind: PaneKind::Outline,
-                    cursor: TOP,
-                },
-                Pane {
-                    kind: PaneKind::Links,
-                    cursor: TOP,
-                },
-            ],
-            focus: 0,
-            pos: 0,
-            folded: BTreeSet::new(),
-            scope: ScopeLevel::Statement,
-            interrogate: None,
-        }
+impl Default for Panes {
+    fn default() -> Panes {
+        let pane = |kind| Pane { kind, cursor: TOP };
+        Panes([pane(PaneKind::Outline), pane(PaneKind::Links)])
+    }
+}
+
+impl std::ops::Deref for Panes {
+    type Target = [Pane; 2];
+    fn deref(&self) -> &[Pane; 2] {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Panes {
+    fn deref_mut(&mut self) -> &mut [Pane; 2] {
+        &mut self.0
     }
 }
 
@@ -213,7 +217,7 @@ impl View {
     /// left, folds to the items left, and the text cursor to its item's
     /// text.
     fn repair(&mut self, outline: &Outline, before: &[u64]) {
-        for pane in &mut self.panes {
+        for pane in self.panes.iter_mut() {
             pane.cursor = surviving(outline, before, pane.cursor);
         }
         self.folded.retain(|f| outline.items.contains_key(f));
