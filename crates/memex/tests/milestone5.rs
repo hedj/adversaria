@@ -350,6 +350,26 @@ fn the_pane_keeps_its_rules() {
         kept,
         "reordered under the pointer"
     );
+    // One that leaves the held order gives its place to the next, and
+    // none is shown twice.
+    command(&mut app, "dismiss 1");
+    let after = described(&app);
+    let distinct: std::collections::BTreeSet<&String> = after.iter().collect();
+    assert_eq!((distinct.len(), after.len()), (5, 5), "{after:?}");
+    // Once the pane loses focus, the order is the ranking again.
+    let ranked: Vec<String> = app
+        .suggestions
+        .iter()
+        .take(5)
+        .map(|s| s.describe())
+        .collect();
+    assert_ne!(during, ranked, "the test needs the held order to differ");
+    command(&mut app, "switch");
+    assert_eq!(
+        described(&app),
+        ranked,
+        "the order is held after focus leaves"
+    );
     // A replay keeps the dismissal.
     app.flush();
     let mut r = App::open(&dir).unwrap();
@@ -357,4 +377,40 @@ fn the_pane_keeps_its_rules() {
     assert_eq!(r.dismissed, app.dismissed);
     assert!(!r.suggestions.iter().any(|s| s.describe() == first));
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_suggestion_is_offered_once() {
+    // The measures count the suggestions offered (shown in the pane), so
+    // each is recorded once, even after more changes or a replay.
+    let dir = temp("offered");
+    let mut app = open(&dir);
+    typ(&mut app, "Places");
+    app.flush();
+    command(&mut app, "pane suggestions");
+    for p in ["p1", "p2", "p3"] {
+        command(&mut app, &format!("fact {p}(a, x)"));
+        command(&mut app, &format!("fact {p}(b, y)"));
+    }
+    command(&mut app, "fact p1(c, z)");
+    let offered = offered_keys(&app);
+    assert!(!offered.is_empty(), "the test needs suggestions offered");
+    let mut once = offered.clone();
+    once.sort();
+    once.dedup();
+    assert_eq!(offered.len(), once.len(), "offered twice: {offered:?}");
+    app.flush();
+    let mut r = App::open(&dir).unwrap();
+    r.evaluate().unwrap();
+    assert_eq!(offered_keys(&r), offered, "offered again after a replay");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The keys of the suggestions offered, in the order the journal records
+/// them.
+fn offered_keys(app: &App) -> Vec<String> {
+    let offers = app.journal().entries().iter().filter_map(|e| e.body());
+    let offers = offers.filter(|b| b["op"] == "offer");
+    let keys = offers.flat_map(|b| b["keys"].as_array().cloned().unwrap_or_default());
+    keys.map(|k| k.as_str().unwrap().to_string()).collect()
 }
