@@ -2,10 +2,13 @@
 //! nodes find, the suggestions, and what follows from them. Nothing here
 //! changes the journal's content; it is computed from it.
 
-use crate::app::App;
+use crate::app::{App, PaneKind};
+use crate::engine::Engine;
 use crate::outline::Outline;
 use crate::reason::{Suggestion, WorldEval};
 use crate::world::World;
+use format::terms::Term;
+use serde_json::json;
 use std::path::PathBuf;
 
 impl App {
@@ -95,4 +98,76 @@ impl App {
         }
         Ok(())
     }
+}
+
+impl App {
+    /// The engine of the current world, for tests that count evaluations.
+    pub fn current_engine(&mut self) -> Result<&mut Engine, String> {
+        self.reason.engine(0)
+    }
+
+    /// Record in the journal what reasoning showed, when it changes: the
+    /// current world's violations and disagreements, and the suggestions
+    /// shown for the first time. A query and its answer are journal entries
+    /// (§ The journal, rule 6), so the measures report can count them.
+    pub(crate) fn record_observations(&mut self) {
+        self.record_shown();
+        self.record_offers();
+    }
+
+    /// Record what reasoning shows of the current world, when it changes.
+    fn record_shown(&mut self) {
+        let Some(now) = self.reason.eval[0].as_ref().map(WorldEval::observed) else {
+            return;
+        };
+        if !self.session.observed_changed(&now) {
+            return;
+        }
+        let world = self.reason.world().to_string();
+        let body = json!({"violations": now.0, "disagreements": now.1, "world": world});
+        self.write_view("observed", body);
+        self.session.set_observed(now);
+    }
+
+    /// Record the suggestions shown for the first time, while the pane
+    /// shows them.
+    fn record_offers(&mut self) {
+        if !self.session.view.shows(PaneKind::Suggestions) {
+            return;
+        }
+        let new = self.reason.suggestions.unoffered();
+        if new.is_empty() {
+            return;
+        }
+        self.write_view("offer", json!({"keys": new}));
+        self.reason.suggestions.offer(new);
+    }
+
+    /// What adopting an item's claims would raise, computed in a spare
+    /// engine: a preview of adopting it, as a world.
+    pub(crate) fn preview_adoption(&mut self, item: u64) -> Result<String, String> {
+        let claims: Vec<Term> = self.claims_of(item).into_iter().map(|c| c.2).collect();
+        if claims.is_empty() {
+            return Ok("no claims to adopt".into());
+        }
+        let next = self.notebook.entry_count() as u64 + 1;
+        let facts = self.notebook.facts_adopting(next, claims)?;
+        let constraints = self.notebook.outline.constraint_names();
+        let raised = self.reason.raised(&facts, &constraints, next)?;
+        Ok(adoption_preview(&raised))
+    }
+
+    /// Keep the suggestion pane's order while it has focus.
+    pub(crate) fn update_frozen(&mut self) {
+        let focused = self.session.view.focused().kind == PaneKind::Suggestions;
+        self.reason.suggestions.hold_order(focused);
+    }
+}
+
+/// What adopting a claim would raise, as interrogation shows it.
+fn adoption_preview(raised: &[String]) -> String {
+    if raised.is_empty() {
+        return "adopting it raises no violation".into();
+    }
+    format!("adopting it would raise {}", raised.join(", "))
 }

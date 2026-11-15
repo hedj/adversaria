@@ -15,15 +15,14 @@
 //! follow, fold, pane, scope. Counting actions by kind reads these.
 
 use crate::actions::dispatch::{complete_command, in_quotes};
-use crate::engine::Engine;
 use crate::journal::{Error as JournalError, Journal};
 use crate::notebook::{CONTENT, Notebook};
 use crate::outline::{Outline, TOP, TextChange, span_json};
-use crate::reason::{self, WorldEval};
+use crate::reason;
 use crate::reasoning::Reasoning;
 use crate::session::Session;
 use format::record::Entry;
-use format::terms::{self, Term};
+use format::terms::Term;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -909,68 +908,6 @@ impl App {
         }
     }
 
-    /// The engine of the current world, for tests that count evaluations.
-    pub fn current_engine(&mut self) -> Result<&mut Engine, String> {
-        self.reason.engine(0)
-    }
-
-    /// Record in the journal what reasoning showed, when it changes: the
-    /// current world's violations and disagreements, and the suggestions
-    /// shown for the first time. A query and its answer are journal entries
-    /// (§ The journal, rule 6), so the measures report can count them.
-    pub(crate) fn record_observations(&mut self) {
-        self.record_shown();
-        self.record_offers();
-    }
-
-    /// Record what reasoning shows of the current world, when it changes.
-    fn record_shown(&mut self) {
-        let Some(now) = self.reason.eval[0].as_ref().map(WorldEval::observed) else {
-            return;
-        };
-        if !self.session.observed_changed(&now) {
-            return;
-        }
-        let world = self.reason.world().to_string();
-        let body = json!({"violations": now.0, "disagreements": now.1, "world": world});
-        self.write_view("observed", body);
-        self.session.set_observed(now);
-    }
-
-    /// Record the suggestions shown for the first time, while the pane
-    /// shows them.
-    fn record_offers(&mut self) {
-        if !self.session.view.shows(PaneKind::Suggestions) {
-            return;
-        }
-        let new = self.reason.suggestions.unoffered();
-        if new.is_empty() {
-            return;
-        }
-        self.write_view("offer", json!({"keys": new}));
-        self.reason.suggestions.offer(new);
-    }
-
-    /// What adopting an item's claims would raise, computed in a spare
-    /// engine: a preview of adopting it, as a world.
-    pub(crate) fn preview_adoption(&mut self, item: u64) -> Result<String, String> {
-        let claims: Vec<Term> = self.claims_of(item).into_iter().map(|c| c.2).collect();
-        if claims.is_empty() {
-            return Ok("no claims to adopt".into());
-        }
-        let next = self.notebook.entry_count() as u64 + 1;
-        let facts = self.notebook.facts_adopting(next, claims)?;
-        let constraints = self.notebook.outline.constraint_names();
-        let raised = self.reason.raised(&facts, &constraints, next)?;
-        Ok(adoption_preview(&raised))
-    }
-
-    /// Keep the suggestion pane's order while it has focus.
-    pub(crate) fn update_frozen(&mut self) {
-        let focused = self.session.view.focused().kind == PaneKind::Suggestions;
-        self.reason.suggestions.hold_order(focused);
-    }
-
     /// The items whose facts are about an entity: facts with it first.
     pub(crate) fn items_about(&self, entity: &Term) -> Vec<u64> {
         let facts = self
@@ -984,50 +921,6 @@ impl App {
             .collect();
         out.dedup();
         out
-    }
-
-    /// Write an item for a document block, with its citations as facts.
-    /// Write a block last under an item.
-    pub(crate) fn append_block(
-        &mut self,
-        b: &crate::docs::Block,
-        under: u64,
-        origin: u64,
-    ) -> Result<u64, String> {
-        let after = self.notebook.outline.last_child(under);
-        self.write_block(b, Spot { under, after }, origin)
-    }
-
-    pub(crate) fn write_block(
-        &mut self,
-        b: &crate::docs::Block,
-        spot: Spot,
-        import: u64,
-    ) -> Result<u64, String> {
-        let n = b.text.chars().count();
-        let (under, after) = (spot.under, spot.after);
-        let e = self.write_here(
-            "edit",
-            json!({"op": "create", "under": under, "after": after, "add": b.text, "spans": [[0, 0, n]], "style": b.style, "import": import}),
-        )?;
-        if !b.cites.is_empty() {
-            let facts: Vec<serde_json::Value> = b
-                .cites
-                .iter()
-                .map(|k| {
-                    terms::encode(&Term::Compound(
-                        "cites".into(),
-                        vec![Term::Int(e.seq as i64), Term::Atom(k.clone())],
-                    ))
-                    .map_err(|x| x.0)
-                })
-                .collect::<Result<_, _>>()?;
-            self.write_here(
-                "edit",
-                json!({"op": "facts", "item": e.seq, "facts": facts}),
-            )?;
-        }
-        Ok(e.seq)
     }
 
     /// The changes of a document revision, from the supposition on: (entry
@@ -1130,14 +1023,6 @@ fn continuation(text: &str, p: &str) -> String {
     let t = text.to_lowercase();
     let after = &t[t.find(p).unwrap() + p.len()..];
     after.chars().take_while(|c| !c.is_whitespace()).collect()
-}
-
-/// What adopting a claim would raise, as interrogation shows it.
-fn adoption_preview(raised: &[String]) -> String {
-    if raised.is_empty() {
-        return "adopting it raises no violation".into();
-    }
-    format!("adopting it would raise {}", raised.join(", "))
 }
 
 /// The word around a text position: [start, end).

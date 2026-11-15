@@ -7,6 +7,7 @@ use crate::docs::{Block, Losses};
 use crate::notebook::Notebook;
 use crate::outline::Revised;
 use crate::outline::TOP;
+use format::terms::{self, Term};
 use serde_json::json;
 use std::collections::HashSet;
 use std::path::Path;
@@ -58,6 +59,50 @@ impl Document {
 }
 
 impl App {
+    /// Write an item for a document block, with its citations as facts.
+    /// Write a block last under an item.
+    pub(crate) fn append_block(
+        &mut self,
+        b: &Block,
+        under: u64,
+        origin: u64,
+    ) -> Result<u64, String> {
+        let after = self.notebook.outline.last_child(under);
+        self.write_block(b, Spot { under, after }, origin)
+    }
+
+    pub(crate) fn write_block(
+        &mut self,
+        b: &Block,
+        spot: Spot,
+        import: u64,
+    ) -> Result<u64, String> {
+        let n = b.text.chars().count();
+        let (under, after) = (spot.under, spot.after);
+        let e = self.write_here(
+            "edit",
+            json!({"op": "create", "under": under, "after": after, "add": b.text, "spans": [[0, 0, n]], "style": b.style, "import": import}),
+        )?;
+        if !b.cites.is_empty() {
+            let facts: Vec<serde_json::Value> = b
+                .cites
+                .iter()
+                .map(|k| {
+                    terms::encode(&Term::Compound(
+                        "cites".into(),
+                        vec![Term::Int(e.seq as i64), Term::Atom(k.clone())],
+                    ))
+                    .map_err(|x| x.0)
+                })
+                .collect::<Result<_, _>>()?;
+            self.write_here(
+                "edit",
+                json!({"op": "facts", "item": e.seq, "facts": facts}),
+            )?;
+        }
+        Ok(e.seq)
+    }
+
     /// Import a document: its blocks become items, its citations facts, and
     /// what the outline cannot hold is listed as losses. Importing a file of
     /// the same name again is a revision: it opens a world (see `revise`).
