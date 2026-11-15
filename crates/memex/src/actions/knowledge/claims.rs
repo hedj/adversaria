@@ -10,32 +10,32 @@ use serde_json::json;
 
 impl App {
     /// State a claim: a fact, then from and its source.
-    pub(crate) fn cmd_claim(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_claim(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let text = words.join(" ");
         let (fact, source) = split_from(&text).ok_or("claim (that) a fact, from a source")?;
         let t = self.parse_fact(fact)?;
-        self.write_fact(target, &claims(source, t), Some(source))
+        self.write_fact(target, &claims(source, t), Some(source))?;
+        Ok(String::new())
     }
 
     /// Show who else claims the target's claim, who disputes it, its
     /// source and record.
-    pub(crate) fn cmd_interrogate(&mut self, _: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_interrogate(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         if self.claims_of(target).is_empty() {
             return Err("the target states no claim".into());
         }
         self.view.show_claim(target);
         self.write_view("interrogate", json!({}));
-        Ok(())
+        Ok(String::new())
     }
 
     // Adopting.
 
-    pub(crate) fn cmd_adopt(&mut self, _: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_adopt(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         let claims = self.claims_of(target);
         check_adoptable(&claims)?;
         self.write_adoptions(target, claims)?;
-        self.message = "adopted: a belief now, with its source kept".into();
-        Ok(())
+        Ok("adopted: a belief now, with its source kept".into())
     }
 
     /// One adopt entry for each claim, keeping its source.
@@ -54,13 +54,12 @@ impl App {
         Ok(())
     }
 
-    pub(crate) fn cmd_unadopt(&mut self, _: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_unadopt(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         let last = self
             .last_adoption(target)
             .ok_or("the target has no adoption to retract")?;
         self.write_here("retract", json!({"target": last}))?;
-        self.message = format!("adoption {last} retracted");
-        Ok(())
+        Ok(format!("adoption {last} retracted"))
     }
 
     /// An item's last adoption on this branch, if it can still be retracted.
@@ -77,18 +76,16 @@ impl App {
 
     // Suggestions.
 
-    pub(crate) fn cmd_accept(&mut self, words: &[&str], _: u64) -> Result<(), String> {
+    pub(crate) fn cmd_accept(&mut self, words: &[&str], _: u64) -> Result<String, String> {
         let s = self.suggestion(words, "accept")?;
         self.accept(&s)?;
-        self.message = format!("adopted: {}", s.describe());
-        Ok(())
+        Ok(format!("adopted: {}", s.describe()))
     }
 
-    pub(crate) fn cmd_dismiss(&mut self, words: &[&str], _: u64) -> Result<(), String> {
+    pub(crate) fn cmd_dismiss(&mut self, words: &[&str], _: u64) -> Result<String, String> {
         let s = self.suggestion(words, "dismiss")?;
         self.dismiss_suggestion(&s);
-        self.message = format!("dismissed: {}", s.describe());
-        Ok(())
+        Ok(format!("dismissed: {}", s.describe()))
     }
 
     fn dismiss_suggestion(&mut self, s: &Suggestion) {

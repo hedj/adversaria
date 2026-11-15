@@ -6,26 +6,28 @@ use format::terms::{self, Term};
 use serde_json::{Value, json};
 
 impl App {
-    pub(crate) fn cmd_new(&mut self, _: &[&str], target: u64) -> Result<(), String> {
-        self.new_item_after(target)
+    pub(crate) fn cmd_new(&mut self, _: &[&str], target: u64) -> Result<String, String> {
+        self.new_item_after(target)?;
+        Ok(String::new())
     }
 
-    pub(crate) fn cmd_name(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_name(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let n = words.join(" ");
         if n.is_empty() {
             return Err("name (as) a word".into());
         }
         self.write_here("name", json!({"name": n, "item": target}))?;
-        Ok(())
+        Ok(String::new())
     }
 
     /// Delete the word at the cursor, or the target's branch.
-    pub(crate) fn cmd_delete(&mut self, _: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_delete(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         if self.view.in_word() {
-            return self.delete_word(target);
+            self.delete_word(target)?;
+            return Ok(String::new());
         }
         self.write_here("edit", json!({"op": "delete", "item": target}))?;
-        Ok(())
+        Ok(String::new())
     }
 
     fn delete_word(&mut self, item: u64) -> Result<(), String> {
@@ -46,32 +48,34 @@ impl App {
 
     // Moving items.
 
-    pub(crate) fn cmd_indent(&mut self, _: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_indent(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         let under = self
             .outline
             .previous_sibling(target)
             .ok_or("the first item of a list cannot be indented")?;
         self.move_to_end(target, under)?;
         self.open_branch(under);
-        Ok(())
+        Ok(String::new())
     }
 
-    pub(crate) fn cmd_outdent(&mut self, _: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_outdent(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         let p = self
             .outline
             .parent_item(target)
             .ok_or("a top-level item cannot be outdented")?;
-        self.move_item(target, self.outline.parent_or_top(p), Some(p))
+        self.move_item(target, self.outline.parent_or_top(p), Some(p))?;
+        Ok(String::new())
     }
 
-    pub(crate) fn cmd_move(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_move(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let to = self
             .address(words)
             .ok_or("move (after) an item: a number, a name, or the start of its text")?;
         if self.outline.within(to, target) {
             return Err("an item cannot move into its own branch".into());
         }
-        self.move_after(target, to)
+        self.move_after(target, to)?;
+        Ok(String::new())
     }
 
     /// Move an item's branch to follow another item.
@@ -99,19 +103,19 @@ impl App {
 
     // Copying and transcluding.
 
-    pub(crate) fn cmd_copy(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_copy(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let to = self.address(words).ok_or("copy (after) an item")?;
         let text = self.outline.text(target);
         let n = text.chars().count();
         self.create_after(to, &text, json!([[0, 0, n]]))?;
-        Ok(())
+        Ok(String::new())
     }
 
-    pub(crate) fn cmd_transclude(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_transclude(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let from = self.address(words).ok_or("transclude (from) an item")?;
         let seq = self.transclusion_after(from, target)?;
         self.go_to(seq);
-        Ok(())
+        Ok(String::new())
     }
 
     /// A new item after one, showing another's text in place.
@@ -135,7 +139,7 @@ impl App {
 
     // Links.
 
-    pub(crate) fn cmd_link(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_link(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let (addr, kind) = split_as(words);
         let (from, to) = self
             .link_ends(addr, target)
@@ -151,14 +155,13 @@ impl App {
         }
     }
 
-    fn write_link(&mut self, from: u64, to: u64, kind: &str) -> Result<(), String> {
+    fn write_link(&mut self, from: u64, to: u64, kind: &str) -> Result<String, String> {
         let fact = link_fact(kind, from, to)?;
         self.write_here(
             "link",
             json!({"from": from, "to": to, "type": kind, "facts": [fact]}),
         )?;
-        self.message = self.linked(from, to, kind);
-        Ok(())
+        Ok(self.linked(from, to, kind))
     }
 
     fn linked(&self, from: u64, to: u64, kind: &str) -> String {
@@ -166,14 +169,14 @@ impl App {
         format!("linked {} to {} as {kind}", n(from), n(to))
     }
 
-    pub(crate) fn cmd_follow(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_follow(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let k: usize = words.first().and_then(|w| w.parse().ok()).unwrap_or(1);
         let ends = self.outline.neighbours(target);
         let to = *ends
             .get(k.wrapping_sub(1))
             .ok_or(format!("the target has {} links", ends.len()))?;
         self.follow_to(to);
-        Ok(())
+        Ok(String::new())
     }
 
     fn follow_to(&mut self, to: u64) {
@@ -184,30 +187,30 @@ impl App {
 
     // Folds and panes.
 
-    pub(crate) fn cmd_fold(&mut self, _: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_fold(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         self.view.folded.insert(target);
         self.write_view("fold", json!({}));
-        Ok(())
+        Ok(String::new())
     }
 
-    pub(crate) fn cmd_unfold(&mut self, _: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_unfold(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         self.view.folded.remove(&target);
         self.write_view("fold", json!({}));
-        Ok(())
+        Ok(String::new())
     }
 
-    pub(crate) fn cmd_pane(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_pane(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let kind = PaneKind::named(words.first().copied())
             .ok_or("pane (shows) outline, links, or suggestions")?;
         self.view.show_other(kind, target);
         self.write_view("pane", json!({}));
-        Ok(())
+        Ok(String::new())
     }
 
-    pub(crate) fn cmd_switch(&mut self, _: &[&str], _: u64) -> Result<(), String> {
+    pub(crate) fn cmd_switch(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         self.view.switch_focus();
         self.write_view("pane", json!({}));
-        Ok(())
+        Ok(String::new())
     }
 }
 

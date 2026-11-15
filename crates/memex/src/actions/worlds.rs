@@ -5,11 +5,10 @@ use crate::app::{App, Mode};
 use serde_json::{Value, json};
 
 impl App {
-    pub(crate) fn cmd_undo(&mut self, _: &[&str], _: u64) -> Result<(), String> {
+    pub(crate) fn cmd_undo(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let t = self.undoable().ok_or("nothing to undo on this branch")?;
         self.write(self.parent_of(t), "undo", json!({"undoes": t}))?;
-        self.message = format!("undid entry {t}");
-        Ok(())
+        Ok(format!("undid entry {t}"))
     }
 
     /// The entry undo would undo: the last on this branch that changed
@@ -22,21 +21,20 @@ impl App {
         self.entry(seq).and_then(|e| e.parent_seq())
     }
 
-    pub(crate) fn cmd_redo(&mut self, _: &[&str], _: u64) -> Result<(), String> {
+    pub(crate) fn cmd_redo(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let Some(&t) = self.redo.last() else {
             return Err("nothing to redo".into());
         };
         self.write(Some(t), "redo", json!({"redoes": t}))?;
-        self.message = format!("redid entry {t}");
-        Ok(())
+        Ok(format!("redid entry {t}"))
     }
 
     /// Ask before retracting an entry, listing what depends on it.
-    pub(crate) fn cmd_retract(&mut self, words: &[&str], _: u64) -> Result<(), String> {
+    pub(crate) fn cmd_retract(&mut self, words: &[&str], _: u64) -> Result<String, String> {
         let t = entry_number(words).ok_or("retract (entry) seq")?;
         let dependents = self.retractable(t)?;
         self.ask_retract(t, dependents);
-        Ok(())
+        Ok(String::new())
     }
 
     fn ask_retract(&mut self, target: u64, dependents: Vec<u64>) {
@@ -44,30 +42,28 @@ impl App {
         self.mode = Mode::ConfirmRetract { target, dependents };
     }
 
-    pub(crate) fn cmd_suppose(&mut self, words: &[&str], _: u64) -> Result<(), String> {
+    pub(crate) fn cmd_suppose(&mut self, words: &[&str], _: u64) -> Result<String, String> {
         let n = words.join(" ");
         if n.is_empty() {
             return Err("suppose (that) a name for the world".into());
         }
         self.write_here("suppose", json!({"name": n}))?;
-        Ok(())
+        Ok(String::new())
     }
 
     /// Return to the actual world as it was; the supposition stays in the
     /// journal.
-    pub(crate) fn cmd_close(&mut self, _: &[&str], _: u64) -> Result<(), String> {
+    pub(crate) fn cmd_close(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let (name, actual) = self.supposed()?;
         self.leave_world(actual, "close")?;
-        self.message = format!("closed “{name}”; it stays in the journal");
-        Ok(())
+        Ok(format!("closed “{name}”; it stays in the journal"))
     }
 
     /// Make the supposed world the actual one.
-    pub(crate) fn cmd_commit(&mut self, _: &[&str], _: u64) -> Result<(), String> {
+    pub(crate) fn cmd_commit(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let (name, _) = self.supposed()?;
         self.leave_world(self.tip, "commit")?;
-        self.message = format!("“{name}” is now the actual world");
-        Ok(())
+        Ok(format!("“{name}” is now the actual world"))
     }
 
     /// The open supposition's name, and the actual world's head it left.

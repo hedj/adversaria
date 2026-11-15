@@ -1128,7 +1128,7 @@ impl App {
     /// contradicts (see `direct_conflicts`), by evaluating the world with
     /// it added in the preview engine; retract them; then state the fact on
     /// the item that held the first of them, or on `target` if none.
-    pub(crate) fn set_fact(&mut self, fact: &Term, target: u64) -> Result<(), String> {
+    pub(crate) fn set_fact(&mut self, fact: &Term, target: u64) -> Result<String, String> {
         let mut facts = self.facts_at(self.tip)?;
         facts.extend(crate::world::outline_facts(&self.outline));
         let next = self.journal.entries().len() as u64 + 1;
@@ -1177,8 +1177,7 @@ impl App {
         if !left.is_empty() {
             m.push_str(&format!("; left for you: {}", left.join(", ")));
         }
-        self.message = m;
-        Ok(())
+        Ok(m)
     }
 
     /// Where a fact entry's fact is stated, in the actual world: its item's
@@ -1460,7 +1459,7 @@ impl App {
     /// Import a document: its blocks become items, its citations facts, and
     /// what the outline cannot hold is listed as losses. Importing a file of
     /// the same name again is a revision: it opens a world (see `revise`).
-    pub(crate) fn import_document(&mut self, file: &str) -> Result<(), String> {
+    pub(crate) fn import_document(&mut self, file: &str) -> Result<String, String> {
         let path = std::path::Path::new(file);
         let (blocks, losses, _) = crate::docs::read(path)?;
         let bytes = std::fs::read(path).map_err(|e| format!("{file}: {e}"))?;
@@ -1503,7 +1502,7 @@ impl App {
             parents.push(id);
             last_at.push(None);
         }
-        self.message = format!(
+        Ok(format!(
             "imported {name}: {} items; losses: {}",
             blocks.len(),
             if lost.is_empty() {
@@ -1511,8 +1510,7 @@ impl App {
             } else {
                 lost.join(", ")
             }
-        );
-        Ok(())
+        ))
     }
 
     /// A revised document: align its blocks with the items of the earlier
@@ -1525,7 +1523,7 @@ impl App {
         blocks: &[crate::docs::Block],
         earlier: &[u64],
         losses: &crate::docs::Losses,
-    ) -> Result<(), String> {
+    ) -> Result<String, String> {
         let old: Vec<u64> = self
             .outline
             .in_order()
@@ -1620,10 +1618,9 @@ impl App {
                 self.write_here("edit", json!({"op": "delete", "item": o}))?;
             }
         }
-        self.message = format!(
+        Ok(format!(
             "revision of {name}: the changes are in a supposed world; retract any with retract N, then commit or close"
-        );
-        Ok(())
+        ))
     }
 
     /// The changes of a document revision, from the supposition on: (entry
@@ -1666,7 +1663,7 @@ impl App {
     /// Export a section (an item and its branch), or the whole outline, as a
     /// document. Its metadata lists the hashes of the entries its text came
     /// from, so a published text traces back to the record.
-    pub(crate) fn export(&mut self, file: &str, section: Option<u64>) -> Result<(), String> {
+    pub(crate) fn export(&mut self, file: &str, section: Option<u64>) -> Result<String, String> {
         let roots: Vec<u64> = match section {
             Some(s) => vec![s],
             None => self.outline.top.clone(),
@@ -1716,17 +1713,16 @@ impl App {
             "export",
             json!({"file": name, "items": blocks.len(), "sources": hashes.len()}),
         );
-        self.message = format!(
+        Ok(format!(
             "exported {} items to {name}, citing {} source entries",
             blocks.len(),
             hashes.len()
-        );
-        Ok(())
+        ))
     }
 
     /// Import results: an exchange file of values with their provenance (W3C
     /// PROV terms), as claims whose source is the analysis.
-    pub(crate) fn import_results(&mut self, file: &str) -> Result<(), String> {
+    pub(crate) fn import_results(&mut self, file: &str) -> Result<String, String> {
         let path = std::path::Path::new(file);
         let bytes = std::fs::read(path).map_err(|e| format!("{file}: {e}"))?;
         let v: serde_json::Value =
@@ -1790,8 +1786,7 @@ impl App {
             );
             self.write_here("edit", json!({"op": "facts", "item": id, "source": source, "facts": [terms::encode(&fact).map_err(|e| e.0)?]}))?;
         }
-        self.message = format!("imported the results of {source}");
-        Ok(())
+        Ok(format!("imported the results of {source}"))
     }
 
     /// Items whose results rest on input files that changed since: each with

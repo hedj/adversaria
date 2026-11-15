@@ -13,7 +13,9 @@ enum Slot {
 
 /// A command's handler, given the words after the command's name and the
 /// target item. A command that asks a question sets `App::mode`.
-type Handler = fn(&mut App, &[&str], u64) -> Result<(), String>;
+/// A command: what it does to the memex, and its reply for the message
+/// line; an empty reply leaves the message as it was.
+type Handler = fn(&mut App, &[&str], u64) -> Result<String, String>;
 
 pub struct Command {
     pub name: &'static str,
@@ -287,18 +289,18 @@ pub const COMMANDS: &[Command] = &[
 ];
 
 impl App {
-    pub(crate) fn cmd_help(&mut self, _: &[&str], _: u64) -> Result<(), String> {
+    pub(crate) fn cmd_help(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         self.message = COMMANDS
             .iter()
             .map(|c| c.name)
             .collect::<Vec<_>>()
             .join(" · ");
-        Ok(())
+        Ok(String::new())
     }
 
-    pub(crate) fn cmd_quit(&mut self, _: &[&str], _: u64) -> Result<(), String> {
+    pub(crate) fn cmd_quit(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         self.session.quit = true;
-        Ok(())
+        Ok(String::new())
     }
 
     pub(crate) fn run_simple(&mut self, name: &str) {
@@ -330,11 +332,14 @@ impl App {
         let Some((cmd, words)) = parse_line(line)? else {
             return Ok(Mode::Normal);
         };
-        self.run(cmd, &words)?;
+        let reply = self.run(cmd, &words)?;
+        if !reply.is_empty() {
+            self.message = reply;
+        }
         Ok(self.next_mode())
     }
 
-    fn run(&mut self, cmd: &Command, words: &[&str]) -> Result<(), String> {
+    fn run(&mut self, cmd: &Command, words: &[&str]) -> Result<String, String> {
         let target = self.target_for(cmd)?;
         (cmd.run)(self, words, target)
     }

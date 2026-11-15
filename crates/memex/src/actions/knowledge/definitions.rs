@@ -8,24 +8,24 @@ use format::terms::Term;
 use serde_json::{Value, json};
 
 impl App {
-    pub(crate) fn cmd_fact(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_fact(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let t = self.parse_fact(&words.join(" "))?;
-        self.write_fact(target, &t, None)
+        self.write_fact(target, &t, None)?;
+        Ok(String::new())
     }
 
     /// State a fact, retracting the beliefs it directly contradicts.
-    pub(crate) fn cmd_set(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_set(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let t = self.parse_fact(&words.join(" "))?;
         self.set_fact(&t, target)
     }
 
     // Rules.
 
-    pub(crate) fn cmd_rule(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_rule(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let text = words.join(" ");
         let pi = self.add_rule(text.trim(), target)?;
-        self.message = format!("rule {pi} kept");
-        Ok(())
+        Ok(format!("rule {pi} kept"))
     }
 
     /// Parse, check and keep a rule; its name and arity.
@@ -73,7 +73,7 @@ impl App {
 
     // Constraints.
 
-    pub(crate) fn cmd_constraint(&mut self, words: &[&str], _: u64) -> Result<(), String> {
+    pub(crate) fn cmd_constraint(&mut self, words: &[&str], _: u64) -> Result<String, String> {
         let text = words.join(" ");
         let (name, rule) = text
             .split_once(": ")
@@ -82,8 +82,9 @@ impl App {
         let body = self.parse_denial(rule)?;
         let vars = self.vet_constraint(&body)?;
         self.keep_constraint(name, rule, vars, body)?;
-        self.message = format!("constraint {name} kept: it fires on a planted violation");
-        Ok(())
+        Ok(format!(
+            "constraint {name} kept: it fires on a planted violation"
+        ))
     }
 
     /// The body of a denial, false :- Body.
@@ -120,14 +121,15 @@ impl App {
 
     // Derived text.
 
-    pub(crate) fn cmd_derive(&mut self, words: &[&str], target: u64) -> Result<(), String> {
+    pub(crate) fn cmd_derive(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let text = words.join(" ");
         let (template, goal) = text
             .split_once(" where ")
             .ok_or("derive (text) a template with {Var}, where a goal")?;
         let (g, names) = self.parse_term(goal.trim().trim_end_matches('.'), "not a Prolog goal")?;
         self.vet_definition(&g, "not derived")?;
-        self.write_derive(target, template.trim(), &names, g)
+        self.write_derive(target, template.trim(), &names, g)?;
+        Ok(String::new())
     }
 
     fn write_derive(
