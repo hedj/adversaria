@@ -54,6 +54,11 @@ impl Solution {
     }
 }
 
+/// A node's solutions: those resting on beliefs alone, and the others.
+fn findings(node: &Term) -> (Vec<Solution>, Vec<Solution>) {
+    solutions(node).into_iter().partition(|s| s.on_beliefs())
+}
+
 /// How many violations of a constraint there are, if there are any:
 /// "1 violation of NAME", "2 violations of NAME".
 pub(crate) fn violations_of(n: usize, name: &str) -> Option<String> {
@@ -69,6 +74,18 @@ pub(crate) fn raised_by(node: &Term, seq: u64) -> usize {
 }
 
 impl ConstraintEval {
+    /// What a constraint's node found: the solutions resting on beliefs
+    /// alone are violations, the others disagreements.
+    pub(crate) fn of(seq: u64, constraint: Constraint, node: &Term) -> ConstraintEval {
+        let (violations, disagreements) = findings(node);
+        ConstraintEval {
+            seq,
+            constraint,
+            violations,
+            disagreements,
+        }
+    }
+
     /// Read a constraint's node from an engine the world is loaded in.
     pub fn read(engine: &mut Engine, seq: u64, c: &Constraint) -> Result<Self, String> {
         let v = engine.node(seq).map_err(|e| e.to_string())?;

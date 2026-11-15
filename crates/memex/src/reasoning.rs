@@ -3,8 +3,10 @@
 //! (docs/structure.md § The code's structure).
 
 use crate::engine::Engine;
+use crate::notebook::Trial;
 use crate::notebook::strings;
-use crate::reason::{Suggestion, WorldEval, raised_by, violations_of};
+use crate::outline::Constraint;
+use crate::reason::{ConstraintEval, Suggestion, WorldEval, raised_by, violations_of};
 use crate::world::World;
 use format::record::Entry;
 use format::terms::Term;
@@ -100,6 +102,18 @@ impl Reasoning {
         Ok(raised.collect())
     }
 
+    /// What each constraint finds, with a trial's facts, in the spare
+    /// engine.
+    pub(crate) fn try_out(&mut self, trial: &Trial) -> Result<Vec<ConstraintEval>, String> {
+        let engine = self.engine(2)?;
+        engine.sync(&trial.facts).map_err(|e| e.to_string())?;
+        let found = trial
+            .constraints
+            .iter()
+            .filter_map(|c| evaluated_in(engine, c));
+        Ok(found.collect())
+    }
+
     /// Whether the current world has an engine and facts.
     pub(crate) fn has_facts(&self) -> bool {
         let facts = self.eval[0].as_ref().is_some_and(|e| !e.facts.is_empty());
@@ -112,6 +126,15 @@ impl Reasoning {
 fn raised_in(engine: &mut Engine, constraint: &(u64, String), by: u64) -> Option<String> {
     let node = engine.node(constraint.0).ok()?;
     violations_of(raised_by(&node, by), &constraint.1)
+}
+
+/// What a constraint, by its entry, finds in an engine, if it can say.
+fn evaluated_in(
+    engine: &mut Engine,
+    (seq, constraint): &(u64, Constraint),
+) -> Option<ConstraintEval> {
+    let node = engine.node(*seq).ok()?;
+    Some(ConstraintEval::of(*seq, constraint.clone(), &node))
 }
 
 /// The suggestions for the current world, and what the user has done with

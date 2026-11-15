@@ -18,8 +18,8 @@ use crate::actions::dispatch::{complete_command, in_quotes};
 use crate::engine::Engine;
 use crate::journal::{Error as JournalError, Journal};
 use crate::notebook::{CONTENT, Notebook};
-use crate::outline::{Constraint, Outline, TOP, TextChange, span_json};
-use crate::reason::{self, Prov, WorldEval, solutions};
+use crate::outline::{Outline, TOP, TextChange, span_json};
+use crate::reason::{self, Prov, WorldEval};
 use crate::reasoning::Reasoning;
 use crate::session::Session;
 use format::record::Entry;
@@ -951,53 +951,45 @@ impl App {
     /// it added in the preview engine; retract them; then state the fact on
     /// the item that held the first of them, or on `target` if none.
     pub(crate) fn set_fact(&mut self, fact: &Term, target: u64) -> Result<String, String> {
-        let mut facts = self.notebook.facts_at(self.notebook.tip)?;
-        facts.extend(crate::world::outline_facts(&self.notebook.outline));
-        let next = self.notebook.journal.entries().len() as u64 + 1;
-        facts.push((next, fact.clone()));
-        let constraints: Vec<(u64, String, String)> = self
-            .notebook
-            .outline
-            .constraints
-            .iter()
-            .map(|(s, c)| (*s, c.name.clone(), c.rule.clone()))
-            .collect();
-        let engine = self.reason.engine(2)?;
-        engine.sync(&facts).map_err(|e| e.to_string())?;
-        let mut evals = Vec::new();
-        for (seq, name, rule) in constraints {
-            let Ok(v) = engine.node(seq) else { continue };
-            let (violations, disagreements): (Vec<_>, Vec<_>) = solutions(&v)
-                .into_iter()
-                .partition(|s| s.prov.iter().all(|p| matches!(p, Prov::Belief(_))));
-            evals.push(reason::ConstraintEval {
-                seq,
-                constraint: Constraint { name, rule },
-                violations,
-                disagreements,
-            });
-        }
-        let (mut replaced, left) = direct_conflicts(&evals, next);
+        let (replaced, left) = self.replaced_by(fact)?;
+        let item = self.set_item(&replaced, target)?;
+        let said = self.replaced_said(&replaced, item);
+        self.retract_all(&replaced)?;
+        self.write_fact(item, fact, None)?;
+        Ok(with_left(said, &left))
+    }
+
+    /// The beliefs a fact directly contradicts that can be retracted, and
+    /// the violations it leaves, tried in the spare engine.
+    fn replaced_by(&mut self, fact: &Term) -> Result<(Vec<u64>, Vec<String>), String> {
+        let trial = self.notebook.trial(fact)?;
+        let evals = self.reason.try_out(&trial)?;
+        let (mut replaced, left) = direct_conflicts(&evals, trial.by);
         replaced.retain(|t| self.retractable(*t).is_ok());
-        let item = replaced
-            .iter()
-            .find_map(|t| self.notebook.outline.fact_item.get(t).copied())
-            .unwrap_or(target);
+        Ok((replaced, left))
+    }
+
+    /// The item a fact goes on: that of the first fact it replaces, else
+    /// the target.
+    fn set_item(&self, replaced: &[u64], target: u64) -> Result<u64, String> {
+        let on = |t: &u64| self.notebook.outline.fact_item.get(t).copied();
+        let item = replaced.iter().find_map(on).unwrap_or(target);
         if item == TOP {
             return Err("there is no item to put the fact on".into());
         }
-        let places: Vec<String> = replaced.iter().map(|t| self.fact_place(*t)).collect();
-        self.retract_all(&replaced)?;
-        self.write_fact(item, fact, None)?;
-        let m = if places.is_empty() {
-            format!(
+        Ok(item)
+    }
+
+    /// What set says it replaced, before it does.
+    fn replaced_said(&self, replaced: &[u64], item: u64) -> String {
+        if replaced.is_empty() {
+            return format!(
                 "set at {}; nothing replaced",
                 self.notebook.outline.number(item)
-            )
-        } else {
-            format!("set; replaced the fact at {}", places.join(", "))
-        };
-        Ok(with_left(m, &left))
+            );
+        }
+        let places: Vec<String> = replaced.iter().map(|t| self.fact_place(*t)).collect();
+        format!("set; replaced the fact at {}", places.join(", "))
     }
 
     /// Where a fact entry's fact is stated, in the actual world: its item's
@@ -1393,6 +1385,7 @@ pub(crate) fn word_at(text: &[char], pos: usize) -> (usize, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::outline::Constraint;
     use crate::reason::{ConstraintEval, Solution, Suggestion};
 
     /// A constraint, by name, violated once on each of these sets of

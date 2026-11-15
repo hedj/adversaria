@@ -4,7 +4,7 @@
 
 use crate::docs::Quote;
 use crate::journal::{Error as JournalError, Journal};
-use crate::outline::Outline;
+use crate::outline::{Constraint, Outline};
 use format::record::Entry;
 use format::terms::Term;
 use serde_json::{Value, json};
@@ -54,6 +54,15 @@ fn input_changed(base: &Path, input: &Value) -> bool {
     let bytes = regular.then(|| std::fs::read(&path).ok()).flatten();
     let now = bytes.map(|x| format::record::sha256_hex(&x));
     now.as_deref() != input["sha256"].as_str()
+}
+
+/// What a fact is tried against: the facts of the world at the tip, the
+/// outline's own and the fact, stated by the next entry, `by`; and the
+/// constraints, by their entries.
+pub(crate) struct Trial {
+    pub(crate) facts: Vec<(u64, Term)>,
+    pub(crate) constraints: Vec<(u64, Constraint)>,
+    pub(crate) by: u64,
 }
 
 /// The entry a retract entry retracts.
@@ -208,6 +217,30 @@ impl Notebook {
         let of = |b: &Value| b["format"] == "document" && b["file"] == name;
         let imports = path.filter(|e| e.kind() == "import" && e.body().is_some_and(of));
         imports.map(|e| e.seq).collect()
+    }
+
+    /// The sequence number the next entry will have.
+    pub(crate) fn next_seq(&self) -> u64 {
+        self.entry_count() as u64 + 1
+    }
+
+    /// A fact to try against the world at the tip.
+    pub(crate) fn trial(&self, fact: &Term) -> Result<Trial, String> {
+        let by = self.next_seq();
+        let mut facts = self.facts_at(self.tip)?;
+        facts.extend(crate::world::outline_facts(&self.outline));
+        facts.push((by, fact.clone()));
+        let constraints = self
+            .outline
+            .constraints
+            .iter()
+            .map(|(s, c)| (*s, c.clone()))
+            .collect();
+        Ok(Trial {
+            facts,
+            constraints,
+            by,
+        })
     }
 
     /// The facts stated on an item, in the world at the tip.
