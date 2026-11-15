@@ -42,11 +42,12 @@ fn an_editing_key_clears_the_message() {
 }
 
 #[test]
-fn down_at_the_last_item_stays() {
+fn down_at_the_last_item_stays_there_at_the_end_of_its_text() {
     let mut r = Room::new("last");
     r.items(&["one", "two"]);
-    r.tap(&[Key::Down]);
-    assert_eq!(r.here(), "two");
+    r.tap(&[Key::Home, Key::Down]);
+    r.typ("!");
+    assert_eq!(r.here(), "two!");
 }
 
 #[test]

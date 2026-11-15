@@ -671,15 +671,16 @@ impl App {
         self.session.report(made);
     }
 
-    /// Up or Down: the cursor to the item shown above or below; from no
-    /// item, to the first.
+    /// Up or Down: the cursor to the item shown above or below, or again
+    /// to the first or last, its text cursor at the end; from no item, to
+    /// the first.
     fn move_line(&mut self, up: bool) {
         self.flush_text();
         let rows = self.visible();
         let at = rows.iter().position(|(id, _)| *id == self.cursor());
         let to = match at {
             Some(i) if up => i.saturating_sub(1),
-            Some(i) => i + 1,
+            Some(i) => (i + 1).min(rows.len().saturating_sub(1)),
             None => 0,
         };
         if let Some((id, _)) = rows.get(to) {
