@@ -76,3 +76,15 @@ fn right_at_the_end_of_the_text_stays() {
     r.typ("X");
     assert_eq!(r.here(), "abXc");
 }
+
+#[test]
+fn the_top_bar_names_the_room_its_world_its_entries_and_the_pane() {
+    let r = Room::new("top");
+    let top = r.lines().remove(0);
+    let room = r.app.journal().room();
+    let left = format!("room {room}   world actual   journal 1");
+    assert!(
+        top.starts_with(&left) && top.trim_end().ends_with("pane 1 of 2"),
+        "{top}"
+    );
+}
