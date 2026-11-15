@@ -30,9 +30,65 @@ pub(crate) fn strings(list: &Value) -> Vec<String> {
     items.filter_map(|x| x.as_str().map(String::from)).collect()
 }
 
-/// An outline replayed, the name of its world, and the entries that no
-/// longer applied.
-pub(crate) type Replayed = (Outline, String, Vec<u64>);
+/// The entry a retract entry retracts.
+fn target(e: &Entry) -> Option<u64> {
+    e.body().and_then(|b| b["target"].as_u64())
+}
+
+/// The entries from the root to a head, oldest first, and those they
+/// retract.
+pub(crate) struct Branch<'a> {
+    pub(crate) entries: Vec<&'a Entry>,
+    retracted: HashSet<u64>,
+}
+
+impl<'a> Branch<'a> {
+    fn new(entries: Vec<&'a Entry>) -> Branch<'a> {
+        let retracts = entries.iter().filter(|e| e.kind() == "retract");
+        let retracted = retracts.filter_map(|e| target(e)).collect();
+        Branch { entries, retracted }
+    }
+
+    pub(crate) fn retracts(&self, seq: u64) -> bool {
+        self.retracted.contains(&seq)
+    }
+
+    /// The edits after an entry, each with whether the branch retracts it.
+    fn edits_after(&self, seq: u64) -> Vec<(&'a Entry, bool)> {
+        let edits = self.entries.iter().filter(|e| e.kind() == "edit");
+        let after = edits.filter(|e| e.seq > seq);
+        after.map(|e| (*e, self.retracts(e.seq))).collect()
+    }
+
+    /// The content entries the branch keeps, with their bodies; `skip` is
+    /// left out as if retracted.
+    fn content(&self, skip: Option<u64>) -> Vec<(&'a Entry, &'a Value)> {
+        let kept = |e: &&&Entry| !self.retracts(e.seq) && Some(e.seq) != skip;
+        let content = self.entries.iter().filter(|e| CONTENT.contains(&e.kind()));
+        content
+            .filter(kept)
+            .filter_map(|e| Some((*e, e.body()?)))
+            .collect()
+    }
+}
+
+/// An outline replayed, and the entries that no longer applied to it.
+#[derive(Default)]
+pub(crate) struct Replayed {
+    pub(crate) outline: Outline,
+    pub(crate) failed: Vec<u64>,
+}
+
+impl Replayed {
+    /// Apply a content entry; one that changes nothing has failed, unless
+    /// it only states facts.
+    fn apply(&mut self, e: &Entry, b: &Value) {
+        let applied = self.outline.apply(e.seq, e.kind(), b);
+        if !applied && !matches!(e.kind(), "suppose" | "adopt" | "import") {
+            self.failed.push(e.seq);
+        }
+    }
+}
 
 impl Notebook {
     /// Open a journal directory, writing its first entry if it is new. The
@@ -84,36 +140,22 @@ impl Notebook {
         out
     }
 
+    /// The branch from the root to a head.
+    pub(crate) fn branch(&self, head: u64) -> Branch<'_> {
+        Branch::new(self.path(head))
+    }
+
     /// Replay the content of a world, leaving out `skip`.
     pub(crate) fn replay(&self, tip: u64, skip: Option<u64>) -> Replayed {
-        let path = self.path(tip);
-        let mut retracted: HashSet<u64> = path
-            .iter()
-            .filter(|e| e.kind() == "retract")
-            .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
-            .collect();
-        retracted.extend(skip);
-        let mut o = Outline::default();
-        let mut world = "actual".to_string();
-        let mut failed = Vec::new();
-        for e in path {
-            if !CONTENT.contains(&e.kind()) || retracted.contains(&e.seq) {
-                continue;
-            }
-            let Some(b) = &e.body() else { continue };
-            if e.kind() == "suppose" {
-                world = b["name"].as_str().unwrap_or("supposed").to_string();
-            }
-            if !o.apply(e.seq, e.kind(), b) && !matches!(e.kind(), "suppose" | "adopt" | "import") {
-                failed.push(e.seq);
-            }
+        let mut out = Replayed::default();
+        for (e, b) in self.branch(tip).content(skip) {
+            out.apply(e, b);
         }
-        (o, world, failed)
+        out
     }
 
     fn rebuild(&mut self) {
-        let (o, _, _) = self.replay(self.tip, None);
-        self.outline = o;
+        self.outline = self.outline_at(self.tip);
     }
 
     /// The facts stated in the world whose head is an entry.
@@ -123,26 +165,23 @@ impl Notebook {
 
     /// The outline of another world, by its head.
     pub fn outline_at(&self, head: u64) -> Outline {
-        self.replay(head, None).0
+        self.replay(head, None).outline
     }
 
     /// The Wikidata import in a world: the last import entry on its path,
     /// not retracted, and the file its blob is in.
-    pub(crate) fn import_on(&self, head: u64) -> Option<(u64, std::path::PathBuf)> {
-        let path = self.path(head);
-        let retracted: HashSet<u64> = path
-            .iter()
-            .filter(|e| e.kind() == "retract")
-            .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
-            .collect();
-        path.iter()
-            .rev()
-            .filter(|e| e.kind() == "import" && !retracted.contains(&e.seq))
-            .find_map(|e| {
-                let b = e.body()?;
-                let blob = b["blob"].as_str()?;
-                (b["source"] == "Wikidata").then(|| (e.seq, self.blob(blob)))
-            })
+    pub(crate) fn import_on(&self, head: u64) -> Option<(u64, PathBuf)> {
+        let branch = self.branch(head);
+        let imports = branch.entries.iter().rev().filter(|e| e.kind() == "import");
+        let kept = imports.filter(|e| !branch.retracts(e.seq));
+        kept.into_iter().find_map(|e| self.wikidata_blob(e))
+    }
+
+    /// The entry and the blob of a Wikidata import.
+    fn wikidata_blob(&self, e: &Entry) -> Option<(u64, PathBuf)> {
+        let b = e.body()?;
+        let blob = b["blob"].as_str()?;
+        (b["source"] == "Wikidata").then(|| (e.seq, self.blob(blob)))
     }
 
     /// Copy a file into blobs/, named by its SHA-256; return the hash.
@@ -174,6 +213,36 @@ impl Notebook {
         let source = crate::docs::plain_text(&self.blob(&blob), fmt)?;
         let span = self.outline.text(item);
         Ok(Quote { span, source, blob })
+    }
+
+    /// The edits of the world at the tip since the actual world it was
+    /// sprouted from, at its head: each entry, what it does, and whether
+    /// it is retracted.
+    pub fn changes_since(&self, actual_head: u64) -> Vec<(u64, String, bool)> {
+        let edits = self.branch(self.tip).edits_after(actual_head);
+        let actual = self.outline_at(actual_head);
+        edits
+            .into_iter()
+            .filter_map(|(e, gone)| Some((e.seq, self.change(e, &actual)?, gone)))
+            .collect()
+    }
+
+    /// What an edit does, beside the actual outline: an item changed,
+    /// added or deleted.
+    fn change(&self, e: &Entry, actual: &Outline) -> Option<String> {
+        let b = e.body()?;
+        let item = b["item"].as_u64().unwrap_or(e.seq);
+        let was = || format!("{}: “{}”", actual.number(item), actual.text(item));
+        match b["op"].as_str()? {
+            "text" => Some(format!(
+                "changed {} → “{}”",
+                was(),
+                self.outline_at(e.seq).text(item)
+            )),
+            "create" => Some(format!("added: “{}”", b["add"].as_str().unwrap_or(""))),
+            "delete" => Some(format!("deleted {}", was())),
+            _ => None,
+        }
     }
 
     /// The order of the items before an entry is applied, if it may remove

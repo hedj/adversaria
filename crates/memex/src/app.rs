@@ -1421,38 +1421,10 @@ impl App {
     /// The changes of a document revision, from the supposition on: (entry
     /// seq, what it does, retracted).
     pub fn revision_changes(&self) -> Vec<(u64, String, bool)> {
-        let Some(s) = &self.reason.supposition else {
-            return vec![];
-        };
-        let path = self.notebook.path(self.notebook.tip);
-        let retracted: HashSet<u64> = path
-            .iter()
-            .filter(|e| e.kind() == "retract")
-            .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
-            .collect();
-        let actual = self.notebook.outline_at(s.actual);
-        let mut out = Vec::new();
-        for e in path
-            .iter()
-            .filter(|e| e.seq > s.actual && e.kind() == "edit")
-        {
-            let Some(b) = &e.body() else { continue };
-            let item = b["item"].as_u64().unwrap_or(e.seq);
-            let num = |o: &Outline| o.number(item);
-            let what = match b["op"].as_str() {
-                Some("text") => format!(
-                    "changed {}: “{}” → “{}”",
-                    num(&actual),
-                    actual.text(item),
-                    self.notebook.outline_at(e.seq).text(item)
-                ),
-                Some("create") => format!("added: “{}”", b["add"].as_str().unwrap_or("")),
-                Some("delete") => format!("deleted {}: “{}”", num(&actual), actual.text(item)),
-                _ => continue,
-            };
-            out.push((e.seq, what, retracted.contains(&e.seq)));
+        match &self.reason.supposition {
+            Some(s) => self.notebook.changes_since(s.actual),
+            None => vec![],
         }
-        out
     }
 
     /// Export a section (an item and its branch), or the whole outline, as a
@@ -1779,22 +1751,20 @@ impl App {
     /// Check that an entry can be retracted; return the entries that depend
     /// on it: those that would no longer apply without it.
     pub fn retractable(&self, t: u64) -> Result<Vec<u64>, String> {
-        let path = self.notebook.path(self.notebook.tip);
-        let e = path
+        let branch = self.notebook.branch(self.notebook.tip);
+        let e = branch
+            .entries
             .iter()
             .find(|e| e.seq == t)
             .ok_or(format!("entry {t} is not in this world"))?;
         if t == 1 || !CONTENT.contains(&e.kind()) {
             return Err(format!("entry {t} ({}) cannot be retracted", e.kind()));
         }
-        let already = path.iter().any(|x| {
-            x.kind() == "retract" && x.body().and_then(|b| b["target"].as_u64()) == Some(t)
-        });
-        if already {
+        if branch.retracts(t) {
             return Err(format!("entry {t} is already retracted"));
         }
-        let (_, _, with) = self.notebook.replay(self.notebook.tip, None);
-        let (_, _, without) = self.notebook.replay(self.notebook.tip, Some(t));
+        let with = self.notebook.replay(self.notebook.tip, None).failed;
+        let without = self.notebook.replay(self.notebook.tip, Some(t)).failed;
         Ok(without
             .into_iter()
             .filter(|s| !with.contains(s) && *s != t)
