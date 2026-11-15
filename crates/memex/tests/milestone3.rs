@@ -150,7 +150,7 @@ fn scene_one_as_written() {
 
     release(&mut app, Quasi::LeapForward);
     assert_eq!(app.outline.text(app.cursor()), "DRAKON");
-    assert_eq!(app.mode, Mode::Normal);
+    assert_eq!(app.session.mode, Mode::Normal);
     let after = app.journal().entries();
     assert_eq!(after.len(), before + 1, "one entry, for the Leap");
     let leap = after.last().unwrap();
@@ -190,7 +190,7 @@ fn leap_recognition_listing_latching_and_repeat() {
     let mut app = essay(&dir);
     hold(&mut app, Quasi::LeapForward, "sour");
     tap(&mut app, Key::Escape);
-    match &app.mode {
+    match &app.session.mode {
         Mode::Quasi(a) => assert_eq!(
             a.input, "source",
             "recognition completes to the shared word"
@@ -201,7 +201,7 @@ fn leap_recognition_listing_latching_and_repeat() {
     assert_eq!(app.outline.text(app.cursor()), "Sources");
     // A tap latches; typing then Enter goes.
     tap(&mut app, Key::Quasi(Quasi::LeapBack));
-    assert!(matches!(&app.mode, Mode::Quasi(a) if a.latched));
+    assert!(matches!(&app.session.mode, Mode::Quasi(a) if a.latched));
     typ(&mut app, "energia");
     tap(&mut app, Key::Enter);
     assert!(app.outline.text(app.cursor()).starts_with("Energia"));
@@ -241,7 +241,7 @@ fn command_guide_words_recognition_and_help() {
     assert_eq!(app.guided("move 3"), "move (after) 3");
     hold(&mut app, Quasi::Command, "li");
     tap(&mut app, Key::Escape);
-    match &app.mode {
+    match &app.session.mode {
         Mode::Quasi(a) => assert_eq!(a.input, "link "),
         m => panic!("{m:?}"),
     }
@@ -250,14 +250,14 @@ fn command_guide_words_recognition_and_help() {
     assert!(shows(&s, "link (from) … (to) … (as) …"), "{}", s.join("\n"));
     release(&mut app, Quasi::Command);
     assert!(
-        !app.message.is_empty(),
+        !app.session.message.is_empty(),
         "an incomplete link says what it needs"
     );
     // An unknown command writes nothing.
     let n = app.journal().entries().len();
     command(&mut app, "frobnicate");
     assert_eq!(app.journal().entries().len(), n);
-    assert!(app.message.contains("no command"));
+    assert!(app.session.message.contains("no command"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -280,7 +280,7 @@ fn undo_redo_and_branches() {
     command(&mut app, "redo");
     assert_eq!(app.outline.text(second), "second");
     command(&mut app, "redo");
-    assert!(app.message.contains("nothing to redo"));
+    assert!(app.session.message.contains("nothing to redo"));
     command(&mut app, "undo");
     command(&mut app, "undo");
     let undo_seq = app.tip;
@@ -327,7 +327,7 @@ fn retraction_lists_dependents_then_keeps_later_work() {
     app.flush();
     let n = app.journal().entries().len();
     command(&mut app, &format!("retract {claim}"));
-    let deps = match &app.mode {
+    let deps = match &app.session.mode {
         Mode::ConfirmRetract { dependents, .. } => dependents.clone(),
         m => panic!("{m:?}"),
     };
@@ -353,7 +353,7 @@ fn retraction_lists_dependents_then_keeps_later_work() {
         "independent work"
     );
     command(&mut app, &format!("retract {claim}"));
-    assert!(app.message.contains("already retracted"));
+    assert!(app.session.message.contains("already retracted"));
     command(&mut app, "undo"); // undoing the retraction brings the claim back
     assert_eq!(app.outline.text(claim), "a claim (revised)");
     std::fs::remove_dir_all(&dir).unwrap();
@@ -408,7 +408,7 @@ fn replay_reproduces_the_screen() {
         (replayed.tip, &replayed.redo, &replayed.reason.world()),
         (app.tip, &app.redo, &app.reason.world())
     );
-    assert_eq!(replayed.view, app.view);
+    assert_eq!(replayed.session.view, app.session.view);
     assert_eq!(replayed.outline, app.outline);
     assert_eq!(app.reason.world(), "the flight was in 1989");
     // Every kind the session used is in the journal.
@@ -535,7 +535,10 @@ fn replay_matches_after_every_action() {
         step(&mut app);
         app.flush();
         let r = App::open(&dir).unwrap();
-        assert_eq!(r.view, app.view, "view differs after step {i}");
+        assert_eq!(
+            r.session.view, app.session.view,
+            "view differs after step {i}"
+        );
         assert_eq!(r.outline, app.outline, "outline differs after step {i}");
         assert_eq!(
             (r.tip, &r.redo, &r.reason.world()),
@@ -573,7 +576,7 @@ fn backspace_erases_then_leaves_a_latched_quasimode() {
     // Tap Command to latch it, type two letters.
     tap(&mut app, Key::Quasi(Quasi::Command));
     typ(&mut app, "he");
-    let input = |app: &App| match &app.mode {
+    let input = |app: &App| match &app.session.mode {
         Mode::Quasi(a) => Some(a.input.clone()),
         _ => None,
     };
@@ -583,7 +586,10 @@ fn backspace_erases_then_leaves_a_latched_quasimode() {
     tap(&mut app, Key::Backspace);
     assert_eq!(input(&app).as_deref(), Some(""), "still latched, now empty");
     tap(&mut app, Key::Backspace);
-    assert!(matches!(app.mode, Mode::Normal), "left the quasimode");
+    assert!(
+        matches!(app.session.mode, Mode::Normal),
+        "left the quasimode"
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -596,7 +602,7 @@ fn a_question_mark_inside_quotes_is_text() {
     app.set_durable(false);
     tap(&mut app, Key::Quasi(Quasi::Command));
     typ(&mut app, "fact q(\"Is it late?\", 'why?') ?");
-    let (input, listing) = match &app.mode {
+    let (input, listing) = match &app.session.mode {
         Mode::Quasi(a) => (a.input.clone(), a.listing),
         m => panic!("{m:?}"),
     };
@@ -616,7 +622,7 @@ fn a_command_on_an_item_needs_one() {
     let before = app.journal().entries().len();
     command(&mut app, "fold");
     assert_eq!(
-        (app.message.as_str(), app.journal().entries().len()),
+        (app.session.message.as_str(), app.journal().entries().len()),
         ("there is no item to act on", before)
     );
     std::fs::remove_dir_all(&dir).unwrap();
@@ -631,9 +637,9 @@ fn a_command_with_nothing_to_say_leaves_the_message() {
     typ(&mut app, "A");
     app.flush();
     command(&mut app, "undo");
-    let said = app.message.clone();
+    let said = app.session.message.clone();
     assert!(said.starts_with("undid entry"), "{said}");
     command(&mut app, "fold");
-    assert_eq!(app.message, said);
+    assert_eq!(app.session.message, said);
     std::fs::remove_dir_all(&dir).unwrap();
 }

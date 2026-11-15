@@ -300,7 +300,7 @@ impl<'a> Session<'a> {
             return;
         }
         if let Err(e) = self.app.evaluate() {
-            self.app.message = e;
+            self.app.session.message = e;
         }
         self.reasoned_at = Some(self.place());
     }

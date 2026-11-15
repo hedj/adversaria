@@ -30,7 +30,7 @@ fn command(app: &mut App, line: &str) -> String {
     typ(app, line);
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
     let _ = app.evaluate();
-    app.message.clone()
+    app.session.message.clone()
 }
 
 fn open(dir: &Path) -> App {
@@ -75,7 +75,7 @@ fn an_imported_document_cannot_include_local_files() {
     assert!(
         text.contains("Before."),
         "the document itself was imported: {text:?}\n{}",
-        app.message
+        app.session.message
     );
     assert!(
         !text.contains(SECRET),

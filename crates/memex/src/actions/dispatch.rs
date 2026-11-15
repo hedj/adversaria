@@ -290,7 +290,7 @@ pub const COMMANDS: &[Command] = &[
 
 impl App {
     pub(crate) fn cmd_help(&mut self, _: &[&str], _: u64) -> Result<String, String> {
-        self.message = COMMANDS
+        self.session.message = COMMANDS
             .iter()
             .map(|c| c.name)
             .collect::<Vec<_>>()
@@ -304,9 +304,9 @@ impl App {
     }
 
     pub(crate) fn run_simple(&mut self, name: &str) {
-        self.mode = Mode::Normal;
+        self.session.mode = Mode::Normal;
         let m = self.run_command(name);
-        self.mode = m;
+        self.session.mode = m;
     }
 
     /// Run a command line, as typed in the Command quasimode.
@@ -321,7 +321,7 @@ impl App {
     /// Run a command; if it fails, its error becomes the message.
     fn command_or_message(&mut self, line: &str) -> Mode {
         self.command(line).unwrap_or_else(|m| {
-            self.message = m;
+            self.session.message = m;
             Mode::Normal
         })
     }
@@ -334,7 +334,7 @@ impl App {
         };
         let reply = self.run(cmd, &words)?;
         if !reply.is_empty() {
-            self.message = reply;
+            self.session.message = reply;
         }
         Ok(self.next_mode())
     }
@@ -357,16 +357,16 @@ impl App {
     /// The mode a command set, if any, taken out; scope returns to the
     /// statement unless a question is open.
     fn next_mode(&mut self) -> Mode {
-        if self.mode == Mode::Normal {
+        if self.session.mode == Mode::Normal {
             self.statement_scope();
         }
-        std::mem::replace(&mut self.mode, Mode::Normal)
+        std::mem::replace(&mut self.session.mode, Mode::Normal)
     }
 
     fn statement_scope(&mut self) {
-        if self.view.scope != ScopeLevel::Statement {
-            self.view.scope = ScopeLevel::Statement;
-            self.view_dirty = true;
+        if self.session.view.scope != ScopeLevel::Statement {
+            self.session.view.scope = ScopeLevel::Statement;
+            self.session.view_dirty = true;
         }
     }
 

@@ -38,8 +38,8 @@ impl App {
     }
 
     fn ask_retract(&mut self, target: u64, dependents: Vec<u64>) {
-        self.message.clear();
-        self.mode = Mode::ConfirmRetract { target, dependents };
+        self.session.message.clear();
+        self.session.mode = Mode::ConfirmRetract { target, dependents };
     }
 
     pub(crate) fn cmd_suppose(&mut self, words: &[&str], _: u64) -> Result<String, String> {
@@ -85,11 +85,11 @@ impl App {
     }
 
     fn stop_interrogating(&mut self) {
-        self.view.interrogate = None;
+        self.session.view.interrogate = None;
     }
 
     fn world_body(&self, op: &str) -> Value {
-        self.view.to_json("world", json!({op: true}))
+        self.session.view.to_json("world", json!({op: true}))
     }
 }
 

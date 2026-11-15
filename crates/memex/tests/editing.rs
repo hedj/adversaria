@@ -135,7 +135,7 @@ fn a_deleted_item_leaves_the_folds() {
     let two = r.app.cursor();
     r.command("fold");
     r.command("delete");
-    assert!(!r.app.view.folded.contains(&two));
+    assert!(!r.app.session.view.folded.contains(&two));
 }
 
 #[test]
@@ -143,7 +143,7 @@ fn the_text_cursor_keeps_within_the_item_it_moves_to() {
     let mut r = Room::new("pos");
     r.items(&["a", "bcdef"]);
     r.command("delete");
-    assert_eq!(r.app.view.pos, 1);
+    assert_eq!(r.app.session.view.pos, 1);
 }
 
 #[test]
@@ -152,5 +152,9 @@ fn a_write_that_fails_is_shown() {
     r.typ("one");
     std::fs::remove_dir_all(&r.dir).unwrap();
     r.app.flush();
-    assert!(r.app.message.contains("os error"), "{}", r.app.message);
+    assert!(
+        r.app.session.message.contains("os error"),
+        "{}",
+        r.app.session.message
+    );
 }

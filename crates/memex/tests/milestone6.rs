@@ -33,9 +33,9 @@ fn command(app: &mut App, line: &str) {
         "there is no",
     ];
     assert!(
-        !bad.iter().any(|b| app.message.starts_with(b)),
+        !bad.iter().any(|b| app.session.message.starts_with(b)),
         "{line}: {}",
-        app.message
+        app.session.message
     );
 }
 
@@ -97,9 +97,9 @@ fn markdown_round_trip_keeps_structure_citations_and_mathematics() {
     let mut app = open(&dir);
     command(&mut app, &format!("import document {}", src.display()));
     assert!(
-        app.message.contains("losses: footnote 1, image 1"),
+        app.session.message.contains("losses: footnote 1, image 1"),
         "{}",
-        app.message
+        app.session.message
     );
     let imp = app
         .journal()
@@ -176,7 +176,7 @@ fn word_round_trip_keeps_structure_citations_and_mathematics() {
     assert!(ok.success());
     let mut app = open(&dir);
     command(&mut app, &format!("import document {}", docx.display()));
-    let losses_msg = app.message.clone();
+    let losses_msg = app.session.message.clone();
     let out = dir.join("out.docx");
     command(&mut app, &format!("export {}", out.display()));
     let (first, _, _) = docs::read(&docx).unwrap();
@@ -370,16 +370,16 @@ fn the_quote_check() {
         .into_iter()
         .find(|i| app.outline.text(*i).starts_with("The 1989"))
         .unwrap();
-    app.view.panes[0].cursor = item;
+    app.session.view.panes[0].cursor = item;
     command(&mut app, "check quote");
-    assert_eq!(app.message, "quote check: quoted");
-    app.view.pos = 4;
+    assert_eq!(app.session.message, "quote check: quoted");
+    app.session.view.pos = 4;
     for c in "first ".chars() {
         tap(&mut app, Key::Char(c));
     }
     app.flush();
     command(&mut app, "check quote");
-    assert_eq!(app.message, "quote check: misquoted");
+    assert_eq!(app.session.message, "quote check: misquoted");
     let e = app.journal().entries().last().unwrap();
     assert!(
         memex::reason::show(&format::terms::decode(&e.body().unwrap()["facts"][0]).unwrap())
@@ -442,7 +442,10 @@ fn the_source_check() {
         command(app, &format!("fact doi(paper, \"{doi}\")"));
         command(app, &format!("fact title(paper, \"{title}\")"));
         command(app, "check source");
-        app.message.trim_start_matches("source check: ").to_string()
+        app.session
+            .message
+            .trim_start_matches("source check: ")
+            .to_string()
     };
     assert_eq!(
         rule(&mut app, "10.5555/good", "buran's flight-software"),

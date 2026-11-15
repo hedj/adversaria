@@ -65,13 +65,13 @@ pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
         return hits;
     }
     for (i, area) in [(0, left), (1, right)] {
-        match app.view.panes[i].kind {
+        match app.session.view.panes[i].kind {
             PaneKind::Outline => draw_outline(f, app, i, area, &mut hits),
             PaneKind::Links => draw_links(f, app, area, &mut hits),
             PaneKind::Suggestions => draw_suggestions(f, app, area, &mut hits),
         }
     }
-    if let Mode::Quasi(a) = &app.mode
+    if let Mode::Quasi(a) = &app.session.mode
         && matches!(a.q, Quasi::LeapForward | Quasi::LeapBack | Quasi::Command)
         && (a.listing || !a.input.is_empty())
     {
@@ -114,7 +114,7 @@ fn draw_top(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(left), area);
     let right = match app.reason.eval[0].as_ref().map(status) {
         Some(s) if !s.is_empty() => s,
-        _ => format!("pane {} of 2", app.view.focus + 1),
+        _ => format!("pane {} of 2", app.session.view.focus + 1),
     };
     let w = right.chars().count() as u16;
     if area.width > w {
@@ -202,7 +202,7 @@ fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
             }
         }
     }
-    if focused && app.view.scope == ScopeLevel::Word {
+    if focused && app.session.view.scope == ScopeLevel::Word {
         // Scope: show the word as the target.
         out = vec![Span::styled(
             pending.iter().collect::<String>(),
@@ -246,9 +246,10 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
         Layout::vertical([Constraint::Length(2), Constraint::Min(1)]).areas(inner);
     f.render_widget(Paragraph::new(Span::styled(title(app), dim())), head);
     let rows = app.visible();
-    let cursor = app.view.panes[pane].cursor;
+    let cursor = app.session.view.panes[pane].cursor;
     let h = rows_area.height as usize;
-    let focused = app.view.focus == pane && matches!(app.mode, Mode::Normal | Mode::Quasi(_));
+    let focused =
+        app.session.view.focus == pane && matches!(app.session.mode, Mode::Normal | Mode::Quasi(_));
     // Every line of the outline, then the window onto them: items, their
     // marks and their views are lines of different heights, so the window
     // is chosen by line, keeping the cursor's line in view.
@@ -274,7 +275,7 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
             Click::Item { pane, id: *id },
         ));
         let kids = app.outline.children(*id).len();
-        let folded = app.view.folded.contains(id);
+        let folded = app.session.view.folded.contains(id);
         let mark = match (kids, folded) {
             (0, _) => "•",
             (_, true) => "▶",
@@ -301,7 +302,7 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
             .unwrap_or_default();
         let mut line = Line::from(spans);
         if is_cursor {
-            line = line.style(if app.view.scope == ScopeLevel::Branch && focused {
+            line = line.style(if app.session.view.scope == ScopeLevel::Branch && focused {
                 Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD)
             } else {
                 Style::default().add_modifier(Modifier::REVERSED)
@@ -365,8 +366,8 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
         }
     }
     // The text cursor, in the focused outline pane.
-    if app.view.focus == pane
-        && matches!(app.mode, Mode::Normal)
+    if app.session.view.focus == pane
+        && matches!(app.session.mode, Mode::Normal)
         && cursor != TOP
         && let Some(r) = cursor_line
             .and_then(|l| l.checked_sub(offset))
@@ -377,7 +378,7 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
         } else {
             0
         };
-        let x = rows_area.x as usize + 2 * cursor_depth + 2 + num + app.view.pos;
+        let x = rows_area.x as usize + 2 * cursor_depth + 2 + num + app.session.view.pos;
         if x < (rows_area.x + rows_area.width) as usize {
             f.set_cursor_position(Position {
                 x: x as u16,
@@ -495,8 +496,8 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
         width: area.width.saturating_sub(2),
         ..area
     };
-    let id = app.view.panes[0].cursor;
-    if let Some(i) = app.view.interrogate {
+    let id = app.session.view.panes[0].cursor;
+    if let Some(i) = app.session.view.interrogate {
         let p = Paragraph::new(interrogation(app, i)).wrap(Wrap { trim: false });
         let used = p.line_count(inner.width) as u16;
         f.render_widget(p, inner);
@@ -649,7 +650,7 @@ fn draw_list(f: &mut Frame, app: &App, q: Quasi, input: &str, listing: bool, are
 }
 
 fn draw_prompt(f: &mut Frame, app: &App, prompt: Rect, guide: Rect) {
-    let (p, g): (Line, String) = match &app.mode {
+    let (p, g): (Line, String) = match &app.session.mode {
         Mode::Quasi(a) => {
             let shown = match a.q {
                 Quasi::Command => app.guided(&a.input),
@@ -738,8 +739,8 @@ fn draw_prompt(f: &mut Frame, app: &App, prompt: Rect, guide: Rect) {
             )
         }
         Mode::Normal => match hint(app) {
-            Some((p, g)) if app.message.is_empty() => (Line::raw(p), g),
-            _ => (Line::raw(""), app.message.clone()),
+            Some((p, g)) if app.session.message.is_empty() => (Line::raw(p), g),
+            _ => (Line::raw(""), app.session.message.clone()),
         },
     };
     f.render_widget(Paragraph::new(p), prompt);

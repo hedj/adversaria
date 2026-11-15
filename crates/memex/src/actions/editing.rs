@@ -22,7 +22,7 @@ impl App {
 
     /// Delete the word at the cursor, or the target's branch.
     pub(crate) fn cmd_delete(&mut self, _: &[&str], target: u64) -> Result<String, String> {
-        if self.view.in_word() {
+        if self.session.view.in_word() {
             self.delete_word(target)?;
             return Ok(String::new());
         }
@@ -38,12 +38,12 @@ impl App {
 
     /// An item's text without the word at the cursor, and where the word was.
     fn word_cut(&self, item: u64) -> (Vec<char>, usize) {
-        cut_word(self.text_of(item), self.view.pos)
+        cut_word(self.text_of(item), self.session.view.pos)
     }
 
     fn set_pos(&mut self, pos: usize) {
-        self.view.pos = pos;
-        self.view_dirty = true;
+        self.session.view.pos = pos;
+        self.session.view_dirty = true;
     }
 
     // Moving items.
@@ -96,8 +96,8 @@ impl App {
 
     /// Show an item's children if they were folded away.
     fn open_branch(&mut self, id: u64) {
-        if self.view.folded.remove(&id) {
-            self.view_dirty = true;
+        if self.session.view.folded.remove(&id) {
+            self.session.view_dirty = true;
         }
     }
 
@@ -188,13 +188,13 @@ impl App {
     // Folds and panes.
 
     pub(crate) fn cmd_fold(&mut self, _: &[&str], target: u64) -> Result<String, String> {
-        self.view.folded.insert(target);
+        self.session.view.folded.insert(target);
         self.write_view("fold", json!({}));
         Ok(String::new())
     }
 
     pub(crate) fn cmd_unfold(&mut self, _: &[&str], target: u64) -> Result<String, String> {
-        self.view.folded.remove(&target);
+        self.session.view.folded.remove(&target);
         self.write_view("fold", json!({}));
         Ok(String::new())
     }
@@ -202,13 +202,13 @@ impl App {
     pub(crate) fn cmd_pane(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let kind = PaneKind::named(words.first().copied())
             .ok_or("pane (shows) outline, links, or suggestions")?;
-        self.view.show_other(kind, target);
+        self.session.view.show_other(kind, target);
         self.write_view("pane", json!({}));
         Ok(String::new())
     }
 
     pub(crate) fn cmd_switch(&mut self, _: &[&str], _: u64) -> Result<String, String> {
-        self.view.switch_focus();
+        self.session.view.switch_focus();
         self.write_view("pane", json!({}));
         Ok(String::new())
     }

@@ -196,6 +196,30 @@ impl Default for View {
 }
 
 impl View {
+    /// The pane with focus.
+    pub fn focused(&self) -> &Pane {
+        &self.panes[self.focus]
+    }
+
+    /// Put the focused pane's cursor on an item, the text cursor at a
+    /// place in it.
+    pub(crate) fn set_cursor(&mut self, id: u64, pos: usize) {
+        self.panes[self.focus].cursor = id;
+        self.pos = pos;
+    }
+
+    /// After the outline changes, each cursor keeps to an item that is
+    /// left, folds to the items left, and the text cursor to its item's
+    /// text.
+    fn repair(&mut self, outline: &Outline, before: &[u64]) {
+        for pane in &mut self.panes {
+            pane.cursor = surviving(outline, before, pane.cursor);
+        }
+        self.folded.retain(|f| outline.items.contains_key(f));
+        let n = outline.text(self.focused().cursor).chars().count();
+        self.pos = self.pos.min(n);
+    }
+
     /// The pane without focus.
     fn other(&mut self) -> &mut Pane {
         &mut self.panes[1 - self.focus]
@@ -278,6 +302,19 @@ impl View {
     }
 }
 
+/// Where a cursor goes after the outline changes: it stays on an item
+/// that is left, or where nothing could have vanished; else it goes to the
+/// nearest item before it that is left, else the first.
+fn surviving(outline: &Outline, before: &[u64], c: u64) -> u64 {
+    if c != TOP && (outline.contains(c) || before.is_empty()) {
+        return c;
+    }
+    let at = before.iter().position(|x| *x == c).unwrap_or(0);
+    let earlier = before[..at].iter().rev().find(|x| outline.contains(**x));
+    let first = || outline.in_order().first().copied();
+    earlier.copied().or_else(first).unwrap_or(TOP)
+}
+
 /// A quasimode in progress, held or latched.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Active {
@@ -291,8 +328,9 @@ pub struct Active {
     pub listing: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Mode {
+    #[default]
     Normal,
     Quasi(Active),
     /// A retraction waits for Enter; the list is what depends on the entry.
@@ -312,24 +350,18 @@ pub enum Mode {
 /// Text typed into an item but not yet written.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PendingText {
-    item: u64,
-    text: Vec<char>,
+    pub(crate) item: u64,
+    pub(crate) text: Vec<char>,
 }
 
 pub struct App {
     pub(crate) journal: Journal,
     pub outline: Outline,
-    pub view: View,
-    pub mode: Mode,
     /// The entry the current state is at.
     pub tip: u64,
     /// Entries undone and not redone, most recent last.
     pub redo: Vec<u64>,
-    pub message: String,
     pub session: Session,
-    pub(crate) pending_text: Option<PendingText>,
-    pub(crate) view_dirty: bool,
-    pub(crate) last_leap: Option<(String, bool)>,
     pub reason: Reasoning,
 }
 
@@ -343,15 +375,9 @@ impl App {
         let mut app = App {
             journal,
             outline: Outline::default(),
-            view: View::default(),
-            mode: Mode::Normal,
             tip: 0,
             redo: vec![],
-            message: String::new(),
             session: Session::default(),
-            pending_text: None,
-            view_dirty: false,
-            last_leap: None,
             reason: Reasoning::default(),
         };
         if app.journal.entries().is_empty() {
@@ -399,9 +425,9 @@ impl App {
             "view" => {
                 let jump = e.parent_seq() != Some(self.tip);
                 if let Some(b) = &e.body() {
-                    self.view.restore(b);
+                    self.session.view.restore(b);
                     if b["op"] == "leap" {
-                        self.last_leap = b["pattern"]
+                        self.session.last_leap = b["pattern"]
                             .as_str()
                             .map(|p| (p.to_string(), b["forward"] != false));
                     }
@@ -475,7 +501,7 @@ impl App {
                 }
             }
         }
-        self.repair_cursors(&before);
+        self.session.view.repair(&self.outline, &before);
     }
 
     /// The entries on the path from the tip back to the root, oldest first.
@@ -539,34 +565,6 @@ impl App {
         self.replay(head, None).0
     }
 
-    /// After the outline changes, a cursor on a vanished item moves to the
-    /// nearest surviving item before it, else the first.
-    fn repair_cursors(&mut self, before: &[u64]) {
-        for i in 0..2 {
-            let c = self.view.panes[i].cursor;
-            if c != TOP && self.outline.items.contains_key(&c) {
-                continue;
-            }
-            if before.is_empty() && c != TOP {
-                continue; // nothing could have vanished
-            }
-            let at = before.iter().position(|x| *x == c).unwrap_or(0);
-            let fallback = before[..at]
-                .iter()
-                .rev()
-                .find(|x| self.outline.items.contains_key(x))
-                .copied();
-            self.view.panes[i].cursor = fallback
-                .or_else(|| self.outline.in_order().first().copied())
-                .unwrap_or(TOP);
-        }
-        self.view
-            .folded
-            .retain(|f| self.outline.items.contains_key(f));
-        let n = self.outline.text(self.cursor()).chars().count();
-        self.view.pos = self.view.pos.min(n);
-    }
-
     // ------------------------------------------------------------------
     // Writing entries.
 
@@ -591,30 +589,28 @@ impl App {
     /// Write whatever is pending: typed text, then cursor moves.
     pub fn flush(&mut self) {
         self.flush_text();
-        if self.view_dirty {
-            self.view_dirty = false;
-            let body = self.view.to_json("move", json!({}));
-            if let Err(m) = self.write_here("view", body) {
-                self.message = m;
-            }
+        if self.session.view_dirty {
+            self.session.view_dirty = false;
+            let body = self.session.view.to_json("move", json!({}));
+            let written = self.write_here("view", body);
+            self.session.report(written);
         }
     }
 
     pub(crate) fn write_view(&mut self, op: &str, extra: Value) {
         self.flush_text();
-        self.view_dirty = false;
-        let body = self.view.to_json(op, extra);
-        if let Err(m) = self.write_here("view", body) {
-            self.message = m;
-        }
+        self.session.view_dirty = false;
+        let body = self.session.view.to_json(op, extra);
+        let written = self.write_here("view", body);
+        self.session.report(written);
     }
 
     pub(crate) fn flush_text(&mut self) {
-        if let Some(p) = self.pending_text.take()
-            && let Err(m) = self.write_text(p.item, &p.text)
-        {
-            self.message = m;
-        }
+        let Some(p) = self.session.take_text() else {
+            return;
+        };
+        let written = self.write_text(p.item, &p.text);
+        self.session.report(written);
     }
 
     /// Write an item's new text: unchanged characters at the start and end
@@ -654,25 +650,24 @@ impl App {
     // What is shown.
 
     pub fn cursor(&self) -> u64 {
-        self.view.panes[self.view.focus].cursor
+        self.session.view.focused().cursor
     }
 
     pub(crate) fn set_cursor(&mut self, id: u64) {
-        let f = self.view.focus;
-        self.view.panes[f].cursor = id;
-        self.view.pos = self.text_of(id).len();
+        let end = self.text_of(id).len();
+        self.session.view.set_cursor(id, end);
     }
 
     /// The text of an item as shown: pending typing included.
     pub fn text_of(&self, id: u64) -> Vec<char> {
-        match &self.pending_text {
-            Some(p) if p.item == id => p.text.clone(),
-            _ => self.outline.text(id).chars().collect(),
+        match self.session.typed(id) {
+            Some(text) => text.to_vec(),
+            None => self.outline.text(id).chars().collect(),
         }
     }
 
     pub fn pending(&self) -> bool {
-        self.pending_text.is_some() || self.view_dirty
+        self.session.pending()
     }
 
     /// The items shown in an outline pane, in order, with their depth.
@@ -681,7 +676,7 @@ impl App {
         let mut stack: Vec<(u64, usize)> = self.outline.top.iter().rev().map(|i| (*i, 0)).collect();
         while let Some((id, d)) = stack.pop() {
             out.push((id, d));
-            if !self.view.folded.contains(&id) {
+            if !self.session.view.folded.contains(&id) {
                 stack.extend(self.outline.children(id).iter().rev().map(|c| (*c, d + 1)));
             }
         }
@@ -748,7 +743,7 @@ impl App {
     pub(crate) fn unfold_to(&mut self, id: u64) {
         let mut at = self.outline.parent(id);
         while let Some(p) = at {
-            self.view.folded.remove(&p);
+            self.session.view.folded.remove(&p);
             at = self.outline.parent(p);
         }
     }
@@ -757,8 +752,8 @@ impl App {
     // Keys.
 
     pub fn handle(&mut self, ev: Event) {
-        let mode = std::mem::replace(&mut self.mode, Mode::Normal);
-        self.mode = match mode {
+        let mode = std::mem::replace(&mut self.session.mode, Mode::Normal);
+        self.session.mode = match mode {
             Mode::Normal => self.normal(ev),
             Mode::Quasi(a) => self.quasi(a, ev),
             Mode::ConfirmRetract { target, dependents } => self.confirm(target, dependents, ev),
@@ -773,7 +768,7 @@ impl App {
     /// view change like an arrow key; a command is run as a bound key runs
     /// it, keeping any confirmation it asks for.
     pub fn click(&mut self, c: &Click) {
-        if self.mode != Mode::Normal {
+        if self.session.mode != Mode::Normal {
             return;
         }
         match c {
@@ -782,17 +777,17 @@ impl App {
                     return;
                 }
                 self.flush_text();
-                self.message.clear();
-                if self.view.focus != *pane {
-                    self.view.focus = *pane;
+                self.session.message.clear();
+                if self.session.view.focus != *pane {
+                    self.session.view.focus = *pane;
                     self.write_view("pane", json!({}));
                 }
                 self.set_cursor(*id);
-                self.view_dirty = true;
+                self.session.view_dirty = true;
             }
             Click::Command(line) => {
                 self.flush();
-                self.message.clear();
+                self.session.message.clear();
                 self.run_simple(line);
             }
         }
@@ -805,7 +800,7 @@ impl App {
         if let Key::Quasi(q) = ev.key {
             self.flush();
             if q == Quasi::Scope {
-                self.view.scope = ScopeLevel::Word;
+                self.session.view.scope = ScopeLevel::Word;
             }
             return Mode::Quasi(Active {
                 q,
@@ -828,26 +823,25 @@ impl App {
             }
             self.run_simple(&line);
             // Keep what the command asked for, such as a confirmation.
-            return std::mem::replace(&mut self.mode, Mode::Normal);
+            return std::mem::replace(&mut self.session.mode, Mode::Normal);
         }
-        let f = self.view.focus;
-        if self.view.panes[f].kind == PaneKind::Links {
-            self.message = format!(
+        let f = self.session.view.focus;
+        if self.session.view.panes[f].kind == PaneKind::Links {
+            self.session.message = format!(
                 "this pane shows links; {} to edit",
                 self.session.keys.key_for("switch")
             );
             return Mode::Normal;
         }
-        self.message.clear();
+        self.session.message.clear();
         match ev.key {
             Key::Char(c) => self.type_char(c),
             Key::Backspace => self.erase(true),
             Key::Delete => self.erase(false),
             Key::Enter => {
                 self.flush();
-                if let Err(m) = self.new_item_after(self.cursor()) {
-                    self.message = m;
-                }
+                let made = self.new_item_after(self.cursor());
+                self.session.report(made);
             }
             Key::Tab => self.run_simple("indent"),
             Key::BackTab => self.run_simple("outdent"),
@@ -862,18 +856,18 @@ impl App {
                 };
                 if let Some((id, _)) = rows.get(j) {
                     self.set_cursor(*id);
-                    self.view_dirty = true;
+                    self.session.view_dirty = true;
                 }
             }
             Key::Left | Key::Right | Key::Home | Key::End => {
                 let n = self.text_of(self.cursor()).len();
-                self.view.pos = match ev.key {
-                    Key::Left => self.view.pos.saturating_sub(1),
-                    Key::Right => (self.view.pos + 1).min(n),
+                self.session.view.pos = match ev.key {
+                    Key::Left => self.session.view.pos.saturating_sub(1),
+                    Key::Right => (self.session.view.pos + 1).min(n),
                     Key::Home => 0,
                     _ => n,
                 };
-                self.view_dirty = true;
+                self.session.view_dirty = true;
             }
             _ => {}
         }
@@ -884,16 +878,12 @@ impl App {
         if self.cursor() == TOP
             && let Err(m) = self.new_item_after(TOP)
         {
-            self.message = m;
+            self.session.message = m;
             return;
         }
         let item = self.cursor();
-        let mut text = self.text_of(item);
-        let pos = self.view.pos.min(text.len());
-        text.insert(pos, c);
-        self.pending_text = Some(PendingText { item, text });
-        self.view.pos = pos + 1;
-        self.view_dirty = true;
+        let text = self.text_of(item);
+        self.session.type_into(item, text, c);
     }
 
     fn erase(&mut self, before: bool) {
@@ -901,18 +891,8 @@ impl App {
         if item == TOP {
             return;
         }
-        let mut text = self.text_of(item);
-        let pos = self.view.pos.min(text.len());
-        if before && pos > 0 {
-            text.remove(pos - 1);
-            self.view.pos = pos - 1;
-        } else if !before && pos < text.len() {
-            text.remove(pos);
-        } else {
-            return;
-        }
-        self.pending_text = Some(PendingText { item, text });
-        self.view_dirty = true;
+        let text = self.text_of(item);
+        self.session.erase_in(item, text, before);
     }
 
     pub(crate) fn new_item_after(&mut self, id: u64) -> Result<(), String> {
@@ -958,7 +938,7 @@ impl App {
                 a.listing = !a.listing
             }
             Key::Char(' ') if a.q == Quasi::Scope => {
-                self.view.scope = match self.view.scope {
+                self.session.view.scope = match self.session.view.scope {
                     ScopeLevel::Word => ScopeLevel::Statement,
                     _ => ScopeLevel::Branch,
                 };
@@ -969,7 +949,7 @@ impl App {
                 // latched quasimode without acting.
                 let erased = a.input.pop().is_some();
                 if !erased && a.latched {
-                    self.message.clear();
+                    self.session.message.clear();
                     return Mode::Normal;
                 }
             }
@@ -992,7 +972,7 @@ impl App {
             Quasi::LeapForward | Quasi::LeapBack => {
                 let forward = a.q == Quasi::LeapForward;
                 let pattern = if a.input.is_empty() {
-                    match &self.last_leap {
+                    match &self.session.last_leap {
                         Some((p, _)) => p.clone(),
                         None => return Mode::Normal,
                     }
@@ -1004,11 +984,11 @@ impl App {
                     Some(id) => {
                         self.unfold_to(id);
                         self.set_cursor(id);
-                        self.message.clear();
+                        self.session.message.clear();
                     }
-                    None => self.message = format!("no item holds “{pattern}”"),
+                    None => self.session.message = format!("no item holds “{pattern}”"),
                 }
-                self.last_leap = Some((pattern.clone(), forward));
+                self.session.last_leap = Some((pattern.clone(), forward));
                 self.write_view(
                     "leap",
                     json!({"pattern": pattern, "forward": forward, "found": found}),
@@ -1024,9 +1004,8 @@ impl App {
                 let readings = reason::readings(&facts, &text);
                 if readings.is_empty() {
                     // No reading: a named world, with nothing supposed in it.
-                    if let Err(m) = self.write_here("suppose", json!({"name": text})) {
-                        self.message = m;
-                    }
+                    let written = self.write_here("suppose", json!({"name": text}));
+                    self.session.report(written);
                 } else {
                     return Mode::ConfirmSuppose {
                         text,
@@ -1047,13 +1026,16 @@ impl App {
         match ev.key {
             Key::Enter => {
                 match self.write_here("retract", json!({"target": target})) {
-                    Ok(e) => self.message = format!("entry {target} retracted by entry {}", e.seq),
-                    Err(m) => self.message = m,
+                    Ok(e) => {
+                        self.session.message =
+                            format!("entry {target} retracted by entry {}", e.seq)
+                    }
+                    Err(m) => self.session.message = m,
                 }
                 Mode::Normal
             }
             Key::Escape => {
-                self.message = format!("entry {target} kept");
+                self.session.message = format!("entry {target} kept");
                 Mode::Normal
             }
             _ => Mode::ConfirmRetract { target, dependents },
@@ -1067,9 +1049,8 @@ impl App {
         match ev.key {
             Key::Enter => {
                 let fact = readings[at].clone();
-                if let Err(m) = self.suppose(&text, &fact) {
-                    self.message = m;
-                }
+                let supposed = self.suppose(&text, &fact);
+                self.session.report(supposed);
                 Mode::Normal
             }
             Key::Tab => {
@@ -1077,7 +1058,7 @@ impl App {
                 Mode::ConfirmSuppose { text, readings, at }
             }
             Key::Escape => {
-                self.message = "nothing supposed".into();
+                self.session.message = "nothing supposed".into();
                 Mode::Normal
             }
             _ => Mode::ConfirmSuppose { text, readings, at },
@@ -1117,7 +1098,7 @@ impl App {
         if !left.is_empty() {
             m.push_str(&format!("; left for you: {}", left.join(", ")));
         }
-        self.message = m;
+        self.session.message = m;
         Ok(())
     }
 
@@ -1228,6 +1209,7 @@ impl App {
             self.session.set_observed(now);
         }
         if self
+            .session
             .view
             .panes
             .iter()
@@ -1313,7 +1295,7 @@ impl App {
 
     /// Keep the suggestion pane's order while it has focus.
     pub(crate) fn update_frozen(&mut self) {
-        let focused = self.view.panes[self.view.focus].kind == PaneKind::Suggestions;
+        let focused = self.session.view.focused().kind == PaneKind::Suggestions;
         self.reason.suggestions.hold_order(focused);
     }
 

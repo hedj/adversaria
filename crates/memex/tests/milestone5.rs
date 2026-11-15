@@ -43,9 +43,9 @@ fn command(app: &mut App, line: &str) {
             "no item"
         ]
         .iter()
-        .any(|p| app.message.starts_with(p)),
+        .any(|p| app.session.message.starts_with(p)),
         "{line}: {}",
-        app.message
+        app.session.message
     );
     app.evaluate().unwrap();
 }
@@ -344,7 +344,10 @@ fn the_pane_keeps_its_rules() {
     // With the pane in focus, the order holds while new evidence arrives.
     command(&mut app, "pane suggestions");
     command(&mut app, "switch");
-    assert_eq!(app.view.panes[app.view.focus].kind, PaneKind::Suggestions);
+    assert_eq!(
+        app.session.view.panes[app.session.view.focus].kind,
+        PaneKind::Suggestions
+    );
     let before = described(&app);
     for (x, y) in [("d", "w"), ("e", "v"), ("f", "u")] {
         command(&mut app, &format!("fact p4({x}, {y})"));

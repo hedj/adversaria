@@ -35,9 +35,9 @@ fn command(app: &mut App, line: &str) {
     typ(app, line);
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
     assert!(
-        !app.message.starts_with("no command") && !app.message.starts_with("not a"),
+        !app.session.message.starts_with("no command") && !app.session.message.starts_with("not a"),
         "{line}: {}",
-        app.message
+        app.session.message
     );
     app.evaluate().unwrap();
 }
@@ -198,7 +198,7 @@ fn a_click_on_a_suggestion_accepts_it() {
     command(&mut app, "fact label(buran_flight, \"Buran's flight\")");
     command(&mut app, &format!("import wikidata {FIXTURE}"));
     command(&mut app, "pane suggestions");
-    assert_eq!(app.view.panes[1].kind, PaneKind::Suggestions);
+    assert_eq!(app.session.view.panes[1].kind, PaneKind::Suggestions);
     let shown: Vec<String> = app
         .reason
         .suggestions
@@ -216,8 +216,12 @@ fn a_click_on_a_suggestion_accepts_it() {
         .expect("the evidence lines are part of suggestion 2");
     assert!(evidence_row > y);
     app.click(&hits.at(x, evidence_row).unwrap().clone());
-    assert!(app.message.starts_with("adopted: "), "{}", app.message);
-    assert_eq!(app.message, format!("adopted: {}", shown[1]));
+    assert!(
+        app.session.message.starts_with("adopted: "),
+        "{}",
+        app.session.message
+    );
+    assert_eq!(app.session.message, format!("adopted: {}", shown[1]));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -235,12 +239,12 @@ fn a_click_does_nothing_while_a_quasimode_or_question_is_open() {
     assert_eq!(app.cursor(), before);
     // Released with nothing typed, Command latches; the click still does nothing.
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
-    assert!(matches!(app.mode, Mode::Quasi(_)));
+    assert!(matches!(app.session.mode, Mode::Quasi(_)));
     app.click(&c);
     assert_eq!(app.cursor(), before);
     tap(&mut app, Key::Escape);
     tap(&mut app, Key::Enter);
-    assert!(matches!(app.mode, Mode::Normal));
+    assert!(matches!(app.session.mode, Mode::Normal));
     app.click(&c);
     assert_eq!(
         app.outline.text(app.cursor()),

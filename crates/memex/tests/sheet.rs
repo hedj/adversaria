@@ -30,7 +30,7 @@ fn command(app: &mut App, line: &str) -> String {
     typ(app, line);
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
     app.evaluate().unwrap();
-    let m = app.message.clone();
+    let m = app.session.message.clone();
     assert!(
         !m.starts_with("no command") && !m.starts_with("not a") && !m.contains("not allowed"),
         "{line}: {m}"
@@ -43,13 +43,13 @@ fn suppose(app: &mut App, text: &str) -> String {
     typ(app, text);
     app.handle(Event::up(Key::Quasi(Quasi::Suppose)));
     assert!(
-        matches!(app.mode, Mode::ConfirmSuppose { .. }),
+        matches!(app.session.mode, Mode::ConfirmSuppose { .. }),
         "no reading of {text:?}: {}",
-        app.message
+        app.session.message
     );
     tap(app, Key::Enter);
     app.evaluate().unwrap();
-    app.message.clone()
+    app.session.message.clone()
 }
 
 fn screen(app: &App) -> Vec<String> {
@@ -240,7 +240,7 @@ fn a_rule_is_written_once_and_used_everywhere() {
         app.handle(Event::down(Key::Quasi(Quasi::Command)));
         typ(&mut app, line);
         app.handle(Event::up(Key::Quasi(Quasi::Command)));
-        let m = app.message.clone();
+        let m = app.session.message.clone();
         if why.is_empty() {
             assert!(m.contains("kept"), "{line}: {m}");
         } else {

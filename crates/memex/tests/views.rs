@@ -29,7 +29,7 @@ fn run(app: &mut App, line: &str) -> String {
     typ(app, line);
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
     app.evaluate().unwrap();
-    app.message.clone()
+    app.session.message.clone()
 }
 
 /// Run a command that must succeed.

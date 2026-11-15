@@ -24,7 +24,7 @@ impl App {
         if self.claims_of(target).is_empty() {
             return Err("the target states no claim".into());
         }
-        self.view.show_claim(target);
+        self.session.view.show_claim(target);
         self.write_view("interrogate", json!({}));
         Ok(String::new())
     }

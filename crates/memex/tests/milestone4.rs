@@ -30,9 +30,9 @@ fn command(app: &mut App, line: &str) {
     typ(app, line);
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
     assert!(
-        !app.message.starts_with("no command") && !app.message.starts_with("not a"),
+        !app.session.message.starts_with("no command") && !app.session.message.starts_with("not a"),
         "{line}: {}",
-        app.message
+        app.session.message
     );
 }
 
@@ -45,7 +45,11 @@ fn leap(app: &mut App, pattern: &str) {
     app.handle(Event::down(Key::Quasi(Quasi::LeapForward)));
     typ(app, pattern);
     app.handle(Event::up(Key::Quasi(Quasi::LeapForward)));
-    assert!(app.message.is_empty(), "leap {pattern}: {}", app.message);
+    assert!(
+        app.session.message.is_empty(),
+        "leap {pattern}: {}",
+        app.session.message
+    );
     app.evaluate().unwrap(); // as the terminal loop does when the journal moves
 }
 
@@ -131,9 +135,9 @@ fn scene(dir: &Path) -> App {
         "constraint one date per event: false :- date(E, D1), date(E, D2), D1 \\= D2.",
     );
     assert!(
-        app.message.contains("fires on a planted violation"),
+        app.session.message.contains("fires on a planted violation"),
         "{}",
-        app.message
+        app.session.message
     );
     app.flush();
     app.evaluate().unwrap();
@@ -273,15 +277,15 @@ fn scene_three_as_written() {
     app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
     typ(&mut app, "the flight was in 1989");
     app.handle(Event::up(Key::Quasi(Quasi::Suppose)));
-    assert!(matches!(app.mode, Mode::ConfirmSuppose { .. }));
+    assert!(matches!(app.session.mode, Mode::ConfirmSuppose { .. }));
     let s = screen(&app);
     s.assert("SUPPOSE  the flight was in 1989");
     s.assert("Do you mean: Suppose that the date of Buran's flight is 1989.  ⏎ yes · Esc no");
     tap(&mut app, Key::Enter);
     assert!(
-        app.message.contains("set aside in this world: 1.1"),
+        app.session.message.contains("set aside in this world: 1.1"),
         "{}",
-        app.message
+        app.session.message
     );
     let s = screen(&app);
     s.assert("worlds actual | suppose: the flight was in 1989");
@@ -342,7 +346,11 @@ fn a_constraint_that_cannot_fire_is_not_kept() {
         "constraint broken: false :- date(E, D), date(E, D), D \\= D.",
     );
     app.handle(Event::up(Key::Quasi(Quasi::Command)));
-    assert!(app.message.contains("did not fire"), "{}", app.message);
+    assert!(
+        app.session.message.contains("did not fire"),
+        "{}",
+        app.session.message
+    );
     assert_eq!(app.journal().entries().len(), n, "nothing written");
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -367,10 +375,10 @@ fn a_constraint_on_negative_or_zero_values_can_be_kept() {
         typ(&mut app, line);
         app.handle(Event::up(Key::Quasi(Quasi::Command)));
         assert_eq!(
-            app.message.contains("kept: it fires"),
+            app.session.message.contains("kept: it fires"),
             kept,
             "{line}: {}",
-            app.message
+            app.session.message
         );
     }
     std::fs::remove_dir_all(&dir).unwrap();
@@ -455,7 +463,7 @@ fn a_second_adoption_is_the_one_retracted() {
     tap(&mut app, Key::F(3));
     let second = app.journal().entries().last().unwrap().seq;
     tap(&mut app, Key::F(4));
-    assert_eq!(app.message, format!("adoption {second} retracted"));
+    assert_eq!(app.session.message, format!("adoption {second} retracted"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -494,7 +502,7 @@ fn replay_reproduces_claims_constraints_and_worlds() {
     let mut r = App::open(&dir).unwrap();
     r.evaluate().unwrap();
     assert_eq!(r.outline, app.outline);
-    assert_eq!(r.view, app.view);
+    assert_eq!(r.session.view, app.session.view);
     assert_eq!(
         (r.tip, &r.reason.world(), &r.reason.supposition),
         (app.tip, &app.reason.world(), &app.reason.supposition)
@@ -565,7 +573,7 @@ fn an_item_with_no_claim_cannot_be_adopted() {
     let before = app.journal().entries().len();
     command(&mut app, "adopt");
     assert_eq!(
-        (app.message.as_str(), app.journal().entries().len()),
+        (app.session.message.as_str(), app.journal().entries().len()),
         ("the target states no claim to adopt", before)
     );
     std::fs::remove_dir_all(&dir).unwrap();

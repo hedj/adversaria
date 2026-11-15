@@ -1,16 +1,27 @@
-//! How a session of the memex is set up, and what it has noticed outside
-//! the journal (docs/structure.md § The code's structure).
+//! What a session of the memex holds and the journal does not: what the
+//! user sees and is in the middle of, how the session is set up, and what
+//! it has noticed outside the journal (docs/structure.md § The code's structure).
 
-use crate::app::Key;
+use crate::app::{Key, Mode, PendingText, View};
 use std::collections::BTreeMap;
 
 /// The violations and the disagreements shown, by key.
 pub type Observed = (Vec<String>, Vec<String>);
 
-/// The keys bound to commands, whether the user has quit, and what the
-/// session has noticed outside the journal.
+/// What the user sees and is in the middle of, the keys bound to
+/// commands, whether the user has quit, and what the session has noticed
+/// outside the journal: all that it holds and the journal does not.
 #[derive(Default)]
 pub struct Session {
+    pub view: View,
+    pub mode: Mode,
+    pub message: String,
+    /// Text typed into an item and not yet written.
+    pub(crate) pending_text: Option<PendingText>,
+    /// The view moved and is not yet written.
+    pub(crate) view_dirty: bool,
+    /// The last leap's pattern and direction, for leaping again.
+    pub(crate) last_leap: Option<(String, bool)>,
     pub keys: Keys,
     pub quit: bool,
     outside: Outside,
@@ -63,6 +74,59 @@ impl Keys {
 }
 
 impl Session {
+    /// Show what went wrong, if anything did.
+    pub(crate) fn report<T>(&mut self, result: Result<T, String>) {
+        if let Err(m) = result {
+            self.message = m;
+        }
+    }
+
+    /// Type a character at the text cursor into an item whose text, as
+    /// shown, is this.
+    pub(crate) fn type_into(&mut self, item: u64, mut text: Vec<char>, c: char) {
+        let pos = self.view.pos.min(text.len());
+        text.insert(pos, c);
+        self.view.pos = pos + 1;
+        self.hold_text(item, text);
+    }
+
+    /// Erase the character before the text cursor, or the one after it, in
+    /// an item whose text, as shown, is this; at the end, nothing.
+    pub(crate) fn erase_in(&mut self, item: u64, mut text: Vec<char>, before: bool) {
+        let pos = self.view.pos.min(text.len());
+        if before && pos > 0 {
+            text.remove(pos - 1);
+            self.view.pos = pos - 1;
+        } else if !before && pos < text.len() {
+            text.remove(pos);
+        } else {
+            return;
+        }
+        self.hold_text(item, text);
+    }
+
+    /// Keep an item's new text until it is written.
+    fn hold_text(&mut self, item: u64, text: Vec<char>) {
+        self.pending_text = Some(PendingText { item, text });
+        self.view_dirty = true;
+    }
+
+    /// The text typed into an item and not yet written, if any.
+    pub(crate) fn typed(&self, item: u64) -> Option<&[char]> {
+        let p = self.pending_text.as_ref().filter(|p| p.item == item);
+        p.map(|p| p.text.as_slice())
+    }
+
+    /// The text typed and not yet written, to write it.
+    pub(crate) fn take_text(&mut self) -> Option<PendingText> {
+        self.pending_text.take()
+    }
+
+    /// Whether anything is typed or moved and not yet written.
+    pub fn pending(&self) -> bool {
+        self.pending_text.is_some() || self.view_dirty
+    }
+
     /// Point the source check at another Crossref-like service (for tests).
     pub fn set_crossref(&mut self, base: &str) {
         self.outside.crossref = base.to_string();

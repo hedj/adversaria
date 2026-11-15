@@ -46,9 +46,10 @@ impl T {
     fn command(&mut self, line: &str) {
         self.hold(Quasi::Command, line);
         assert!(
-            !self.app.message.starts_with("no command") && !self.app.message.starts_with("not a"),
+            !self.app.session.message.starts_with("no command")
+                && !self.app.session.message.starts_with("not a"),
             "{line}: {}",
-            self.app.message
+            self.app.session.message
         );
     }
     fn key(&mut self, k: Key) {
@@ -92,16 +93,16 @@ impl T {
     fn says(&self, text: &str) {
         in_tutorial(text);
         assert!(
-            self.app.message.contains(text),
+            self.app.session.message.contains(text),
             "message {:?} lacks {text:?}",
-            self.app.message
+            self.app.session.message
         );
     }
     fn look(&self, at: &str) {
         if self.dump {
             println!(
                 "---- {at} (message: {:?})\n{}",
-                self.app.message,
+                self.app.session.message,
                 self.screen().join("\n")
             );
         }
@@ -190,7 +191,7 @@ fn the_tutorial_works_as_written() {
 
     // Step 8: suppose.
     t.hold(Quasi::Suppose, "the flight was in 1989");
-    assert!(matches!(t.app.mode, Mode::ConfirmSuppose { .. }));
+    assert!(matches!(t.app.session.mode, Mode::ConfirmSuppose { .. }));
     t.look("suppose?");
     t.shows("Do you mean: Suppose that the date of Buran's flight is 1989.  ⏎ yes · Esc no");
     t.key(Key::Enter);
