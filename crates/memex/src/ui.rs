@@ -59,7 +59,7 @@ pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
     draw_top(f, app, top);
     let [left, right] =
         Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).areas(body);
-    if app.supposition.is_some() {
+    if app.reason.supposition.is_some() {
         draw_worlds(f, app, body);
         draw_prompt(f, app, prompt, guide);
         return hits;
@@ -85,7 +85,7 @@ pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
 
 fn draw_top(f: &mut Frame, app: &App, area: Rect) {
     let n = app.journal().entries().len();
-    let world = match &app.supposition {
+    let world = match &app.reason.supposition {
         Some(s) => vec![
             Span::styled("worlds ", dim()),
             Span::styled("actual", bold()),
@@ -94,7 +94,7 @@ fn draw_top(f: &mut Frame, app: &App, area: Rect) {
         ],
         None => vec![
             Span::styled("world ", dim()),
-            Span::styled(app.world.clone(), bold()),
+            Span::styled(app.reason.world().to_string(), bold()),
         ],
     };
     let mut parts = vec![
@@ -112,7 +112,7 @@ fn draw_top(f: &mut Frame, app: &App, area: Rect) {
     let mut left = left;
     left.spans.splice(0..1, parts);
     f.render_widget(Paragraph::new(left), area);
-    let right = match app.eval[0].as_ref().map(status) {
+    let right = match app.reason.eval[0].as_ref().map(status) {
         Some(s) if !s.is_empty() => s,
         _ => format!("pane {} of 2", app.view.focus + 1),
     };
@@ -144,7 +144,7 @@ fn view_panel(app: &App, id: u64, layers: &[crate::outline::Layer]) -> Vec<Line<
         Line::raw(""),
     ];
     for l in layers {
-        let n = app.eval[0]
+        let n = app.reason.eval[0]
             .as_ref()
             .and_then(|e| e.nodes.layers.get(&l.seq))
             .map_or(0, |m| m.len());
@@ -209,7 +209,7 @@ fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
             Style::default().add_modifier(Modifier::UNDERLINED),
         )];
     }
-    if let (Some(d), Some(e)) = (app.outline.derived.get(&id), app.eval[0].as_ref())
+    if let (Some(d), Some(e)) = (app.outline.derived.get(&id), app.reason.eval[0].as_ref())
         && let Some(v) = e.nodes.derived.get(&id)
     {
         out = vec![
@@ -295,7 +295,7 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
                 dim(),
             ));
         }
-        let marks = app.eval[0]
+        let marks = app.reason.eval[0]
             .as_ref()
             .map(|e| item_marks(e, &app.outline, *id))
             .unwrap_or_default();
@@ -390,7 +390,7 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect, hits: &mut Hi
 /// The facts in violations in world k, by seq: marks resting on them are
 /// drawn loudly.
 fn violated(app: &App, k: usize) -> std::collections::BTreeSet<u64> {
-    app.eval[k]
+    app.reason.eval[k]
         .as_ref()
         .map(|e| {
             e.constraints
@@ -408,7 +408,7 @@ pub fn view_figure(app: &App, k: usize, item: u64, width: usize, height: usize) 
         return view::Figure::default();
     };
     let bad = violated(app, k);
-    let inputs: Vec<view::Input> = app.eval[k]
+    let inputs: Vec<view::Input> = app.reason.eval[k]
         .as_ref()
         .map(|e| {
             layers
@@ -532,7 +532,7 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
         );
         return;
     }
-    if let Some(e) = app.eval[0].as_ref()
+    if let Some(e) = app.reason.eval[0].as_ref()
         && !item_marks(e, &app.outline, id).is_empty()
     {
         f.render_widget(
@@ -974,7 +974,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
 
 /// The right pane when a claim is interrogated (one key, F2).
 fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
-    let Some(e) = app.eval[0].as_ref() else {
+    let Some(e) = app.reason.eval[0].as_ref() else {
         return vec![Line::raw("not yet evaluated")];
     };
     let mut lines = vec![
@@ -1067,7 +1067,7 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
 /// Fading hint: while the cursor is on an item with marks, how to try the
 /// other reading; it stops once Suppose has been used four times.
 fn hint(app: &App) -> Option<(String, String)> {
-    let e = app.eval[0].as_ref()?;
+    let e = app.reason.eval[0].as_ref()?;
     if item_marks(e, &app.outline, app.cursor()).is_empty() {
         return None;
     }
@@ -1087,7 +1087,9 @@ fn hint(app: &App) -> Option<(String, String)> {
 /// A supposition: the actual world and the supposed one side by side, row
 /// for row. Rows are the items that state facts or show derived values.
 fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
-    let Some(sup) = &app.supposition else { return };
+    let Some(sup) = &app.reason.supposition else {
+        return;
+    };
     if sup.name.starts_with("revision of ") {
         draw_revision(f, app, area);
         return;
@@ -1096,10 +1098,14 @@ fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area);
     let actual = app.outline_at(sup.actual);
     let worlds = [
-        (&actual, app.eval[1].as_ref(), "WORLD · ACTUAL".to_string()),
+        (
+            &actual,
+            app.reason.eval[1].as_ref(),
+            "WORLD · ACTUAL".to_string(),
+        ),
         (
             &app.outline,
-            app.eval[0].as_ref(),
+            app.reason.eval[0].as_ref(),
             format!("WORLD · SUPPOSE {}", sup.name.to_uppercase()),
         ),
     ];
@@ -1247,10 +1253,14 @@ fn draw_suggestions(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
         width: area.width.saturating_sub(2),
         ..area
     };
-    let shown = app.shown_suggestions();
+    let shown = app.reason.suggestions.shown();
     let mut lines = vec![
         Line::styled(
-            format!("SUGGESTIONS · {} OF {}", shown.len(), app.suggestions.len()),
+            format!(
+                "SUGGESTIONS · {} OF {}",
+                shown.len(),
+                app.reason.suggestions.list.len()
+            ),
             dim(),
         ),
         Line::raw(""),
@@ -1284,7 +1294,9 @@ fn draw_suggestions(f: &mut Frame, app: &App, area: Rect, hits: &mut Hits) {
 /// A document revision's world: each change, one entry each, to keep or
 /// retract (retract N) before the world is committed or closed.
 fn draw_revision(f: &mut Frame, app: &App, area: Rect) {
-    let Some(sup) = &app.supposition else { return };
+    let Some(sup) = &app.reason.supposition else {
+        return;
+    };
     let mut lines = vec![
         Line::styled(format!("WORLD · {}", sup.name.to_uppercase()), dim()),
         Line::raw(""),

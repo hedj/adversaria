@@ -200,7 +200,9 @@ fn a_click_on_a_suggestion_accepts_it() {
     command(&mut app, "pane suggestions");
     assert_eq!(app.view.panes[1].kind, PaneKind::Suggestions);
     let shown: Vec<String> = app
-        .shown_suggestions()
+        .reason
+        .suggestions
+        .shown()
         .iter()
         .map(|s| s.describe())
         .collect();

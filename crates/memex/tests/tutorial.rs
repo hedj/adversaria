@@ -201,7 +201,7 @@ fn the_tutorial_works_as_written() {
     t.command("close");
     t.look("closed");
     t.says("it stays in the journal");
-    assert_eq!(t.app.world, "actual");
+    assert_eq!(t.app.reason.world(), "actual");
     t.shows("The flight came a year after Energia's first launch.");
 
     // Part C, then part D, in the same session.

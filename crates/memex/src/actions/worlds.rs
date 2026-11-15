@@ -72,7 +72,8 @@ impl App {
 
     /// The open supposition's name, and the actual world's head it left.
     fn supposed(&self) -> Result<(String, u64), String> {
-        self.supposition
+        self.reason
+            .supposition
             .as_ref()
             .map(|s| (s.name.clone(), s.actual))
             .ok_or("no supposition is open".into())

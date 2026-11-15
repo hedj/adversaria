@@ -51,14 +51,18 @@ impl App {
     /// first, in case it has not been evaluated since.
     fn vet_rule(&mut self, head: &Term, body: &Term) -> Result<(), String> {
         self.sync_engine()?;
-        self.engine(0)?
+        self.reason
+            .engine(0)?
             .check_rule(head, body)
             .map_err(|w| format!("rule not kept: {w}"))
     }
 
     fn sync_engine(&mut self) -> Result<(), String> {
         let facts = self.facts_at(self.tip)?;
-        self.engine(0)?.sync(&facts).map_err(|e| e.to_string())
+        self.reason
+            .engine(0)?
+            .sync(&facts)
+            .map_err(|e| e.to_string())
     }
 
     fn keep_rule(&mut self, text: &str, head: Term, body: Term, target: u64) -> Result<(), String> {

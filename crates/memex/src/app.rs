@@ -18,7 +18,8 @@ use crate::actions::dispatch::{complete_command, in_quotes};
 use crate::engine::Engine;
 use crate::journal::{Error as JournalError, Journal};
 use crate::outline::{Constraint, Outline, Span, TOP, span_json};
-use crate::reason::{self, ConstraintEval, Prov, Suggestion, WorldEval, solutions};
+use crate::reason::{self, ConstraintEval, Prov, Suggestion, solutions};
+use crate::reasoning::{Reasoning, Supposition};
 use crate::session::Session;
 use format::record::Entry;
 use format::terms::{self, Term};
@@ -308,14 +309,6 @@ pub enum Mode {
     },
 }
 
-/// An open supposition: a world sprouted from the actual one.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Supposition {
-    pub name: String,
-    /// The head of the actual world it was sprouted from.
-    pub actual: u64,
-}
-
 /// Text typed into an item but not yet written.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PendingText {
@@ -332,32 +325,14 @@ pub struct App {
     pub tip: u64,
     /// Entries undone and not redone, most recent last.
     pub redo: Vec<u64>,
-    /// The name of the current world: "actual", or the last Suppose.
-    pub world: String,
     pub message: String,
     pub session: Session,
     pub(crate) pending_text: Option<PendingText>,
     pub(crate) view_dirty: bool,
     pub(crate) last_leap: Option<(String, bool)>,
-    pub supposition: Option<Supposition>,
-    /// Reasoning: the current world's engine, the actual world's while a
-    /// supposition is open, and one for previews.
-    pub(crate) engines: [Option<Engine>; 3],
-    /// What reasoning found: [0] the current world, [1] the actual world
-    /// while a supposition is open.
-    pub eval: [Option<WorldEval>; 2],
+    pub reason: Reasoning,
     /// Interrogation's preview of adopting a claim: violations it would raise.
     pub preview: Option<String>,
-    /// Suggestions for the current world, best evidence first, less those
-    /// dismissed.
-    pub suggestions: Vec<Suggestion>,
-    /// Keys of dismissed suggestions, from the journal.
-    pub dismissed: BTreeSet<String>,
-    /// While the suggestion pane has focus, its order is kept: a suggestion
-    /// never moves under the pointer. Not journaled, like a held key.
-    pub(crate) frozen: Option<Vec<String>>,
-    /// Suggestions recorded as offered (shown in the pane), by identity.
-    pub offered: BTreeSet<String>,
 }
 
 const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
@@ -374,20 +349,13 @@ impl App {
             mode: Mode::Normal,
             tip: 0,
             redo: vec![],
-            world: "actual".into(),
             message: String::new(),
             session: Session::new(dir),
             pending_text: None,
             view_dirty: false,
             last_leap: None,
-            supposition: None,
-            engines: [None, None, None],
-            eval: [None, None],
+            reason: Reasoning::default(),
             preview: None,
-            suggestions: vec![],
-            dismissed: BTreeSet::new(),
-            frozen: None,
-            offered: BTreeSet::new(),
         };
         if app.journal.entries().is_empty() {
             let e = app.journal.append("edit", json!({"op": "init"}))?;
@@ -441,12 +409,12 @@ impl App {
                             .map(|p| (p.to_string(), b["forward"] != false));
                     }
                     if b["op"] == "world" {
-                        self.supposition = None;
+                        self.reason.supposition = None;
                     }
                     if b["op"] == "dismiss"
                         && let Some(k) = b["key"].as_str()
                     {
-                        self.dismissed.insert(k.to_string());
+                        self.reason.suggestions.dismiss(k.to_string());
                     }
                     if b["op"] == "observed" {
                         let keys = |k: &str| {
@@ -462,7 +430,7 @@ impl App {
                             .set_observed((keys("violations"), keys("disagreements")));
                     }
                     if b["op"] == "offer" {
-                        self.offered.extend(
+                        self.reason.suggestions.offer(
                             b["keys"]
                                 .as_array()
                                 .into_iter()
@@ -506,14 +474,10 @@ impl App {
                 {
                     let actual = e.parent_seq().unwrap_or(1);
                     let name = b["name"].as_str().unwrap_or("supposed").to_string();
-                    self.supposition = Some(Supposition { name, actual });
+                    self.reason.supposition = Some(Supposition { name, actual });
                 }
             }
         }
-        self.world = self
-            .supposition
-            .as_ref()
-            .map_or("actual".into(), |s| s.name.clone());
         self.repair_cursors(&before);
     }
 
@@ -1134,7 +1098,7 @@ impl App {
         let mut left = Vec::new();
         for _ in 0..5 {
             self.evaluate()?;
-            let eval = self.eval[0].as_ref().ok_or("no evaluation")?;
+            let eval = self.reason.eval[0].as_ref().ok_or("no evaluation")?;
             let (mut targets, l) = direct_conflicts(&eval.constraints, s.seq);
             left = l;
             targets.retain(|t| self.retractable(*t).is_ok());
@@ -1175,7 +1139,7 @@ impl App {
             .iter()
             .map(|(s, c)| (*s, c.name.clone(), c.rule.clone()))
             .collect();
-        let engine = self.engine(2)?;
+        let engine = self.reason.engine(2)?;
         engine.sync(&facts).map_err(|e| e.to_string())?;
         let mut evals = Vec::new();
         for (seq, name, rule) in constraints {
@@ -1220,7 +1184,7 @@ impl App {
     /// Where a fact entry's fact is stated, in the actual world: its item's
     /// number, or "entry n".
     pub fn fact_place(&self, seq: u64) -> String {
-        let head = self.supposition.as_ref().map_or(self.tip, |s| s.actual);
+        let head = self.reason.actual_head(self.tip);
         let o = self.outline_at(head);
         match o.fact_item.get(&seq) {
             Some(i) => o.number(*i),
@@ -1228,13 +1192,9 @@ impl App {
         }
     }
 
-    pub(crate) fn engine(&mut self, k: usize) -> Result<&mut Engine, String> {
-        crate::world::started(&mut self.engines[k])
-    }
-
     /// The engine of the current world, for tests that count evaluations.
     pub fn current_engine(&mut self) -> Result<&mut Engine, String> {
-        self.engine(0)
+        self.reason.engine(0)
     }
 
     /// Record in the journal what reasoning showed, when it changes: the
@@ -1242,7 +1202,9 @@ impl App {
     /// shown for the first time. A query and its answer are journal entries
     /// (§ The journal, rule 6), so the measures report can count them.
     pub(crate) fn record_observations(&mut self) {
-        let Some(e) = &self.eval[0] else { return };
+        let Some(e) = &self.reason.eval[0] else {
+            return;
+        };
         let key = |c: &ConstraintEval, s: &reason::Solution| {
             let mut f: Vec<String> = s.facts.iter().map(reason::show).collect();
             f.sort();
@@ -1262,7 +1224,7 @@ impl App {
         d.sort();
         let now = (v, d);
         if self.session.observed_changed(&now) {
-            let world = self.world.clone();
+            let world = self.reason.world().to_string();
             self.write_view(
                 "observed",
                 json!({"violations": now.0, "disagreements": now.1, "world": world}),
@@ -1275,15 +1237,10 @@ impl App {
             .iter()
             .any(|p| p.kind == PaneKind::Suggestions)
         {
-            let new: Vec<String> = self
-                .shown_suggestions()
-                .iter()
-                .map(|s| s.identity())
-                .filter(|k| !self.offered.contains(k))
-                .collect();
+            let new = self.reason.suggestions.unoffered();
             if !new.is_empty() {
                 self.write_view("offer", json!({"keys": new}));
-                self.offered.extend(new);
+                self.reason.suggestions.offer(new);
             }
         }
     }
@@ -1308,7 +1265,7 @@ impl App {
             .iter()
             .map(|(s, c)| (*s, c.name.clone()))
             .collect();
-        let engine = self.engine(2)?;
+        let engine = self.reason.engine(2)?;
         engine.sync(&facts).map_err(|e| e.to_string())?;
         let mut raised = Vec::new();
         for (seq, name) in constraints {
@@ -1358,39 +1315,10 @@ impl App {
             })
     }
 
-    /// The suggestions in the order shown: while the suggestion pane has
-    /// focus, those already shown keep their places and new ones go last.
-    pub fn shown_suggestions(&self) -> Vec<&Suggestion> {
-        let mut out: Vec<&Suggestion> = Vec::new();
-        if let Some(order) = &self.frozen {
-            for k in order {
-                if let Some(s) = self.suggestions.iter().find(|s| &s.identity() == k) {
-                    out.push(s);
-                }
-            }
-        }
-        for s in &self.suggestions {
-            if !out.iter().any(|o| o.identity() == s.identity()) {
-                out.push(s);
-            }
-        }
-        out.truncate(5); // few in view
-        out
-    }
-
     /// Keep the suggestion pane's order while it has focus.
     pub(crate) fn update_frozen(&mut self) {
         let focused = self.view.panes[self.view.focus].kind == PaneKind::Suggestions;
-        self.frozen = match (focused, self.frozen.take()) {
-            (true, Some(f)) => Some(f),
-            (true, None) => Some(
-                self.shown_suggestions()
-                    .iter()
-                    .map(|s| s.identity())
-                    .collect(),
-            ),
-            (false, _) => None,
-        };
+        self.reason.suggestions.hold_order(focused);
     }
 
     /// The items whose facts are about an entity: facts with it first.
@@ -1416,6 +1344,7 @@ impl App {
         match (s.kind_name(), &s.kind) {
             ("constraint", Term::Compound(_, a)) if a.len() == 3 => {
                 let planted = self
+                    .reason
                     .engine(0)?
                     .plant(&a[1], &a[2])
                     .map_err(|e| e.to_string())?;
@@ -1700,7 +1629,7 @@ impl App {
     /// The changes of a document revision, from the supposition on: (entry
     /// seq, what it does, retracted).
     pub fn revision_changes(&self) -> Vec<(u64, String, bool)> {
-        let Some(s) = &self.supposition else {
+        let Some(s) = &self.reason.supposition else {
             return vec![];
         };
         let path = self.path(self.tip);

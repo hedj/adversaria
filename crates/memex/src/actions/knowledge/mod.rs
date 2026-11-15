@@ -17,7 +17,8 @@ use serde_json::{Value, json};
 impl App {
     /// Parse Prolog text; an error starts with `what`.
     fn parse_term(&mut self, text: &str, what: &str) -> Result<(Term, Vec<String>), String> {
-        self.engine(0)?
+        self.reason
+            .engine(0)?
             .parse(text)
             .map_err(|e| format!("{what}: {e}"))
     }
@@ -43,7 +44,8 @@ impl App {
     /// Check that a goal is one a definition may use; an error starts with
     /// `what`.
     fn vet_definition(&mut self, goal: &Term, what: &str) -> Result<(), String> {
-        self.engine(0)?
+        self.reason
+            .engine(0)?
             .check_definition(goal)
             .map_err(|w| format!("{what}: {w}"))
     }
@@ -51,6 +53,7 @@ impl App {
     /// A constraint is tried against a planted violation before it is kept.
     fn check_fires(&mut self, vars: &Term, body: &Term) -> Result<(), String> {
         let planted = self
+            .reason
             .engine(0)?
             .plant(vars, body)
             .map_err(|e| e.to_string())?;

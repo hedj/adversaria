@@ -19,26 +19,17 @@ impl App {
     }
 
     fn evaluate_worlds(&mut self) -> Result<(), String> {
-        self.eval = [None, None];
-        for (k, head) in self.shown_heads().into_iter().enumerate() {
-            self.eval[k] = Some(self.evaluate_world(k, head)?);
+        self.reason.eval = [None, None];
+        for (k, head) in self.reason.shown_heads(self.tip).into_iter().enumerate() {
+            self.reason.eval[k] = Some(self.evaluate_world(k, head)?);
         }
         Ok(())
-    }
-
-    /// The heads of the worlds shown: the current one, and the actual one
-    /// while a supposition is open.
-    fn shown_heads(&self) -> Vec<u64> {
-        match &self.supposition {
-            Some(s) => vec![self.tip, s.actual],
-            None => vec![self.tip],
-        }
     }
 
     /// The world at a head, evaluated in engine k.
     fn evaluate_world(&mut self, k: usize, head: u64) -> Result<WorldEval, String> {
         let world = self.world(k, head)?;
-        world.evaluate(&mut self.engines[k])
+        self.reason.evaluate(k, world)
     }
 
     fn world(&self, k: usize, head: u64) -> Result<World, String> {
@@ -69,26 +60,17 @@ impl App {
 
     fn refresh_suggestions(&mut self) -> Result<(), String> {
         let all = self.engine_suggestions()?;
-        self.suggestions = self.undismissed(all);
+        self.reason.suggestions.set(all);
         Ok(())
     }
 
     /// The current world's engine's suggestions, if it has facts.
     fn engine_suggestions(&mut self) -> Result<Vec<Suggestion>, String> {
-        if !self.has_facts() {
+        if !self.reason.has_facts() {
             return Ok(vec![]);
         }
-        self.engine(0)?.suggestions().map_err(|e| e.to_string())
-    }
-
-    fn has_facts(&self) -> bool {
-        self.engines[0].is_some() && self.eval[0].as_ref().is_some_and(|e| !e.facts.is_empty())
-    }
-
-    fn undismissed(&self, all: Vec<Suggestion>) -> Vec<Suggestion> {
-        all.into_iter()
-            .filter(|s| !self.dismissed.contains(&s.key()))
-            .collect()
+        let engine = self.reason.engine(0)?;
+        engine.suggestions().map_err(|e| e.to_string())
     }
 
     // What follows.

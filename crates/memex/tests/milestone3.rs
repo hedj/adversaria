@@ -405,12 +405,12 @@ fn replay_reproduces_the_screen() {
     let n = live.len() - 1; // the last line holds messages
     assert_eq!(live[..n], again[..n]);
     assert_eq!(
-        (replayed.tip, &replayed.redo, &replayed.world),
-        (app.tip, &app.redo, &app.world)
+        (replayed.tip, &replayed.redo, &replayed.reason.world()),
+        (app.tip, &app.redo, &app.reason.world())
     );
     assert_eq!(replayed.view, app.view);
     assert_eq!(replayed.outline, app.outline);
-    assert_eq!(app.world, "the flight was in 1989");
+    assert_eq!(app.reason.world(), "the flight was in 1989");
     // Every kind the session used is in the journal.
     let kinds: std::collections::BTreeSet<&str> =
         app.journal().entries().iter().map(|e| e.kind()).collect();
@@ -538,8 +538,8 @@ fn replay_matches_after_every_action() {
         assert_eq!(r.view, app.view, "view differs after step {i}");
         assert_eq!(r.outline, app.outline, "outline differs after step {i}");
         assert_eq!(
-            (r.tip, &r.redo, &r.world),
-            (app.tip, &app.redo, &app.world),
+            (r.tip, &r.redo, &r.reason.world()),
+            (app.tip, &app.redo, &app.reason.world()),
             "after step {i}"
         );
     }

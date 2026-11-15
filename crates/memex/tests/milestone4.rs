@@ -303,8 +303,8 @@ fn scene_three_as_written() {
     // Close it: back to the actual world, the branch kept.
     command(&mut app, "close");
     app.evaluate().unwrap();
-    assert!(app.supposition.is_none());
-    assert_eq!(app.world, "actual");
+    assert!(app.reason.supposition.is_none());
+    assert_eq!(app.reason.world(), "actual");
     let s = screen(&app);
     s.assert("1 disagreement between sources");
     s.assert("The flight came a year after Energia's first launch.");
@@ -489,10 +489,10 @@ fn replay_reproduces_claims_constraints_and_worlds() {
     assert_eq!(r.outline, app.outline);
     assert_eq!(r.view, app.view);
     assert_eq!(
-        (r.tip, &r.world, &r.supposition),
-        (app.tip, &app.world, &app.supposition)
+        (r.tip, &r.reason.world(), &r.reason.supposition),
+        (app.tip, &app.reason.world(), &app.reason.supposition)
     );
-    assert_eq!(r.eval, app.eval);
+    assert_eq!(r.reason.eval, app.reason.eval);
     let n = screen(&app).lines.len() - 1;
     assert_eq!(screen(&r).lines[..n], screen(&app).lines[..n]);
     std::fs::remove_dir_all(&dir).unwrap();
@@ -575,7 +575,9 @@ fn a_retracted_constraint_is_not_read() {
     let seq = app.journal().entries().last().unwrap().seq;
     let count = |app: &mut App| {
         app.evaluate().unwrap();
-        app.eval[0].as_ref().map_or(0, |e| e.constraints.len())
+        app.reason.eval[0]
+            .as_ref()
+            .map_or(0, |e| e.constraints.len())
     };
     let before = count(&mut app);
     command(&mut app, &format!("retract {seq}"));

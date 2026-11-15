@@ -241,7 +241,8 @@ fn a_revised_document_opens_a_world_of_changes() {
     .unwrap();
     command(&mut app, &format!("import document {}", src.display()));
     assert!(
-        app.supposition
+        app.reason
+            .supposition
             .as_ref()
             .is_some_and(|s| s.name == "revision of essay.md")
     );
@@ -274,7 +275,7 @@ fn a_revised_document_opens_a_world_of_changes() {
     command(&mut app, &format!("retract {deletion}"));
     tap(&mut app, Key::Enter);
     command(&mut app, "commit");
-    assert!(app.supposition.is_none());
+    assert!(app.reason.supposition.is_none());
     let texts: Vec<String> = app
         .outline
         .in_order()

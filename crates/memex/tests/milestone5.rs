@@ -81,7 +81,9 @@ fn assert_shows(s: &[String], text: &str) {
 }
 
 fn described(app: &App) -> Vec<String> {
-    app.shown_suggestions()
+    app.reason
+        .suggestions
+        .shown()
         .iter()
         .map(|s| s.describe())
         .collect()
@@ -134,7 +136,7 @@ fn a_planted_wrong_date_is_reported_against_wikidata() {
         described(&app)
     );
     assert!(
-        app.shown_suggestions()[0]
+        app.reason.suggestions.shown()[0]
             .evidence
             .contains("within five years")
     );
@@ -263,7 +265,9 @@ fn no_suggested_reference_names_a_work_outside_the_store() {
     command(&mut app, "fact same_as(paper_b, 'QTEST2')");
     command(&mut app, &format!("import wikidata {}", subset.display()));
     let refs: Vec<String> = app
+        .reason
         .suggestions
+        .list
         .iter()
         .filter(|s| s.kind_name() == "reference")
         .map(|s| s.describe())
@@ -272,7 +276,7 @@ fn no_suggested_reference_names_a_work_outside_the_store() {
         refs,
         vec!["cite paper_a for the claims about buran_flight".to_string()]
     );
-    for s in &app.suggestions {
+    for s in &app.reason.suggestions.list {
         assert!(
             !s.describe().contains("QTEST3") && !s.evidence.contains("QTEST3"),
             "names a work outside the store: {s:?}"
@@ -311,13 +315,19 @@ fn the_pane_keeps_its_rules() {
         }
     }
     assert!(
-        app.suggestions.len() > 5,
+        app.reason.suggestions.list.len() > 5,
         "{} suggestions",
-        app.suggestions.len()
+        app.reason.suggestions.list.len()
     );
-    assert_eq!(app.shown_suggestions().len(), 5, "few in view");
+    assert_eq!(app.reason.suggestions.shown().len(), 5, "few in view");
     // Ranked by evidence: scores never rise down the list.
-    let scores: Vec<i64> = app.suggestions.iter().map(|s| s.score).collect();
+    let scores: Vec<i64> = app
+        .reason
+        .suggestions
+        .list
+        .iter()
+        .map(|s| s.score)
+        .collect();
     assert!(scores.windows(2).all(|w| w[0] >= w[1]), "{scores:?}");
     // It never takes the keyboard: typing goes to the outline.
     typ(&mut app, " here");
@@ -358,7 +368,9 @@ fn the_pane_keeps_its_rules() {
     assert_eq!((distinct.len(), after.len()), (5, 5), "{after:?}");
     // Once the pane loses focus, the order is the ranking again.
     let ranked: Vec<String> = app
+        .reason
         .suggestions
+        .list
         .iter()
         .take(5)
         .map(|s| s.describe())
@@ -374,8 +386,17 @@ fn the_pane_keeps_its_rules() {
     app.flush();
     let mut r = App::open(&dir).unwrap();
     r.evaluate().unwrap();
-    assert_eq!(r.dismissed, app.dismissed);
-    assert!(!r.suggestions.iter().any(|s| s.describe() == first));
+    assert_eq!(
+        r.reason.suggestions.dismissed,
+        app.reason.suggestions.dismissed
+    );
+    assert!(
+        !r.reason
+            .suggestions
+            .list
+            .iter()
+            .any(|s| s.describe() == first)
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

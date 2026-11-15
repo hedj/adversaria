@@ -11,6 +11,7 @@ pub mod journal;
 pub mod outline;
 pub mod prolog;
 pub mod reason;
+pub mod reasoning;
 pub mod replay;
 pub mod session;
 pub mod store;

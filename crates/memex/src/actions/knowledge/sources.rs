@@ -33,7 +33,8 @@ impl App {
     }
 
     fn vet_wikidata(&mut self, file: &str) -> Result<(), String> {
-        self.engine(0)?
+        self.reason
+            .engine(0)?
             .check_wikidata(Path::new(file))
             .map_err(|e| format!("{file} is not a Wikidata subset: {e}"))
     }

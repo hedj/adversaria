@@ -101,7 +101,9 @@ impl App {
             .first()
             .and_then(|w| w.parse().ok())
             .ok_or(format!("{command} (suggestion) a number"))?;
-        self.shown_suggestions()
+        self.reason
+            .suggestions
+            .shown()
             .get(n.wrapping_sub(1))
             .map(|s| (*s).clone())
             .ok_or(format!("there is no suggestion {n}"))

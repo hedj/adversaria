@@ -292,7 +292,7 @@ fn a_violation_through_a_rule_rests_on_the_facts_under_it() {
         "constraint within income: false :- spent(S), cell(income, I), S > I.",
     );
     command(&mut app, "set cell(food, 900)");
-    let eval = app.eval[0].as_ref().unwrap();
+    let eval = app.reason.eval[0].as_ref().unwrap();
     let c = eval
         .constraints
         .iter()

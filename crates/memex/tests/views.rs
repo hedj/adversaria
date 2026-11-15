@@ -74,7 +74,7 @@ fn budget(dir: &Path) -> App {
 
 /// The marks of the view at an item, as text, in order.
 fn marks(app: &App, item: u64) -> Vec<String> {
-    let eval = app.eval[0].as_ref().unwrap();
+    let eval = app.reason.eval[0].as_ref().unwrap();
     app.outline.views[&item]
         .iter()
         .flat_map(|l| eval.nodes.layers.get(&l.seq).cloned().unwrap_or_default())
@@ -109,7 +109,7 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
         ]
     );
     // Each mark rests on the fact it shows.
-    let eval = app.eval[0].as_ref().unwrap();
+    let eval = app.reason.eval[0].as_ref().unwrap();
     let layer = app.outline.views[&chart][0].seq;
     for (mark, prov) in &eval.nodes.layers[&layer] {
         assert_eq!(prov.len(), 1, "{mark:?}");
@@ -148,7 +148,7 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
     command(&mut app, "layer text(x(1), y(1), text(S)) where spent(S)");
     let spent = find(&app, "spent");
     assert_eq!(marks(&app, spent), ["text(x(1), y(1), text(2100))"]);
-    let eval = app.eval[0].as_ref().unwrap();
+    let eval = app.reason.eval[0].as_ref().unwrap();
     let l = app.outline.views[&spent][0].seq;
     assert_eq!(
         eval.nodes.layers[&l][0].1.len(),
