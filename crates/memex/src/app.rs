@@ -1080,17 +1080,6 @@ impl App {
         out
     }
 
-    /// The depth of an item in the outline: a top-level item is 0.
-    fn depth_of(&self, id: u64) -> usize {
-        let mut d = 0;
-        let mut at = self.notebook.outline.parent(id);
-        while let Some(p) = at.filter(|p| *p != TOP) {
-            d += 1;
-            at = self.notebook.outline.parent(p);
-        }
-        d
-    }
-
     /// Write an item for a document block, with its citations as facts.
     /// Write a block last under an item.
     pub(crate) fn append_block(
@@ -1142,66 +1131,6 @@ impl App {
             Some(s) => self.notebook.changes_since(s.actual),
             None => vec![],
         }
-    }
-
-    /// Export a section (an item and its branch), or the whole outline, as a
-    /// document. Its metadata lists the hashes of the entries its text came
-    /// from, so a published text traces back to the record.
-    pub(crate) fn export(&mut self, file: &str, section: Option<u64>) -> Result<String, String> {
-        let roots: Vec<u64> = match section {
-            Some(s) => vec![s],
-            None => self.notebook.outline.top.clone(),
-        };
-        let mut blocks = Vec::new();
-        let mut seqs = std::collections::BTreeSet::new();
-        for r in roots {
-            let base = self.depth_of(r);
-            let mut stack = vec![r];
-            while let Some(id) = stack.pop() {
-                let item = &self.notebook.outline.items[&id];
-                let style = if item.block.style.is_empty() {
-                    if item.children.is_empty() {
-                        "para"
-                    } else {
-                        "heading"
-                    }
-                } else {
-                    item.block.style.as_str()
-                };
-                let text = self.notebook.outline.text(id);
-                blocks.push(crate::docs::Block {
-                    depth: self.depth_of(id) - base,
-                    style: style.into(),
-                    cites: crate::docs::cite_keys(&text),
-                    text,
-                });
-                seqs.extend(item.spans.iter().map(|s| s.seq));
-                seqs.insert(id);
-                stack.extend(item.children.iter().rev());
-            }
-        }
-        let hashes: Vec<String> = seqs
-            .iter()
-            .filter_map(|s| self.notebook.entry(*s).map(|e| e.hash.clone()))
-            .collect();
-        crate::docs::write(
-            &crate::docs::markdown(&blocks),
-            std::path::Path::new(file),
-            &hashes,
-        )?;
-        let name = std::path::Path::new(file)
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        self.write_view(
-            "export",
-            json!({"file": name, "items": blocks.len(), "sources": hashes.len()}),
-        );
-        Ok(format!(
-            "exported {} items to {name}, citing {} source entries",
-            blocks.len(),
-            hashes.len()
-        ))
     }
 
     /// An item's claims: (entry seq, source, claimed fact).

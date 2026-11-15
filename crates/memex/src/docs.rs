@@ -454,6 +454,12 @@ fn key(part: &str) -> Option<String> {
     named.then(|| k.to_string())
 }
 
+/// Write blocks to a file as Markdown, with the hashes of the entries
+/// they came from in its metadata.
+pub fn write_markdown(blocks: &[Block], file: &str, hashes: &[String]) -> Result<(), String> {
+    write(&markdown(blocks), Path::new(file), hashes)
+}
+
 /// Blocks as a Markdown document: headings by level, paragraphs, lists,
 /// quotes, code, display mathematics, and tables as pipe tables.
 pub fn markdown(blocks: &[Block]) -> String {

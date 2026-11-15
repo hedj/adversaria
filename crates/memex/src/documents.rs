@@ -23,12 +23,10 @@ pub(crate) struct Document {
 impl Document {
     /// Read a document, and keep its file as a blob of the notebook.
     fn read(file: &str, notebook: &Notebook) -> Result<Document, String> {
-        let path = Path::new(file);
-        let (blocks, losses, _) = crate::docs::read(path)?;
+        let (blocks, losses, _) = crate::docs::read(Path::new(file))?;
         let blob = notebook.store_file(file)?;
-        let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
         Ok(Document {
-            name: name.unwrap_or_default(),
+            name: file_name_of(file),
             blob,
             blocks,
             losses,
@@ -103,6 +101,28 @@ impl App {
             parents.push(self.append_block(b, under, import)?);
         }
         Ok(())
+    }
+
+    /// Export a section (an item and its branch), or the whole outline, as a
+    /// document. Its metadata lists the hashes of the entries its text came
+    /// from, so a published text traces back to the record.
+    pub(crate) fn export(&mut self, file: &str, section: Option<u64>) -> Result<String, String> {
+        let exported = self.notebook.outline.exported(section);
+        let hashes = self.notebook.hashes_of(&exported.entries);
+        crate::docs::write_markdown(&exported.blocks, file, &hashes)?;
+        let count = (exported.blocks.len(), hashes.len());
+        Ok(self.say_exported(file, count))
+    }
+
+    /// Record an export, by its file's name and how many items and source
+    /// entries it holds, and say so.
+    fn say_exported(&mut self, file: &str, (items, sources): (usize, usize)) -> String {
+        let name = file_name_of(file);
+        self.write_view(
+            "export",
+            json!({"file": name, "items": items, "sources": sources}),
+        );
+        format!("exported {items} items to {name}, citing {sources} source entries")
     }
 
     /// A revised document: align its blocks with the items of the earlier
@@ -224,4 +244,12 @@ impl Stack {
         self.pop_to(depth);
         self.chain.push((depth, id));
     }
+}
+
+/// The name of a file, without its directory.
+fn file_name_of(file: &str) -> String {
+    let name = Path::new(file)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned());
+    name.unwrap_or_default()
 }

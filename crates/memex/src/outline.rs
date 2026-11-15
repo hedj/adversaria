@@ -44,6 +44,22 @@ pub struct Span {
     pub len: usize,
 }
 
+/// What an export holds: the blocks of the items exported, from the depth
+/// of each root, and the entries their texts came from.
+#[derive(Default)]
+pub struct Exported {
+    pub blocks: Vec<crate::docs::Block>,
+    pub entries: BTreeSet<u64>,
+}
+
+impl Exported {
+    /// Add an item, its depth counted from a root's.
+    fn add(&mut self, o: &Outline, id: u64, base: usize) {
+        self.blocks.push(o.block_at(id, base));
+        self.entries.extend(o.entries_of(id));
+    }
+}
+
 /// A revision of a document in items: the item each new block keeps, if
 /// any; the blocks whose text changes; the items dropped; and where the
 /// document is.
@@ -780,6 +796,61 @@ impl Outline {
             .collect()
     }
 
+    /// What exporting a section, or the whole outline, holds.
+    pub fn exported(&self, section: Option<u64>) -> Exported {
+        let roots = section.map_or(self.top.clone(), |s| vec![s]);
+        let mut out = Exported::default();
+        for r in roots {
+            let base = self.depth_of(r);
+            for id in self.branch(r) {
+                out.add(self, id, base);
+            }
+        }
+        out
+    }
+
+    /// An item and the items under it, in order.
+    fn branch(&self, root: u64) -> Vec<u64> {
+        self.walk(vec![root])
+    }
+
+    /// The depth of an item in the outline: a top-level item is 0.
+    pub fn depth_of(&self, id: u64) -> usize {
+        let mut d = 0;
+        let mut at = self.parent(id);
+        while let Some(p) = at.filter(|p| *p != TOP) {
+            d += 1;
+            at = self.parent(p);
+        }
+        d
+    }
+
+    /// An item as a block, its depth counted from a root's.
+    fn block_at(&self, id: u64, base: usize) -> crate::docs::Block {
+        crate::docs::Block::plain(
+            self.depth_of(id) - base,
+            self.export_style(id),
+            self.text(id),
+        )
+    }
+
+    /// How an item exports: by its style, or the user's own as a heading
+    /// if it has children, else a paragraph.
+    fn export_style(&self, id: u64) -> &str {
+        let item = &self.items[&id];
+        match (item.block.style.as_str(), item.children.is_empty()) {
+            ("", true) => "para",
+            ("", false) => "heading",
+            (style, _) => style,
+        }
+    }
+
+    /// The entries an item's text came from, and its own.
+    fn entries_of(&self, id: u64) -> Vec<u64> {
+        let spans = self.items[&id].spans.iter().map(|s| s.seq);
+        spans.chain([id]).collect()
+    }
+
     /// The items any of these imports brought in, in order.
     pub fn items_from_any(&self, imports: &[u64]) -> Vec<u64> {
         let from = |i: &u64| self.origin(*i).is_some_and(|o| imports.contains(&o));
@@ -862,8 +933,13 @@ impl Outline {
     }
 
     pub fn in_order(&self) -> Vec<u64> {
+        self.walk(self.top.iter().rev().copied().collect())
+    }
+
+    /// The items from a stack of them, each before the items under it, in
+    /// order; the last of the stack first.
+    fn walk(&self, mut stack: Vec<u64>) -> Vec<u64> {
         let mut out = Vec::with_capacity(self.items.len());
-        let mut stack: Vec<u64> = self.top.iter().rev().copied().collect();
         while let Some(id) = stack.pop() {
             out.push(id);
             stack.extend(self.children(id).iter().rev());

@@ -219,6 +219,12 @@ impl Notebook {
         imports.map(|e| e.seq).collect()
     }
 
+    /// The hashes of these entries, of those the journal holds.
+    pub(crate) fn hashes_of(&self, entries: &std::collections::BTreeSet<u64>) -> Vec<String> {
+        let found = entries.iter().filter_map(|s| self.entry(*s));
+        found.map(|e| e.hash.clone()).collect()
+    }
+
     /// The sequence number the next entry will have.
     pub(crate) fn next_seq(&self) -> u64 {
         self.entry_count() as u64 + 1
