@@ -290,3 +290,13 @@ fn a_retracted_change_is_shown_retracted() {
     let line = format!("#{change}  changed 1.1: “Old text.” → “New text.”  (retracted)");
     assert!(shows(&r, &line), "{:?}", r.lines());
 }
+
+#[test]
+fn the_top_bar_keeps_its_left_whole() {
+    // Catches the right side of the bar drawn over the left when both do
+    // not fit: here a revision's world, on 80 columns.
+    let mut r = Room::new("rev-top");
+    revised(&mut r, "# T\n", "# T\n");
+    let top = r.lines().remove(0);
+    assert!(top.contains("suppose: revision of d.md"), "{top}");
+}

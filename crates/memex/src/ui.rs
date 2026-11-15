@@ -84,8 +84,10 @@ pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
 }
 
 fn draw_top(f: &mut Frame, app: &App, area: Rect) {
-    f.render_widget(Paragraph::new(top_left(app)), area);
-    if let Some(right) = top_right(app, area.width) {
+    let left = top_left(app);
+    let room = (area.width as usize).saturating_sub(left.width() + 1);
+    f.render_widget(Paragraph::new(left), area);
+    if let Some(right) = top_right(app, room) {
         f.render_widget(Paragraph::new(right), area);
     }
 }
@@ -125,13 +127,13 @@ fn world_spans(app: &App) -> Vec<Span<'static>> {
 }
 
 /// The top bar's right: the world's status, else the pane with focus,
-/// at the right, dim, if it fits.
-fn top_right(app: &App, width: u16) -> Option<Line<'static>> {
+/// at the right, dim, if it fits in the room the left leaves.
+fn top_right(app: &App, room: usize) -> Option<Line<'static>> {
     let text = match app.reason.eval[0].as_ref().map(status) {
         Some(s) if !s.is_empty() => s,
         _ => format!("pane {} of 2", app.session.view.focus + 1),
     };
-    let fits = (text.chars().count() as u16) < width;
+    let fits = text.chars().count() <= room;
     fits.then(|| Line::styled(text, dim()).right_aligned())
 }
 
