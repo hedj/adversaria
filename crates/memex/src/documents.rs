@@ -216,8 +216,8 @@ impl App {
         Ok(())
     }
 
-    /// The blocks that are no item yet, in the document's order, each
-    /// placed by the items before it (see `Stack`).
+    /// Each block in the document's order, placed by the items before it
+    /// (see `Stack`): a new one written there, a kept one moved there.
     fn write_created(
         &mut self,
         revised: &Revised,
@@ -230,12 +230,25 @@ impl App {
         };
         for (b, kept) in blocks.iter().zip(&revised.kept) {
             let id = match kept {
-                Some(id) => *id,
+                Some(id) => self.write_kept(*id, b, &mut stack)?,
                 None => self.write_new(b, &mut stack, import)?,
             };
             stack.push(b.depth, id);
         }
         Ok(())
+    }
+
+    /// A kept block, moved under the item the stack puts it under, if it is
+    /// under another. Kept blocks keep the document's order (the alignment
+    /// keeps order), so only the parent can be wrong; the user's own items
+    /// among them stay where they are.
+    fn write_kept(&mut self, id: u64, b: &Block, stack: &mut Stack) -> Result<u64, String> {
+        let spot = stack.spot(b.depth);
+        if self.notebook.outline.parent_or_top(id) != spot.under {
+            let body = json!({"op": "move", "item": id, "under": spot.under, "after": spot.after});
+            self.write_here("edit", body)?;
+        }
+        Ok(id)
     }
 
     /// A new block, where the stack puts it.

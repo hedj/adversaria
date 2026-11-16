@@ -679,6 +679,11 @@ impl Outline {
         parts.join(".")
     }
 
+    /// An item as a change names it: its number and its text.
+    pub fn labelled(&self, id: u64) -> String {
+        format!("{}: “{}”", self.number(id), self.text(id))
+    }
+
     /// The item an outline number names.
     pub fn by_number(&self, n: &str) -> Option<u64> {
         let mut at = TOP;

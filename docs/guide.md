@@ -560,8 +560,10 @@ hidden.
 **Import it again** after a co-author has revised it, under the same file
 name, and the memex compares the new version with what it imported before.
 It opens a supposed world with each change as one entry: changed text,
-added items, deleted items. `retract N` drops a change; `commit` accepts
-the rest; `close` rejects them all.
+added items, deleted items, and items moved under another heading (when a
+heading changes its level, for one). `retract N` drops a change; `commit`
+accepts the rest; `close` rejects them all. Your own items stay where you
+put them.
 
 **Export** writes the outline, or one section, through Pandoc. The format
 comes from the file's extension: `.md`, `.docx`, `.odt`, `.tex`, `.html`.
@@ -796,8 +798,9 @@ This is a prototype, built for a one-month trial. Known limits:
 - The quasimode keys are provisional; they have not been tried on real
   keyboards.
 - Images are not shown, though the graphics protocol is required.
-- Re-importing a document does not detect moved blocks; a move shows as a
-  deletion and an addition.
+- Re-importing a document does not detect a block moved past others; it
+  shows as a deletion and an addition. A block that keeps its place among
+  the others but falls under another heading is moved.
 - Seal dates are not shown in the memex, and `check` does not check that
   they are in order.
 - Integers larger than 2^53 − 1 are refused in the journal.

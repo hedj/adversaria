@@ -4,7 +4,7 @@
 
 use crate::docs::Quote;
 use crate::journal::{Error as JournalError, Journal};
-use crate::outline::{Constraint, Outline};
+use crate::outline::{Constraint, Outline, TOP};
 use format::record::Entry;
 use format::terms::Term;
 use serde_json::{Value, json};
@@ -43,6 +43,14 @@ fn changed_inputs(b: &Value) -> Option<Vec<String>> {
         .map(|input| input["path"].as_str().unwrap_or("").into())
         .collect();
     (!paths.is_empty()).then_some(paths)
+}
+
+/// Where a move puts an item: under another, or at the top.
+fn placed(outline: &Outline, under: &Value) -> String {
+    match under.as_u64().filter(|u| *u != TOP) {
+        Some(u) => format!("under “{}”", outline.text(u)),
+        None => "to the top".into(),
+    }
 }
 
 /// Whether an input's file no longer matches the hash recorded for it.
@@ -356,11 +364,11 @@ impl Notebook {
     }
 
     /// What an edit does, beside the actual outline: an item changed,
-    /// added or deleted.
+    /// added, deleted or moved.
     fn change(&self, e: &Entry, actual: &Outline) -> Option<String> {
         let b = e.body()?;
         let item = b["item"].as_u64().unwrap_or(e.seq);
-        let was = || format!("{}: “{}”", actual.number(item), actual.text(item));
+        let was = || actual.labelled(item);
         match b["op"].as_str()? {
             "text" => Some(format!(
                 "changed {} → “{}”",
@@ -369,6 +377,7 @@ impl Notebook {
             )),
             "create" => Some(format!("added: “{}”", b["add"].as_str().unwrap_or(""))),
             "delete" => Some(format!("deleted {}", was())),
+            "move" => Some(format!("moved {} {}", was(), placed(actual, &b["under"]))),
             _ => None,
         }
     }

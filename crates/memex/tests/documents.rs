@@ -51,6 +51,11 @@ fn revised(r: &mut Room, first: &str, second: &str) -> Vec<(String, String)> {
 /// its own.
 fn revised_again(r: &mut Room, text: &str) -> Vec<(String, String)> {
     import(r, "d.md", text);
+    pairs(r)
+}
+
+/// Each item, by its parent's text and its own.
+fn pairs(r: &Room) -> Vec<(String, String)> {
     let outline = &r.app.notebook.outline;
     let parent = |id: u64| {
         outline
@@ -100,7 +105,7 @@ fn a_new_block_goes_under_the_block_it_follows_in_the_document() {
         ("", "T"),
         ("T", "Sub"),
         ("Sub", "New text."),
-        ("T", "Old text."),
+        ("Sub", "Old text."),
     ]);
     assert_eq!(after, expected);
 }
@@ -122,13 +127,11 @@ fn a_new_block_goes_after_the_one_before_it() {
 }
 
 #[test]
-fn a_dropped_block_that_holds_a_kept_one_stays() {
+fn a_kept_block_is_moved_out_of_a_dropped_one_before_it_goes() {
+    // Catches a kept block deleted with the block it was under.
     let mut r = Room::new("rev-keeps");
     let after = revised(&mut r, "# A\n\nKept text.\n", "Kept text.\n");
-    assert_eq!(
-        (after, deletes(&r)),
-        (items(&[("", "A"), ("A", "Kept text.")]), 0)
-    );
+    assert_eq!((after, deletes(&r)), (items(&[("", "Kept text.")]), 1));
 }
 
 #[test]
@@ -195,7 +198,7 @@ fn a_new_block_two_levels_down_goes_under_the_block_before_it() {
     );
     assert_eq!(
         after,
-        items(&[("", "T"), ("T", "Deep"), ("T", "Text one.")])
+        items(&[("", "T"), ("T", "Deep"), ("Deep", "Text one.")])
     );
 }
 
@@ -311,4 +314,21 @@ fn an_export_of_a_section_that_is_not_there_says_so() {
     r.command(&format!("export {} 99", out.display()));
     assert_eq!(r.app.session.message, "there is no item 99");
     assert!(!out.exists());
+}
+
+#[test]
+fn a_heading_whose_level_changed_moves_as_a_fresh_import_places_it() {
+    // Catches a kept block left under its old parent: the revision showed
+    // no change, and after commit the outline disagreed with the document.
+    let first = "# T\n\n## Part\n\nUnder the part.\n\n## Second\n\nUnder second.\n";
+    let second = first.replace("## Second", "### Second");
+    let mut r = Room::new("rev-level");
+    let after = revised(&mut r, first, &second);
+    let mut fresh = Room::new("rev-level-fresh");
+    import(&mut fresh, "d.md", &second);
+    assert_eq!(after, pairs(&fresh));
+    assert!(
+        r.shows("moved 1.2: “Second” under “Part”"),
+        "the move is a change"
+    );
 }
