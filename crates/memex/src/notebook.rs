@@ -46,14 +46,23 @@ fn changed_inputs(b: &Value) -> Option<Vec<String>> {
 }
 
 /// Whether an input's file no longer matches the hash recorded for it.
-/// Only a regular file is read: a pipe would block forever, and a device
-/// such as /dev/zero never ends. Anything else counts as changed.
+/// One that cannot be read (read_input) counts as changed.
 fn input_changed(base: &Path, input: &Value) -> bool {
     let path = base.join(input["path"].as_str().unwrap_or(""));
-    let regular = std::fs::metadata(&path).is_ok_and(|m| m.is_file());
-    let bytes = regular.then(|| std::fs::read(&path).ok()).flatten();
+    let bytes = read_input(&path).ok();
     let now = bytes.map(|x| format::record::sha256_hex(&x));
     now.as_deref() != input["sha256"].as_str()
+}
+
+/// The bytes of a file the memex is given to read. Only a regular file is
+/// read: a pipe would block forever, and a device such as /dev/zero never
+/// ends.
+pub(crate) fn read_input(path: &Path) -> Result<Vec<u8>, String> {
+    let shown = path.display();
+    if !std::fs::metadata(path).is_ok_and(|m| m.is_file()) {
+        return Err(format!("{shown}: not a regular file"));
+    }
+    std::fs::read(path).map_err(|e| format!("{shown}: {e}"))
 }
 
 /// What a fact is tried against: the facts of the world at the tip, the
@@ -277,10 +286,9 @@ impl Notebook {
         (b["source"] == "Wikidata").then(|| (e.seq, self.blob(blob)))
     }
 
-    /// Keep a file as a blob; its hash.
+    /// Keep a file the memex is given (read_input) as a blob; its hash.
     pub(crate) fn store_file(&self, file: &str) -> Result<String, String> {
-        let bytes = std::fs::read(file).map_err(|e| format!("{file}: {e}"))?;
-        self.store_blob(&bytes)
+        self.store_blob(&read_input(Path::new(file))?)
     }
 
     /// Copy a file into blobs/, named by its SHA-256; return the hash.

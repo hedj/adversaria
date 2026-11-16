@@ -419,3 +419,40 @@ fn a_results_file_cannot_make_the_memex_read_forever() {
     assert!(marked.iter().any(|p| p.ends_with("pipe")), "{marked:?}");
     assert!(marked.iter().any(|p| p == "/dev/zero"), "{marked:?}");
 }
+
+/// Run a command in a memex of its own: the message it leaves, if it is
+/// done within 20 s.
+fn done_in_time(name: &str, line: String) -> String {
+    let dir = temp(name);
+    let task = move || command(&mut open(&dir), &line);
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || tx.send(task()));
+    let waited = rx.recv_timeout(std::time::Duration::from_secs(20));
+    waited.expect("the memex was still reading after 20 s")
+}
+
+/// A named pipe at a path; nothing ever writes to it.
+fn pipe(path: &Path) -> String {
+    let made = std::process::Command::new("mkfifo").arg(path).status();
+    assert!(made.unwrap().success());
+    path.display().to_string()
+}
+
+#[test]
+fn an_import_refuses_a_pipe_rather_than_wait_on_it() {
+    // Catches an import that reads a named pipe, which blocks forever: a
+    // results file, or one named as a document.
+    let dir = temp("import-pipes");
+    for (name, kind) in [("pipe.json", "results"), ("pipe.md", "document")] {
+        let line = format!("import {kind} {}", pipe(&dir.join(name)));
+        let said = done_in_time(&format!("import-pipe-{kind}"), line);
+        assert!(said.ends_with("not a regular file"), "{kind}: {said}");
+    }
+}
+
+#[test]
+fn an_import_refuses_a_device_rather_than_read_it_without_end() {
+    // Catches an import that reads /dev/zero until memory runs out.
+    let said = done_in_time("import-zero", "import results /dev/zero".into());
+    assert!(said.ends_with("not a regular file"), "{said}");
+}

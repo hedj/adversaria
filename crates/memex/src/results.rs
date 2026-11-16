@@ -4,9 +4,11 @@
 
 use crate::app::App;
 use crate::docs::Block;
+use crate::notebook::read_input;
 use crate::outline::TOP;
 use format::terms::Term;
 use serde_json::{Value, json};
+use std::path::Path;
 
 /// A results file: its source, the analysis script at its commit; its
 /// provenance; and each result.
@@ -92,7 +94,7 @@ impl App {
     /// Import results: an exchange file of values with their provenance (W3C
     /// PROV terms), as claims whose source is the analysis.
     pub(crate) fn import_results(&mut self, file: &str) -> Result<String, String> {
-        let bytes = std::fs::read(file).map_err(|e| format!("{file}: {e}"))?;
+        let bytes = read_input(Path::new(file))?;
         let results = Results::parse(&bytes)?;
         let import = self.write_results_import(file, &bytes, &results)?;
         let top = self.write_results_heading(&results.source, import)?;
