@@ -162,10 +162,11 @@ impl Journal {
         Ok(())
     }
 
-    /// Purge an entry: write a purge entry naming it and why, then replace
-    /// the entry's body with null. Its hash and body_hash stay, so the chain
-    /// still checks. The rewrite goes through a temporary file and a rename,
-    /// so a crash leaves the old file or the new one, never a torn one.
+    /// Purge an entry: add a purge entry naming it and why, and replace the
+    /// entry's body with null. Its hash and body_hash stay, so the chain
+    /// still checks. Both go in one rewrite, through a temporary file and a
+    /// rename, so a crash leaves the old journal or the purged one: never a
+    /// purge entry whose target keeps its body, which no check accepts.
     pub fn purge(&mut self, target: u64, reason: &str) -> Result<Entry, Error> {
         let t = self.entry(target)?;
         if t.kind() == "purge" {
@@ -177,16 +178,19 @@ impl Journal {
             return Err(Error::Refused(format!("entry {target} is already purged")));
         }
         let parent = self.last().map(|e| e.seq);
-        let p = self.write(parent, "purge", json!({"target": target, "reason": reason}))?;
-        let i = target as usize - 1;
-        self.entries[i] = self.entries[i].purged();
-        self.rewrite()?;
+        let p = self.next_entry(parent, "purge", json!({"target": target, "reason": reason}))?;
+        let mut entries = self.entries.clone();
+        entries[target as usize - 1] = t.purged();
+        entries.push(p.clone());
+        self.rewrite(&entries)?;
+        self.entries = entries;
         Ok(p)
     }
 
-    fn rewrite(&self) -> Result<(), Error> {
+    /// Write the journal anew as these entries, in place of the file.
+    fn rewrite(&self, entries: &[Entry]) -> Result<(), Error> {
         let mut text = record::header(JOURNAL_FORMAT) + "\n";
-        for e in &self.entries {
+        for e in entries {
             text += &(e.to_line()? + "\n");
         }
         let tmp = self.dir.join(format!("{JOURNAL}.tmp"));
@@ -305,6 +309,23 @@ mod tests {
         assert_eq!(missing.to_string(), "entry 1 does not exist");
         let not_object = j.append("edit", json!("x")).unwrap_err();
         assert_eq!(not_object.to_string(), "a body must be a JSON object");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_purge_that_cannot_finish_leaves_the_journal_as_it_was() {
+        // Catches a purge entry made durable before its target's body is
+        // nulled: the journal would then fail its check, and never open.
+        let d = temp_dir("purge-unfinished");
+        let mut j = Journal::open(&d).unwrap();
+        j.append("edit", json!({"t": "a"})).unwrap();
+        fs::create_dir(d.join(format!("{JOURNAL}.tmp"))).unwrap();
+        assert!(
+            j.purge(1, "privacy").is_err(),
+            "the rewrite cannot make its file"
+        );
+        assert_eq!(j.entries().len(), 1, "nothing changed in memory");
+        assert_eq!(Journal::open(&d).unwrap().entries().len(), 1);
         fs::remove_dir_all(&d).unwrap();
     }
 
