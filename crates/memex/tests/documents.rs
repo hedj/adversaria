@@ -300,3 +300,15 @@ fn the_top_bar_keeps_its_left_whole() {
     let top = r.lines().remove(0);
     assert!(top.contains("suppose: revision of d.md"), "{top}");
 }
+
+#[test]
+fn an_export_of_a_section_that_is_not_there_says_so() {
+    // Catches the item's number read as part of the file's name, which
+    // was then refused for its format.
+    let mut r = Room::new("export-no-section");
+    r.items(&["Alpha"]);
+    let out = r.dir.join("out.md");
+    r.command(&format!("export {} 99", out.display()));
+    assert_eq!(r.app.session.message, "there is no item 99");
+    assert!(!out.exists());
+}

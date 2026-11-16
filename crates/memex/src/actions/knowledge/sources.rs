@@ -2,6 +2,7 @@
 //! Wikidata, exporting the outline, and checking quotes and sources.
 
 use crate::app::App;
+use crate::outline::reads_as_number;
 use serde_json::json;
 use std::path::Path;
 
@@ -54,23 +55,24 @@ impl App {
     }
 
     pub(crate) fn cmd_export(&mut self, words: &[&str], _: u64) -> Result<String, String> {
-        let (file, section) = self.export_args(words);
+        let (file, section) = self.export_args(words)?;
         if file.is_empty() {
             return Err("export (to) a file, and an item number for one section".into());
         }
         self.export(&file, section)
     }
 
-    /// The file to export to, and the section: the last word, if it is an
-    /// item's number and there are words before it.
-    fn export_args(&self, words: &[&str]) -> (String, Option<u64>) {
+    /// The file to export to, and the section: the last word, if it reads
+    /// as an item's number and there are words before it; it must name an
+    /// item.
+    fn export_args(&self, words: &[&str]) -> Result<(String, Option<u64>), String> {
         match words.split_last() {
-            Some((last, rest))
-                if !rest.is_empty() && self.notebook.outline.by_number(last).is_some() =>
-            {
-                (rest.join(" "), self.notebook.outline.by_number(last))
+            Some((last, rest)) if !rest.is_empty() && reads_as_number(last) => {
+                let item = self.notebook.outline.by_number(last);
+                let item = item.ok_or(format!("there is no item {last}"))?;
+                Ok((rest.join(" "), Some(item)))
             }
-            _ => (words.join(" "), None),
+            _ => Ok((words.join(" "), None)),
         }
     }
 
