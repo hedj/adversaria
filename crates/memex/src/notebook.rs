@@ -151,18 +151,21 @@ impl Replayed {
 impl Notebook {
     /// Open a journal directory, writing its first entry if it is new. The
     /// state is at no entry yet: each entry is to be applied.
-    pub fn open(dir: &Path) -> Result<Notebook, JournalError> {
-        let mut journal = Journal::open(dir)?;
+    /// Open a notebook's journal, and say what opening it set aside, if
+    /// anything (Journal::opened).
+    pub fn open(dir: &Path) -> Result<(Notebook, Option<String>), JournalError> {
+        let (mut journal, note) = Journal::opened(dir)?;
         if journal.entries().is_empty() {
             journal.append("edit", json!({"op": "init"}))?;
         }
         let outline = Outline::default();
-        Ok(Notebook {
+        let notebook = Notebook {
             journal,
             outline,
             tip: 0,
             redo: vec![],
-        })
+        };
+        Ok((notebook, note))
     }
 
     pub(crate) fn entry(&self, seq: u64) -> Option<&Entry> {

@@ -4,7 +4,7 @@
 use memex::app::Quasi;
 
 mod support;
-use support::Room;
+use support::{Room, replayed};
 
 #[test]
 fn the_foot_shows_a_held_quasimode_in_a_supposition_too() {
@@ -36,4 +36,16 @@ fn no_click_lands_on_the_outline_under_a_list() {
     );
     room.hold(Quasi::Command, "?");
     assert!(room.hits().at(x, y).is_none());
+}
+
+#[test]
+fn a_room_a_crash_left_unfinished_opens_and_says_what_was_set_aside() {
+    let mut room = Room::new("screen-torn");
+    room.items(&["Alpha"]);
+    let file = room.dir.join("journal.jsonl");
+    let cut = [std::fs::read(&file).unwrap(), br#"{"body":"#.to_vec()].concat();
+    std::fs::write(&file, cut).unwrap();
+    let opened = replayed(&room.dir);
+    assert!(opened.session.message.ends_with("journal.jsonl.torn"));
+    assert_eq!(opened.notebook.outline.text(opened.cursor()), "Alpha");
 }

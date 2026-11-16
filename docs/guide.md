@@ -777,6 +777,14 @@ The hints on screen (such as "F3 adopts") follow your bindings.
 - **`check` reports a fault:** it names the line and the fault. Do not edit
   the journal by hand; it is hash-chained, and any change breaks the chain
   from that line on.
+- **"the journal's last line was unfinished, as a crash leaves it":** the
+  memex stopped, or the machine lost power, while it wrote an entry. The
+  entry was never finished, so it was never kept: the memex keeps the line
+  in `journal.jsonl.torn`, writes the journal without it, and opens the
+  room. Only a last line with no newline, or with zero bytes in it, is set
+  aside; any other fault is refused, as `check` would report it.
+- **"… is open in another memex"**: a room is open in one memex at a time.
+  Close the other, or wait for it to end.
 
 #### Limits
 

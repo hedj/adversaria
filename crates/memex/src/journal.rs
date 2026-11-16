@@ -56,21 +56,45 @@ pub struct Journal {
 
 impl Journal {
     /// Open a journal directory, creating it and its header if missing, and
-    /// check the whole journal before accepting it.
+    /// check the whole journal before accepting it (Journal::opened).
     pub fn open(dir: &Path) -> Result<Journal, Error> {
+        Ok(Journal::opened(dir)?.0)
+    }
+
+    /// Open a journal directory, as open does, and say what was set aside:
+    /// a last line that a crash left unfinished (unfinished_from) is kept in
+    /// journal.jsonl.torn, and the journal is written without it. The rest
+    /// must check, as a journal does, or the journal is refused.
+    pub fn opened(dir: &Path) -> Result<(Journal, Option<String>), Error> {
         fs::create_dir_all(dir)?;
-        let path = dir.join(JOURNAL);
-        if !path.exists() {
+        if !dir.join(JOURNAL).exists() {
             create(dir)?;
         }
         let dir = Locked::take(dir)?;
-        let text = fs::read_to_string(&path)?;
-        let entries = chain::check_journal(&text)?;
-        Ok(Journal {
+        let bytes = fs::read(dir.join(JOURNAL))?;
+        let keep = unfinished_from(&bytes).unwrap_or(bytes.len());
+        let entries = checked(&bytes[..keep])?;
+        let journal = Journal {
             dir,
             entries,
             durable: true,
-        })
+        };
+        let torn = &bytes[keep..];
+        let note = (!torn.is_empty()).then(|| journal.set_aside(torn));
+        Ok((journal, note.transpose()?))
+    }
+
+    /// Keep a line that was never finished beside the journal, durably,
+    /// then write the journal without it.
+    fn set_aside(&self, torn: &[u8]) -> Result<String, Error> {
+        let path = self.dir.join(TORN);
+        let mut kept = OpenOptions::new().create(true).append(true).open(path)?;
+        kept.write_all(torn)?;
+        kept.sync_all()?;
+        self.rewrite(&self.entries)?;
+        Ok(format!(
+            "the journal's last line was unfinished, as a crash leaves it; it is kept in {TORN}"
+        ))
     }
 
     pub fn dir(&self) -> &Path {
@@ -235,6 +259,30 @@ impl std::ops::Deref for Locked {
     }
 }
 
+/// Where a line that was never finished is kept.
+const TORN: &str = "journal.jsonl.torn";
+
+/// Where a journal's last line starts, if a crash left it unfinished: it
+/// has no newline, or it holds a zero byte, as a part of a line that never
+/// reached the disk reads; canonical JSON holds neither. A line is written
+/// whole, with its newline, and synced before the memex goes on, so such a
+/// line was never an entry. A line that is whole and does not check is not
+/// set aside: that is damage, which the check refuses.
+fn unfinished_from(bytes: &[u8]) -> Option<usize> {
+    let body = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+    let start = body.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1);
+    let last = &bytes[start..];
+    let unfinished = !last.ends_with(b"\n") || last.contains(&0);
+    (unfinished && start > 0 && !last.is_empty()).then_some(start)
+}
+
+/// The entries of a journal's text, checked.
+fn checked(bytes: &[u8]) -> Result<Vec<Entry>, Error> {
+    let text = std::str::from_utf8(bytes)
+        .map_err(|_| Error::Refused(format!("{JOURNAL} is not UTF-8")))?;
+    Ok(chain::check_journal(text)?)
+}
+
 /// Start the journal file in `dir`, holding its header alone, and make it
 /// durable.
 fn create(dir: &Path) -> io::Result<()> {
@@ -343,6 +391,64 @@ mod tests {
         assert_eq!(missing.to_string(), "entry 1 does not exist");
         let not_object = j.append("edit", json!("x")).unwrap_err();
         assert_eq!(not_object.to_string(), "a body must be a JSON object");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// A journal of two entries, closed, then these bytes added to its file,
+    /// as a crash would leave them; the file's bytes before.
+    fn left_by_a_crash(d: &Path, tail: &[u8]) -> Vec<u8> {
+        let mut j = Journal::open(d).unwrap();
+        j.append("edit", json!({"t": "a"})).unwrap();
+        j.append("edit", json!({"t": "b"})).unwrap();
+        drop(j);
+        let before = fs::read(d.join(JOURNAL)).unwrap();
+        fs::write(d.join(JOURNAL), [before.as_slice(), tail].concat()).unwrap();
+        before
+    }
+
+    #[test]
+    fn a_last_line_a_crash_cut_short_is_set_aside_and_the_room_opens() {
+        // Catches a room refused for good after a crash in an append: the
+        // last line, never finished, has no newline.
+        let d = temp_dir("cut-short");
+        let before = left_by_a_crash(&d, br#"{"body":{"op":"te"#);
+        let (j, note) = Journal::opened(&d).unwrap();
+        assert_eq!(j.entries().len(), 2);
+        assert!(note.is_some_and(|n| n.ends_with("journal.jsonl.torn")));
+        assert_eq!(
+            fs::read(d.join(JOURNAL)).unwrap(),
+            before,
+            "written without it"
+        );
+        assert_eq!(fs::read(d.join(TORN)).unwrap(), br#"{"body":{"op":"te"#);
+        drop(j);
+        assert!(Journal::opened(&d).unwrap().1.is_none(), "set aside once");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_last_line_holding_a_zero_byte_is_set_aside() {
+        // Catches a line whose newline reached the disk before the rest of
+        // it, which reads as zero bytes: it too was never finished.
+        let d = temp_dir("zero-bytes");
+        let before = left_by_a_crash(&d, b"{\"body\":\0\0\0\n");
+        let (j, note) = Journal::opened(&d).unwrap();
+        assert!(note.is_some() && j.entries().len() == 2);
+        assert_eq!(fs::read(d.join(JOURNAL)).unwrap(), before);
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn damage_is_still_refused_and_nothing_is_set_aside() {
+        // Catches recovery that hides damage: a whole last line that does
+        // not check, or an unfinished line after one that does not, is
+        // refused as before, and the file is left as it is.
+        let d = temp_dir("damaged");
+        left_by_a_crash(&d, b"{\"x\":1}\n{\"body\":");
+        let damaged = fs::read(d.join(JOURNAL)).unwrap();
+        assert!(Journal::opened(&d).is_err());
+        assert_eq!(fs::read(d.join(JOURNAL)).unwrap(), damaged);
+        assert!(!d.join(TORN).exists());
         fs::remove_dir_all(&d).unwrap();
     }
 

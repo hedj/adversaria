@@ -88,6 +88,12 @@ impl Keys {
 }
 
 impl Session {
+    /// A session that starts by saying this.
+    pub(crate) fn saying(message: String) -> Session {
+        let session = Session::default();
+        Session { message, ..session }
+    }
+
     /// The quasimode in progress, if it lists over the outline.
     pub(crate) fn listed(&self) -> Option<&Active> {
         match &self.mode {

@@ -434,11 +434,12 @@ impl App {
     /// Open a journal directory, writing its first entry if it is new, and
     /// replay it.
     pub fn open(dir: &Path) -> Result<App, JournalError> {
-        let notebook = Notebook::open(dir)?;
+        let (notebook, note) = Notebook::open(dir)?;
+        let session = Session::saying(note.unwrap_or_default());
         let mut app = App {
             notebook,
             reason: Reasoning::default(),
-            session: Session::default(),
+            session,
         };
         app.apply_all();
         Ok(app)
