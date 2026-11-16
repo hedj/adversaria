@@ -332,3 +332,17 @@ fn a_heading_whose_level_changed_moves_as_a_fresh_import_places_it() {
         "the move is a change"
     );
 }
+
+#[test]
+fn a_dropped_block_holding_the_users_own_item_stays_with_it() {
+    // Catches the user's own note deleted with the block the new version
+    // drops, unnamed in the change that deletes the block.
+    let mut r = Room::new("rev-own");
+    import(&mut r, "d.md", "# T\n\n## Gone\n\nGone text.\n");
+    let gone = r.app.notebook.outline.in_order()[2];
+    r.put_cursor(gone);
+    r.items(&["", "My own note."]);
+    let after = revised_again(&mut r, "# T\n");
+    let kept = items(&[("", "T"), ("T", "Gone"), ("Gone", "My own note.")]);
+    assert_eq!(after, kept);
+}

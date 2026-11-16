@@ -192,9 +192,8 @@ impl App {
         self.write_document_import(doc, earlier.last().copied())
     }
 
-    /// A revision's changes: the new texts, the new blocks, and the items
-    /// it drops. A dropped item holds no new one, so the items kept are
-    /// those it must not drop.
+    /// A revision's changes: the new texts, the new blocks and the moves,
+    /// then the items it drops.
     fn write_revision(
         &mut self,
         revised: &Revised,
@@ -203,8 +202,7 @@ impl App {
     ) -> Result<(), String> {
         self.write_changed(revised, blocks)?;
         self.write_created(revised, blocks, import)?;
-        let kept = revised.kept.iter().flatten().copied().collect();
-        self.write_dropped(&revised.dropped, &kept)
+        self.write_dropped(&revised.dropped)
     }
 
     /// The new texts of the items a revision keeps.
@@ -257,12 +255,14 @@ impl App {
         self.write_block(b, spot, import)
     }
 
-    /// Delete the items a revision drops, but one whose branch holds an item
-    /// it keeps, or one already gone with its parent.
-    fn write_dropped(&mut self, dropped: &[u64], kept: &HashSet<u64>) -> Result<(), String> {
+    /// Delete the items a revision drops whose whole branch it drops: one
+    /// that still holds a kept block, the user's own item or another
+    /// document's stays, as does one already gone with its parent.
+    fn write_dropped(&mut self, dropped: &[u64]) -> Result<(), String> {
+        let all: HashSet<u64> = dropped.iter().copied().collect();
         for &o in dropped {
             let outline = &self.notebook.outline;
-            if outline.items.contains_key(&o) && !outline.branch_holds(o, kept) {
+            if outline.items.contains_key(&o) && outline.branch_within(o, &all) {
                 self.write_here("edit", json!({"op": "delete", "item": o}))?;
             }
         }

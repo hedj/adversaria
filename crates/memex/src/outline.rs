@@ -893,16 +893,16 @@ impl Outline {
             .collect()
     }
 
-    /// Whether the branch under an item holds any of these items.
-    pub fn branch_holds(&self, id: u64, any: &HashSet<u64>) -> bool {
+    /// Whether every item in the branch under an item is one of these.
+    pub fn branch_within(&self, id: u64, these: &HashSet<u64>) -> bool {
         let mut stack = self.children(id).to_vec();
         while let Some(x) = stack.pop() {
-            if any.contains(&x) {
-                return true;
+            if !these.contains(&x) {
+                return false;
             }
             stack.extend(self.children(x));
         }
-        false
+        true
     }
 
     /// The items an import entry brought in.
