@@ -1543,7 +1543,20 @@ impl Table {
             c.draw_row_name(&mut cv, j + 2, name);
             self.draw_row(&mut cv, c, j);
         }
-        cv.finish(vec![])
+        cv.finish(self.cut_off(c))
+    }
+
+    /// The columns that reach past the grid's width, named: marks that do
+    /// not fit, which the grid cuts off.
+    fn cut_off(&self, c: &Columns) -> Vec<String> {
+        let past = c
+            .cols
+            .iter()
+            .zip(&self.cols)
+            .filter(|(run, _)| run.hi >= c.width);
+        let names: Vec<&str> = past.map(|(_, name)| name.as_str()).collect();
+        let note = format!("columns cut off, for want of room: {}", names.join(", "));
+        (!names.is_empty()).then_some(note).into_iter().collect()
     }
 
     /// The columns' names, each cut to its column.
@@ -3073,8 +3086,14 @@ mod tests {
     #[test]
     fn no_column_narrows_below_three() {
         // Catches a column narrowed past three characters. The picture is what the code
-        // drew before grid was restructured.
-        let want = ["  │ a   │ b", "──┼─────┼───", "1 │ xx… │ xx"];
+        // drew before grid was restructured, with the note, since 16 November 2026, of
+        // the columns it cuts off.
+        let want = [
+            "  │ a   │ b",
+            "──┼─────┼───",
+            "1 │ xx… │ xx",
+            "note: columns cut off, for want of room: b, c",
+        ];
         assert_eq!(
             draw(
                 &[

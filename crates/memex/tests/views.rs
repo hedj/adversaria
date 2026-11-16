@@ -668,3 +668,26 @@ fn boxes_of_a_graph_cut_off_for_want_of_room_are_named() {
         "room for all at 80"
     );
 }
+
+#[test]
+fn columns_of_a_grid_cut_off_for_want_of_room_are_named() {
+    // Catches a grid wider than its view: the columns past its width were
+    // left out, with no note (§ 3.3).
+    let mut room = Room::new("grid-cut");
+    room.items(&["Sheet"]);
+    for k in 1..=12 {
+        room.command(&format!("fact g(c{k:02}, 1, v{k})"));
+    }
+    room.items(&["", "Grid"]);
+    room.command("layer cell(x(X), y(Y), text(T)) where g(X, Y, T)");
+    room.app.evaluate().unwrap();
+    let notes = chart_figure(&room, 0, 20).notes;
+    assert!(
+        notes.iter().any(|n| n.contains("c04") && n.contains("c12")),
+        "{notes:?}"
+    );
+    assert!(
+        chart_figure(&room, 0, 200).notes.is_empty(),
+        "room for all at 200"
+    );
+}
