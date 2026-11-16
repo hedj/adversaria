@@ -80,16 +80,14 @@ impl App {
         Ok(format!("adoption {last} retracted"))
     }
 
-    /// An item's last adoption on this branch, if it can still be retracted.
+    /// An item's last adoption on this branch that can still be retracted:
+    /// one already retracted is passed over, for the one before it.
     fn last_adoption(&self, item: u64) -> Option<u64> {
-        self.adoption_of(item)
-            .filter(|s| self.retractable(*s).is_ok())
-    }
-
-    fn adoption_of(&self, item: u64) -> Option<u64> {
         let path = self.notebook.path(self.notebook.tip);
-        let last = path.iter().rev().find(|e| adopts(e, item))?;
-        Some(last.seq)
+        let adoptions = path.iter().rev().filter(|e| adopts(e, item));
+        adoptions
+            .map(|e| e.seq)
+            .find(|s| self.retractable(*s).is_ok())
     }
 
     // Suggestions.
