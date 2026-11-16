@@ -241,7 +241,7 @@ struct Locked {
 impl Locked {
     fn take(path: &Path) -> Result<Locked, Error> {
         let lock = File::open(path)?;
-        lock.try_lock().map_err(|e| match e {
+        lock_soon(&lock).map_err(|e| match e {
             fs::TryLockError::WouldBlock => {
                 Error::Refused(format!("{} is open in another memex", path.display()))
             }
@@ -250,6 +250,21 @@ impl Locked {
         let path = path.into();
         Ok(Locked { path, _lock: lock })
     }
+}
+
+/// Take a lock, waiting up to half a second while it is held: a child
+/// process holds a copy of its parent's lock from its fork to its exec, so
+/// a room just let go can be held for a moment yet.
+fn lock_soon(file: &File) -> Result<(), fs::TryLockError> {
+    for _ in 0..50 {
+        match file.try_lock() {
+            Err(fs::TryLockError::WouldBlock) => {
+                std::thread::sleep(std::time::Duration::from_millis(10))
+            }
+            done => return done,
+        }
+    }
+    file.try_lock()
 }
 
 impl std::ops::Deref for Locked {
@@ -449,6 +464,25 @@ mod tests {
         assert!(Journal::opened(&d).is_err());
         assert_eq!(fs::read(d.join(JOURNAL)).unwrap(), damaged);
         assert!(!d.join(TORN).exists());
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_lock_held_for_a_moment_is_waited_for() {
+        // Catches a room refused while its lock is held only for a moment:
+        // a child process holds a copy of its parent's lock from its fork
+        // to its exec, as when the memex starts Prolog or pandoc.
+        let d = temp_dir("lock-moment");
+        drop(Journal::open(&d).unwrap());
+        let held = File::open(&d).unwrap();
+        held.lock().unwrap();
+        let moment = std::time::Duration::from_millis(100);
+        let freed = std::thread::spawn(move || {
+            std::thread::sleep(moment);
+            drop(held);
+        });
+        assert!(Journal::open(&d).is_ok());
+        freed.join().unwrap();
         fs::remove_dir_all(&d).unwrap();
     }
 
