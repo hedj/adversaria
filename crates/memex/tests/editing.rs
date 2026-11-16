@@ -181,3 +181,16 @@ fn a_command_that_works_leaves_no_earlier_refusal_on_the_message_line() {
     r.command("copy after 1");
     assert_eq!(r.app.session.message, "", "the copy worked");
 }
+
+#[test]
+fn a_name_that_reads_as_an_item_or_an_entry_number_is_refused() {
+    // Catches a name that no address can reach: a number, or # and a
+    // number, is read as an item's number or an entry's first.
+    let mut r = Room::new("names-unreachable");
+    r.items(&["Alpha"]);
+    for name in ["1", "1.2", "#2"] {
+        r.command(&format!("name {name}"));
+        assert!(r.app.session.message.starts_with("name not kept"), "{name}");
+    }
+    assert!(r.app.notebook.outline.names.is_empty());
+}

@@ -2,7 +2,7 @@
 //! (docs/guide.md, § 2.4, Editing the outline).
 
 use crate::app::{App, PaneKind, word_at};
-use crate::outline::Outline;
+use crate::outline::{Outline, reads_as_number};
 use format::terms::{self, Term};
 use serde_json::{Value, json};
 
@@ -16,6 +16,11 @@ impl App {
         let n = words.join(" ");
         if n.is_empty() {
             return Err("name (as) a word".into());
+        }
+        if reads_as_number(&n) || n.starts_with('#') {
+            return Err(format!(
+                "name not kept: “{n}” reads as an item's or an entry's number, so it would address no item"
+            ));
         }
         self.write_here("name", json!({"name": n, "item": target}))?;
         Ok(String::new())

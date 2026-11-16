@@ -963,6 +963,13 @@ fn by_kind(mut links: Vec<&Link>) -> Vec<&Link> {
     links
 }
 
+/// Whether an address is written as an item's number: parts of digits,
+/// split by dots, as `2` or `1.4`.
+pub fn reads_as_number(a: &str) -> bool {
+    let digits = |p: &str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
+    a.split('.').all(digits)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
