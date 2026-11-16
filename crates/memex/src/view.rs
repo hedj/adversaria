@@ -238,6 +238,11 @@ struct Run {
 }
 
 impl Run {
+    /// Whether it starts before, or in the cell where, an earlier run ends.
+    fn starts_within(&self, earlier: &Run) -> bool {
+        self.lo <= earlier.hi
+    }
+
     /// One cell.
     fn at(n: usize) -> Run {
         Run { lo: n, hi: n }
@@ -816,6 +821,7 @@ impl Scale {
 fn plot(ms: &[M], space: (usize, usize)) -> Figure {
     let mut p = Plot::new(Frame::train(ms, space), space);
     p.notes.extend(not_drawn(ms, M::is_cell, NOT_IN_PLOT));
+    p.notes.extend(p.frame.crowded());
     p.axes();
     p.y_labels();
     p.x_labels();
@@ -853,6 +859,15 @@ struct Frame {
 }
 
 impl Frame {
+    /// What each axis of categories draws over another, if it has more of
+    /// them than cells: marks that do not fit, named.
+    fn crowded(&self) -> Vec<String> {
+        let axes = [("x", &self.xs, self.size.0), ("y", &self.ys, self.size.1)];
+        axes.into_iter()
+            .filter_map(|(axis, scale, cells)| drawn_over(axis, scale, cells))
+            .collect()
+    }
+
     /// The scales that hold the marks' values, and the area left for them
     /// in a space of a width and a height.
     fn train(ms: &[M], space: (usize, usize)) -> Frame {
@@ -1034,6 +1049,32 @@ fn range_of(values: &[&V]) -> (f64, f64) {
 fn on_line(x: f64, (lo, hi): (f64, f64), n: usize) -> usize {
     let at = (x - lo) / (hi - lo) * (n - 1) as f64;
     at.round().clamp(0.0, (n - 1) as f64) as usize
+}
+
+/// What an axis of categories draws over another, named, if any: those
+/// that share a cell with the one before them.
+fn drawn_over(axis: &str, scale: &Scale, cells: usize) -> Option<String> {
+    let Scale::Band(cats) = scale else {
+        return None;
+    };
+    let over = sharing_a_cell(cats, cells.max(1));
+    (!over.is_empty()).then(|| {
+        format!(
+            "drawn over others, for want of room on the {axis} axis: {}",
+            over.join(", ")
+        )
+    })
+}
+
+/// The categories whose band starts in the cell the one before it ends in.
+fn sharing_a_cell(cats: &[String], cells: usize) -> Vec<&str> {
+    let bands: Vec<Run> = cats
+        .iter()
+        .filter_map(|c| band_of(cats, c, cells))
+        .collect();
+    let shared = bands.windows(2).map(|w| w[1].starts_within(&w[0]));
+    let over = cats.iter().skip(1).zip(shared).filter(|(_, s)| *s);
+    over.map(|(c, _)| c.as_str()).collect()
 }
 
 /// A category's band of n cells, shared out among the categories.

@@ -628,3 +628,21 @@ fn a_view_is_drawn_in_the_width_it_is_given() {
     let fig = chart_figure(&room, 0, 24);
     assert!(fig.rows.iter().all(|row| row.len() <= 24));
 }
+
+#[test]
+fn categories_drawn_over_others_are_named_under_the_view() {
+    // Catches more categories than columns: some bars drawn over others,
+    // with no note, though marks that do not fit are named (§ 3.3).
+    let cells: Vec<String> = (1..=12).map(|k| format!("cell(c{k:02}, {k})")).collect();
+    let cells: Vec<&str> = cells.iter().map(String::as_str).collect();
+    let room = chart("crowded", &cells);
+    let notes = chart_figure(&room, 0, 12).notes;
+    assert!(
+        notes.iter().any(|n| n.starts_with("drawn over others")),
+        "{notes:?}"
+    );
+    assert!(
+        chart_figure(&room, 0, 60).notes.is_empty(),
+        "room for all at 60"
+    );
+}
