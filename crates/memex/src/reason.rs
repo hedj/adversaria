@@ -692,11 +692,13 @@ fn filled(template: &str, names: &[String], values: &[Term]) -> String {
     out
 }
 
-/// A count of years in words: "a year", "two years".
+/// A count of years in words: "a year", "two years"; one not whole in
+/// figures, "2.5 years".
 fn years(v: &Term) -> String {
     match v {
         Term::Int(1) => "a year".to_string(),
         Term::Int(k) => format!("{} years", number_word(*k)),
+        Term::Float(_) => format!("{} years", show(v)),
         v => show(v),
     }
 }
@@ -931,6 +933,15 @@ mod tests {
             readings(&facts, "nothing here 1990").is_empty(),
             "no word names a fact"
         );
+    }
+
+    #[test]
+    fn years_not_whole_are_still_years() {
+        // Catches the unit dropped from a float: "It took 2.5." for 2.5
+        // years, which says something else.
+        let names = vec!["N".to_string()];
+        let half = make_list(vec![make_list(vec![Term::Float(2.5)])]);
+        assert_eq!(fill("{N:years}", &names, &half, &[]), "2.5 years");
     }
 
     #[test]
