@@ -231,8 +231,9 @@ safe_builtin_(sort, 4).   safe_builtin_(keysort, 2). safe_builtin_(memberchk, 2)
 %   Try a constraint against a planted violation (docs/design.md § Testing
 %   claims, last row): give its variables distinct integers (1..N, then
 %   -N..-1, 0..N-1, -(N-1)..0 and -1, 1, -2, 2, ...), in every order
-%   until the built-ins hold, plant the other literals as facts, and run
-%   the constraint over them. Result is fires(Planted) or broken(Why).
+%   until the built-ins hold, then values near the body's own numbers
+%   (near_numbers); plant the other literals as facts, and run the
+%   constraint over them. Result is fires(Planted) or broken(Why).
 plant_check(Vars, Body, Result) :-
     copy_term(Vars-Body, _-B),
     term_variables(B, Vs),
@@ -247,14 +248,37 @@ plant_check(Vars, Body, Result) :-
         % bodies such as L < 0, X =< 0, or A < 0, B > 0.
         (   member(Ns, [Pos, Neg, Zero, NegZero, Alt]),
             permutation(Ns, P),
-            copy_term(Vs-B, P-Ground),
-            literals(Ground, Facts, Builtins),
-            maplist(planted_call, Builtins),
-            planted_holds(Ground, Facts)
+            planted(Vs-B, P, Facts)
+        ->  Result = fires(Facts)
+        ;   near_numbers(B, N, P),
+            planted(Vs-B, P, Facts)
         ->  Result = fires(Facts)
         ;   Result = broken(no_planted_values_make_the_body_true)
         )
     ).
+
+%   The body with these values for its variables holds, on the facts it
+%   plants.
+planted(Vs-B, P, Facts) :-
+    copy_term(Vs-B, P-Ground),
+    literals(Ground, Facts, Builtins),
+    maplist(planted_call, Builtins),
+    planted_holds(Ground, Facts).
+
+%   Values for N variables near the numbers the body holds: each number,
+%   one less and one more, beside 1..N; not distinct, so that a limit such
+%   as R > 1000 or R =:= 1200 can be true. Tried only while there are at
+%   most 200 000 ways, so a large body cannot stall the memex.
+near_numbers(B, N, P) :-
+    findall(V, (sub_term(K, B), number(K), member(D, [-1, 0, 1]), V is K + D), Near),
+    Near \== [],
+    range(1, N, Small),
+    append(Near, Small, All),
+    sort(All, Pool),
+    length(Pool, Size),
+    Size ** N =< 200000,
+    length(P, N),
+    maplist([V]>>member(V, Pool), P).
 
 %   The integers from L to H; none when H is below L, as for a body with
 %   no variables, which is planted as it stands.

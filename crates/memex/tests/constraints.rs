@@ -14,6 +14,25 @@ fn stated(name: &str, constraint: &str) -> String {
 }
 
 #[test]
+fn a_constraint_that_compares_with_a_number_is_kept() {
+    // Catches values planted only near zero, which no limit such as
+    // R > 1000 is true of: the constraint was refused as never firing.
+    for (n, body) in ["R > 1000", "R >= 1000, R =< 5000", "R =:= 1200", "R > 0.5"]
+        .iter()
+        .enumerate()
+    {
+        let said = stated(
+            &format!("limit-{n}"),
+            &format!("limit: false :- cell(C, R), {body}."),
+        );
+        assert_eq!(
+            said, "constraint limit kept: it fires on a planted violation",
+            "{body}"
+        );
+    }
+}
+
+#[test]
 fn a_constraint_without_variables_is_tried_too() {
     // Catches a body with no variables, which the planting did not answer.
     let said = stated("no-variables", "exact: false :- cell(rent, 1200).");
