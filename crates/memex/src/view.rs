@@ -400,13 +400,16 @@ fn label(t: &Term) -> String {
     }
 }
 
+/// A number as an axis or a mark writes it: whole, or to two places, or,
+/// when two places would make it 0, to its first two figures (up to 15
+/// places, so that a label stays short).
 fn number(x: f64) -> String {
     if x.fract() == 0.0 && x.abs() < 1e15 {
-        format!("{}", x as i64)
-    } else {
-        let s = format!("{x:.2}");
-        s.trim_end_matches('0').trim_end_matches('.').to_string()
+        return format!("{}", x as i64);
     }
+    let places = (1 - x.abs().log10().floor() as i64).clamp(2, 15) as usize;
+    let s = format!("{x:.places$}");
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
 /// Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant's
@@ -2374,6 +2377,23 @@ fn frame_of(shape: &str) -> [[char; 3]; 3] {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_small_number_is_written_to_its_figures() {
+        // Catches 0.000001 written "0" on an axis whose other end is 0.
+        let cases = [
+            (0.000001, "0.000001"),
+            (0.0123, "0.012"),
+            (-0.004, "-0.004"),
+        ];
+        for (x, text) in cases {
+            assert_eq!(number(x), text);
+        }
+        assert_eq!(
+            (number(2.5), number(1234.5678), number(0.0)),
+            ("2.5".into(), "1234.57".into(), "0".into())
+        );
+    }
+
     #[test]
     fn a_date_axis_names_the_year_of_its_day() {
         // Catches years counted back from days by their mean length:
