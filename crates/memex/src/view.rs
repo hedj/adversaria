@@ -421,6 +421,17 @@ fn days(y: i64, m: i64, d: i64) -> i64 {
     era * 146097 + doe - 719468
 }
 
+/// The year of a day counted from 1970-01-01, as days counts it (Howard
+/// Hinnant's civil_from_days, its year).
+fn year_of(days: i64) -> i64 {
+    let z = days + 719468;
+    let (era, doe) = (z.div_euclid(146097), z.rem_euclid(146097));
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let march_based_month = (5 * doy + 2) / 153;
+    yoe + era * 400 + i64::from(march_based_month >= 10)
+}
+
 /// A parsed mark.
 struct M {
     kind: &'static str,
@@ -793,11 +804,7 @@ impl Scale {
     }
     fn tick_text(&self, x: f64) -> String {
         match self {
-            Scale::Line { time: true, .. } => {
-                // Back from days to a year, near enough for an axis label.
-                let y = 1970.0 + x / 365.2425;
-                format!("{}", y.floor() as i64)
-            }
+            Scale::Line { time: true, .. } => year_of(x.floor() as i64).to_string(),
             _ => number(x),
         }
     }
@@ -2367,6 +2374,28 @@ fn frame_of(shape: &str) -> [[char; 3]; 3] {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_date_axis_names_the_year_of_its_day() {
+        // Catches years counted back from days by their mean length:
+        // 2020-01-01 was labelled 2019.
+        let scale = Scale::Line {
+            lo: 0.0,
+            hi: 1.0,
+            time: true,
+        };
+        // A year's first day and the day before it, a leap day, and a
+        // day before 1970.
+        let cases = [
+            (days(2020, 1, 1), "2020"),
+            (days(2019, 12, 31), "2019"),
+            (days(2000, 2, 29), "2000"),
+            (days(1969, 12, 31), "1969"),
+        ];
+        for (day, year) in cases {
+            assert_eq!(scale.tick_text(day as f64), year);
+        }
+    }
+
     use super::*;
 
     fn t(f: &str, a: Vec<Term>) -> Term {
