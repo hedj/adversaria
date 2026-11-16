@@ -49,3 +49,23 @@ fn a_room_a_crash_left_unfinished_opens_and_says_what_was_set_aside() {
     assert!(opened.session.message.ends_with("journal.jsonl.torn"));
     assert_eq!(opened.notebook.outline.text(opened.cursor()), "Alpha");
 }
+
+#[test]
+fn the_cursors_item_stays_in_view_however_short_the_outline() {
+    // Catches the lines kept below the cursor pushing the window past the
+    // cursor itself, when the outline has room for fewer than three.
+    let mut room = Room::new("short-outline");
+    room.items(&["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]);
+    room.put_cursor(room.app.notebook.outline.in_order()[1]);
+    for h in 6..10 {
+        let outline: Vec<String> = room
+            .lines_at(60, h)
+            .iter()
+            .map(|l| l.chars().take(30).collect())
+            .collect();
+        assert!(
+            outline.iter().any(|l| l.contains("2. Beta")),
+            "height {h}: {outline:?}"
+        );
+    }
+}

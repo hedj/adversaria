@@ -404,9 +404,12 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Hits {
     if rows.is_empty() {
         lines.push(Line::styled("(empty: type to write the first item)", dim()));
     }
+    // Two lines below the cursor's are kept in view where there is room,
+    // but never at the cost of the cursor's own.
     let at = cursor_line.unwrap_or(0);
     let offset = (at + 3)
         .saturating_sub(h)
+        .min(at)
         .min(lines.len().saturating_sub(1));
     let shown: Vec<Line> = lines.into_iter().skip(offset).take(h).collect();
     f.render_widget(Paragraph::new(shown), rows_area);
