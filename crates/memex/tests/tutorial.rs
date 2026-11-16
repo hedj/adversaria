@@ -8,6 +8,9 @@ use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use std::path::PathBuf;
 
+mod support;
+use support::replayed;
+
 const TUTORIAL: &str = include_str!("../../../docs/tutorial.md");
 
 fn temp(name: &str) -> PathBuf {
@@ -219,7 +222,7 @@ fn the_tutorial_works_as_written() {
     t.key(Key::F(10));
     assert!(t.app.session.quit);
     t.app.flush();
-    let mut app = App::open(&dir).unwrap();
+    let mut app = replayed(&dir);
     app.set_durable(false);
     app.evaluate().unwrap();
     let t = T { app, dump: t.dump };

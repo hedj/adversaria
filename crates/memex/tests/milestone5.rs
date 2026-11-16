@@ -8,6 +8,9 @@ use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use std::path::{Path, PathBuf};
 
+mod support;
+use support::replayed;
+
 const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../tests/fixtures/wikidata-buran.pl"
@@ -416,7 +419,7 @@ fn the_pane_keeps_its_rules() {
     );
     // A replay keeps the dismissal.
     app.flush();
-    let mut r = App::open(&dir).unwrap();
+    let mut r = replayed(&dir);
     r.evaluate().unwrap();
     assert_eq!(
         r.reason.suggestions.dismissed,
@@ -453,7 +456,7 @@ fn a_suggestion_is_offered_once() {
     once.dedup();
     assert_eq!(offered.len(), once.len(), "offered twice: {offered:?}");
     app.flush();
-    let mut r = App::open(&dir).unwrap();
+    let mut r = replayed(&dir);
     r.evaluate().unwrap();
     assert_eq!(offered_keys(&r), offered, "offered again after a replay");
     std::fs::remove_dir_all(&dir).unwrap();

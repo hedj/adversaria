@@ -8,7 +8,8 @@ use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use ratatui::style::Style;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A memex in a directory of this test's own, removed after it.
 pub struct Room {
@@ -180,5 +181,32 @@ impl Room {
 impl Drop for Room {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// A room's journal opened afresh, as replay builds it. The room stays open
+/// in its own memex, which holds it alone, so a copy of its directory is
+/// opened: the same journal, under the same name.
+pub fn replayed(dir: &Path) -> App {
+    static COPIES: AtomicUsize = AtomicUsize::new(0);
+    let n = COPIES.fetch_add(1, Ordering::Relaxed);
+    let id = std::process::id();
+    let home = std::env::temp_dir().join(format!("adversaria-replay-{id}-{n}"));
+    let copy = home.join(dir.file_name().expect("a room has a name"));
+    let _ = std::fs::remove_dir_all(&home);
+    copy_dir(dir, &copy);
+    App::open(&copy).unwrap()
+}
+
+/// Copy a directory and what it holds.
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for item in std::fs::read_dir(from).unwrap() {
+        let path = item.unwrap().path();
+        let target = to.join(path.file_name().unwrap());
+        match path.is_dir() {
+            true => copy_dir(&path, &target),
+            false => drop(std::fs::copy(&path, &target).unwrap()),
+        }
     }
 }

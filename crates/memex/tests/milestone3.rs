@@ -9,6 +9,9 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+mod support;
+use support::replayed;
+
 fn temp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("adversaria-m3-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
@@ -416,7 +419,7 @@ fn replay_reproduces_the_screen() {
     tap(&mut app, Key::Right);
     app.flush();
     let live = screen(&app, 140, 40);
-    let replayed = App::open(&dir).unwrap();
+    let replayed = replayed(&dir);
     let again = screen(&replayed, 140, 40);
     let n = live.len() - 1; // the last line holds messages
     assert_eq!(live[..n], again[..n]);
@@ -554,7 +557,7 @@ fn replay_matches_after_every_action() {
     for (i, step) in steps.iter().enumerate() {
         step(&mut app);
         app.flush();
-        let r = App::open(&dir).unwrap();
+        let r = replayed(&dir);
         assert_eq!(
             r.session.view, app.session.view,
             "view differs after step {i}"

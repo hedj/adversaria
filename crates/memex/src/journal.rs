@@ -48,7 +48,7 @@ impl From<String> for Error {
 }
 
 pub struct Journal {
-    dir: PathBuf,
+    dir: Locked,
     entries: Vec<Entry>,
     /// Flush each write to the disk before returning (fsync). On by default.
     pub durable: bool,
@@ -63,10 +63,11 @@ impl Journal {
         if !path.exists() {
             create(dir)?;
         }
+        let dir = Locked::take(dir)?;
         let text = fs::read_to_string(&path)?;
         let entries = chain::check_journal(&text)?;
         Ok(Journal {
-            dir: dir.into(),
+            dir,
             entries,
             durable: true,
         })
@@ -203,6 +204,37 @@ impl Journal {
     }
 }
 
+/// A journal's directory, held by this process alone while it is open: a
+/// second memex on the same room is refused, where it would write entries
+/// with numbers the first has used, which no check accepts. The lock is
+/// on the directory, so a purge's rename keeps it, and the operating
+/// system lets it go when the process ends, however it ends.
+struct Locked {
+    path: PathBuf,
+    _lock: File,
+}
+
+impl Locked {
+    fn take(path: &Path) -> Result<Locked, Error> {
+        let lock = File::open(path)?;
+        lock.try_lock().map_err(|e| match e {
+            fs::TryLockError::WouldBlock => {
+                Error::Refused(format!("{} is open in another memex", path.display()))
+            }
+            fs::TryLockError::Error(e) => Error::Io(e),
+        })?;
+        let path = path.into();
+        Ok(Locked { path, _lock: lock })
+    }
+}
+
+impl std::ops::Deref for Locked {
+    type Target = Path;
+    fn deref(&self) -> &Path {
+        &self.path
+    }
+}
+
 /// Start the journal file in `dir`, holding its header alone, and make it
 /// durable.
 fn create(dir: &Path) -> io::Result<()> {
@@ -250,8 +282,10 @@ mod tests {
         j.append("edit", json!({"t": "a"})).unwrap();
         j.append("edit", json!({"t": "b"})).unwrap();
         j.append_after(Some(1), "undo", json!({})).unwrap();
+        let written = j.entries().to_vec();
+        drop(j);
         let reopened = Journal::open(&d).unwrap();
-        assert_eq!(reopened.entries(), j.entries());
+        assert_eq!(reopened.entries(), written);
         fs::remove_dir_all(&d).unwrap();
     }
 
@@ -313,6 +347,20 @@ mod tests {
     }
 
     #[test]
+    fn a_room_open_in_one_memex_is_refused_to_another() {
+        // Catches two memexes appending to one journal: each would write
+        // the same next number, and the journal would never open again.
+        let d = temp_dir("two-memexes");
+        let mut first = Journal::open(&d).unwrap();
+        first.append("edit", json!({"t": "a"})).unwrap();
+        let second = Journal::open(&d).err().map(|e| e.to_string());
+        assert!(second.is_some_and(|m| m.ends_with("is open in another memex")));
+        drop(first);
+        assert_eq!(Journal::open(&d).unwrap().entries().len(), 1, "free again");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
     fn a_purge_that_cannot_finish_leaves_the_journal_as_it_was() {
         // Catches a purge entry made durable before its target's body is
         // nulled: the journal would then fail its check, and never open.
@@ -325,6 +373,7 @@ mod tests {
             "the rewrite cannot make its file"
         );
         assert_eq!(j.entries().len(), 1, "nothing changed in memory");
+        drop(j);
         assert_eq!(Journal::open(&d).unwrap().entries().len(), 1);
         fs::remove_dir_all(&d).unwrap();
     }
@@ -354,6 +403,7 @@ mod tests {
         let d = temp_dir("broken");
         let mut j = Journal::open(&d).unwrap();
         j.append("edit", json!({"t": "a"})).unwrap();
+        drop(j);
         let p = d.join(JOURNAL);
         let text = fs::read_to_string(&p).unwrap().replace("\"a\"", "\"b\"");
         fs::write(&p, text).unwrap();

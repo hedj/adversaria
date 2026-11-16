@@ -8,6 +8,9 @@ use ratatui::backend::TestBackend;
 use ratatui::style::Modifier;
 use std::path::{Path, PathBuf};
 
+mod support;
+use support::replayed;
+
 fn temp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("adversaria-m4-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
@@ -500,7 +503,7 @@ fn replay_reproduces_claims_constraints_and_worlds() {
     tap(&mut app, Key::Enter);
     app.flush();
     app.evaluate().unwrap();
-    let mut r = App::open(&dir).unwrap();
+    let mut r = replayed(&dir);
     r.evaluate().unwrap();
     assert_eq!(r.notebook.outline, app.notebook.outline);
     assert_eq!(r.session.view, app.session.view);
