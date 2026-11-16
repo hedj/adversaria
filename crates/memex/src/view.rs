@@ -527,7 +527,7 @@ pub fn render(inputs: &[Input], width: usize, height: usize) -> Figure {
 /// if all are cells, else a plot.
 fn figure_of(ms: &[M], width: usize, height: usize) -> Figure {
     if ms.iter().any(M::in_graph) {
-        return graph(ms);
+        return graph(ms, width);
     }
     if !ms.is_empty() && ms.iter().all(M::is_cell) {
         return grid(ms, width);
@@ -1634,17 +1634,27 @@ fn narrow(widths: &mut [usize]) -> bool {
 
 // ---- graphs ---------------------------------------------------------
 
-fn graph(ms: &[M]) -> Figure {
+fn graph(ms: &[M], width: usize) -> Figure {
     let mut g = Graph::read(ms);
     g.break_cycles();
     let at = Layout::of(&g);
+    let cut = cut_off(&g, &at, width);
+    let mut notes = graph_notes(ms, &g);
+    notes.extend(cut);
     let ports = Ports::of(&g, &at);
     let mut d = Draw::new(&g, &at, &ports);
     // The edges under the boxes, and their labels after all the lines.
     let labels = d.lines();
     d.labels(labels);
     d.boxes();
-    d.cv.finish(graph_notes(ms, &g))
+    d.cv.finish(notes)
+}
+
+/// The boxes of a graph that reach past a width, named: marks that do not
+/// fit, which the pane cuts off.
+fn cut_off(g: &Graph, at: &Layout, width: usize) -> Option<String> {
+    let cut = g.texts(&at.beyond(width));
+    (!cut.is_empty()).then(|| format!("cut off, for want of room: {}", cut.join(", ")))
 }
 
 /// A graph's notes: the marks it leaves out, and the edges it draws back
@@ -1699,6 +1709,11 @@ struct Graph {
 }
 
 impl Graph {
+    /// The texts of some of its nodes.
+    fn texts(&self, nodes: &[usize]) -> Vec<&str> {
+        nodes.iter().map(|v| self.nodes[*v].text.as_str()).collect()
+    }
+
     fn read(ms: &[M]) -> Graph {
         let mut g = Graph {
             nodes: Vec::new(),
@@ -1886,6 +1901,12 @@ struct Layout {
 }
 
 impl Layout {
+    /// The nodes whose boxes reach past a width.
+    fn beyond(&self, width: usize) -> Vec<usize> {
+        let nodes = 0..self.nodes;
+        nodes.filter(|v| self.cols[*v].hi >= width).collect()
+    }
+
     fn of(g: &Graph) -> Layout {
         let (layer, segs) = through_dummies(g);
         let cols = unplaced(g, layer.len());

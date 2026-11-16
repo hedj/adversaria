@@ -646,3 +646,25 @@ fn categories_drawn_over_others_are_named_under_the_view() {
         "room for all at 60"
     );
 }
+
+#[test]
+fn boxes_of_a_graph_cut_off_for_want_of_room_are_named() {
+    // Catches a graph drawn wider than its view: the pane cut its right
+    // side off, boxes and all, with no note (§ 3.3).
+    let mut room = Room::new("graph-cut");
+    room.items(&["Steps"]);
+    for n in ["alpha", "beta", "gamma", "delta"] {
+        room.command(&format!("fact n({n})"));
+    }
+    room.command("fact e(alpha, beta)");
+    room.items(&["", "Graph"]);
+    room.command("layer node(id(N), text(N)) where n(N)");
+    room.command("layer edge(from(A), to(B)) where e(A, B)");
+    room.app.evaluate().unwrap();
+    let notes = chart_figure(&room, 0, 14).notes;
+    assert!(notes.iter().any(|n| n.starts_with("cut off")), "{notes:?}");
+    assert!(
+        chart_figure(&room, 0, 80).notes.is_empty(),
+        "room for all at 80"
+    );
+}
