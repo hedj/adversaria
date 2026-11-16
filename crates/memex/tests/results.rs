@@ -105,3 +105,20 @@ fn a_malformed_results_file_writes_nothing() {
     );
     assert_eq!(r.app.journal().entries().len(), entries);
 }
+
+#[test]
+fn importing_a_file_again_mends_its_blob_if_it_was_torn() {
+    // Catches a blob written in place: a write cut short leaves a file
+    // under the content's hash that is not that content, which every
+    // later import of the same file then left as it was.
+    let mut r = Room::new("results-torn-blob");
+    let text = results(r#"{"name": "g", "value": 9.81, "uncertainty": 0.01, "unit": "m/s2"}"#);
+    import(&mut r, &text);
+    let blob = r
+        .dir
+        .join("blobs")
+        .join(format::record::sha256_hex(text.as_bytes()));
+    std::fs::write(&blob, &text[..10]).unwrap();
+    import(&mut r, &text);
+    assert_eq!(std::fs::read_to_string(&blob).unwrap(), text);
+}

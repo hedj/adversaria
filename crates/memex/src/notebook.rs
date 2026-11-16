@@ -54,6 +54,20 @@ fn input_changed(base: &Path, input: &Value) -> bool {
     now.as_deref() != input["sha256"].as_str()
 }
 
+/// Write a file in a directory whole or not at all, and durably, before
+/// the journal names it: through a temporary file beside the directory,
+/// since every file in blobs/ must be named by its content, and a rename.
+/// A file already there is written again, so one torn by a crash is mended.
+fn write_whole(dir: &Path, name: &str, bytes: &[u8]) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let tmp = dir.with_extension("tmp");
+    let mut file = std::fs::File::create(&tmp)?;
+    std::io::Write::write_all(&mut file, bytes)?;
+    file.sync_all()?;
+    std::fs::rename(&tmp, dir.join(name))?;
+    std::fs::File::open(dir)?.sync_all()
+}
+
 /// The bytes of a file the memex is given to read. Only a regular file is
 /// read: a pipe would block forever, and a device such as /dev/zero never
 /// ends.
@@ -291,15 +305,11 @@ impl Notebook {
         self.store_blob(&read_input(Path::new(file))?)
     }
 
-    /// Copy a file into blobs/, named by its SHA-256; return the hash.
+    /// Keep bytes in blobs/, named by their SHA-256; return the hash.
     pub(crate) fn store_blob(&self, bytes: &[u8]) -> Result<String, String> {
         let hash = format::record::sha256_hex(bytes);
         let blobs = self.journal.dir().join(format::record::BLOBS);
-        std::fs::create_dir_all(&blobs).map_err(|e| e.to_string())?;
-        let dest = blobs.join(&hash);
-        if !dest.exists() {
-            std::fs::write(&dest, bytes).map_err(|e| e.to_string())?;
-        }
+        write_whole(&blobs, &hash, bytes).map_err(|e| e.to_string())?;
         Ok(hash)
     }
 
