@@ -583,9 +583,12 @@ fn words_of(text: &str) -> Vec<String> {
     words.filter(|w| w.len() >= 3).map(String::from).collect()
 }
 
-/// A text's numbers.
+/// A text's whole numbers, as written: a sign kept, a full stop that ends
+/// a sentence dropped, and a number with a fraction, such as 1989.5, not
+/// read as two.
 fn numbers_of(text: &str) -> Vec<i64> {
-    let numbers = text.split(|c: char| !c.is_ascii_digit());
+    let tokens = text.split(|c: char| !(c.is_ascii_digit() || c == '-' || c == '.'));
+    let numbers = tokens.map(|t| t.trim_end_matches('.'));
     numbers.filter_map(|n| n.parse().ok()).collect()
 }
 
@@ -933,6 +936,21 @@ mod tests {
             readings(&facts, "nothing here 1990").is_empty(),
             "no word names a fact"
         );
+    }
+
+    #[test]
+    fn a_reading_takes_a_number_as_written() {
+        // Catches "-5" read as 5, and "1989.5" as 1989 and 5: readings of
+        // values the user did not write.
+        let flight = |y| date("buran_flight", y);
+        let facts = [
+            (1, flight(1988)),
+            (2, lbl("buran_flight", "Buran's flight")),
+        ];
+        let read = |text| readings(&facts, text);
+        assert_eq!(read("the flight was in -5"), [flight(-5)]);
+        assert_eq!(read("the flight was in 1989."), [flight(1989)]);
+        assert!(read("the flight was in 1989.5").is_empty());
     }
 
     #[test]
