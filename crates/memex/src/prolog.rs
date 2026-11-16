@@ -176,6 +176,13 @@ impl Prolog {
         Error::Dead(reason)
     }
 
+    /// Whether the connection is dead, or the server has ended though no
+    /// call has found it yet.
+    pub fn is_dead(&mut self) -> bool {
+        let ended = matches!(self.server.child.try_wait(), Ok(Some(_)));
+        self.dead.is_some() || ended
+    }
+
     fn alive(&self) -> Result<(), Error> {
         match &self.dead {
             Some(r) => Err(Error::Dead(r.clone())),

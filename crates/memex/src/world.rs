@@ -139,8 +139,13 @@ fn layer_marks(engine: &mut Engine, seq: u64) -> Option<Vec<(Term, Vec<u64>)>> {
     engine.node(seq).ok().map(|v| marks(&v))
 }
 
-/// The engine in a slot, started if there is none.
+/// The engine in a slot, started if there is none, or if the one there has
+/// died: a new one is loaded from the world's facts at its first sync, so
+/// nothing is lost with the old.
 pub fn started(slot: &mut Option<Engine>) -> Result<&mut Engine, String> {
+    if slot.as_mut().is_some_and(Engine::is_dead) {
+        *slot = None;
+    }
     if slot.is_none() {
         *slot = Some(Engine::start().map_err(|e| format!("cannot start Prolog: {e}"))?);
     }

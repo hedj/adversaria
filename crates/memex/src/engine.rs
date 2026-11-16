@@ -56,6 +56,11 @@ impl Engine {
         })
     }
 
+    /// Whether its server is dead (Prolog::is_dead).
+    pub fn is_dead(&mut self) -> bool {
+        self.p.is_dead()
+    }
+
     /// Make the loaded facts equal these, by difference.
     pub fn sync(&mut self, facts: &[(u64, Term)]) -> Result<(), Error> {
         for (seq, gone) in absent(&self.loaded, facts) {
