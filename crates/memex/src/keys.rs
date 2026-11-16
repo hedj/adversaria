@@ -231,6 +231,15 @@ impl App {
         Mode::Quasi(a)
     }
 
+    /// A statement with no reading: a world of that name, with nothing
+    /// supposed in it (guide § 3.2), and say so.
+    fn suppose_named(&mut self, text: &str) {
+        self.session.message =
+            format!("no reading of “{text}”: a world of that name, with nothing supposed");
+        let written = self.write_here("suppose", json!({"name": text}));
+        self.session.report(written);
+    }
+
     /// End a quasimode: do what it was for.
     fn finish(&mut self, a: Active) -> Mode {
         match a.q {
@@ -271,9 +280,7 @@ impl App {
                     .unwrap_or_default();
                 let readings = reason::readings(&facts, &text);
                 if readings.is_empty() {
-                    // No reading: a named world, with nothing supposed in it.
-                    let written = self.write_here("suppose", json!({"name": text}));
-                    self.session.report(written);
+                    self.suppose_named(&text);
                 } else {
                     return Mode::ConfirmSuppose {
                         text,
