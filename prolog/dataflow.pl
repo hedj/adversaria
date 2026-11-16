@@ -240,7 +240,7 @@ plant_check(Vars, Body, Result) :-
     (   N > 7
     ->  Result = broken(too_many_variables(N))
     ;   M is N - 1, Lo is -N, Hi is -1, Lo1 is -M,
-        numlist(1, N, Pos), numlist(Lo, Hi, Neg), numlist(0, M, Zero), numlist(Lo1, 0, NegZero),
+        range(1, N, Pos), range(Lo, Hi, Neg), range(0, M, Zero), range(Lo1, 0, NegZero),
         findall(V, (between(1, N, K), V is (K + 1) // 2 * (-1) ** K), Alt),
         % Distinct values from 1 up first; then negative ones, ranges
         % holding zero, and alternating signs (-1, 1, -2, 2, ...), for
@@ -255,6 +255,10 @@ plant_check(Vars, Body, Result) :-
         ;   Result = broken(no_planted_values_make_the_body_true)
         )
     ).
+
+%   The integers from L to H; none when H is below L, as for a body with
+%   no variables, which is planted as it stands.
+range(L, H, Xs) :- ( L =< H -> numlist(L, H, Xs) ; Xs = [] ).
 
 literals((A, B), F, Bs) :- !,
     literals(A, F1, B1), literals(B, F2, B2),
