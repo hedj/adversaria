@@ -23,6 +23,20 @@ fn dates(r: &mut Room) -> usize {
 }
 
 #[test]
+fn adopting_claims_again_adds_no_belief_twice() {
+    // Catches a second adopt of the same claims: each belief twice, and
+    // the source's record counting them twice.
+    let mut r = two_claims("adopt-twice");
+    r.command("adopt");
+    r.command("adopt");
+    assert_eq!(
+        r.app.session.message,
+        "the target's claims are beliefs already"
+    );
+    assert_eq!(dates(&mut r), 2);
+}
+
+#[test]
 fn unadopt_takes_back_each_adoption_in_turn() {
     // Catches unadopt stopping at the last adopt entry once it is
     // retracted, so that an adoption before it could never be taken back.
@@ -42,4 +56,17 @@ fn unadopt_takes_back_each_adoption_in_turn() {
         "the target has no adoption to retract"
     );
     assert_eq!(dates(&mut r), 0);
+}
+
+#[test]
+fn a_claim_taken_back_can_be_adopted_again() {
+    let mut r = two_claims("adopt-again");
+    r.command("adopt");
+    r.command("unadopt");
+    r.command("adopt");
+    assert_eq!(
+        r.app.session.message,
+        "adopted: a belief now, with its source kept"
+    );
+    assert_eq!(dates(&mut r), 2);
 }

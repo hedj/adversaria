@@ -52,8 +52,22 @@ impl App {
     pub(crate) fn cmd_adopt(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         let claims = self.claims_of(target);
         check_adoptable(&claims)?;
-        self.write_adoptions(target, claims)?;
+        let new = self.not_adopted(claims);
+        if new.is_empty() {
+            return Err("the target's claims are beliefs already".into());
+        }
+        self.write_adoptions(target, new)?;
         Ok("adopted: a belief now, with its source kept".into())
+    }
+
+    /// The claims with no adoption in effect on this branch.
+    fn not_adopted(&self, claims: Vec<(u64, String, Term)>) -> Vec<(u64, String, Term)> {
+        let branch = self.notebook.branch(self.notebook.tip);
+        let adopted: Vec<u64> = branch.live().filter_map(adopted_claim).collect();
+        claims
+            .into_iter()
+            .filter(|(seq, ..)| !adopted.contains(seq))
+            .collect()
     }
 
     /// One adopt entry for each claim, keeping its source.
@@ -149,6 +163,12 @@ fn check_adoptable(claims: &[(u64, String, Term)]) -> Result<(), String> {
 }
 
 /// Whether an entry adopts a claim of an item.
+/// The claim an adopt entry adopted, if it is one.
+fn adopted_claim(e: &Entry) -> Option<u64> {
+    let body = e.body().filter(|_| e.kind() == "adopt")?;
+    body["claim"].as_u64()
+}
+
 fn adopts(e: &Entry, item: u64) -> bool {
     e.kind() == "adopt" && e.body().and_then(|b| b["item"].as_u64()) == Some(item)
 }

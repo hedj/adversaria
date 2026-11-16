@@ -107,6 +107,14 @@ impl<'a> Branch<'a> {
         Branch { entries, retracted }
     }
 
+    /// Its entries that it does not retract.
+    pub(crate) fn live(&self) -> impl Iterator<Item = &'a Entry> + '_ {
+        self.entries
+            .iter()
+            .copied()
+            .filter(|e| !self.retracts(e.seq))
+    }
+
     pub(crate) fn retracts(&self, seq: u64) -> bool {
         self.retracted.contains(&seq)
     }
