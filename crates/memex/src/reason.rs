@@ -520,6 +520,14 @@ pub fn readings(facts: &[(u64, Term)], text: &str) -> Vec<Term> {
     scored.into_iter().map(|(_, t)| t).collect()
 }
 
+/// Whether a supposition typed in English states a belief already held:
+/// a fact its words name, with a number the text gives, as a reading would
+/// be if the number were not the fact's own.
+pub fn believed_already(facts: &[(u64, Term)], text: &str) -> bool {
+    let said = Said::read(text);
+    facts.iter().any(|(_, f)| said.restates(facts, f))
+}
+
 /// What a typed text says, for matching against facts: its words of
 /// three letters or more, and its numbers.
 struct Said {
@@ -550,6 +558,24 @@ impl Said {
         let numbered = (0..args.len()).filter(|k| matches!(args[*k], Term::Int(_)));
         let changes = |k| self.changes(facts, &Number { name, args, k });
         numbered.flat_map(changes).collect()
+    }
+
+    /// Whether the text names a fact, which is no claim, and gives one of
+    /// its numbers as it is.
+    fn restates(&self, facts: &[(u64, Term)], fact: &Term) -> bool {
+        if is_meta(fact) {
+            return false;
+        }
+        let Term::Compound(name, args) = fact else {
+            return false;
+        };
+        (0..args.len()).any(|k| self.restates_at(facts, &Number { name, args, k }))
+    }
+
+    /// Whether the text gives a fact's number as it is, and names the fact.
+    fn restates_at(&self, facts: &[(u64, Term)], at: &Number) -> bool {
+        let held = self.numbers.iter().any(|n| at.is(*n));
+        held && self.score(at.name, &at.others(facts)) > 0
     }
 
     /// A fact with a number changed to each other number of the text,

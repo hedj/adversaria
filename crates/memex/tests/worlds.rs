@@ -50,3 +50,36 @@ fn a_statement_with_no_reading_starts_a_named_world_and_says_so() {
     let said = "no reading of “zzz qqq”: a world of that name, with nothing supposed";
     assert_eq!(r.app.session.message, said);
 }
+
+#[test]
+fn supposing_what_is_believed_starts_a_world_with_nothing_changed() {
+    // Catches the world started under "no reading of", though the
+    // statement reads as a belief: there is a reading, and it is so.
+    let mut r = Room::new("believed");
+    r.items(&["Buran"]);
+    r.command("fact date(buran_flight, 1988)");
+    r.command("fact label(buran_flight, \"Buran's flight\")");
+    let before = r.facts();
+    r.hold(Quasi::Suppose, "the flight was in 1988");
+    r.release(Quasi::Suppose);
+    assert_eq!(r.app.reason.world(), "the flight was in 1988");
+    let said =
+        "“the flight was in 1988” is believed already: a world of that name, with nothing changed";
+    assert_eq!(r.app.session.message, said);
+    assert_eq!(r.facts(), before);
+}
+
+#[test]
+fn only_a_belief_both_named_and_numbered_is_believed_already() {
+    // Catches a statement taken for a belief by its number alone, or by
+    // its words alone.
+    let mut r = Room::new("not-believed");
+    r.items(&["Buran"]);
+    r.command("fact date(buran_flight, 1988)");
+    for text in ["it was in 1988", "the flight was early"] {
+        r.hold(Quasi::Suppose, text);
+        r.release(Quasi::Suppose);
+        assert!(r.app.session.message.starts_with("no reading"), "{text}");
+        r.command("close");
+    }
+}

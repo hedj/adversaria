@@ -378,7 +378,9 @@ Hold Suppose and type a statement in your own words, such as `the flight
 was in 1989`. The memex reads it against the facts it knows and offers each
 reading: `Do you mean: Suppose that the date of Buran's flight is 1989.`
 Enter accepts; Tab shows the next reading; Esc cancels. If there is no
-reading, releasing starts a named world with nothing supposed.
+reading, releasing starts a named world with nothing supposed; if what
+you typed is believed already, it starts one with nothing changed, and
+says so.
 
 In the supposed world, each belief the supposition directly contradicts
 is set aside, in that world only: the supposition wins. A belief is

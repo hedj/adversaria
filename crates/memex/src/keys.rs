@@ -231,13 +231,27 @@ impl App {
         Mode::Quasi(a)
     }
 
-    /// A statement with no reading: a world of that name, with nothing
-    /// supposed in it (guide § 3.2), and say so.
+    /// A statement with no reading, or one believed already: a world of
+    /// that name, with nothing supposed in it (guide § 3.2), and say which.
     fn suppose_named(&mut self, text: &str) {
-        self.session.message =
-            format!("no reading of “{text}”: a world of that name, with nothing supposed");
+        self.session.message = self.nothing_to_suppose(text);
         let written = self.write_here("suppose", json!({"name": text}));
         self.session.report(written);
+    }
+
+    /// What a supposition with no reading says: that it is believed
+    /// already, or that it has no reading.
+    fn nothing_to_suppose(&self, text: &str) -> String {
+        let facts = self
+            .notebook
+            .facts_at(self.notebook.tip)
+            .unwrap_or_default();
+        match reason::believed_already(&facts, text) {
+            true => {
+                format!("“{text}” is believed already: a world of that name, with nothing changed")
+            }
+            false => format!("no reading of “{text}”: a world of that name, with nothing supposed"),
+        }
     }
 
     /// End a quasimode: do what it was for.
