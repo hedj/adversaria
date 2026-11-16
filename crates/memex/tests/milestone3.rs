@@ -655,18 +655,22 @@ fn a_command_on_an_item_needs_one() {
 }
 
 #[test]
-fn a_command_with_nothing_to_say_leaves_the_message() {
-    // Catches a silent command that clears the message line, and with it
-    // what a write inside the command reported.
+fn a_write_that_fails_inside_a_command_with_nothing_to_say_is_reported() {
+    // Catches a silent command that clears the message line after it ran,
+    // and with it what a write inside the command reported: fold writes a
+    // view entry, which fails here, since a directory is where the
+    // journal's file was.
     let dir = temp("silent");
     let mut app = App::open(&dir).unwrap();
     typ(&mut app, "A");
     app.flush();
-    command(&mut app, "undo");
-    let said = app.session.message.clone();
-    assert!(said.starts_with("undid entry"), "{said}");
+    std::fs::remove_file(dir.join("journal.jsonl")).unwrap();
+    std::fs::create_dir(dir.join("journal.jsonl")).unwrap();
     command(&mut app, "fold");
-    assert_eq!(app.session.message, said);
+    assert!(
+        !app.session.message.is_empty(),
+        "the failed write is reported"
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

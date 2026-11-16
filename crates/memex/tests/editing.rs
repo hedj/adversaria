@@ -168,3 +168,16 @@ fn text_typed_and_erased_writes_no_edit() {
     r.app.flush();
     assert_eq!(r.count("edit"), edits);
 }
+
+#[test]
+fn a_command_that_works_leaves_no_earlier_refusal_on_the_message_line() {
+    let mut r = Room::new("stale-message");
+    r.items(&["Alpha", "Beta"]);
+    r.command("outdent");
+    assert_eq!(
+        r.app.session.message,
+        "a top-level item cannot be outdented"
+    );
+    r.command("copy after 1");
+    assert_eq!(r.app.session.message, "", "the copy worked");
+}

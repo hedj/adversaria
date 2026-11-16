@@ -318,8 +318,11 @@ impl App {
         mode
     }
 
-    /// Run a command; if it fails, its error becomes the message.
+    /// Run a command; if it fails, its error becomes the message. What an
+    /// earlier command said is cleared first, so that a command that works
+    /// and says nothing does not leave an earlier refusal on show.
     fn command_or_message(&mut self, line: &str) -> Mode {
+        self.session.message.clear();
         self.command(line).unwrap_or_else(|m| {
             self.session.message = m;
             Mode::Normal
