@@ -1,7 +1,7 @@
 //! The screen as a whole: its parts in each mode, and what covers what
 //! (docs/guide.md § 2.2).
 
-use memex::app::{Key, Quasi};
+use memex::app::{Click, Key, Quasi};
 
 mod support;
 use support::{Room, replayed};
@@ -141,4 +141,43 @@ fn suppose_offers_the_next_reading_only_when_there_is_one() {
     room.command("fact date(energia_flight, 1987)");
     room.leap(Quasi::Suppose, "the flight was in 1990");
     assert!(foot(&room)[1].ends_with("· Tab next reading"), "two");
+}
+
+/// A room of 40 items, with the cursor on the 21st.
+fn long_outline(name: &str) -> Room {
+    let mut room = Room::new(name);
+    let texts: Vec<String> = (1..=40).map(|i| format!("item {i}")).collect();
+    room.items(&texts.iter().map(String::as_str).collect::<Vec<_>>());
+    room.put_cursor(twenty_first(&room));
+    room
+}
+
+/// The 21st item of a room's outline.
+fn twenty_first(room: &Room) -> u64 {
+    room.app.notebook.outline.in_order()[20]
+}
+
+#[test]
+fn the_two_items_after_the_cursor_stay_in_view() {
+    // Catches a window that keeps fewer lines below the cursor's, or an
+    // outline built too short to fill it.
+    let room = long_outline("two-after");
+    let lines = room.lines_at(60, 12);
+    for item in ["21. item 21", "22. item 22", "23. item 23"] {
+        assert!(lines.iter().any(|l| l.contains(item)), "{item}: {lines:?}");
+    }
+}
+
+#[test]
+fn a_click_lands_on_the_item_drawn_there_when_the_outline_is_scrolled() {
+    // Catches places counted from the outline's first line, not the
+    // window's.
+    let room = long_outline("scrolled-click");
+    let y = room
+        .lines_at(60, 12)
+        .iter()
+        .position(|l| l.contains("21. item 21"));
+    let click = room.hits_at(60, 12).at(2, y.unwrap() as u16).cloned();
+    let id = twenty_first(&room);
+    assert_eq!(click, Some(Click::Item { pane: 0, id }));
 }

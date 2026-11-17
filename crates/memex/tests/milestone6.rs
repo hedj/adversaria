@@ -416,6 +416,15 @@ fn a_changed_input_marks_its_results() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(shown.contains("⚑ input changed since: data.csv"), "{shown}");
+    let lines: Vec<&str> = shown.lines().collect();
+    let at = lines
+        .iter()
+        .position(|l| l.contains("• mean_delay = 1.55"))
+        .unwrap();
+    assert!(
+        lines[at + 1].contains("⚑ input changed since"),
+        "under its result"
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

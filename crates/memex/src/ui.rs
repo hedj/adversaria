@@ -3,7 +3,7 @@
 //! state always draws the same screen.
 
 use crate::actions::command_help;
-use crate::app::{Active, App, Click, Mode, PaneKind, Quasi, ScopeLevel};
+use crate::app::{Active, App, Click, Mode, PaneKind, Quasi, ScopeLevel, View};
 use crate::outline::{Layer, Link, Outline, Run, TOP};
 use crate::reason::{
     self, ConstraintEval, Finding, Prov, Solution, Sourced, Suggestion, WorldEval,
@@ -288,167 +288,367 @@ fn title(app: &App) -> String {
     }
 }
 
+/// An outline pane: its frame and title, then every line of the outline
+/// near the cursor, and the window onto them that keeps the cursor's line
+/// in view.
 fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Hits {
-    let mut hits = Hits::default();
-    let block = Block::default().borders(if pane == 0 {
+    let rows = outline_frame(f, app, pane, area);
+    let outline = OutlinePane { app, pane, rows };
+    outline.drawn().show(f, &outline)
+}
+
+/// An outline pane's frame, ruled off from the pane on its right, and its
+/// title: the area left for its rows.
+fn outline_frame(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Rect {
+    let inner = draw_frame(f, pane, area);
+    let [head, rows] = title_and_rows(inner);
+    f.render_widget(dim_text(title(app)), head);
+    rows
+}
+
+/// A pane's frame, the first ruled off from the second: the area inside.
+fn draw_frame(f: &mut Frame, pane: usize, area: Rect) -> Rect {
+    let border = if pane == 0 {
         Borders::RIGHT
     } else {
         Borders::NONE
-    });
+    };
+    let block = Block::default().borders(border);
     let inner = block.inner(area);
     f.render_widget(block, area);
-    let [head, rows_area] =
-        Layout::vertical([Constraint::Length(2), Constraint::Min(1)]).areas(inner);
-    f.render_widget(Paragraph::new(Span::styled(title(app), dim())), head);
-    let rows = app.visible();
-    let cursor = app.session.view.panes[pane].cursor;
-    let h = rows_area.height as usize;
-    let focused =
-        app.session.view.focus == pane && matches!(app.session.mode, Mode::Normal | Mode::Quasi(_));
-    // Every line of the outline, then the window onto them: items, their
-    // marks and their views are lines of different heights, so the window
-    // is chosen by line, keeping the cursor's line in view.
-    let mut lines: Vec<Line> = Vec::new();
-    // Clickable places: (line, column, width, what).
-    let mut places: Vec<(usize, usize, usize, Click)> = Vec::new();
-    let mut cursor_line = None;
-    let mut cursor_depth = 0;
-    // Each item takes at least a line, so only the items within a screen's
-    // height of the cursor's can be in the window: build those alone (a long
-    // outline would otherwise be drawn whole on every keystroke).
-    let at_item = rows.iter().position(|(id, _)| *id == cursor).unwrap_or(0);
-    let first = at_item.saturating_sub(h);
-    for (id, depth) in rows.iter().skip(first).take(2 * h + 1) {
-        if *id == cursor {
-            cursor_line = Some(lines.len());
-            cursor_depth = *depth;
+    inner
+}
+
+/// A pane's two lines of title, and the rows below.
+fn title_and_rows(area: Rect) -> [Rect; 2] {
+    Layout::vertical([Constraint::Length(2), Constraint::Min(1)]).areas(area)
+}
+
+/// An outline pane being drawn: the memex, the pane, and the area of its
+/// rows.
+struct OutlinePane<'a> {
+    app: &'a App,
+    pane: usize,
+    rows: Rect,
+}
+
+impl<'a> OutlinePane<'a> {
+    fn outline(&self) -> &'a Outline {
+        &self.app.notebook.outline
+    }
+
+    fn view(&self) -> &'a View {
+        &self.app.session.view
+    }
+
+    /// The item at the pane's cursor.
+    fn cursor(&self) -> u64 {
+        self.view().panes[self.pane].cursor
+    }
+
+    fn has_focus(&self) -> bool {
+        self.view().focus == self.pane
+    }
+
+    /// Whether the pane has the focus, outside a dialogue: the cursor's
+    /// item shows its target.
+    fn focused(&self) -> bool {
+        self.has_focus() && matches!(self.app.session.mode, Mode::Normal | Mode::Quasi(_))
+    }
+
+    /// The lines of the items within a screen's height of the cursor's:
+    /// each item takes at least a line, so no other can be in the window,
+    /// and a long outline is not drawn whole on every keystroke.
+    fn drawn(&self) -> Drawn {
+        let rows = self.app.visible();
+        let mut drawn = Drawn::default();
+        for (id, depth) in self.near(&rows) {
+            self.item(&mut drawn, *id, *depth);
         }
-        places.push((
-            lines.len(),
-            0,
-            rows_area.width as usize,
-            Click::Item { pane, id: *id },
-        ));
-        let kids = app.notebook.outline.children(*id).len();
-        let folded = app.session.view.folded.contains(id);
-        let mark = match (kids, folded) {
+        if rows.is_empty() {
+            let empty = "(empty: type to write the first item)";
+            drawn.lines.push(Line::styled(empty, dim()));
+        }
+        drawn
+    }
+
+    /// The rows within a screen's height of the cursor's row, either side.
+    fn near<'r>(&self, rows: &'r [(u64, usize)]) -> &'r [(u64, usize)] {
+        near(rows, self.cursor(), self.rows.height as usize)
+    }
+
+    /// An item's lines: the item, a click on all of it; its marks; and its
+    /// view, if it is one.
+    fn item(&self, drawn: &mut Drawn, id: u64, depth: usize) {
+        if id == self.cursor() {
+            drawn.cursor = Some((drawn.lines.len(), depth));
+        }
+        let line = (drawn.lines.len(), 0, self.rows.width as usize);
+        drawn.places.push(Place::of(line, self.click(id)));
+        drawn.lines.push(self.item_line(id, depth));
+        drawn.lines.extend(self.mark_lines(id, depth));
+        if self.outline().views.contains_key(&id) {
+            self.view_lines(drawn, id, 2 * depth + 2);
+        }
+    }
+
+    /// An item's line: its place in the tree, its text, how many items a
+    /// fold hides; reversed at the cursor.
+    fn item_line(&self, id: u64, depth: usize) -> Line<'static> {
+        let at_cursor = id == self.cursor();
+        let mut spans = self.item_head(id, depth);
+        spans.extend(item_spans(self.app, id, at_cursor && self.focused()));
+        spans.extend(self.folded_count(id));
+        let line = Line::from(spans);
+        if at_cursor {
+            line.style(self.cursor_style())
+        } else {
+            line
+        }
+    }
+
+    /// An item's indent and its mark of the tree; at the top level, its
+    /// number.
+    fn item_head(&self, id: u64, depth: usize) -> Vec<Span<'static>> {
+        let indent = Span::raw("  ".repeat(depth));
+        let mut spans = vec![
+            indent,
+            Span::styled(format!("{} ", self.tree_mark(id)), dim()),
+        ];
+        if depth == 0 {
+            spans.push(Span::raw(format!("{}. ", self.outline().number(id))));
+        }
+        spans
+    }
+
+    /// • for an item with none under it, ▶ for a folded one, ▼ for one
+    /// open.
+    fn tree_mark(&self, id: u64) -> &'static str {
+        let kids = self.outline().children(id).len();
+        match (kids, self.view().folded.contains(&id)) {
             (0, _) => "•",
             (_, true) => "▶",
             _ => "▼",
-        };
-        let mut spans = vec![
-            Span::raw("  ".repeat(*depth)),
-            Span::styled(format!("{mark} "), dim()),
-        ];
-        if *depth == 0 {
-            spans.push(Span::raw(format!("{}. ", app.notebook.outline.number(*id))));
-        }
-        let is_cursor = *id == cursor;
-        spans.extend(item_spans(app, *id, is_cursor && focused));
-        if folded {
-            spans.push(Span::styled(
-                format!(" {}", app.notebook.outline.descendants(*id)),
-                dim(),
-            ));
-        }
-        let marks = app.reason.eval[0]
-            .as_ref()
-            .map(|e| item_marks(e, &app.notebook.outline, *id))
-            .unwrap_or_default();
-        let mut line = Line::from(spans);
-        if is_cursor {
-            line = line.style(if app.session.view.scope == ScopeLevel::Branch && focused {
-                Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD)
-            } else {
-                Style::default().add_modifier(Modifier::REVERSED)
-            });
-        }
-        lines.push(line);
-        let stale = app
-            .session
-            .stale()
-            .get(id)
-            .map(|files| (true, format!("input changed since: {}", files.join(", "))));
-        for (violation, m) in marks.into_iter().chain(stale) {
-            let style = if violation {
-                Style::default().add_modifier(Modifier::BOLD)
-            } else {
-                dim()
-            };
-            lines.push(Line::styled(
-                format!("{}  ⚑ {m}", "  ".repeat(*depth + 1)),
-                style,
-            ));
-        }
-        // A view, drawn under its item.
-        if app.notebook.outline.views.contains_key(id) {
-            let indent = 2 * depth + 2;
-            let width = (rows_area.width as usize).saturating_sub(indent + 1);
-            let fig = view_figure(app, 0, *id, width, 12);
-            let top = lines.len();
-            lines.extend(figure_lines(&fig, indent));
-            for hit in &fig.hits {
-                if let Some(item) = hit_item(app, hit) {
-                    for dy in 0..hit.area.h {
-                        places.push((
-                            top + hit.area.y + dy,
-                            indent + hit.area.x,
-                            hit.area.w,
-                            Click::Item { pane, id: item },
-                        ));
-                    }
-                }
-            }
         }
     }
-    if rows.is_empty() {
-        lines.push(Line::styled("(empty: type to write the first item)", dim()));
+
+    /// How many items a folded item hides.
+    fn folded_count(&self, id: u64) -> Option<Span<'static>> {
+        let count = || format!(" {}", self.outline().descendants(id));
+        let folded = self.view().folded.contains(&id);
+        folded.then(|| Span::styled(count(), dim()))
     }
-    // Two lines below the cursor's are kept in view where there is room,
-    // but never at the cost of the cursor's own.
-    let at = cursor_line.unwrap_or(0);
-    let offset = (at + 3)
-        .saturating_sub(h)
-        .min(at)
-        .min(lines.len().saturating_sub(1));
-    let shown: Vec<Line> = lines.into_iter().skip(offset).take(h).collect();
-    f.render_widget(Paragraph::new(shown), rows_area);
-    for (l, x, w, click) in places {
-        if l >= offset && l < offset + h {
-            let y = rows_area.y + (l - offset) as u16;
-            hits.add(
-                rows_area,
-                Rect::new(rows_area.x + x as u16, y, w as u16, 1),
-                click,
-            );
-        }
-    }
-    // The text cursor, in the focused outline pane.
-    if app.session.view.focus == pane
-        && matches!(app.session.mode, Mode::Normal)
-        && cursor != TOP
-        && let Some(r) = cursor_line
-            .and_then(|l| l.checked_sub(offset))
-            .filter(|r| *r < h)
-    {
-        let num = if cursor_depth == 0 {
-            app.notebook.outline.number(cursor).len() + 2
+
+    /// The cursor's line reversed; bold too in branch scope, with focus.
+    fn cursor_style(&self) -> Style {
+        let reversed = Style::default().add_modifier(Modifier::REVERSED);
+        let branch = self.view().scope == ScopeLevel::Branch;
+        if branch && self.focused() {
+            reversed.add_modifier(Modifier::BOLD)
         } else {
-            0
-        };
-        let x = rows_area.x as usize
-            + 2 * cursor_depth
-            + 2
-            + num
-            + cells(&app.text_of(cursor), app.session.view.pos);
-        if x < (rows_area.x + rows_area.width) as usize {
-            f.set_cursor_position(Position {
-                x: x as u16,
-                y: (rows_area.y as usize + r) as u16,
-            });
+            reversed
         }
     }
-    hits
+
+    /// An item's marks, each under it, set in: bold if loud, else dim.
+    fn mark_lines(&self, id: u64, depth: usize) -> Vec<Line<'static>> {
+        let indent = "  ".repeat(depth + 1);
+        let line = |(loud, m)| {
+            let style = if loud { bold() } else { dim() };
+            Line::styled(format!("{indent}  ⚑ {m}"), style)
+        };
+        self.marks_of(id).into_iter().map(line).collect()
+    }
+
+    /// An item's marks: each finding on its facts, then, if its inputs
+    /// changed since it was made, which.
+    fn marks_of(&self, id: u64) -> Vec<(bool, String)> {
+        let found = self.app.reason.eval[0].as_ref();
+        let mut marks = found
+            .map(|e| item_marks(e, self.outline(), id))
+            .unwrap_or_default();
+        marks.extend(self.stale_mark(id));
+        marks
+    }
+
+    /// The loud mark of an item whose input files changed since it was
+    /// made: which.
+    fn stale_mark(&self, id: u64) -> Option<(bool, String)> {
+        let files = self.app.session.stale().get(&id)?.join(", ");
+        Some((true, format!("input changed since: {files}")))
+    }
+
+    /// A view, drawn under its item, set in; a click on a mark goes to the
+    /// item that states its fact.
+    fn view_lines(&self, drawn: &mut Drawn, id: u64, indent: usize) {
+        let fig = self.figure(id, indent);
+        let places = self.view_places(&fig, (drawn.lines.len(), indent));
+        drawn.lines.extend(figure_lines(&fig, indent));
+        drawn.places.extend(places);
+    }
+
+    /// A view's figure, as wide as the pane leaves it, set in.
+    fn figure(&self, id: u64, indent: usize) -> view::Figure {
+        let width = (self.rows.width as usize).saturating_sub(indent + 1);
+        view_figure(self.app, 0, id, width, 12)
+    }
+
+    /// The places of a view's marks, for a figure that starts at a line
+    /// and a column.
+    fn view_places(&self, fig: &view::Figure, at: (usize, usize)) -> Vec<Place> {
+        let places = fig.hits.iter().filter_map(|hit| self.hit_places(hit, at));
+        places.flatten().collect()
+    }
+
+    /// A mark of a view a click, on each of its lines, if an item states
+    /// its fact.
+    fn hit_places(&self, hit: &view::Hit, at: (usize, usize)) -> Option<Vec<Place>> {
+        let click = self.click(hit_item(self.app, hit)?);
+        let lines = hit.area.lines_at(at);
+        Some(
+            lines
+                .into_iter()
+                .map(|l| Place::of(l, click.clone()))
+                .collect(),
+        )
+    }
+
+    /// A click that selects an item in this pane.
+    fn click(&self, id: u64) -> Click {
+        Click::Item {
+            pane: self.pane,
+            id,
+        }
+    }
+
+    /// The text cursor, if this pane shows it and its row is in the
+    /// window, where the column fits.
+    fn put_text_cursor(&self, f: &mut Frame, at: Option<(usize, usize)>) {
+        let at = at.filter(|_| self.shows_text_cursor());
+        if let Some(position) = at.and_then(|(row, depth)| self.text_cursor_at(row, depth)) {
+            f.set_cursor_position(position);
+        }
+    }
+
+    /// Where the text cursor is on a row of the window, if its column
+    /// fits.
+    fn text_cursor_at(&self, row: usize, depth: usize) -> Option<Position> {
+        let x = self.rows.x as usize + self.text_column(depth);
+        let y = self.rows.y + row as u16;
+        (x < self.rows.right() as usize).then(|| Position::new(x as u16, y))
+    }
+
+    /// Whether this pane shows the text cursor: it has the focus, in
+    /// normal mode. With the cursor on no item, no row is the cursor's.
+    fn shows_text_cursor(&self) -> bool {
+        self.has_focus() && matches!(self.app.session.mode, Mode::Normal)
+    }
+
+    /// The text cursor's column on its line: after its item's indent, tree
+    /// mark and, at the top level, number, and the text before it.
+    fn text_column(&self, depth: usize) -> usize {
+        let number = match depth {
+            0 => self.outline().number(self.cursor()).len() + 2,
+            _ => 0,
+        };
+        2 * depth + 2 + number + self.typed_cells()
+    }
+
+    /// How many cells the text before the text cursor takes.
+    fn typed_cells(&self) -> usize {
+        cells(&self.app.text_of(self.cursor()), self.view().pos)
+    }
+}
+
+/// The rows within a screen's height of the cursor's row, either side.
+fn near(rows: &[(u64, usize)], cursor: u64, height: usize) -> &[(u64, usize)] {
+    let at = rows.iter().position(|(id, _)| *id == cursor).unwrap_or(0);
+    let first = at.saturating_sub(height);
+    &rows[first..rows.len().min(first + 2 * height + 1)]
+}
+
+/// The lines of an outline pane, before its window is chosen: each line,
+/// each place a click acts on, and the cursor's line and depth.
+#[derive(Default)]
+struct Drawn {
+    lines: Vec<Line<'static>>,
+    places: Vec<Place>,
+    cursor: Option<(usize, usize)>,
+}
+
+/// A place a click acts on: its line, its column and width, and what it
+/// does.
+struct Place {
+    line: usize,
+    span: (usize, usize),
+    click: Click,
+}
+
+impl Place {
+    /// A place on a line: the line, its first column and its width.
+    fn of((line, x, width): (usize, usize, usize), click: Click) -> Place {
+        let span = (x, width);
+        Place { line, span, click }
+    }
+
+    /// A click on it, if it is in the window, where it is drawn in an area
+    /// whose first line is the window's.
+    fn add_to(&self, hits: &mut Hits, area: Rect, offset: usize) {
+        let shown = (offset..offset + area.height as usize).contains(&self.line);
+        if shown {
+            hits.add(area, self.rect(area, offset), self.click.clone());
+        }
+    }
+
+    /// Where it is drawn in an area whose first line is the window's.
+    fn rect(&self, area: Rect, offset: usize) -> Rect {
+        let (x, width) = self.span;
+        let y = area.y + (self.line - offset) as u16;
+        Rect::new(area.x + x as u16, y, width as u16, 1)
+    }
+}
+
+impl Drawn {
+    /// The window onto the lines, in the pane's rows; then the text cursor,
+    /// and the places in the window.
+    fn show(self, f: &mut Frame, outline: &OutlinePane) -> Hits {
+        let rows = outline.rows;
+        let offset = self.offset(rows.height as usize);
+        let hits = self.hits(rows, offset);
+        outline.put_text_cursor(f, self.cursor_row(offset, rows.height as usize));
+        f.render_widget(self.window(offset, rows.height as usize), rows);
+        hits
+    }
+
+    /// The first line in a window of a height: two lines below the
+    /// cursor's are kept in view where there is room, but never at the
+    /// cost of the cursor's own.
+    fn offset(&self, height: usize) -> usize {
+        let at = self.cursor.map_or(0, |(line, _)| line);
+        let below = (at + 3).saturating_sub(height).min(at);
+        below.min(self.lines.len().saturating_sub(1))
+    }
+
+    /// The cursor's row in a window, if it is in it, and its depth.
+    fn cursor_row(&self, offset: usize, height: usize) -> Option<(usize, usize)> {
+        let (line, depth) = self.cursor?;
+        let row = line.checked_sub(offset).filter(|r| *r < height)?;
+        Some((row, depth))
+    }
+
+    /// The lines in a window.
+    fn window(self, offset: usize, height: usize) -> Paragraph<'static> {
+        let shown: Vec<Line> = self.lines.into_iter().skip(offset).take(height).collect();
+        Paragraph::new(shown)
+    }
+
+    /// The places in a window, each where it is drawn in an area.
+    fn hits(&self, area: Rect, offset: usize) -> Hits {
+        let mut hits = Hits::default();
+        let places = self.places.iter();
+        places.for_each(|p| p.add_to(&mut hits, area, offset));
+        hits
+    }
 }
 
 /// How many cells the first characters of a text take: a wide character,

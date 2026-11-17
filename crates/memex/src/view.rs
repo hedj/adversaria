@@ -195,6 +195,13 @@ impl Rect {
         Rect { x, y, w, h }
     }
 
+    /// Each line it covers, moved to start at a line and a column: the
+    /// line, its first column, and its width.
+    pub fn lines_at(&self, (top, left): (usize, usize)) -> Vec<(usize, usize, usize)> {
+        let lines = self.y..self.y + self.h;
+        lines.map(|y| (top + y, left + self.x, self.w)).collect()
+    }
+
     /// The column just right of it.
     fn right(&self) -> usize {
         self.x + self.w
