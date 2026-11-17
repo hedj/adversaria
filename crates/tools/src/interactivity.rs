@@ -259,6 +259,12 @@ impl Unit {
         }
     }
 
+    /// The load counting each field or term apart, where it has that
+    /// count, else its load.
+    fn strict_load(&self) -> usize {
+        self.strict.unwrap_or(self.load())
+    }
+
     /// The lower bound: ambiguous calls left out.
     pub fn load(&self) -> usize {
         self.referents.len()
@@ -1579,10 +1585,7 @@ fn strict_part(units: &[Unit], limit: usize) -> String {
     if !units.iter().any(|u| u.strict.is_some()) {
         return String::new();
     }
-    let strict = units
-        .iter()
-        .filter(|u| u.strict.unwrap_or(u.load()) > limit)
-        .count();
+    let strict = over_by(units, limit, Unit::strict_load);
     let part = if units.iter().any(|u| u.file.ends_with(".rs")) {
         "field"
     } else {
