@@ -372,6 +372,12 @@ fn a_ruling_names_the_blob_it_read() {
 }
 
 /// The body of the last entry.
+/// The first fact of the last entry, shown.
+fn last_fact_shown(app: &App) -> String {
+    let fact = format::terms::decode(&last_body(app)["facts"][0]).unwrap();
+    memex::reason::show(&fact)
+}
+
 fn last_body(app: &App) -> serde_json::Value {
     app.journal()
         .entries()
@@ -477,11 +483,8 @@ fn the_quote_check() {
     app.flush();
     command(&mut app, "check quote");
     assert_eq!(app.session.message, "quote check: misquoted");
-    let e = app.journal().entries().last().unwrap();
-    assert!(
-        memex::reason::show(&format::terms::decode(&e.body().unwrap()["facts"][0]).unwrap())
-            .starts_with(&format!("ruling({item}, quote, misquoted, "))
-    );
+    let ruling = format!("ruling({item}, quote, misquoted, ");
+    assert!(last_fact_shown(&app).starts_with(&ruling));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
