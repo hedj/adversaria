@@ -22,9 +22,14 @@ fn every_command_has_a_row() {
     let missing: Vec<&str> = COMMANDS
         .iter()
         .map(|c| c.name)
-        .filter(|n| !GUIDE.contains(&format!("| `{n}` |")))
+        .filter(|n| !has_row(n))
         .collect();
     assert!(missing.is_empty(), "the guide has no row for {missing:?}");
+}
+
+/// Whether the guide's table of commands has a row for a command.
+fn has_row(name: &str) -> bool {
+    GUIDE.contains(&format!("| `{name}` |"))
 }
 
 #[test]
