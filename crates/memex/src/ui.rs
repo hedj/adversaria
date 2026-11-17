@@ -1017,8 +1017,23 @@ fn foot_box(area: Rect, lines: usize) -> Rect {
 fn list_lines(app: &App, a: &Active) -> Vec<Line<'static>> {
     match a.q {
         Quasi::Command => command_help(&a.input).into_iter().map(Line::raw).collect(),
+        Quasi::Suppose => suppose_lines(a),
         q => leap_lines(app, a, q == Quasi::LeapForward),
     }
+}
+
+/// What may come next in Suppose, listed with help; its first line, the
+/// heading, dim.
+fn suppose_lines(a: &Active) -> Vec<Line<'static>> {
+    let listed = a.hint.iter().flat_map(|h| h.listing.iter().cloned());
+    let lines = listed.enumerate().map(|(k, l)| {
+        if k == 0 {
+            Line::styled(l, dim())
+        } else {
+            Line::raw(l)
+        }
+    });
+    lines.collect()
 }
 
 /// A Leap's matches: how many, then the first five, or every one while
@@ -1148,11 +1163,11 @@ fn quasi_guide(a: &Active) -> String {
         Quasi::Scope => {
             format!("Space widens the target: word, statement, branch · {end} keeps it")
         }
-        Quasi::Suppose => match &a.hint {
+        Quasi::Suppose => match a.hint.as_ref().and_then(|h| h.said.as_ref()) {
             None => format!(
-                "type a statement · {end} offers its readings, or a world of that name if none"
+                "type a statement · ? lists what may come next · {end} offers its readings, or a world of that name if none"
             ),
-            Some(h) => format!("{} · {end} offers its readings", h.said),
+            Some(said) => format!("{said} · {end} offers its readings"),
         },
     }
 }

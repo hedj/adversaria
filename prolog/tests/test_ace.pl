@@ -170,13 +170,13 @@ test(the_words_that_may_come_next_are_the_grammars) :-
     % a verb.
     ace_lexicon([pn_sg(buran_flight, buran_flight, neutr), adj_itr(reusable, reusable)], _),
     next_words("The date of", Next),
-    assertion(memberchk(word(buran_flight), Next)),
+    assertion(memberchk(own(buran_flight), Next)),
     assertion(memberchk(kind(name), Next)),
     assertion(memberchk(word(the), Next)),
     assertion(\+ memberchk(kind(verb), Next)),
-    assertion(\+ memberchk(word(reusable), Next)),
+    assertion(\+ memberchk(own(reusable), Next)),
     Next = [First|_],
-    assertion(First == word(buran_flight)).
+    assertion(First == own(buran_flight)).
 
 test(nothing_may_come_after_a_broken_beginning) :-
     % Catches a text that cannot go on as ACE given next words: ACE has no
@@ -195,7 +195,7 @@ test(a_beginning_of_ace_is_open_with_what_may_come_next) :-
     % Catches a sentence still being typed reported as not ACE.
     ace_lexicon([pn_sg(buran_flight, buran_flight, neutr)], _),
     ace_check("The date of ", open(Next, "")),
-    assertion(memberchk(word(buran_flight), Next)).
+    assertion(memberchk(own(buran_flight), Next)).
 
 test(a_word_being_typed_filters_the_next_words_and_one_alone_completes) :-
     % Catches next words not filtered by what is typed, ignoring case, or
@@ -225,7 +225,21 @@ test(a_word_begun_that_two_words_fit_completes_to_neither) :-
     % Catches the first of two fitting words taken as the completion.
     ace_lexicon([pn_sg(buran_flight, buran_flight, neutr), pn_sg(buran_orbit, buran_orbit, neutr)], _),
     ace_check("The date of bur", open(Next, Completed)),
-    assertion(memberchk(word(buran_orbit), Next)),
+    assertion(memberchk(own(buran_orbit), Next)),
     assertion(Completed == "").
+
+test(what_may_begin_a_sentence_is_listed) :-
+    % Catches nothing listed before anything is typed.
+    ace_lexicon([pn_sg(buran_flight, buran_flight, neutr)], _),
+    ace_next("", Next),
+    assertion(memberchk(own(buran_flight), Next)),
+    assertion(memberchk(word(every), Next)).
+
+test(what_may_come_after_a_whole_sentence_is_listed) :-
+    % Catches a whole sentence given nothing to go on with: "and" may
+    % follow "John waits".
+    ace_lexicon([], []),
+    ace_next("John waits ", Next),
+    assertion(memberchk(word(and), Next)).
 
 :- end_tests(ace).

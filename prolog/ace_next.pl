@@ -11,10 +11,10 @@ so the grammar goes on to every other way it could continue. Parsing a
 text with the marker after it thus finds every word that may come next.
 Elsewhere the wrappers do nothing: no text holds the marker.
 
-next_words/2 gives them as word(Form), for function words and the user
-lexicon's words of each category asked for, and kind(Name), for each
-category: noun, name, verb, participle, adjective, adverb, preposition,
-number, variable.
+next_words/2 gives them as own(Form), for the user lexicon's words of
+each category asked for (the notebook's words), word(Form), for function
+words, and kind(Name), for each category: noun, unit, name, verb,
+participle, adjective, adverb, preposition, number, variable.
 */
 
 :- module(ace_next, [next_words/2, users_word/1]).
@@ -106,7 +106,7 @@ shown(Asked, Next) :-
     findall(C, member(kind(C), Asked), Cs0),
     sort(Ks0, Ks),
     sort(Cs0, Cs),
-    findall(word(W), ( member(C, Cs), users_word(C, W) ), Users),
+    findall(own(W), ( member(C, Cs), users_word(C, W) ), Users),
     findall(kind(K), member(K, Ks), Kinds),
     findall(word(W), ( member(word(W), Asked), is_word(W) ), Fws0),
     sort(Fws0, Fws),

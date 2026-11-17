@@ -698,6 +698,26 @@ Checked: 27 Prolog tests (8 new) and 8 tests through the memex (2 new),
 (listed in the commit), one only after a test was added for it: the
 first of two fitting words taken as the completion.
 
+#### `?` in Suppose (17 November 2026)
+
+`?` lists what may come next with a line of help (design, the outline
+model's aid 10, after TOPS-20): the notebook's words (marked `own` by
+`ace_next.pl`, so the list can tell them from ACE's words), each kind of
+word with what it is and examples, and the words of ACE, ten to a line.
+It works with nothing typed (how a sentence may begin) and after a whole
+sentence ("and" may follow "John waits"); `ace_next/2` gives the next
+words for any text. `?` is also ACE's question mark, so in Suppose it
+lists only at the start or after a space; typed after a word it ends a
+question.
+
+Found on the way, and fixed first (commit efd7bb7): APE restates no
+yes-no question (its own paraphrase is "# ..."), so "Does John wait?"
+was said to be `ACE:` with nothing after; and APE's drs_to_drslist/2
+left a choice point for a text with a question.
+
+Checked: 30 Prolog tests (2 new), 17 unit tests in `ace.rs` (1 new), 11
+tests through the memex (3 new); 11 breaks, each made a test fail.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

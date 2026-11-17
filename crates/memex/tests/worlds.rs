@@ -88,12 +88,12 @@ fn only_a_belief_both_named_and_numbered_is_believed_already() {
 #[test]
 fn the_foot_says_what_holding_suppose_does() {
     // Catches the foot asking for a world's name, where Suppose reads a
-    // statement and offers its readings (guide § 2.3, § 3.2).
+    // statement and offers its readings, or leaving out that `?` lists
+    // what may come next (guide § 2.3, § 3.2).
     let mut r = Room::new("suppose-foot");
     r.items(&["Notes"]);
     r.hold(Quasi::Suppose, "");
-    let said =
-        "type a statement · release Suppose offers its readings, or a world of that name if none";
+    let said = "type a statement · ? lists what may come next · release Suppose offers its readings, or a world of that name if none";
     assert!(r.shows(said), "{:?}", r.lines_at(160, 40).last());
 }
 

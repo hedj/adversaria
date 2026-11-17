@@ -364,11 +364,13 @@ pub struct Active {
 }
 
 /// What APE makes of a supposition being typed, in words (or why there is
-/// no parser), and the text mended by its first repair, which Esc applies.
+/// no parser; none if nothing is typed), the text Esc puts in its place,
+/// and, while `?` lists, what may come next with a line of help.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hint {
-    pub said: String,
+    pub said: Option<String>,
     pub mended: Option<String>,
+    pub listing: Vec<String>,
 }
 
 impl Active {
@@ -379,7 +381,8 @@ impl Active {
             self.q,
             Quasi::LeapForward | Quasi::LeapBack | Quasi::Command
         );
-        lister && (self.listing || !self.input.is_empty())
+        let suppose = self.q == Quasi::Suppose && self.listing;
+        suppose || lister && (self.listing || !self.input.is_empty())
     }
 
     /// A quasimode whose key is held, nothing typed yet.

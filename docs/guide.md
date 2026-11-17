@@ -161,7 +161,11 @@ Within a quasimode:
 - **Esc completes:** a command name in Command, a pattern in Leap. In
   Suppose it completes the word being typed when one word alone fits, or
   mends: it puts the repair the line below offers first in place.
-- **`?` lists** the commands that match (Command) or every match (Leap).
+- **`?` lists** the commands that match (Command), every match (Leap), or
+  everything that may come next, each kind of word with a line of help
+  (Suppose). In Suppose, `?` lists only at the start or after a space:
+  typed straight after a word it ends a question ("Does John wait?").
+  `?` again hides the list; what you typed stays.
 - **Repeat a Leap:** a second tap of a latched, empty Leap repeats the last
   pattern.
 
@@ -401,7 +405,11 @@ While you type, the line below checks the statement as controlled English
   only the present tense). Esc puts the first in place. With no such
   edit, it names the words ACE does not know.
 
-A word is judged only once it ends, with a space or an end mark. A fact written as
+A word is judged only once it ends, with a space or an end mark. To see
+everything that may come next, not only the first twelve, type `?` (at
+the start, or after a space): the notebook's words, each kind of word
+with what it is (`a name — one thing by its name: John, buran_flight`),
+and the words of ACE. A fact written as
 Prolog, such as `cell(fuel, 80)`, is read exactly as you wrote it, even
 for something the memex has no facts about. If there is no reading,
 releasing starts a named world with nothing supposed; if what you typed

@@ -197,11 +197,7 @@ impl App {
         }
         a.used = true;
         match ev.key {
-            Key::Char('?')
-                if a.q != Quasi::Suppose && !(a.q == Quasi::Command && in_quotes(&a.input)) =>
-            {
-                a.listing = !a.listing
-            }
+            Key::Char('?') if asks_help(&a) => a.listing = !a.listing,
             Key::Char(' ') if a.q == Quasi::Scope => {
                 self.session.view.scope = match self.session.view.scope {
                     ScopeLevel::Word => ScopeLevel::Statement,
@@ -416,4 +412,15 @@ fn continuation(text: &str, p: &str) -> String {
     let t = text.to_lowercase();
     let after = &t[t.find(p).unwrap() + p.len()..];
     after.chars().take_while(|c| !c.is_whitespace()).collect()
+}
+
+/// Whether `?` asks what may come next: in Command, but not inside
+/// quotes; in Suppose, only at the start or after a space, since typed
+/// after a word it ends a question of ACE.
+fn asks_help(a: &Active) -> bool {
+    match a.q {
+        Quasi::Command => !in_quotes(&a.input),
+        Quasi::Suppose => a.input.is_empty() || a.input.ends_with(' '),
+        _ => true,
+    }
 }

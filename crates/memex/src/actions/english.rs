@@ -1,7 +1,7 @@
 //! Controlled English: what APE makes of a text, read with the words the
 //! current world gives (docs/translator.md).
 
-use crate::ace::{Check, Parse, hint, lexicon_of, said};
+use crate::ace::{Check, Next, Parse, hint, lexicon_of, listing, said};
 use crate::app::{Active, App, Hint, Quasi};
 use crate::engine::told;
 
@@ -16,13 +16,32 @@ impl App {
     }
 
     /// Check again what is typed in Suppose, the one quasimode whose text
-    /// is English; nothing when nothing is typed.
+    /// is English, and list what may come next while `?` lists.
     pub(crate) fn recheck(&mut self, a: &mut Active) {
         if a.q != Quasi::Suppose {
             return;
         }
         let typed = !a.input.trim().is_empty();
-        a.hint = typed.then(|| hint_of(self.ace_check(&a.input)));
+        let mut hint = typed.then(|| hint_of(self.ace_check(&a.input)));
+        if a.listing {
+            let listed = self.ace_listing(&a.input);
+            hint.get_or_insert_with(Hint::none).listing = listed;
+        }
+        a.hint = hint;
+    }
+
+    /// What may come next in a text, listed with help; or why not.
+    fn ace_listing(&mut self, text: &str) -> Vec<String> {
+        match self.ace_next(text) {
+            Ok(next) => listing(&next),
+            Err(e) => vec![e],
+        }
+    }
+
+    fn ace_next(&mut self, text: &str) -> Result<Vec<Next>, String> {
+        let facts = self.notebook.facts_now()?;
+        let ace = self.reason.ace()?;
+        ace.next_with(lexicon_of(&facts), text).map_err(told)
     }
 
     /// What a text being typed is, with the current world's words.
@@ -49,11 +68,24 @@ impl App {
 /// A check as a hint: in words, with the text its first repair mends;
 /// or why there is no check.
 fn hint_of(checked: Result<Check, String>) -> Hint {
-    match checked {
-        Ok(c) => Hint {
-            said: hint(&c),
-            mended: c.mended(),
-        },
-        Err(said) => Hint { said, mended: None },
+    let (said, mended) = match checked {
+        Ok(c) => (hint(&c), c.mended()),
+        Err(said) => (said, None),
+    };
+    Hint {
+        said: Some(said),
+        mended,
+        ..Hint::none()
+    }
+}
+
+impl Hint {
+    /// Nothing said, nothing to put in place, nothing listed.
+    fn none() -> Hint {
+        Hint {
+            said: None,
+            mended: None,
+            listing: vec![],
+        }
     }
 }

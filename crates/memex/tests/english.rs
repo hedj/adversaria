@@ -132,3 +132,42 @@ fn esc_completes_the_word_being_typed_when_one_alone_fits() {
     assert_eq!(typed(&r), "The date of buran_flight ");
     assert!(line_with(&r, "next: ").is_some());
 }
+
+/// Whether `?` lists in the quasimode held.
+fn listing(r: &Room) -> bool {
+    matches!(&r.app.session.mode, Mode::Quasi(a) if a.listing)
+}
+
+#[test]
+fn question_mark_with_nothing_typed_lists_how_a_sentence_may_begin() {
+    // Catches `?` typed into the statement in Suppose, or nothing listed:
+    // the notebook's words, and each kind of word with its help.
+    let mut r = buran("english-list-start");
+    r.hold(Quasi::Suppose, "?");
+    assert_eq!(typed(&r), "");
+    assert!(line_with(&r, "WHAT MAY COME NEXT").is_some());
+    assert!(line_with(&r, "from your notebook: buran_flight").is_some());
+    assert!(line_with(&r, "a name — one thing by its name").is_some());
+}
+
+#[test]
+fn question_mark_after_a_space_lists_and_again_hides_the_list() {
+    // Catches the list not following what is typed, or `?` not hiding it.
+    let mut r = buran("english-list-toggle");
+    r.hold(Quasi::Suppose, "The date of ?");
+    assert_eq!(typed(&r), "The date of ");
+    assert!(line_with(&r, "a variable — a thing named").is_some());
+    r.typ("?");
+    assert!(!listing(&r));
+    assert!(line_with(&r, "WHAT MAY COME NEXT").is_none());
+}
+
+#[test]
+fn question_mark_after_a_word_ends_a_question() {
+    // Catches `?` taken for help where it ends a question of ACE.
+    let mut r = Room::new("english-question");
+    r.hold(Quasi::Suppose, "Does John wait?");
+    assert_eq!(typed(&r), "Does John wait?");
+    assert!(!listing(&r));
+    assert!(line_with(&r, "ACE: (APE does not restate this sentence.)").is_some());
+}

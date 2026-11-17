@@ -14,7 +14,7 @@ word, or the sentence with <> where parsing failed); Repair is APE's
 advice.
 */
 
-:- module(ace, [ace_lexicon/2, ace_parse/2, ace_check/2]).
+:- module(ace, [ace_lexicon/2, ace_parse/2, ace_check/2, ace_next/2]).
 
 %   APE's files declare no encoding, and one holds UTF-8 in a comment.
 :- set_prolog_flag(encoding, utf8).
@@ -127,11 +127,20 @@ checked(not_ace(Messages), Text, not_ace(Failure, Notes, Repairs)) :-
 %   cannot go on. A word being typed is not judged before it ends.
 going_on(Text, Next, Completed) :-
     \+ ended_by_mark(Text),
+    ace_next(Text, Next),
+    Next \== [],
+    typing(Text, Done, Typed),
+    completed(Done, Typed, Next, Completed).
+
+%!  ace_next(+Text:string, -Next:list) is det.
+%   What may come next in a text: the words and kinds of word that may
+%   come after its last space (ace_next.pl), those the word being typed
+%   begins. With nothing typed, the ways a sentence may begin.
+ace_next(Text, Next) :-
+    must_be(string, Text),
     typing(Text, Done, Typed),
     next_words(Done, All),
-    include(begun_by(Typed), All, Next),
-    Next \== [],
-    completed(Done, Typed, Next, Completed).
+    include(begun_by(Typed), All, Next).
 
 ended_by_mark(Text) :-
     split_string(Text, "", " \t\n", [T]),
@@ -152,6 +161,7 @@ typing(Text, Done, Typed) :-
 %   A next word the word being typed begins (ignoring case), or a kind of
 %   word, which it may begin.
 begun_by(_, kind(_)).
+begun_by(Typed, own(W)) :- begun_by(Typed, word(W)).
 begun_by(Typed, word(W)) :-
     string_lower(Typed, T),
     atom_string(W, S),
@@ -162,10 +172,13 @@ begun_by(Typed, word(W)) :-
 %   and something is typed; else "".
 completed(Done, Typed, Next, Completed) :-
     (   Typed \== "",
-        findall(W, member(word(W), Next), [W])
+        findall(W, ( member(N, Next), word_of(N, W) ), [W])
     ->  format(string(Completed), "~w~w ", [Done, W])
     ;   Completed = ""
     ).
+
+word_of(word(W), W).
+word_of(own(W), W).
 
 %   A text with a full stop after it, unless it ends with . ? or !.
 ended(Text, Ended) :-

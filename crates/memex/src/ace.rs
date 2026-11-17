@@ -63,9 +63,11 @@ pub struct Opening {
     pub completed: Option<String>,
 }
 
-/// What may come next: a word, or a kind of word (noun, name, verb, ...).
+/// What may come next: a word of the notebook, a word of ACE (a function
+/// word), or a kind of word (noun, name, verb, ...).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Next {
+    Own(String),
     Word(String),
     Kind(String),
 }
@@ -154,6 +156,16 @@ impl Ace {
         check_of(&self.only_answer(&goal)?)
     }
 
+    /// What may come next in a text, with this user lexicon (ace_next/2).
+    pub fn next_with(&mut self, lexicon: Vec<Term>, text: &str) -> Result<Vec<Next>, Error> {
+        self.set_lexicon(lexicon)?;
+        let goal = call("ace_next", vec![Term::Str(text.into()), Term::Var(0)]);
+        list(&self.only_answer(&goal)?)
+            .iter()
+            .map(next_of)
+            .collect()
+    }
+
     /// What APE makes of a text.
     pub fn parse(&mut self, text: &str) -> Result<Parse, Error> {
         let goal = call("ace_parse", vec![Term::Str(text.into()), Term::Var(0)]);
@@ -223,8 +235,11 @@ fn opening(a: &[Term]) -> Result<Opening, Error> {
     Ok(Opening { next, completed })
 }
 
-/// What may come next, from word(Form) or kind(Name).
+/// What may come next, from own(Form), word(Form) or kind(Name).
 fn next_of(t: &Term) -> Result<Next, Error> {
+    if let Some(a) = parts(t, "own", 1) {
+        return Ok(Next::Own(text(&a[0])?));
+    }
     if let Some(a) = parts(t, "word", 1) {
         return Ok(Next::Word(text(&a[0])?));
     }
@@ -347,11 +362,61 @@ impl Next {
     /// A word as it is; a kind with its article: "a noun", "an adverb".
     fn said(&self) -> String {
         match self {
-            Next::Word(w) => w.clone(),
+            Next::Own(w) | Next::Word(w) => w.clone(),
             Next::Kind(k) if k.starts_with(['a', 'e', 'i', 'o', 'u']) => format!("an {k}"),
             Next::Kind(k) => format!("a {k}"),
         }
     }
+}
+
+/// What may come next, listed with a line of help (`?` in Suppose): the
+/// notebook's words, each kind of word with what it is, and the words of
+/// ACE, ten to a line.
+pub fn listing(next: &[Next]) -> Vec<String> {
+    if next.is_empty() {
+        return vec!["nothing may come next: the text cannot go on as ACE".into()];
+    }
+    let mut lines = vec![format!("WHAT MAY COME NEXT · {}", next.len())];
+    lines.extend(words_line("from your notebook", next, |n| {
+        matches!(n, Next::Own(_))
+    }));
+    lines.extend(next.iter().filter_map(kind_line));
+    let words: Vec<String> = next
+        .iter()
+        .filter(|n| matches!(n, Next::Word(_)))
+        .map(Next::said)
+        .collect();
+    lines.extend(
+        words
+            .chunks(10)
+            .map(|c| format!("words of ACE: {}", c.join(", "))),
+    );
+    lines
+}
+
+/// The words of one sort, on one line after a label, if there are any.
+fn words_line(label: &str, next: &[Next], sort: fn(&Next) -> bool) -> Option<String> {
+    let words: Vec<String> = next.iter().filter(|n| sort(n)).map(Next::said).collect();
+    (!words.is_empty()).then(|| format!("{label}: {}", words.join(", ")))
+}
+
+/// A kind of word, with a line of help: what it is, and examples.
+fn kind_line(n: &Next) -> Option<String> {
+    let Next::Kind(k) = n else { return None };
+    let help = match k.as_str() {
+        "noun" => "a thing of a kind: a flight, the date of ...",
+        "unit" => "a unit after a number: 3 dollars",
+        "name" => "one thing by its name: John, buran_flight",
+        "verb" => "what something does, in the present: waits, owns",
+        "participle" => "after is: is bought",
+        "adjective" => "a quality: is green, a green park",
+        "adverb" => "how something is done: quickly",
+        "preposition" => "how two things relate: in, of, near",
+        "number" => "a number: 3, 1989, 2.5",
+        "variable" => "a thing named to be named again: X, Y1",
+        _ => "",
+    };
+    Some(format!("{} — {help}", n.said()))
 }
 
 /// The repairs, the first with the key that applies it; or, with none,
@@ -659,15 +724,41 @@ mod tests {
     }
 
     #[test]
+    fn a_listing_gives_each_sort_its_line_and_each_kind_its_help() {
+        // Catches the notebook's words mixed with ACE's, a kind without its
+        // help, or a long run of words on one line.
+        let mut next = vec![Next::Own("buran_flight".into()), Next::Kind("name".into())];
+        next.extend((0..12).map(|i| Next::Word(format!("w{i}"))));
+        let lines = listing(&next);
+        assert_eq!(lines[0], "WHAT MAY COME NEXT · 14");
+        assert_eq!(lines[1], "from your notebook: buran_flight");
+        assert_eq!(
+            lines[2],
+            "a name — one thing by its name: John, buran_flight"
+        );
+        assert!(lines[3].starts_with("words of ACE: w0,") && lines[3].ends_with("w9"));
+        assert_eq!(lines[4], "words of ACE: w10, w11");
+        assert_eq!(
+            listing(&[]),
+            ["nothing may come next: the text cannot go on as ACE"]
+        );
+    }
+
+    #[test]
     fn an_opening_is_read() {
         // Catches the next words or kinds misread, or an empty completion
         // taken for one.
         let next = make_list(vec![
+            c("own", vec![atom("date")]),
             c("word", vec![atom("of")]),
             c("kind", vec![atom("noun")]),
         ]);
         let t = c("open", vec![next, Term::Str(String::new())]);
-        let want = vec![Next::Word("of".into()), Next::Kind("noun".into())];
+        let want = vec![
+            Next::Own("date".into()),
+            Next::Word("of".into()),
+            Next::Kind("noun".into()),
+        ];
         assert_eq!(check_of(&t).unwrap(), opened(want, None));
         let odd = c(
             "open",
