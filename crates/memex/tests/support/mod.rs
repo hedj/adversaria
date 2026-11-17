@@ -177,6 +177,16 @@ impl Room {
         entries.filter(|e| e.kind() == kind).count()
     }
 
+    /// The outline as it stands.
+    pub fn outline(&self) -> &memex::outline::Outline {
+        &self.app.notebook.outline
+    }
+
+    /// How many entries the journal holds.
+    pub fn entry_count(&self) -> usize {
+        self.app.journal().entries().len()
+    }
+
     /// The text of the item at the cursor, as shown.
     pub fn here(&self) -> String {
         self.text(self.app.cursor())

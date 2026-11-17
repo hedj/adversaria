@@ -322,60 +322,60 @@ fn undo_redo_and_branches() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// A room where a link and a revision depend on a claim, and an item does
+/// not: the room, and the claim.
+fn claim_with_dependents(name: &str) -> (Room, u64) {
+    let mut r = Room::new(name);
+    r.items(&["a claim", "independent work"]);
+    let claim = r.app.notebook.outline.by_number("1").unwrap();
+    r.command("link 1 2 as supports");
+    r.leap(Quasi::LeapBack, "claim");
+    r.typ(" (revised)");
+    r.app.flush();
+    (r, claim)
+}
+
+/// What a retraction waiting to be confirmed lists as depending on it.
+fn dependents(r: &Room) -> usize {
+    match &r.app.session.mode {
+        Mode::ConfirmRetract { dependents, .. } => dependents.len(),
+        m => panic!("{m:?}"),
+    }
+}
+
+#[test]
+fn a_retraction_lists_what_depends_on_it_and_waits() {
+    // Plan: "retraction of any earlier entry, listing what depends on it
+    // before confirming". Catches a retraction without the list, or
+    // without confirmation.
+    let (mut r, claim) = claim_with_dependents("retract-list");
+    let n = r.entry_count();
+    r.command(&format!("retract {claim}"));
+    let deps = "the first text, the link and the revision depend on the claim";
+    assert_eq!(dependents(&r), 3, "{deps}");
+    assert!(r.shows("depend on it"), "{:?}", r.lines());
+    assert_eq!(r.entry_count(), n, "nothing written before confirming");
+    r.tap(&[Key::Escape]);
+    assert!(r.outline().contains(claim), "Escape keeps it");
+}
+
 #[test]
 fn retraction_lists_dependents_then_keeps_later_work() {
-    // Plan: "retraction of any earlier entry, listing what depends on it
-    // before confirming". Catches a retraction without the list, without
-    // confirmation, or that loses work that does not depend on it.
-    let dir = temp("retract");
-    let mut app = App::open(&dir).unwrap();
-    app.set_durable(false);
-    typ(&mut app, "a claim");
-    item(&mut app, "independent work");
-    app.flush();
-    let claim = app.notebook.outline.by_number("1").unwrap();
-    command(&mut app, "link 1 2 as supports");
-    hold(&mut app, Quasi::LeapBack, "claim");
-    release(&mut app, Quasi::LeapBack);
-    typ(&mut app, " (revised)");
-    app.flush();
-    let n = app.journal().entries().len();
-    command(&mut app, &format!("retract {claim}"));
-    let deps = match &app.session.mode {
-        Mode::ConfirmRetract { dependents, .. } => dependents.clone(),
-        m => panic!("{m:?}"),
-    };
-    assert_eq!(
-        deps.len(),
-        3,
-        "the first text, the link and the revision depend on the claim: {deps:?}"
-    );
-    let s = screen(&app, 140, 30);
-    assert!(shows(&s, "depend on it"), "{}", s.join("\n"));
-    assert_eq!(
-        app.journal().entries().len(),
-        n,
-        "nothing written before confirming"
-    );
-    tap(&mut app, Key::Escape);
-    assert!(
-        app.notebook.outline.items.contains_key(&claim),
-        "Escape keeps it"
-    );
-    command(&mut app, &format!("retract {claim}"));
-    tap(&mut app, Key::Enter);
-    assert!(!app.notebook.outline.items.contains_key(&claim));
-    assert_eq!(
-        app.notebook
-            .outline
-            .text(app.notebook.outline.by_number("1").unwrap()),
-        "independent work"
-    );
-    command(&mut app, &format!("retract {claim}"));
-    assert!(app.session.message.contains("already retracted"));
-    command(&mut app, "undo"); // undoing the retraction brings the claim back
-    assert_eq!(app.notebook.outline.text(claim), "a claim (revised)");
-    std::fs::remove_dir_all(&dir).unwrap();
+    // Catches a confirmed retraction that loses work that does not depend
+    // on it, or that cannot be undone.
+    let (mut r, claim) = claim_with_dependents("retract");
+    let retract = format!("retract {claim}");
+    r.command(&retract);
+    r.tap(&[Key::Escape]);
+    r.command(&retract);
+    r.tap(&[Key::Enter]);
+    assert!(!r.outline().contains(claim));
+    let first = r.outline().by_number("1").unwrap();
+    assert_eq!(r.text(first), "independent work");
+    r.command(&retract);
+    assert!(r.app.session.message.contains("already retracted"));
+    r.command("undo"); // undoing the retraction brings the claim back
+    assert_eq!(r.text(claim), "a claim (revised)");
 }
 
 #[test]
