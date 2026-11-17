@@ -1111,8 +1111,8 @@ fn status(e: &WorldEval) -> String {
 /// The predicates a goal or body reads, by name.
 fn predicates(t: &Term, out: &mut Vec<String>) {
     if let Term::Compound(f, a) = t {
-        if f == "," || f == ";" || f == "\\+" {
-            a.iter().for_each(|x| predicates(x, out));
+        if let Some(goals) = goals_within(f, a) {
+            goals.iter().for_each(|x| predicates(x, out));
         } else if ![
             "is", "=", "\\=", "<", ">", "=<", ">=", "=:=", "=\\=", "==", "\\==",
         ]
@@ -1120,6 +1120,16 @@ fn predicates(t: &Term, out: &mut Vec<String>) {
         {
             out.push(f.clone());
         }
+    }
+}
+
+/// The goals a control construct calls, as body_literal in
+/// prolog/dataflow.pl finds them; none if it is not one.
+fn goals_within<'a>(f: &str, a: &'a [Term]) -> Option<&'a [Term]> {
+    match (f, a.len()) {
+        ("," | ";" | "->" | "*->" | "forall", 2) | ("\\+", 1) => Some(a),
+        ("findall", 3 | 4) => Some(&a[1..2]),
+        _ => None,
     }
 }
 
