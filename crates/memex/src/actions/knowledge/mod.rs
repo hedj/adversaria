@@ -10,6 +10,7 @@ mod sources;
 
 use crate::app::App;
 use crate::engine::{told, variables};
+use crate::prolog::Error;
 use crate::reason::{make_list, show};
 use format::terms::{self, Term};
 use serde_json::{Value, json};
@@ -66,12 +67,14 @@ impl App {
     }
 
     /// Try a constraint against a planted violation: what it found, shown,
-    /// if it did not fire.
+    /// or the error its body raised, if it did not fire.
     fn misfire(&mut self, vars: &Term, body: &Term) -> Result<Option<String>, String> {
         let engine = self.reason.engine(0)?;
-        let planted = engine.plant(vars, body).map_err(told)?;
-        let fired = matches!(&planted, Term::Compound(n, _) if n == "fires");
-        Ok((!fired).then(|| show(&planted)))
+        match engine.plant(vars, body) {
+            Ok(planted) => Ok(not_fired(&planted)),
+            Err(e @ Error::Prolog(_)) => Ok(Some(told(e))),
+            Err(e) => Err(told(e)),
+        }
     }
 
     /// Write an edit entry that defines a node, numbered by the entry's own
@@ -169,4 +172,10 @@ fn free_names(outer: &Term, inner: &Term, names: &[String]) -> Vec<String> {
                 .unwrap_or_else(|| format!("_{v}"))
         })
         .collect()
+}
+
+/// What a planted violation found, shown, if the constraint did not fire.
+fn not_fired(planted: &Term) -> Option<String> {
+    let fired = matches!(planted, Term::Compound(n, _) if n == "fires");
+    (!fired).then(|| show(planted))
 }

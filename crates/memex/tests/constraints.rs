@@ -263,3 +263,12 @@ fn a_finding_whose_facts_share_two_arguments_is_keyed_by_both() {
     r.app.evaluate().unwrap();
     assert!(r.shows("rent, june: 1200 (1) · 1300 (2)"));
 }
+
+#[test]
+fn a_constraint_that_raises_an_error_when_tried_is_not_kept() {
+    // Catches the error alone, with nothing to say what it is about.
+    let said = stated("raises", "c: false :- cell(C, R), X is R + foo, X > 0.");
+    let why = "type_error(evaluable, foo / 0)";
+    let not_kept = "constraint not kept: tried against a planted violation";
+    assert_eq!(said, format!("{not_kept}, it did not fire ({why})"));
+}
