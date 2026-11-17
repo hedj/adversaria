@@ -313,21 +313,49 @@ fn scene_three_as_written() {
     // world is untouched. Then close the supposition.
     let mut app = scene("scene3");
     let actual_head = app.notebook.tip;
-    let actual_facts = memex::store::facts(app.journal().entries(), actual_head).unwrap();
+    let actual_facts = facts_at(&app, actual_head);
+    suppose_offers_its_reading(&mut app);
+    tap(&mut app, Key::Enter);
+    the_worlds_are_side_by_side(&app);
+    // The actual world is untouched.
+    assert_eq!(facts_at(&app, actual_head), actual_facts);
+    // A world is a branch of the undo tree: the supposition hangs off the actual head.
+    let sup = first_of_kind(&app, "suppose").expect("a supposition");
+    assert_eq!(sup.parent_seq(), Some(actual_head));
+    // Close it: back to the actual world, the branch kept.
+    command(&mut app, "close");
+    closing_returns_to_the_actual_world(&mut app, &actual_facts);
+}
+
+/// The facts of the world whose head is an entry.
+fn facts_at(app: &App, head: u64) -> Vec<(u64, format::terms::Term)> {
+    memex::store::facts(app.journal().entries(), head).unwrap()
+}
+
+/// The first entry of a kind, if there is one.
+fn first_of_kind<'a>(app: &'a App, kind: &str) -> Option<&'a format::record::Entry> {
+    app.journal().entries().iter().find(|e| e.kind() == kind)
+}
+
+/// Scene 3, Suppose held on "the flight was in 1989" and released: "do you
+/// mean?", with the reading.
+fn suppose_offers_its_reading(app: &mut App) {
     app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
-    typ(&mut app, "the flight was in 1989");
+    typ(app, "the flight was in 1989");
     app.handle(Event::up(Key::Quasi(Quasi::Suppose)));
     assert!(matches!(app.session.mode, Mode::ConfirmSuppose { .. }));
-    let s = screen(&app);
+    let s = screen(app);
     s.assert("SUPPOSE  the flight was in 1989");
     s.assert("Do you mean: Suppose that the date of Buran's flight is 1989.  ⏎ yes · Esc no");
-    tap(&mut app, Key::Enter);
-    assert!(
-        app.session.message.contains("set aside in this world: 1.1"),
-        "{}",
-        app.session.message
-    );
-    let s = screen(&app);
+}
+
+/// Scene 3, the reading taken: the source's date set aside, and the two
+/// worlds side by side, the sentence, the timeline and the constraint
+/// each changed.
+fn the_worlds_are_side_by_side(app: &App) {
+    let said = &app.session.message;
+    assert!(said.contains("set aside in this world: 1.1"), "{said}");
+    let s = screen(app);
     s.assert("worlds actual | suppose: the flight was in 1989");
     s.assert("WORLD · ACTUAL");
     s.assert("WORLD · SUPPOSE THE FLIGHT WAS IN 1989");
@@ -338,38 +366,20 @@ fn scene_three_as_written() {
     s.assert("Constraint one date per event: 0 violations, 1 disagreement");
     s.assert("Constraint one date per event: 0 violations · 1.1 retracted here");
     s.assert("(fact retracted here)");
-    // The actual world is untouched.
-    assert_eq!(
-        memex::store::facts(app.journal().entries(), actual_head).unwrap(),
-        actual_facts
-    );
-    // A world is a branch of the undo tree: the supposition hangs off the actual head.
-    let sup = app
-        .journal()
-        .entries()
-        .iter()
-        .find(|e| e.kind() == "suppose")
-        .unwrap();
-    assert_eq!(sup.parent_seq(), Some(actual_head));
-    // Close it: back to the actual world, the branch kept.
-    command(&mut app, "close");
+}
+
+/// Scene 3, closed: the actual world again, as it was, and the
+/// supposition kept in the journal.
+fn closing_returns_to_the_actual_world(app: &mut App, actual_facts: &[(u64, format::terms::Term)]) {
     app.evaluate().unwrap();
     assert!(app.reason.supposition.is_none());
     assert_eq!(app.reason.world(), "actual");
-    let s = screen(&app);
+    let s = screen(app);
     s.assert("1 disagreement between sources");
     s.assert("The flight came a year after Energia's first launch.");
-    assert_eq!(
-        memex::store::facts(app.journal().entries(), app.notebook.tip).unwrap(),
-        actual_facts
-    );
-    assert!(
-        app.journal()
-            .entries()
-            .iter()
-            .any(|e| e.kind() == "suppose"),
-        "the supposition stays in the journal"
-    );
+    assert_eq!(facts_at(app, app.notebook.tip), actual_facts);
+    let kept = first_of_kind(app, "suppose").is_some();
+    assert!(kept, "the supposition stays in the journal");
 }
 
 #[test]
