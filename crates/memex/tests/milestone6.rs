@@ -404,34 +404,34 @@ fn a_changed_input_marks_its_results() {
     app.evaluate().unwrap();
     assert!(app.session.stale().is_empty(), "nothing has changed yet");
     let result = leap(&mut app, "mean_delay");
+    the_result_is_read(&app, result);
+    std::fs::write(dir.join("data.csv"), "t,delay\n1,1.5\n2,1.9\n").unwrap();
+    app.evaluate().unwrap();
+    assert_eq!(changed_inputs(&app, result), ["data.csv"]);
+    the_mark_is_under_its_result(&app);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The input files of an item's result that changed since it was made.
+fn changed_inputs(app: &App, item: u64) -> Vec<String> {
+    app.session.stale().get(&item).cloned().unwrap_or_default()
+}
+
+/// The result's item shows its value, and its fact is a measurement.
+fn the_result_is_read(app: &App, result: u64) {
     assert_eq!(
         app.notebook.outline.text(result),
         "mean_delay = 1.55 ± 0.05 s"
     );
     let facts = memex::store::facts(app.journal().entries(), app.notebook.tip).unwrap();
-    assert!(
-        facts
-            .iter()
-            .any(|(_, f)| memex::reason::show(f).contains("measured(1.55, 0.05, \"s\")")),
-        "{facts:?}"
-    );
-    std::fs::write(dir.join("data.csv"), "t,delay\n1,1.5\n2,1.9\n").unwrap();
-    app.evaluate().unwrap();
-    assert_eq!(
-        app.session.stale().get(&result),
-        Some(&vec!["data.csv".to_string()])
-    );
-    let mut t = ratatui::Terminal::new(ratatui::backend::TestBackend::new(140, 30)).unwrap();
-    t.draw(|f| memex::ui::draw(f, &app)).unwrap();
-    let buf = t.backend().buffer().clone();
-    let shown = (0..30)
-        .map(|y| {
-            (0..140)
-                .map(|x| buf[(x, y)].symbol().to_string())
-                .collect::<String>()
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    let measured =
+        |f: &format::terms::Term| memex::reason::show(f).contains("measured(1.55, 0.05, \"s\")");
+    assert!(facts.iter().any(|(_, f)| measured(f)), "{facts:?}");
+}
+
+/// The mark of a changed input is drawn on the line under its result.
+fn the_mark_is_under_its_result(app: &App) {
+    let shown = screen_text(app, 140, 30);
     assert!(shown.contains("⚑ input changed since: data.csv"), "{shown}");
     let lines: Vec<&str> = shown.lines().collect();
     let at = lines
@@ -442,7 +442,19 @@ fn a_changed_input_marks_its_results() {
         lines[at + 1].contains("⚑ input changed since"),
         "under its result"
     );
-    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The screen drawn at a width and a height, as text, a line to a row.
+fn screen_text(app: &App, w: u16, h: u16) -> String {
+    let mut t = ratatui::Terminal::new(ratatui::backend::TestBackend::new(w, h)).unwrap();
+    t.draw(|f| memex::ui::draw(f, app)).unwrap();
+    let buf = t.backend().buffer().clone();
+    let row = |y| {
+        (0..w)
+            .map(|x| buf[(x, y)].symbol().to_string())
+            .collect::<String>()
+    };
+    (0..h).map(row).collect::<Vec<_>>().join("\n")
 }
 
 #[test]
