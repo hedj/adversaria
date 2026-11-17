@@ -138,7 +138,20 @@ fn a_click_on_a_suggestion_accepts_it() {
     // Plan: suggestions "adopted ... by a click". Catches a click that
     // accepts a different suggestion from the one under it, which wrapped
     // evidence lines would cause if heights were guessed.
-    let mut app = Room::new("mouse-suggestion");
+    let mut app = buran_with_suggestions("mouse-suggestion");
+    let shown = shown_suggestions(&app);
+    assert!(shown.len() >= 2, "{shown:?}");
+    let accept_2 = Click::Command("accept 2".into());
+    // Click the second suggestion's last line: its evidence, not its title.
+    the_second_spans_its_evidence(&app, &shown[1], &accept_2);
+    app.click(&accept_2);
+    assert_eq!(app.session.message, format!("adopted: {}", shown[1]));
+}
+
+/// Notes that Buran flew in 1989, Wikidata imported, and the suggestions
+/// in the second pane.
+fn buran_with_suggestions(name: &str) -> Room {
+    let mut app = Room::new(name);
     app.set_durable(false);
     typ(&mut app, "Buran flew once, unmanned, in 1989.");
     app.flush();
@@ -147,21 +160,21 @@ fn a_click_on_a_suggestion_accepts_it() {
     command(&mut app, &format!("import wikidata {FIXTURE}"));
     command(&mut app, "pane suggestions");
     assert_eq!(app.session.view.panes[1].kind, PaneKind::Suggestions);
-    let shown = shown_suggestions(&app);
-    assert!(shown.len() >= 2, "{shown:?}");
-    // Click the second suggestion's last line: its evidence, not its title.
-    let (x, y) = app.find(&format!("2. {}", shown[1]));
-    let accept_2 = Click::Command("accept 2".into());
+    app
+}
+
+/// The second suggestion's title, and its evidence lines below, are each
+/// a click that accepts it.
+fn the_second_spans_its_evidence(app: &Room, title: &str, accept: &Click) {
+    let at = app.find(&format!("2. {title}"));
     let hits = app.hits();
     assert_eq!(
-        hits.at(x, y),
-        Some(&accept_2),
+        hits.at(at.0, at.1),
+        Some(accept),
         "the title is part of suggestion 2"
     );
-    let below = last_row_of(&hits, (x, y), &accept_2);
-    assert!(below > y, "the evidence lines are part of suggestion 2");
-    app.click(&accept_2);
-    assert_eq!(app.session.message, format!("adopted: {}", shown[1]));
+    let below = last_row_of(&hits, at, accept) > at.1;
+    assert!(below, "the evidence lines are part of suggestion 2");
 }
 
 /// The suggestions shown, described.
