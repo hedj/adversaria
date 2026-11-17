@@ -2,7 +2,7 @@
 //! engines, what they found in the worlds shown, and the suggestions
 //! (docs/structure.md § The code's structure).
 
-use crate::engine::Engine;
+use crate::engine::{Engine, told};
 use crate::notebook::Trial;
 use crate::notebook::strings;
 use crate::outline::Constraint;
@@ -97,7 +97,7 @@ impl Reasoning {
         by: u64,
     ) -> Result<Vec<String>, String> {
         let engine = self.engine(2)?;
-        engine.sync(facts).map_err(|e| e.to_string())?;
+        engine.sync(facts).map_err(told)?;
         let raised = constraints.iter().filter_map(|c| raised_in(engine, c, by));
         Ok(raised.collect())
     }
@@ -106,7 +106,7 @@ impl Reasoning {
     /// engine.
     pub(crate) fn try_out(&mut self, trial: &Trial) -> Result<Vec<ConstraintEval>, String> {
         let engine = self.engine(2)?;
-        engine.sync(&trial.facts).map_err(|e| e.to_string())?;
+        engine.sync(&trial.facts).map_err(told)?;
         let found = trial
             .constraints
             .iter()

@@ -9,7 +9,7 @@ mod layers;
 mod sources;
 
 use crate::app::App;
-use crate::engine::variables;
+use crate::engine::{told, variables};
 use crate::reason::{make_list, show};
 use format::terms::{self, Term};
 use serde_json::{Value, json};
@@ -20,7 +20,7 @@ impl App {
         self.reason
             .engine(0)?
             .parse(text)
-            .map_err(|e| format!("{what}: {e}"))
+            .map_err(|e| format!("{what}: {}", told(e)))
     }
 
     /// A fact as typed: an atom or a compound term, ground, not reserved.
@@ -69,7 +69,7 @@ impl App {
     /// if it did not fire.
     fn misfire(&mut self, vars: &Term, body: &Term) -> Result<Option<String>, String> {
         let engine = self.reason.engine(0)?;
-        let planted = engine.plant(vars, body).map_err(|e| e.to_string())?;
+        let planted = engine.plant(vars, body).map_err(told)?;
         let fired = matches!(&planted, Term::Compound(n, _) if n == "fires");
         Ok((!fired).then(|| show(&planted)))
     }

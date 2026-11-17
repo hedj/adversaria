@@ -131,7 +131,7 @@ impl ConstraintEval {
 
     /// Read a constraint's node from an engine the world is loaded in.
     pub fn read(engine: &mut Engine, seq: u64, c: &Constraint) -> Result<Self, String> {
-        let v = engine.node(seq).map_err(|e| e.to_string())?;
+        let v = engine.node(seq).map_err(crate::engine::told)?;
         let (violations, disagreements) = split_solutions(&v);
         Ok(Self {
             seq,

@@ -1,7 +1,7 @@
 //! A world to reason over, loaded into an engine, and what its nodes find
 //! (docs/design.md § Dataflow).
 
-use crate::engine::Engine;
+use crate::engine::{Engine, told};
 use crate::outline::{Constraint, Outline};
 use crate::reason::{ConstraintEval, Nodes, WorldEval, marks};
 use format::terms::Term;
@@ -53,12 +53,12 @@ impl World {
     }
 
     fn load_facts(&self, engine: &mut Engine) -> Result<(), String> {
-        engine.sync(&self.with_outline()).map_err(|e| e.to_string())
+        engine.sync(&self.with_outline()).map_err(told)
     }
 
     fn load_import(&self, engine: &mut Engine) -> Result<(), String> {
         let import = self.import.as_ref().map(|(s, f)| (*s, f.as_path()));
-        engine.wikidata(import).map_err(|e| e.to_string())
+        engine.wikidata(import).map_err(told)
     }
 
     /// The world's facts, and the facts its outline states of its items.
@@ -117,7 +117,7 @@ impl World {
         for item in self.outline.derived.keys() {
             match engine.node(*item) {
                 Ok(v) => drop(answers.insert(*item, v)),
-                Err(e) => drop(failed.insert(*item, why(e))),
+                Err(e) => drop(failed.insert(*item, told(e))),
             }
         }
         (answers, failed)
@@ -138,17 +138,6 @@ impl World {
             .flatten()
             .map(|l| l.seq)
             .collect()
-    }
-}
-
-/// Why a node could not be read: of a Prolog error, its formal part,
-/// such as type_error(evaluable, foo/0).
-fn why(e: crate::prolog::Error) -> String {
-    match e {
-        crate::prolog::Error::Prolog(Term::Compound(n, a)) if n == "error" && a.len() == 2 => {
-            crate::reason::show(&a[0])
-        }
-        e => e.to_string(),
     }
 }
 

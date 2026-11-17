@@ -3,7 +3,7 @@
 //! changes the journal's content; it is computed from it.
 
 use crate::app::{App, PaneKind};
-use crate::engine::Engine;
+use crate::engine::{Engine, told};
 use crate::outline::Outline;
 use crate::reason::{Suggestion, WorldEval};
 use crate::world::World;
@@ -78,7 +78,7 @@ impl App {
             return Ok(vec![]);
         }
         let engine = self.reason.engine(0)?;
-        engine.suggestions().map_err(|e| e.to_string())
+        engine.suggestions().map_err(told)
     }
 
     // What follows.

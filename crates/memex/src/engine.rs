@@ -212,6 +212,16 @@ fn wikidata_goal(import: Option<(u64, &std::path::Path)>) -> Term {
 // Refusals, in words.
 
 /// What Prolog's error(E, _) holds, if the error is one.
+/// What an error from the engine says, as the user should read it: of a
+/// Prolog error, its formal part, such as type_error(evaluable, foo/0);
+/// else the error's own words.
+pub fn told(e: Error) -> String {
+    match raised(&e) {
+        Some(formal) => show(formal),
+        None => e.to_string(),
+    }
+}
+
 fn raised(e: &Error) -> Option<&Term> {
     match e {
         Error::Prolog(Term::Compound(f, a)) if f == "error" => a.first(),
@@ -243,7 +253,7 @@ fn definition_refusal(e: Error) -> String {
             "{} is not allowed: a definition may only read facts, compare and compute (docs/guide.md, § 3.1)",
             not_allowed(what)
         ),
-        _ => e.to_string(),
+        _ => told(e),
     }
 }
 
@@ -263,7 +273,7 @@ fn rule_refusal(e: Error) -> String {
             "a variable of the head is not bound by the body".to_string()
         }
         (None, Some(other)) => show(other),
-        (None, None) => e.to_string(),
+        (None, None) => told(e),
     }
 }
 
