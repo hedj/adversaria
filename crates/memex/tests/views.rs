@@ -116,30 +116,7 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
             "bar(x(rent), y(1200))"
         ]
     );
-    // Each mark rests on the fact it shows.
-    let eval = app.reason.eval[0].as_ref().unwrap();
-    let layer = app.notebook.outline.views[&chart][0].seq;
-    for (mark, prov) in &eval.nodes.layers[&layer] {
-        assert_eq!(prov.len(), 1, "{mark:?}");
-        let fact = &eval.facts.iter().find(|(s, _)| *s == prov[0]).unwrap().1;
-        let Term::Compound(_, a) = mark else { panic!() };
-        let Term::Compound(_, x) = &a[0] else {
-            panic!()
-        };
-        assert_eq!(
-            fact,
-            &Term::Compound(
-                "cell".into(),
-                vec![
-                    x[0].clone(),
-                    match &a[1] {
-                        Term::Compound(_, y) => y[0].clone(),
-                        _ => panic!(),
-                    }
-                ]
-            )
-        );
-    }
+    each_mark_rests_on_the_fact_it_shows(&app, chart);
     // A second layer, constant: a reference line.
     command(&mut app, "layer rule(y(1500))");
     assert_eq!(marks(&app, chart).last().unwrap(), "rule(y(1500))");
@@ -147,32 +124,73 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
     command(&mut app, "set cell(food, 900)");
     assert!(marks(&app, chart).contains(&"bar(x(food), y(900))".to_string()));
     assert!(!marks(&app, chart).contains(&"bar(x(food), y(400))".to_string()));
-    // A layer over a rule rests on the facts under the rule.
-    command(
-        &mut app,
-        "rule spent(S) :- cell(rent, R), cell(food, F), S is R + F.",
-    );
-    item(&mut app, "spent");
-    command(&mut app, "layer text(x(1), y(1), text(S)) where spent(S)");
-    let spent = find(&app, "spent");
-    assert_eq!(marks(&app, spent), ["text(x(1), y(1), text(2100))"]);
-    let eval = app.reason.eval[0].as_ref().unwrap();
-    let l = app.notebook.outline.views[&spent][0].seq;
-    assert_eq!(
-        eval.nodes.layers[&l][0].1.len(),
-        2,
-        "rent and food, not the rule"
-    );
-    // Retracting a layer removes it.
-    run(&mut app, &format!("retract {l}"));
-    tap(&mut app, Key::Enter);
-    app.evaluate().unwrap();
-    assert!(!app.notebook.outline.views.contains_key(&spent));
+    a_layer_over_a_rule_rests_on_the_facts_under_it(&mut app);
     // Replay gives the same marks.
     let before = marks(&app, chart);
     let mut again = replayed(&app.dir);
     again.evaluate().unwrap();
     assert_eq!(marks(&again, chart), before);
+}
+
+/// Each mark of the item's first layer rests on one fact: the one it shows.
+fn each_mark_rests_on_the_fact_it_shows(app: &App, item: u64) {
+    let layer = first_layer(app, item);
+    for (mark, prov) in solutions(app, layer) {
+        assert_eq!(prov.len(), 1, "{mark:?}");
+        assert_eq!(stated(app, prov[0]), Some(&shown_fact(mark)), "{mark:?}");
+    }
+}
+
+/// The entry of the first layer of the view at an item.
+fn first_layer(app: &App, item: u64) -> u64 {
+    app.notebook.outline.views[&item][0].seq
+}
+
+/// A layer's solutions in the actual world: each mark, and the entries of
+/// the facts it rests on.
+fn solutions(app: &App, layer: u64) -> &[(Term, Vec<u64>)] {
+    let eval = app.reason.eval[0].as_ref().unwrap();
+    &eval.nodes.layers[&layer]
+}
+
+/// The fact an entry states in the actual world.
+fn stated(app: &App, seq: u64) -> Option<&Term> {
+    app.reason.eval[0].as_ref().unwrap().fact(seq)
+}
+
+/// The fact a bar shows: bar(x(C), y(V)) shows cell(C, V).
+fn shown_fact(bar: &Term) -> Term {
+    let x = arg(&arg(bar, 0), 0);
+    let y = arg(&arg(bar, 1), 0);
+    Term::Compound("cell".into(), vec![x, y])
+}
+
+/// A compound term's argument at this place.
+fn arg(t: &Term, i: usize) -> Term {
+    let Term::Compound(_, args) = t else {
+        panic!("not a compound: {t:?}")
+    };
+    args[i].clone()
+}
+
+/// A layer over a rule rests on the facts under the rule, not the rule;
+/// retracting the layer removes the view.
+fn a_layer_over_a_rule_rests_on_the_facts_under_it(app: &mut Room) {
+    command(
+        app,
+        "rule spent(S) :- cell(rent, R), cell(food, F), S is R + F.",
+    );
+    item(app, "spent");
+    command(app, "layer text(x(1), y(1), text(S)) where spent(S)");
+    let spent = find(app, "spent");
+    assert_eq!(marks(app, spent), ["text(x(1), y(1), text(2100))"]);
+    let l = first_layer(app, spent);
+    let rests_on = &solutions(app, l)[0].1;
+    assert_eq!(rests_on.len(), 2, "rent and food, not the rule");
+    run(app, &format!("retract {l}"));
+    tap(app, Key::Enter);
+    app.evaluate().unwrap();
+    assert!(!app.notebook.outline.views.contains_key(&spent));
 }
 
 #[test]
