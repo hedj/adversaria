@@ -261,10 +261,17 @@ mod tests {
 
     fn chain(bodies: &[(&str, serde_json::Value)]) -> Vec<Entry> {
         let mut out: Vec<Entry> = Vec::new();
-        for ((k, b), seq) in bodies.iter().zip(1..) {
-            out.push(Entry::new(seq, after(&out), k, b.clone()).unwrap());
+        for body in bodies {
+            let entry = next(&out, body);
+            out.push(entry);
         }
         out
+    }
+
+    /// The entry of a kind and a body after these, numbered after the
+    /// last.
+    fn next(es: &[Entry], (kind, body): &(&str, serde_json::Value)) -> Entry {
+        Entry::new(es.len() as u64 + 1, after(es), kind, body.clone()).unwrap()
     }
 
     /// The last entry, as Entry::new names a parent.
