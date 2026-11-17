@@ -90,4 +90,11 @@ test(a_parse_runs_in_an_engine_of_its_own) :-
     engine_destroy(E),
     assertion(Result = parsed("John waits.", _, [])).
 
+test(setting_the_lexicon_leaves_no_choice_point) :-
+    % Catches a choice point APE leaves when a word is defined twice: the
+    % server would look for a second answer, and set the lexicon again.
+    Twice = [pn_sg('Buran', buran, neutr), pn_sg('Buran', energia, neutr)],
+    call_cleanup(ace_lexicon(Twice, _), Det = true),
+    assertion(Det == true).
+
 :- end_tests(ace).

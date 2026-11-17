@@ -48,7 +48,8 @@ ace_lexicon(Entries, Told) :-
     partition(content_entry, Entries, Kept, Skipped),
     discard_ulex,
     clear_messages,
-    add_lexicon_entries(Kept),
+    % APE leaves a choice point when a word is defined twice.
+    once(add_lexicon_entries(Kept)),
     get_messages(Found),
     clear_messages,
     maplist(message, Found, Messages),
