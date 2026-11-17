@@ -218,6 +218,13 @@ fn a_rule_is_written_once_and_used_everywhere() {
     command(&mut app, "set cell(food, 900)");
     shows(&app, "Spent: 2100 [derived]");
     shows(&app, "within income, violation");
+    each_bad_rule_is_refused(&mut app);
+}
+
+/// A recursive rule, directly or through another, a rule whose head has a
+/// variable its body never binds, one whose body calls what definitions
+/// may not, and one of a reserved predicate are each refused, and why.
+fn each_bad_rule_is_refused(app: &mut Room) {
     for (line, why) in [
         ("rule above(X, Y) :- above(X, Z), above(Z, Y).", "recursive"),
         ("rule loop1(X) :- loop2(X).", ""),
@@ -226,15 +233,17 @@ fn a_rule_is_written_once_and_used_everywhere() {
         ("rule bad(X) :- cell(X, _), shell(ls).", "not allowed"),
         ("rule rule_def(a, b, c) :- true.", "reserved"),
     ] {
-        app.handle(Event::down(Key::Quasi(Quasi::Command)));
-        typ(&mut app, line);
-        app.handle(Event::up(Key::Quasi(Quasi::Command)));
-        let m = app.session.message.clone();
-        if why.is_empty() {
-            assert!(m.contains("kept"), "{line}: {m}");
-        } else {
-            assert!(m.contains("not kept") && m.contains(why), "{line}: {m}");
-        }
+        app.command(line);
+        let m = &app.session.message;
+        let refused = m.contains("not kept") && m.contains(why);
+        assert!(
+            if why.is_empty() {
+                m.contains("kept")
+            } else {
+                refused
+            },
+            "{line}: {m}"
+        );
     }
 }
 
