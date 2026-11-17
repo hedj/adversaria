@@ -4,7 +4,7 @@
 
 use crate::actions::command_help;
 use crate::app::{Active, App, Click, Mode, PaneKind, Quasi, ScopeLevel};
-use crate::outline::{Layer, Outline, Run, TOP};
+use crate::outline::{Layer, Link, Outline, Run, TOP};
 use crate::reason::{
     self, ConstraintEval, Finding, Prov, Solution, Sourced, Suggestion, WorldEval,
 };
@@ -553,111 +553,200 @@ fn inverse(kind: &str) -> String {
     }
 }
 
+/// The links pane: the interrogation, if one is open; else what the
+/// selected item needs (right_panel).
 fn draw_links(f: &mut Frame, app: &App, area: Rect) -> Hits {
-    let mut hits = Hits::default();
     let inner = inset(area);
-    let id = app.session.view.selected();
-    if let Some(i) = app.session.view.interrogate {
-        let p = Paragraph::new(interrogation(app, i)).wrap(Wrap { trim: false });
-        let used = p.line_count(inner.width) as u16;
-        f.render_widget(p, inner);
-        // The hint on its own line after the answers, each part clickable.
-        let (a, u) = (
-            format!("{} adopts", app.session.keys.key_for("adopt")),
-            format!(
-                "{} retracts an adoption",
-                app.session.keys.key_for("unadopt")
-            ),
-        );
-        let y = inner.y.saturating_add(used);
-        if y < inner.y + inner.height {
-            let w = |s: &str| s.chars().count() as u16;
-            f.render_widget(
-                Paragraph::new(Line::styled(format!("{a} · {u}"), dim())),
-                Rect::new(inner.x, y, inner.width, 1),
-            );
-            hits.add(
-                inner,
-                Rect::new(inner.x, y, w(&a), 1),
-                Click::Command("adopt".into()),
-            );
-            hits.add(
-                inner,
-                Rect::new(inner.x + w(&a) + 3, y, w(&u), 1),
-                Click::Command("unadopt".into()),
-            );
-        }
-        return hits;
+    if let Some(item) = app.session.view.interrogate {
+        return draw_interrogation(f, app, item, inner);
     }
+    f.render_widget(right_panel(app, app.session.view.selected()), inner);
+    Hits::default()
+}
+
+/// What the selected item needs: its view's layers, the constraints its
+/// marks come from, or its links.
+fn right_panel(app: &App, id: u64) -> Paragraph<'static> {
     if let Some(layers) = app.notebook.outline.views.get(&id) {
-        f.render_widget(
-            Paragraph::new(view_panel(app, id, layers)).wrap(Wrap { trim: false }),
-            inner,
-        );
-        return hits;
+        return wrapped(view_panel(app, id, layers));
     }
-    if let Some(e) = app.reason.eval[0].as_ref()
-        && !item_marks(e, &app.notebook.outline, id).is_empty()
-    {
-        f.render_widget(
-            Paragraph::new(constraint_panel(app, e, id)).wrap(Wrap { trim: false }),
-            inner,
-        );
-        return hits;
+    match app.reason.eval[0].as_ref() {
+        Some(e) if !item_marks(e, &app.notebook.outline, id).is_empty() => {
+            wrapped(constraint_panel(app, e, id))
+        }
+        _ => Paragraph::new(links_lines(&app.notebook.outline, id)),
     }
+}
+
+/// Lines wrapped to the width they are drawn in.
+fn wrapped(lines: Vec<Line<'static>>) -> Paragraph<'static> {
+    Paragraph::new(lines).wrap(Wrap { trim: false })
+}
+
+/// An interrogation, and under it the hint of what adopts and what takes
+/// an adoption back, each part a click on its command.
+fn draw_interrogation(f: &mut Frame, app: &App, item: u64, inner: Rect) -> Hits {
+    let lines = interrogation(app, item);
+    let used = wrapped_height(&lines, inner.width);
+    f.render_widget(wrapped(lines), inner);
+    draw_adopt_hint(f, app, row_below(inner, used))
+}
+
+/// The row of an area after its first rows: none high if it is outside.
+fn row_below(area: Rect, used: u16) -> Rect {
+    let y = area.y.saturating_add(used);
+    let height = u16::from(y < area.bottom());
+    Rect { y, height, ..area }
+}
+
+/// The hint "F3 adopts · F4 retracts an adoption", by the keys bound,
+/// each part a click on its command.
+fn draw_adopt_hint(f: &mut Frame, app: &App, row: Rect) -> Hits {
+    let adopt = hint_part(app, "adopt", "adopts");
+    let parts = [adopt, hint_part(app, "unadopt", "retracts an adoption")];
+    f.render_widget(dim_text(joined(&parts)), row);
+    let mut along = Along::new(row);
+    parts
+        .into_iter()
+        .for_each(|(text, click)| along.part(&text, click));
+    along.hits
+}
+
+/// A part of a hint: the key bound to a command and what it does, and a
+/// click on the command.
+fn hint_part(app: &App, command: &str, does: &str) -> (String, Click) {
+    let key = app.session.keys.key_for(command);
+    (format!("{key} {does}"), Click::Command(command.into()))
+}
+
+/// The texts of a hint's parts, " · " between them.
+fn joined(parts: &[(String, Click)]) -> String {
+    let texts: Vec<&str> = parts.iter().map(|(text, _)| text.as_str()).collect();
+    texts.join(" · ")
+}
+
+/// A text drawn dim.
+fn dim_text(text: String) -> Paragraph<'static> {
+    Paragraph::new(Line::styled(text, dim()))
+}
+
+/// A row of a pane, part by part, each part's text a click: where the
+/// next part starts, and the clicks so far.
+struct Along {
+    row: Rect,
+    x: u16,
+    hits: Hits,
+}
+
+impl Along {
+    fn new(row: Rect) -> Self {
+        let hits = Hits::default();
+        Along {
+            row,
+            x: row.x,
+            hits,
+        }
+    }
+
+    /// A part's text a click, then " · " before the next part.
+    fn part(&mut self, text: &str, click: Click) {
+        let width = text.chars().count() as u16;
+        let at = Rect {
+            x: self.x,
+            width,
+            ..self.row
+        };
+        self.hits.add(self.row, at, click);
+        self.x += width + 3;
+    }
+}
+
+/// The links pane's list: the item, its links from it and into it, each
+/// kind once and each link numbered as follow numbers it, and where its
+/// text is shown in place.
+fn links_lines(outline: &Outline, id: u64) -> Vec<Line<'static>> {
     let mut lines = vec![
         Line::styled("LINKS OF THE SELECTED ITEM", dim()),
         Line::raw(""),
     ];
-    if id != TOP {
-        lines.push(Line::raw(app.notebook.outline.text(id)));
-        lines.push(Line::raw(""));
-        let (out, into) = app.notebook.outline.links_of(id);
-        let label = |l: u64| {
-            format!(
-                "  {}. {}",
-                app.notebook.outline.number(l),
-                app.notebook.outline.text(l)
-            )
-        };
-        let mut kinds: Vec<&str> = out.iter().map(|l| l.kind.as_str()).collect();
-        kinds.dedup();
-        let mut n = 0;
-        for k in kinds {
-            lines.push(Line::styled(format!("{k} →"), dim()));
-            for l in out.iter().filter(|l| l.kind == k) {
-                n += 1;
-                lines.push(Line::raw(format!("{}  {n}", label(l.to))));
-            }
-        }
-        let mut kinds: Vec<&str> = into.iter().map(|l| l.kind.as_str()).collect();
-        kinds.dedup();
-        for k in kinds {
-            lines.push(Line::styled(format!("{} ←", inverse(k)), dim()));
-            for l in into.iter().filter(|l| l.kind == k) {
-                n += 1;
-                lines.push(Line::raw(format!("{}  {n}", label(l.from))));
-            }
-        }
-        let tr = app.notebook.outline.transcluded_in(id);
-        if !tr.is_empty() {
-            lines.push(Line::styled("transcluded in ←", dim()));
-            for t in tr {
-                // The container shows where the text appears.
-                let path = match app.notebook.outline.parent(t).filter(|p| *p != TOP) {
-                    Some(p) => format!(
-                        "  {} › {}",
-                        app.notebook.outline.text(p),
-                        app.notebook.outline.text(t)
-                    ),
-                    None => label(t),
-                };
-                lines.push(Line::raw(path));
-            }
-        }
+    if id == TOP {
+        return lines;
     }
-    f.render_widget(Paragraph::new(lines), inner);
-    hits
+    lines.extend([Line::raw(outline.text(id)), Line::raw("")]);
+    lines.extend(link_lines(outline, id));
+    lines.extend(transclusion_lines(outline, id));
+    lines
+}
+
+/// An item's links, under a heading for each kind, numbered in order.
+fn link_lines(outline: &Outline, id: u64) -> Vec<Line<'static>> {
+    let rows = numbered_links(outline, id);
+    let groups = rows.chunk_by(|a, b| a.0 == b.0);
+    groups.flat_map(kind_lines).collect()
+}
+
+/// A heading of a kind of link, and its links.
+fn kind_lines(group: &[(String, String)]) -> Vec<Line<'static>> {
+    let heading = Line::styled(group[0].0.clone(), dim());
+    let links = group.iter().map(|(_, link)| Line::raw(link.clone()));
+    std::iter::once(heading).chain(links).collect()
+}
+
+/// Each of an item's links: its kind's heading, and the item at its other
+/// end with its number for follow.
+fn numbered_links(outline: &Outline, id: u64) -> Vec<(String, String)> {
+    let numbered = link_ends(outline, id).into_iter().enumerate();
+    let line = |n: usize, end| format!("{}  {}", labelled_end(outline, end), n + 1);
+    numbered
+        .map(|(n, (kind, end))| (kind, line(n, end)))
+        .collect()
+}
+
+/// An item's links, each by its kind's heading and the item at its other
+/// end: those from it, then those into it.
+fn link_ends(outline: &Outline, id: u64) -> Vec<(String, u64)> {
+    let (out, into) = outline.links_of(id);
+    let outgoing = out.into_iter().map(link_out);
+    outgoing.chain(into.into_iter().map(link_in)).collect()
+}
+
+/// A link from the item: "cites →", and the item it reaches.
+fn link_out(l: &Link) -> (String, u64) {
+    (format!("{} →", l.kind), l.to)
+}
+
+/// A link into the item: "cited by ←", and the item it comes from.
+fn link_in(l: &Link) -> (String, u64) {
+    (format!("{} ←", inverse(&l.kind)), l.from)
+}
+
+/// An item at a link's end: its number and its text.
+fn labelled_end(outline: &Outline, id: u64) -> String {
+    format!("  {}. {}", outline.number(id), outline.text(id))
+}
+
+/// Where an item's text is shown in place: each item that transcludes it,
+/// under the item that holds it.
+fn transclusion_lines(outline: &Outline, id: u64) -> Vec<Line<'static>> {
+    let shown_in = outline.transcluded_in(id);
+    if shown_in.is_empty() {
+        return vec![];
+    }
+    let places = shown_in
+        .into_iter()
+        .map(|t| Line::raw(transcluded_at(outline, t)));
+    std::iter::once(Line::styled("transcluded in ←", dim()))
+        .chain(places)
+        .collect()
+}
+
+/// An item that transcludes another, by the item that holds it, else its
+/// number.
+fn transcluded_at(outline: &Outline, t: u64) -> String {
+    match outline.parent_item(t) {
+        Some(p) => format!("  {} › {}", outline.text(p), outline.text(t)),
+        None => labelled_end(outline, t),
+    }
 }
 
 /// The matches of a Leap, or the commands a Command may be, in a box at the

@@ -91,3 +91,42 @@ fn with_focus_on_the_links_pane_a_leap_selects_what_it_finds() {
         "the pane shows it"
     );
 }
+
+/// An item stating a claim, interrogated.
+fn interrogated(name: &str) -> Room {
+    let mut r = Room::new(name);
+    r.items(&["Buran"]);
+    r.command("claim date(buran, 1988) from Encyclopedia");
+    r.command("interrogate");
+    r.app.evaluate().unwrap();
+    r
+}
+
+#[test]
+fn each_part_of_the_hint_under_an_interrogation_is_a_click_on_its_command() {
+    // Catches the second part's click set off from its text.
+    let room = interrogated("hint-parts");
+    let (x, y) = room.find("F4 retracts an adoption");
+    let hits = room.hits();
+    let unadopt = Some(memex::app::Click::Command("unadopt".into()));
+    assert_eq!(hits.at(x, y).cloned(), unadopt, "its first cell");
+    assert_eq!(hits.at(x - 1, y), None, "the gap before it");
+}
+
+#[test]
+fn a_hint_with_no_room_under_the_interrogation_is_no_click() {
+    // Catches the hint's clicks placed below the pane, over the foot.
+    let room = interrogated("hint-no-room");
+    let lines = room.lines_at(80, 7);
+    assert!(!lines.concat().contains("adopts"), "no room for the hint");
+    let mut t = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 7)).unwrap();
+    let mut hits = memex::ui::Hits::default();
+    t.draw(|f| hits = memex::ui::draw_hits(f, &room.app))
+        .unwrap();
+    assert!(
+        !hits
+            .0
+            .iter()
+            .any(|(_, c)| format!("{c:?}").contains("adopt"))
+    );
+}
