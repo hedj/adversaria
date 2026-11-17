@@ -784,10 +784,15 @@ impl Scale {
         Scale::band(values)
     }
 
+    /// A line scale over values, reaching zero if asked; of time if every
+    /// value is a time.
     fn line(values: &[&V], zero: bool) -> Scale {
         let (lo, hi) = extent(values, zero);
-        let time = values.iter().all(|v| v.is_time());
-        Scale::Line { lo, hi, time }
+        Scale::Line {
+            lo,
+            hi,
+            time: values.iter().all(|v| v.is_time()),
+        }
     }
 
     /// The categories, in order on an axis, each once.
@@ -2474,6 +2479,16 @@ mod tests {
             (number(2.5), number(1234.5678), number(0.0)),
             ("2.5".into(), "1234.57".into(), "0".into())
         );
+    }
+
+    #[test]
+    fn a_scale_is_of_time_only_if_every_value_is_a_time() {
+        // Catches an axis of years for numbers that hold one date.
+        let (date, n) = (V::Time(18262.0, "2020-01-01".into()), V::Num(5.0));
+        let is_time =
+            |values: &[&V]| matches!(Scale::train(values, false), Scale::Line { time: true, .. });
+        assert!(is_time(&[&date]));
+        assert!(!is_time(&[&date, &n]));
     }
 
     #[test]
