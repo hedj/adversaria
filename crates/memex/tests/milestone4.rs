@@ -528,31 +528,32 @@ fn replay_reproduces_claims_constraints_and_worlds() {
     // Catches state of milestone 4 that lives outside the journal: a replay
     // must give the same outline, view, world and reasoning.
     let mut app = scene("replay4");
-    leap(&mut app, "talk notes");
-    tap(&mut app, Key::F(2));
-    tap(&mut app, Key::F(3));
-    tap(&mut app, Key::F(4));
-    app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
-    typ(&mut app, "the flight was in 1989");
-    app.handle(Event::up(Key::Quasi(Quasi::Suppose)));
-    tap(&mut app, Key::Enter);
-    app.flush();
-    app.evaluate().unwrap();
+    interrogate_adopt_retract_suppose(&mut app);
     let mut r = replayed(&app.dir);
     r.evaluate().unwrap();
     assert_eq!(r.notebook.outline, app.notebook.outline);
     assert_eq!(r.session.view, app.session.view);
-    assert_eq!(
-        (r.notebook.tip, &r.reason.world(), &r.reason.supposition),
-        (
-            app.notebook.tip,
-            &app.reason.world(),
-            &app.reason.supposition
-        )
-    );
+    assert_eq!(r.notebook.tip, app.notebook.tip);
+    assert_eq!(r.reason.world(), app.reason.world());
+    assert_eq!(r.reason.supposition, app.reason.supposition);
     assert_eq!(r.reason.eval, app.reason.eval);
     let n = screen(&app).lines.len() - 1;
     assert_eq!(screen(&r).lines[..n], screen(&app).lines[..n]);
+}
+
+/// On the talk notes: interrogate, adopt, retract the adoption, and
+/// suppose the flight was in 1989; flushed and evaluated.
+fn interrogate_adopt_retract_suppose(app: &mut App) {
+    leap(app, "talk notes");
+    tap(app, Key::F(2));
+    tap(app, Key::F(3));
+    tap(app, Key::F(4));
+    app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
+    typ(app, "the flight was in 1989");
+    app.handle(Event::up(Key::Quasi(Quasi::Suppose)));
+    tap(app, Key::Enter);
+    app.flush();
+    app.evaluate().unwrap();
 }
 
 #[test]
