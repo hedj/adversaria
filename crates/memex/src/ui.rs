@@ -1301,6 +1301,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
                     }
                 )));
             }
+            lines.push(Line::raw(""));
         }
     }
     lines

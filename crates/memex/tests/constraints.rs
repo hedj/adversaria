@@ -180,3 +180,16 @@ fn a_finding_whose_facts_share_nothing_is_listed_without_a_key() {
     r.app.evaluate().unwrap();
     assert!(r.shows("│  rent, 1200 (1) · food, 300 (2)"));
 }
+
+#[test]
+fn the_constraints_of_an_item_are_drawn_apart() {
+    // Catches a constraint's heading drawn straight under the list of
+    // what depends on the one before.
+    let derive = "derive {N} cells where findall(C, cell(C, _), L), length(L, N)";
+    let limit = "constraint limit: false :- cell(C, R), R > 1000.";
+    let r = rents_with("drawn-apart", &[ONE_VALUE, limit, derive]);
+    let lines = r.lines_at(160, 40);
+    let at = lines.iter().position(|l| l.contains("CONSTRAINT · LIMIT"));
+    let above = &lines[at.expect("the second constraint") - 1];
+    assert_eq!(above.split('│').nth(1).map(str::trim), Some(""));
+}
