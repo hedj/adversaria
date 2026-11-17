@@ -3,6 +3,7 @@
 //! memex let it (read a local file, run a script, make many requests, crash
 //! the memex) and checks that it does not.
 
+use format::terms::Term;
 use memex::app::{App, Event, Key, Quasi};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -312,61 +313,77 @@ fn a_definition_cannot_run_a_side_effect() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// A compound term of a name and its arguments.
+fn compound(f: &str, a: Vec<Term>) -> Term {
+    Term::Compound(f.into(), a)
+}
+
+fn atom(x: &str) -> Term {
+    Term::Atom(x.into())
+}
+
+/// A goal that makes a file, which a side effect would leave behind.
+fn touch(path: &str) -> Term {
+    compound("shell", vec![atom(&format!("touch {path}"))])
+}
+
+/// A definition, node 9, whose goal makes a file: stored as a definition
+/// arrives, as node_def(9, query([], Goal)).
+fn touching_definition(path: &str) -> Term {
+    let query = compound("query", vec![atom("[]"), touch(path)]);
+    compound("node_def", vec![Term::Int(9), query])
+}
+
+/// The value of a node: node(Id, Value).
+fn node(id: i64) -> Term {
+    compound("node", vec![Term::Int(id), Term::Var(0)])
+}
+
 #[test]
-fn the_reasoner_runs_no_side_effect_however_a_definition_arrives() {
+fn a_definition_sent_straight_to_the_server_runs_no_command() {
     // Past the memex's own checks: facts sent straight to the server, as a
-    // journal written by something else would be replayed. Catches a server
-    // that stores a clause, or a reasoner that calls any built-in.
-    let dir = temp("server");
+    // journal written by something else would be replayed. Catches a
+    // reasoner that calls any built-in.
+    let dir = temp("server-definition");
     let (m, ms) = marker(&dir);
     let mut p = memex::prolog::Prolog::start().unwrap();
-    let c = |f: &str, a: Vec<format::terms::Term>| format::terms::Term::Compound(f.into(), a);
-    let s = |x: &str| format::terms::Term::Atom(x.into());
-    let shell = c("shell", vec![s(&format!("touch {ms}"))]);
-    // A definition whose goal runs a command: stored (node_def is how
-    // definitions arrive), but evaluating it is refused.
-    p.assert_fact(
-        &c(
-            "node_def",
-            vec![
-                format::terms::Term::Int(9),
-                c("query", vec![s("[]"), shell.clone()]),
-            ],
-        ),
-        1,
-    )
-    .unwrap();
-    let r = p.all(
-        &c(
-            "node",
-            vec![format::terms::Term::Int(9), format::terms::Term::Var(0)],
-        ),
-        1,
-    );
+    p.assert_fact(&touching_definition(&ms), 1).unwrap();
+    let r = p.all(&node(9), 1);
     assert!(format!("{r:?}").contains("not_allowed"), "{r:?}");
     assert!(!m.exists(), "evaluating the definition ran the command");
-    // A clause, a module-qualified fact, and the server's own predicates
-    // are refused outright.
-    for (i, f) in [
-        c(":-", vec![s("p"), shell.clone()]),
-        c(
-            ":",
-            vec![s("lists"), c("append", vec![s("a"), s("b"), s("c")])],
-        ),
-        c(
-            "fact_ref",
-            vec![format::terms::Term::Int(1), s("x"), s("y")],
-        ),
-        c("wd", vec![s("Q1"), s("P1"), s("x")]),
-        c("query_engine", vec![s("a"), s("b")]),
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Facts the server refuses to store: a clause, a module-qualified fact,
+/// and facts of the server's own predicates.
+fn reserved_facts(path: &str) -> Vec<Term> {
+    let abc = vec![atom("a"), atom("b"), atom("c")];
+    vec![
+        compound(":-", vec![atom("p"), touch(path)]),
+        compound(":", vec![atom("lists"), compound("append", abc)]),
+        compound("fact_ref", vec![Term::Int(1), atom("x"), atom("y")]),
+        compound("wd", vec![atom("Q1"), atom("P1"), atom("x")]),
+        compound("query_engine", vec![atom("a"), atom("b")]),
     ]
-    .into_iter()
-    .enumerate()
-    {
+}
+
+/// Send each fact to the server, and see each refused as reserved.
+fn all_refused(p: &mut memex::prolog::Prolog, facts: Vec<Term>) {
+    for (i, f) in facts.into_iter().enumerate() {
         let r = p.assert_fact(&f, 10 + i as u64);
         assert!(format!("{r:?}").contains("reserved"), "{f:?}: {r:?}");
     }
-    p.all(&s("p"), 1).ok();
+}
+
+#[test]
+fn a_clause_or_the_servers_own_fact_sent_straight_is_refused() {
+    // Past the memex's own checks, as above. Catches a server that stores
+    // a clause, which would run when its head is called.
+    let dir = temp("server-clauses");
+    let (m, ms) = marker(&dir);
+    let mut p = memex::prolog::Prolog::start().unwrap();
+    all_refused(&mut p, reserved_facts(&ms));
+    p.all(&atom("p"), 1).ok();
     assert!(!m.exists());
     std::fs::remove_dir_all(&dir).unwrap();
 }
