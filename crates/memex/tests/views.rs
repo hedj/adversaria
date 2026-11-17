@@ -316,15 +316,7 @@ fn a_view_is_drawn_under_its_item_and_its_marks_lead_to_their_facts() {
 /// then its notes.
 fn figure(app: &App, title: &str) -> Vec<String> {
     let id = find(app, title);
-    let depth = {
-        let mut d = 0;
-        let mut p = app.notebook.outline.parent(id);
-        while let Some(x) = p.filter(|x| app.notebook.outline.items.contains_key(x)) {
-            d += 1;
-            p = app.notebook.outline.parent(x);
-        }
-        d
-    };
+    let depth = app.notebook.outline.depth_of(id);
     let f = memex::ui::view_figure(app, 0, id, 95 - 2 * depth - 3, 12);
     let mut out = f.text();
     out.extend(f.notes);
