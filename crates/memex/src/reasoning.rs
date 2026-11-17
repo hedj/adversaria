@@ -2,6 +2,7 @@
 //! engines, what they found in the worlds shown, and the suggestions
 //! (docs/structure.md § The code's structure).
 
+use crate::ace::Ace;
 use crate::engine::{Engine, told};
 use crate::notebook::Trial;
 use crate::notebook::strings;
@@ -43,6 +44,8 @@ pub struct Reasoning {
     /// Interrogation's preview of adopting a claim: violations it would raise.
     pub preview: Option<String>,
     pub suggestions: Suggestions,
+    /// The parser of controlled English, started when first needed.
+    ace: Option<Ace>,
 }
 
 impl Reasoning {
@@ -79,6 +82,18 @@ impl Reasoning {
     }
 
     /// Engine k, started if it is not yet.
+    /// The parser of controlled English, started if it is not running.
+    pub(crate) fn ace(&mut self) -> Result<&mut Ace, String> {
+        if self.ace.as_mut().is_some_and(Ace::is_dead) {
+            self.ace = None;
+        }
+        if self.ace.is_none() {
+            let started = Ace::start().map_err(|e| format!("cannot start the parser: {e}"))?;
+            self.ace = Some(started);
+        }
+        Ok(self.ace.as_mut().unwrap())
+    }
+
     pub(crate) fn engine(&mut self, k: usize) -> Result<&mut Engine, String> {
         crate::world::started(&mut self.engines[k])
     }

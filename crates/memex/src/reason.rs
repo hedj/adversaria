@@ -378,7 +378,7 @@ fn constraint_words(name: &Term, body: &Term) -> String {
 
 /// The arguments of a compound term of a name and an arity, if the term
 /// is one.
-fn parts<'a>(t: &'a Term, name: &str, arity: usize) -> Option<&'a [Term]> {
+pub(crate) fn parts<'a>(t: &'a Term, name: &str, arity: usize) -> Option<&'a [Term]> {
     match t {
         Term::Compound(f, a) if f == name && a.len() == arity => Some(a),
         _ => None,

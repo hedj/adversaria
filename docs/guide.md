@@ -252,6 +252,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | `fact` | `fact FACT` | the target states a belief |
 | `claim` | `claim FACT from SOURCE` | the target states a claim: what SOURCE says |
 | `rule` | `rule HEAD :- BODY.` | defines a predicate from others, usable wherever a goal is: in `derive`, `constraint`, `layer` and other rules. Refused if recursive, if a head variable is not bound by the body, or if the body calls what a definition may not |
+| `ace` | `ace SENTENCE` | shows what APE, the parser of controlled English, makes of SENTENCE: its paraphrase, or where it fails and APE's advice. Each entity of the current world is a word for it, as are the names of one-place facts (adjectives) and two-place facts (nouns) and labels of one word (§ 3.2) |
 | `set` | `set FACT` | states FACT and retracts the beliefs it directly contradicts (each that breaks a constraint with it and nothing else); the fact goes on the item that held the one it replaces, else on the target. A violation it leaves is named, not resolved |
 | `constraint` | `constraint NAME: false :- BODY.` | adds a constraint, after checking it fires on a planted violation |
 | `derive` | `derive TEMPLATE where GOAL` | the target shows text computed from facts (§ 3.1) |

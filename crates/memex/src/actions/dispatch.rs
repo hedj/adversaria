@@ -231,6 +231,13 @@ pub const COMMANDS: &[Command] = &[
         help: "define a predicate from others: Head :- Body. Usable in derive, constraint, layer and other rules",
     },
     Command {
+        name: "ace",
+        run: App::cmd_ace,
+        target: false,
+        slots: &[("sentence", Slot::Text)],
+        help: "what APE makes of a sentence of controlled English: its paraphrase, or where it fails and APE's advice",
+    },
+    Command {
         name: "set",
         run: App::cmd_set,
         target: false,

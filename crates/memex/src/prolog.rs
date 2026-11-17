@@ -117,10 +117,15 @@ impl Drop for Server {
 
 /// prolog/server.pl, unless ADVERSARIA_PROLOG names another directory.
 fn server_path() -> PathBuf {
+    prolog_file("server.pl")
+}
+
+/// A file of the prolog directory, or of the one ADVERSARIA_PROLOG names.
+pub fn prolog_file(name: &str) -> PathBuf {
     let dir = std::env::var_os("ADVERSARIA_PROLOG")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../prolog")));
-    dir.join("server.pl")
+    dir.join(name)
 }
 
 /// Start `swipl` on a server file; its errors go to this process's stderr.
@@ -156,7 +161,8 @@ impl Prolog {
         Prolog::start_with(&server_path())
     }
 
-    /// Start `swipl` with another server file. For tests.
+    /// Start `swipl` with another server file: the parser's, or one for
+    /// tests.
     pub fn start_with(path: &std::path::Path) -> Result<Prolog, Error> {
         let server = Server::start(path)?;
         Ok(Prolog {

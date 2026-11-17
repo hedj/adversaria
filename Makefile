@@ -29,9 +29,11 @@ test-rust:
 test-spikes:
 	swipl -q -g main -t halt tests/spikes/incremental_tabling.pl
 
-# The Prolog end of the query protocol.
+# The Prolog end of the query protocol, and the parser of controlled
+# English (it needs APE: the Nix shell sets APE_HOME).
 test-prolog:
 	swipl -g run_tests -t halt prolog/tests/test_protocol.pl
+	swipl -g run_tests -t halt prolog/tests/test_ace.pl
 
 # Optional: s(CASP) is not needed before stage B. Pass the path to a
 # checkout of github.com/SWI-Prolog/sCASP at tag V1.1.4; the Nix dev shell

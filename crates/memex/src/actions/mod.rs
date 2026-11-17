@@ -2,6 +2,7 @@
 
 pub mod dispatch;
 mod editing;
+mod english;
 mod knowledge;
 mod worlds;
 

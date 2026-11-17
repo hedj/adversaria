@@ -569,6 +569,62 @@ Faults found on the way, each fixed with a test that failed first:
 
 Checked: `make test` passes (187 Rust tests and the tutorial's three parts, 19 Prolog tests, 21 pseudo-terminal checks). A gallery test builds each kind through the memex's commands. Not checked: any of it in a real terminal; views wider than the screen are cut, not scrolled.
 
+### Teaching the controlled English
+
+The design teaches ACE while the user types: APE's repair hints, a
+predictive editor, `?` in Suppose, and a memory of confirmed pairs
+(`docs/translator.md` § "Do you mean?"). Before 17 November 2026 none
+of it was built, and Suppose's "Do you mean?" used no parser. The author
+asked for all four; APE and Clex are pinned in Nix (environment table
+above).
+
+#### APE in the memex (17 November 2026)
+
+* `prolog/ace.pl`: `ace_lexicon/2` sets the user lexicon, leaving out
+  ACE's function words (APE takes them, but warns that they should not be
+  redefined) and returning APE's lexicon warnings; `ace_parse/2` gives a
+  text's paraphrase, its DRS (referents numbered, as the query protocol
+  sends no variable a query did not have) and APE's messages, or, if it
+  is not ACE, the messages alone. A parse has 5 seconds.
+* `prolog/ace_server.pl`: the query protocol server with APE loaded, a
+  process of its own, started when first needed. Loading APE and Clex
+  takes about a second (measured once: 1.1 s with four parses), which the
+  reasoning engines do not pay.
+* `crates/memex/src/ace.rs`: the client, and `lexicon_of`, the notebook's
+  words: each entity a proper name, each one-place fact's name an
+  adjective, each two-place fact's name a noun, each label of one word
+  (spaces made hyphens) a name for its entity.
+* The command `ace SENTENCE` shows APE's paraphrase, or where the
+  sentence failed and APE's advice. APE's warning that a definite noun
+  phrase has no antecedent is left out: one sentence about a fact has
+  none to have.
+
+Measured with APE (`prolog/tests/test_ace.pl` and probes): a name of one
+word, with underscores or hyphens, works (`buran_flight`,
+`Buran-flight`); a name of two words does not; "Buran's flight" is read
+as a flight of Buran whatever the lexicon says; "The flight was in
+1989." fails at `was` (ACE has no past tense), and APE's advice is `as`.
+
+Faults found on the way:
+
+* APE's files declare no encoding, and `refres.pl` holds an en dash in a
+  comment: in a POSIX locale SWI-Prolog warned of an illegal multibyte
+  sequence. `ace.pl` sets the encoding to UTF-8 before loading APE.
+* APE keeps lexicon warnings until they are cleared, and reported them as
+  each later sentence's own. `ace_lexicon/2` clears them.
+* APE keeps its messages in a global variable, and the server runs each
+  query in an engine of its own, whose global variables start unset:
+  every parse threw `existence_error(variable, message)`. The Prolog
+  tests ran in one thread and passed; the memex's tests found it.
+  `ace_parse/2` sets the variable first, and a test now parses in an
+  engine of its own.
+
+Checked: 11 Prolog tests and 14 Rust tests (11 unit, 3 through the
+memex); 14 breaks of the code, each made a test fail (listed in the
+commit); `make test` passes in the Nix shell. The APE tests need APE_HOME, so `make test` needs the Nix
+shell. Not built yet: repair hints in Suppose, the predictive editor,
+`?` in Suppose, the memory of confirmed pairs.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

@@ -167,11 +167,14 @@ it, so the modules form an acyclic graph.
 ```
 workspace
 ├── record: format (jcs, terms, record, chain), check, sealer
-├── reasoning: protocol; prolog (vetting, nodes, wikidata, suggestions)
+├── reasoning: protocol; prolog (vetting, nodes, wikidata, suggestions),
+│              and the parser of controlled English (ace: APE with Clex)
 ├── memex
 │   ├── state: journal, notebook (the outline replayed), store, configuration
-│   ├── reasoner: client, engine, readings and solutions, what reasoning found
-│   ├── actions: dispatch, editing, knowledge, checks, worlds and history
+│   ├── reasoner: client, engine, readings and solutions, what reasoning found,
+│   │             the parser's client and the notebook's lexicon (ace)
+│   ├── actions: dispatch, editing, knowledge, checks, worlds and history,
+│   │            English
 │   └── screen: session, terminal, panels, views
 └── tools: wikidata, measures, interactivity; acceptance tests
 ```
