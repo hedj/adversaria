@@ -106,72 +106,93 @@ fn markdown_round_trip_keeps_structure_citations_and_mathematics() {
     // Plan: "Markdown and Word round trips preserve headings, items,
     // citations and mathematics (as LaTeX); losses are listed, not hidden."
     let dir = temp("md");
-    let src = dir.join("essay.md");
-    std::fs::write(&src, ESSAY).unwrap();
+    let src = write_essay(&dir, "essay.md");
     let mut app = open(&dir);
     command(&mut app, &format!("import document {}", src.display()));
-    assert!(
-        app.session.message.contains("losses: footnote 1, image 1"),
-        "{}",
-        app.session.message
-    );
-    let imp = app
-        .journal()
-        .entries()
-        .iter()
+    the_losses_are_listed_and_recorded(&app);
+    citations_became_facts(&app);
+    mathematics_stayed_latex(&app);
+    // Export, and import the export into a fresh journal: the same shape.
+    let out = exported(&mut app, &dir.join("out.md"));
+    the_round_trip_keeps_the_shape(&src, &out);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The essay, written as Markdown to a file in a directory.
+fn write_essay(dir: &Path, name: &str) -> PathBuf {
+    let src = dir.join(name);
+    std::fs::write(&src, ESSAY).unwrap();
+    src
+}
+
+/// The import says what it lost, and records it.
+fn the_losses_are_listed_and_recorded(app: &App) {
+    let said = &app.session.message;
+    assert!(said.contains("losses: footnote 1, image 1"), "{said}");
+    let mut entries = app.journal().entries().iter();
+    let imp = entries
         .find(|e| e.kind() == "import")
         .unwrap()
-        .clone();
-    assert_eq!(
-        imp.body().unwrap()["losses"],
-        serde_json::json!({"footnote": 1, "image": 1}),
-        "losses recorded"
-    );
-    // Citations became facts; mathematics stayed LaTeX.
+        .body()
+        .unwrap();
+    let lost = serde_json::json!({"footnote": 1, "image": 1});
+    assert_eq!(imp["losses"], lost, "losses recorded");
+}
+
+/// Citations became facts.
+fn citations_became_facts(app: &App) {
     let facts = memex::store::facts(app.journal().entries(), app.notebook.tip).unwrap();
-    assert!(facts.iter().any(|(_, f)| {
-        format::terms::encode(f)
-            .unwrap()
-            .to_string()
-            .contains("buran1988")
-    }));
-    let texts: Vec<String> = app
-        .notebook
-        .outline
+    let shown = |f: &format::terms::Term| format::terms::encode(f).unwrap().to_string();
+    assert!(facts.iter().any(|(_, f)| shown(f).contains("buran1988")));
+}
+
+/// Mathematics stayed LaTeX, displayed and inline.
+fn mathematics_stayed_latex(app: &App) {
+    let texts = outline_texts(app);
+    let integral = "\\int_0^1 x \\, dx = \\frac{1}{2}".to_string();
+    assert!(texts.contains(&integral), "{texts:?}");
+    assert!(texts.iter().any(|t| t.contains("$E = mc^2$")));
+}
+
+/// The text of each item, in the outline's order.
+fn outline_texts(app: &App) -> Vec<String> {
+    let outline = &app.notebook.outline;
+    outline
         .in_order()
         .iter()
-        .map(|i| app.notebook.outline.text(*i))
-        .collect();
+        .map(|i| outline.text(*i))
+        .collect()
+}
+
+/// Export to a file, which records its source entries: the file.
+fn exported(app: &mut App, out: &Path) -> PathBuf {
+    command(app, &format!("export {}", out.display()));
+    let text = std::fs::read_to_string(out).unwrap();
     assert!(
-        texts.contains(&"\\int_0^1 x \\, dx = \\frac{1}{2}".to_string()),
-        "{texts:?}"
-    );
-    assert!(texts.iter().any(|t| t.contains("$E = mc^2$")));
-    // Export, and import the export into a fresh journal: the same shape.
-    let out = dir.join("out.md");
-    command(&mut app, &format!("export {}", out.display()));
-    let exported = std::fs::read_to_string(&out).unwrap();
-    assert!(
-        exported.contains("source-entries:"),
+        text.contains("source-entries:"),
         "the export records its source entries"
     );
-    let (first, _, _) = docs::read(&src).unwrap();
-    let (second, losses, _) = docs::read(&out).unwrap();
+    out.to_path_buf()
+}
+
+/// The export reads back as the source does, losing nothing more, and the
+/// source is the essay: two headings, one formula, one citation.
+fn the_round_trip_keeps_the_shape(src: &Path, out: &Path) {
+    let (first, _, _) = docs::read(src).unwrap();
+    let (second, losses, _) = docs::read(out).unwrap();
     assert_eq!(shape(&second), shape(&first));
     assert!(
         losses.is_empty(),
         "nothing more lost on the way back: {losses:?}"
     );
-    assert_eq!(first.iter().filter(|b| b.style == "heading").count(), 2);
-    assert_eq!(first.iter().filter(|b| b.style == "math").count(), 1);
-    assert_eq!(
-        first
-            .iter()
-            .flat_map(|b| b.cites.clone())
-            .collect::<Vec<_>>(),
-        vec!["buran1988".to_string()]
-    );
-    std::fs::remove_dir_all(&dir).unwrap();
+    let count = |style: &str| first.iter().filter(|b| b.style == style).count();
+    assert_eq!((count("heading"), count("math")), (2, 1));
+    assert_eq!(cited(&first), ["buran1988"]);
+}
+
+/// What blocks cite, in order.
+fn cited(blocks: &[Block]) -> Vec<String> {
+    blocks.iter().flat_map(|b| b.cites.clone()).collect()
 }
 
 #[test]
