@@ -279,54 +279,64 @@ fn a_view_is_drawn_under_its_item_and_its_marks_lead_to_their_facts() {
     item(&mut app, "Budget chart");
     command(&mut app, "layer bar(x(C), y(V)) where cell(C, V)");
     command(&mut app, "layer rule(y(I)) where cell(income, I)");
-    let (s, hits, _) = screen(&app);
-    let (_, title) = at(&s, "Budget chart");
-    let (fx, fy) = below(&s, " food ", title + 1);
-    assert!(
-        fy > title && fy < title + 15,
-        "the chart under its item:\n{}",
-        s.join("\n")
-    );
-    at(&s, "VIEW · 2 LAYERS");
-    at(&s, "layer bar(x(C), y(V)) where cell(C, V)");
-    // Click on the food bar: the column above its label.
-    let bar_y = (title + 1..fy)
-        .rev()
-        .find(|y| s[*y as usize].chars().nth(fx as usize + 2) == Some('█'))
-        .unwrap();
-    let c = hits
-        .at(fx + 2, bar_y)
-        .cloned()
-        .expect("the bar is clickable");
-    app.click(&c);
-    assert_eq!(
-        app.notebook.outline.text(app.cursor()),
-        "food",
-        "the item stating cell(food, 400)"
-    );
+    the_chart_is_drawn_under_its_item(&app);
+    the_food_bar_leads_to_its_fact(&mut app);
     // Break the rule: the bars on the facts in the violation are drawn bold.
     command(&mut app, "set cell(food, 900)");
     let (s, _, buf) = screen(&app);
+    let bar = food_bar(&s);
+    let loud = buf[bar].modifier.contains(ratatui::style::Modifier::BOLD);
+    assert!(loud, "loud bar");
+    a_supposition_draws_the_view_in_each_world(&mut app);
+}
+
+/// The chart is drawn under its item, with its panel.
+fn the_chart_is_drawn_under_its_item(app: &App) {
+    let (s, _, _) = screen(app);
     let (_, title) = at(&s, "Budget chart");
-    let (fx, fy) = below(&s, " food ", title + 1);
-    let y = (0..fy)
-        .rev()
-        .find(|y| s[*y as usize].chars().nth(fx as usize + 2) == Some('█'))
-        .unwrap();
-    assert!(
-        buf[(fx + 2, y)]
-            .modifier
-            .contains(ratatui::style::Modifier::BOLD),
-        "loud bar"
-    );
-    // A supposition: the view in both worlds, each from its own facts.
-    command(&mut app, "set cell(food, 500)");
+    let label = food_label(&s);
+    let under = label.1 > title && label.1 < title + 15;
+    assert!(under, "the chart under its item:\n{}", s.join("\n"));
+    at(&s, "VIEW · 2 LAYERS");
+    at(&s, "layer bar(x(C), y(V)) where cell(C, V)");
+}
+
+/// A click on the food bar goes to the item stating cell(food, 400).
+fn the_food_bar_leads_to_its_fact(app: &mut Room) {
+    let (s, hits, _) = screen(app);
+    let (x, y) = food_bar(&s);
+    let c = hits.at(x, y).cloned().expect("the bar is clickable");
+    app.click(&c);
+    let text = app.notebook.outline.text(app.cursor());
+    assert_eq!(text, "food", "the item stating cell(food, 400)");
+}
+
+/// Where the label of the food bar is: the first " food " under the
+/// chart's item.
+fn food_label(s: &[String]) -> (u16, u16) {
+    let (_, title) = at(s, "Budget chart");
+    below(s, " food ", title + 1)
+}
+
+/// A cell of the food bar: the nearest bar cell above its label, in the
+/// column the bar is drawn in.
+fn food_bar(s: &[String]) -> (u16, u16) {
+    let (x, y) = food_label(s);
+    let column = x as usize + 2;
+    let filled = |row: &u16| s[*row as usize].chars().nth(column) == Some('█');
+    let row = (0..y).rev().find(filled).expect("a bar above its label");
+    (x + 2, row)
+}
+
+/// A supposition: the view in both worlds, each from its own facts.
+fn a_supposition_draws_the_view_in_each_world(app: &mut Room) {
+    command(app, "set cell(food, 500)");
     app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
-    typ(&mut app, "rent is 1600");
+    typ(app, "rent is 1600");
     app.handle(Event::up(Key::Quasi(Quasi::Suppose)));
-    tap(&mut app, Key::Enter);
+    tap(app, Key::Enter);
     app.evaluate().unwrap();
-    let (s, _, _) = screen(&app);
+    let (s, _, _) = screen(app);
     let both = s
         .iter()
         .filter(|l| l.matches("Budget chart").count() == 2)
