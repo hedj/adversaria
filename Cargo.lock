@@ -790,6 +790,7 @@ dependencies = [
  "ratatui",
  "serde_json",
  "toml",
+ "unicode-width",
 ]
 
 [[package]]

@@ -29,6 +29,7 @@
 
 use format::terms::Term;
 use std::collections::BTreeSet;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// A mark's channels, by name, in the order written.
 pub type Channels = Vec<(String, Term)>;
@@ -311,6 +312,16 @@ impl Run {
     }
 }
 
+/// The cell after a character two columns wide, which that character
+/// covers: nothing is drawn in it. The terminal library drops control
+/// characters such as this one, and gives the wide character both cells.
+pub const COVERED: char = '\0';
+
+/// The columns a text takes on a terminal.
+fn width(s: &str) -> usize {
+    s.width()
+}
+
 /// What a view draws: rows of characters, where each mark landed, and
 /// notes (legends, and what could not be drawn).
 #[derive(Debug, Clone, Default)]
@@ -342,6 +353,7 @@ impl Figure {
             .map(|r| {
                 r.iter()
                     .map(|(c, _)| *c)
+                    .filter(|c| *c != COVERED)
                     .collect::<String>()
                     .trim_end()
                     .to_string()
@@ -570,7 +582,28 @@ impl Canvas {
     }
     fn put(&mut self, x: usize, y: usize, c: char, ink: Ink) {
         if x < self.w && y < self.h {
+            self.unpair(x, y);
             self.cells[y][x] = (c, ink);
+        }
+    }
+    /// Blank the other half of a wide character at a cell about to be
+    /// drawn on, so that no half is left.
+    fn unpair(&mut self, x: usize, y: usize) {
+        let row = &mut self.cells[y];
+        if row[x].0 == COVERED {
+            row[x - 1].0 = ' ';
+        }
+        if row[x].0.width() == Some(2) {
+            row[x + 1].0 = ' ';
+        }
+    }
+    /// A character two columns wide, and the cell it covers after it.
+    fn put_wide(&mut self, x: usize, y: usize, c: char, ink: Ink) {
+        if x + 1 < self.w && y < self.h {
+            self.unpair(x, y);
+            self.unpair(x + 1, y);
+            self.cells[y][x] = (c, ink);
+            self.cells[y][x + 1] = (COVERED, ink);
         }
     }
     /// A character where nothing is drawn yet.
@@ -588,7 +621,7 @@ impl Canvas {
     /// Where a label goes: on the lowest row above `below` with room for
     /// it and a space after, as near x as the right edge allows.
     fn label_place(&self, x: usize, t: &str, below: usize) -> Option<Rect> {
-        let n = t.chars().count() + 1;
+        let n = width(t) + 1;
         let start = x.min(self.w.saturating_sub(n));
         let y = (0..below).rev().find(|y| self.free(start, *y, n))?;
         Some(Rect::row(start, y, n - 1))
@@ -629,7 +662,7 @@ impl Canvas {
 
     /// Text at the first of these places where it has room; else none.
     fn text_where_free(&mut self, places: [(usize, usize); 2], text: &str, ink: Ink) {
-        let Some((x, y)) = self.first_free(places, text.chars().count()) else {
+        let Some((x, y)) = self.first_free(places, width(text)) else {
             return;
         };
         self.text(x, y, text, ink);
@@ -657,9 +690,17 @@ impl Canvas {
     fn text_in(&mut self, r: Rect, s: &str, ink: Ink) {
         self.text(r.x, r.y, s, ink);
     }
+    /// Text from x along row y, each character in as many cells as it
+    /// takes columns on a terminal; one that does not fit is left off.
     fn text(&mut self, x: usize, y: usize, s: &str, ink: Ink) {
-        for (i, c) in s.chars().enumerate() {
-            self.put(x + i, y, c, ink);
+        let mut at = x;
+        for c in s.chars() {
+            match c.width() {
+                Some(2) => self.put_wide(at, y, c, ink),
+                Some(1) => self.put(at, y, c, ink),
+                _ => continue,
+            }
+            at += c.width().unwrap_or(0);
         }
     }
     /// Line directions at a cell, added to those there; a loud line
@@ -742,16 +783,22 @@ fn junction(bits: u8) -> char {
     }
 }
 
+/// A text cut to n columns, with an ellipsis where it was cut.
 fn truncate(s: &str, n: usize) -> String {
-    if s.chars().count() <= n {
-        s.to_string()
-    } else if n == 0 {
-        String::new()
-    } else {
-        let mut t: String = s.chars().take(n - 1).collect();
-        t.push('…');
-        t
+    if width(s) <= n {
+        return s.to_string();
     }
+    let Some(room) = n.checked_sub(1) else {
+        return String::new();
+    };
+    let mut used = 0;
+    let fits = |c: &char| {
+        used += c.width().unwrap_or(0);
+        used <= room
+    };
+    let mut t: String = s.chars().take_while(fits).collect();
+    t.push('…');
+    t
 }
 
 // ---- plots ----------------------------------------------------------
@@ -1017,7 +1064,7 @@ impl Frame {
     fn band_col_label(&self, s: &str) -> Option<(usize, String)> {
         let cols = self.col(&V::Cat(s.to_string()))?;
         let t = truncate(s, (cols.hi - cols.lo).max(1));
-        let x = (cols.lo + cols.hi + 1).saturating_sub(t.chars().count()) / 2;
+        let x = (cols.lo + cols.hi + 1).saturating_sub(width(&t)) / 2;
         Some((x, t))
     }
 
@@ -1025,7 +1072,7 @@ impl Frame {
     /// high ending at its end.
     fn line_ends(&self, lo: f64, hi: f64) -> Vec<(usize, String)> {
         let high = self.xs.tick_text(hi);
-        let right = (self.columns().hi + 1).saturating_sub(high.chars().count());
+        let right = (self.columns().hi + 1).saturating_sub(width(&high));
         vec![(self.x0(), self.xs.tick_text(lo)), (right, high)]
     }
 }
@@ -1038,7 +1085,7 @@ fn margin(ys: &Scale) -> usize {
         Scale::Line { lo, hi, .. } => vec![ys.tick_text(*lo), ys.tick_text(*hi)],
         Scale::None => vec![],
     };
-    let longest = labels.iter().map(|s| s.chars().count()).max();
+    let longest = labels.iter().map(|s| width(s)).max();
     longest.map_or(0, |n| n + 1)
 }
 
@@ -1140,7 +1187,7 @@ impl Plot {
     /// The y labels, right-aligned in the margin.
     fn y_labels(&mut self) {
         for (text, y) in self.frame.y_label_places() {
-            let x = self.frame.left.saturating_sub(text.chars().count() + 1);
+            let x = self.frame.left.saturating_sub(width(&text) + 1);
             self.cv.text(x, y, &text, Ink::Dim);
         }
     }
@@ -1224,7 +1271,7 @@ impl Plot {
 
     /// A label centred over a bar, on the row above it.
     fn label_above(&mut self, bar: &Rect, label: &str, ink: Ink) {
-        let left = bar.mid_x().saturating_sub(label.chars().count() / 2);
+        let left = bar.mid_x().saturating_sub(width(label) / 2);
         self.cv.text(left, bar.y - 1, label, ink);
     }
 
@@ -1280,7 +1327,7 @@ impl Plot {
     fn span(&mut self, m: &M, cols: Run, row: usize) {
         self.cv.text(cols.lo, row, &"━".repeat(cols.len()), m.ink());
         if let Some(t) = m.get("text").map(V::text) {
-            let inside = t.chars().count() + 2 <= cols.len();
+            let inside = width(&t) + 2 <= cols.len();
             let x = if inside { cols.lo + 1 } else { cols.hi + 2 };
             self.cv.text(x, row, &t, m.ink());
         }
@@ -1312,7 +1359,7 @@ impl Plot {
 
     fn text_mark(&mut self, m: &M, place: (usize, usize)) {
         let t = m.get("text").map(V::text).unwrap_or_default();
-        let at = Rect::row(place.0, place.1, t.chars().count());
+        let at = Rect::row(place.0, place.1, width(&t));
         self.cv.text_in(at, &t, m.ink());
         self.cv.hit(at, &m.prov);
     }
@@ -1475,7 +1522,7 @@ impl Cell {
 
     /// The width the cell's text takes, with its mark if it is loud.
     fn width(&self) -> usize {
-        self.text.chars().count() + usize::from(self.loud)
+        width(&self.text) + usize::from(self.loud)
     }
 
     /// The cell as shown in a column of a width: its text, cut to fit and
@@ -1500,7 +1547,7 @@ impl Cell {
     fn placed(&self, col: Run) -> (usize, String) {
         let t = self.shown(col.len());
         let x = if self.number {
-            col.hi + 1 - t.chars().count()
+            col.hi + 1 - width(&t)
         } else {
             col.lo
         };
@@ -1545,12 +1592,12 @@ impl Table {
     /// The width a column needs: its widest cell or its name, from 1 to 20.
     fn column_width(&self, i: usize) -> usize {
         let content = self.cells.iter().map(|r| r[i].width()).max().unwrap_or(0);
-        content.max(self.cols[i].chars().count()).clamp(1, 20)
+        content.max(width(&self.cols[i])).clamp(1, 20)
     }
 
     /// The width of the rows' names, at most 16.
     fn head(&self) -> usize {
-        let longest = self.rows.iter().map(|r| r.chars().count()).max();
+        let longest = self.rows.iter().map(|r| width(r)).max();
         longest.unwrap_or(0).min(16)
     }
 
@@ -2197,7 +2244,7 @@ fn unplaced(g: &Graph, n: usize) -> Vec<Run> {
 /// dummy's is one.
 fn box_width(g: &Graph, v: usize) -> usize {
     match g.nodes.get(v) {
-        Some(n) => n.text.chars().count().clamp(1, 22) + 4,
+        Some(n) => width(&n.text).clamp(1, 22) + 4,
         None => 1,
     }
 }
@@ -2521,6 +2568,7 @@ mod tests {
     }
 
     use super::*;
+    use unicode_width::UnicodeWidthChar;
 
     fn t(f: &str, a: Vec<Term>) -> Term {
         Term::Compound(f.into(), a)
@@ -2590,6 +2638,73 @@ mod tests {
     /// How many cells of column x hold c.
     fn count(lines: &[String], x: usize, c: char) -> usize {
         lines.iter().filter(|l| l.chars().nth(x) == Some(c)).count()
+    }
+
+    #[test]
+    fn a_row_with_wide_characters_is_as_wide_as_the_figure() {
+        // Catches a wide character (two columns on a terminal) given one
+        // cell: each row holding one was drawn a column wider than the
+        // figure per character, and what followed it moved right.
+        let specs = ["bar x:日本 y:2000", "bar x:food y:400"];
+        let fig = render(&marks_of(&specs), 40, 10);
+        let columns = |row: &Vec<(char, Ink)>| -> usize {
+            row.iter().map(|(c, _)| c.width().unwrap_or(0)).sum()
+        };
+        assert!(
+            fig.text().iter().any(|l| l.contains("日本")),
+            "{:?}",
+            fig.text()
+        );
+        assert!(
+            fig.rows.iter().all(|r| columns(r) == 40),
+            "{:#?}",
+            fig.text()
+        );
+    }
+
+    #[test]
+    fn drawing_on_half_a_wide_character_blanks_the_other_half() {
+        // Catches half a wide character left: a line drawn on the cell it
+        // covers left the character, which then took that cell too.
+        let mut cv = Canvas::new(6, 1);
+        cv.text(0, 0, "日本", Ink::Plain);
+        cv.put(1, 0, '│', Ink::Plain);
+        cv.put(2, 0, '─', Ink::Plain);
+        let row: String = cv.cells[0].iter().map(|(c, _)| *c).collect();
+        assert_eq!(row, " │─   ");
+    }
+
+    #[test]
+    fn a_text_is_cut_to_the_columns_it_is_given() {
+        // Catches a text cut by its characters: "日本語" cut to 4 kept two,
+        // four columns, and the ellipsis made five.
+        assert_eq!(truncate("日本語", 4), "日…");
+        assert_eq!(truncate("日本語", 6), "日本語");
+        assert_eq!(truncate("food", 3), "fo…");
+        assert_eq!(truncate("日本", 0), "");
+    }
+
+    #[test]
+    fn a_wide_label_is_centred_under_its_bar_as_a_narrow_one_is() {
+        // Catches a label centred by its characters: "日本" (two characters,
+        // four columns) began a column right of "zzzz" under the same bar.
+        assert_eq!(label_start("日本"), label_start("zzzz"));
+    }
+
+    /// The column where a category's label starts, beside food, in a bar
+    /// chart 40 wide.
+    fn label_start(label: &str) -> Option<usize> {
+        let specs = [format!("bar x:{label} y:2000"), "bar x:food y:400".into()];
+        let specs: Vec<&str> = specs.iter().map(String::as_str).collect();
+        let fig = render(&marks_of(&specs), 40, 10);
+        column_of(&fig, label.chars().next()?)
+    }
+
+    /// The cell of the first row that holds a character, where it is.
+    fn column_of(fig: &Figure, c: char) -> Option<usize> {
+        let holds = |r: &&Vec<(char, Ink)>| r.iter().any(|(x, _)| *x == c);
+        let row = fig.rows.iter().find(holds)?;
+        row.iter().position(|(x, _)| *x == c)
     }
 
     /// Bars of a budget over three categories, and a rule at 1500.
