@@ -629,9 +629,11 @@ fn an_item_with_no_claim_cannot_be_adopted() {
 #[test]
 fn a_retracted_constraint_is_not_read() {
     // Catches a world reading every constraint in its outline, including
-    // one whose definition is retracted in it.
+    // one whose definition is retracted in it. The fact keeps the world
+    // read once the constraint is gone: a world with no facts reads nothing.
     let mut app = Room::new("m4-retracted-constraint");
     item(&mut app, "rules");
+    command(&mut app, "fact p(1)");
     command(&mut app, "constraint same: false :- p(X), q(X).");
     let seq = app.journal().entries().last().unwrap().seq;
     let before = constraints_read(&mut app);
