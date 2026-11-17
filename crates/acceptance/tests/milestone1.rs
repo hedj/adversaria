@@ -91,14 +91,20 @@ fn write_entries(dir: &Path, n: u64, purges: u64) {
 /// earlier entry.
 fn append_one(j: &mut Journal, rng: &mut Rng) {
     let last = j.last().unwrap().seq;
+    let (parent, kind, body) = random_entry(rng, last);
+    j.append_after(Some(parent), kind, body).unwrap();
+}
+
+/// An entry to append after the last: its parent, usually the last but
+/// one time in ten any earlier entry, its kind, and its body.
+fn random_entry(rng: &mut Rng, last: u64) -> (u64, &'static str, Value) {
     let parent = if rng.below(10) == 0 {
         1 + rng.below(last)
     } else {
         last
     };
     let kind = KINDS[rng.below(KINDS.len() as u64) as usize];
-    j.append_after(Some(parent), kind, body(rng, last + 1))
-        .unwrap();
+    (parent, kind, body(rng, last + 1))
 }
 
 /// A blob, named by the SHA-256 of its content.
