@@ -699,8 +699,9 @@ pub fn align<T: PartialEq>(a: &[T], b: &[T]) -> Vec<(usize, usize)> {
             .collect();
     }
     let (mid, split) = cut(a, b);
-    let first = align(&a[..mid], &b[..split]);
-    joined(first, align(&a[mid..], &b[split..]), (mid, split))
+    let mut pairs = align(&a[..mid], &b[..split]);
+    pairs.extend(align_after(a, b, (mid, split)));
+    pairs
 }
 
 /// Where to cut each list: a in half, and b where its parts align best
@@ -710,14 +711,18 @@ fn cut<T: PartialEq>(a: &[T], b: &[T]) -> (usize, usize) {
     (mid, best_split(&a[..mid], &a[mid..], b))
 }
 
-/// The pairs of two parts, the second's moved to where its part starts.
-fn joined(
-    mut first: Vec<(usize, usize)>,
-    second: Vec<(usize, usize)>,
-    (i0, j0): (usize, usize),
+/// The pairs of what follows a cut in each list, numbered from the lists'
+/// starts.
+fn align_after<T: PartialEq>(
+    a: &[T],
+    b: &[T],
+    (mid, split): (usize, usize),
 ) -> Vec<(usize, usize)> {
-    first.extend(second.into_iter().map(|(i, j)| (i + i0, j + j0)));
-    first
+    let pairs = align(&a[mid..], &b[split..]);
+    pairs
+        .into_iter()
+        .map(|(i, j)| (i + mid, j + split))
+        .collect()
 }
 
 /// Where to cut b so that the first half of a aligns with the part before
