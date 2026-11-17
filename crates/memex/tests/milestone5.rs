@@ -328,91 +328,112 @@ fn last_link(app: &App) -> (u64, u64, String) {
 fn the_pane_keeps_its_rules() {
     // Plan: "never takes the keyboard, never reorders under the pointer,
     // ranked by evidence, few in view, dismissals recorded".
-    let mut app = open("pane");
-    typ(&mut app, "Places");
-    app.flush();
-    let pairs = [("a", "x"), ("b", "y"), ("c", "z")];
-    for (p, q) in ["p1", "p2", "p3", "p4"]
-        .iter()
-        .zip(["q1", "q2", "q3", "q4"])
-    {
-        for (x, y) in pairs {
-            command(&mut app, &format!("fact {p}({x}, {y})"));
-            command(&mut app, &format!("fact {q}({x}, {y})"));
-        }
-    }
-    assert!(
-        app.reason.suggestions.list.len() > 5,
-        "{} suggestions",
-        app.reason.suggestions.list.len()
-    );
-    assert_eq!(app.reason.suggestions.shown().len(), 5, "few in view");
-    // Ranked by evidence: scores never rise down the list.
-    let scores: Vec<i64> = app
-        .reason
-        .suggestions
-        .list
-        .iter()
-        .map(|s| s.score)
-        .collect();
-    assert!(scores.windows(2).all(|w| w[0] >= w[1]), "{scores:?}");
+    let mut app = many_suggestions("pane");
+    few_in_view_ranked_by_evidence(&app);
     // It never takes the keyboard: typing goes to the outline.
     typ(&mut app, " here");
     app.flush();
     assert_eq!(app.notebook.outline.text(app.cursor()), "Places here");
-    // Dismissed suggestions do not come back, and the dismissal is journaled.
-    let first = described(&app)[0].clone();
-    command(&mut app, "dismiss 1");
-    assert!(!described(&app).contains(&first));
-    assert_eq!(
-        app.journal().entries().last().unwrap().body().unwrap()["op"],
-        "dismiss"
-    );
-    // With the pane in focus, the order holds while new evidence arrives.
-    command(&mut app, "pane suggestions");
-    command(&mut app, "switch");
-    assert_eq!(
-        app.session.view.panes[app.session.view.focus].kind,
-        PaneKind::Suggestions
-    );
-    let before = described(&app);
-    for (x, y) in [("d", "w"), ("e", "v"), ("f", "u")] {
-        command(&mut app, &format!("fact p4({x}, {y})"));
-        command(&mut app, &format!("fact q1({x}, {y})"));
+    let first = dismissing_the_first(&mut app);
+    the_order_holds_while_the_pane_has_focus(&mut app);
+    a_replay_keeps_the_dismissal(&mut app, &first);
+}
+
+/// Places, with four pairs of predicates over three pairs of entities:
+/// more suggestions than the pane shows.
+fn many_suggestions(name: &str) -> Room {
+    let mut app = open(name);
+    typ(&mut app, "Places");
+    app.flush();
+    let preds = ["p1", "p2", "p3", "p4"]
+        .iter()
+        .zip(["q1", "q2", "q3", "q4"]);
+    for (p, q) in preds {
+        for (x, y) in [("a", "x"), ("b", "y"), ("c", "z")] {
+            command(&mut app, &format!("fact {p}({x}, {y})"));
+            command(&mut app, &format!("fact {q}({x}, {y})"));
+        }
     }
-    let during = described(&app);
-    // A suggestion whose evidence no longer holds may leave; those that stay
-    // keep their order, ahead of new ones.
+    app
+}
+
+/// More suggestions than five, five in view, and scores that never rise
+/// down the list.
+fn few_in_view_ranked_by_evidence(app: &App) {
+    let list = &app.reason.suggestions.list;
+    assert!(list.len() > 5, "{} suggestions", list.len());
+    assert_eq!(app.reason.suggestions.shown().len(), 5, "few in view");
+    let scores: Vec<i64> = list.iter().map(|s| s.score).collect();
+    assert!(scores.windows(2).all(|w| w[0] >= w[1]), "{scores:?}");
+}
+
+/// Dismiss the first suggestion shown: it does not come back, and the
+/// dismissal is journaled. What it described.
+fn dismissing_the_first(app: &mut App) -> String {
+    let first = described(app)[0].clone();
+    command(app, "dismiss 1");
+    assert!(!described(app).contains(&first));
+    let last = app.journal().entries().last().unwrap().body().unwrap();
+    assert_eq!(last["op"], "dismiss");
+    first
+}
+
+/// With the pane in focus, the order holds while new evidence arrives;
+/// none is shown twice when one leaves; and once focus leaves, the order is
+/// the ranking again.
+fn the_order_holds_while_the_pane_has_focus(app: &mut App) {
+    focus_the_suggestions(app);
+    let before = described(app);
+    for (x, y) in [("d", "w"), ("e", "v"), ("f", "u")] {
+        command(app, &format!("fact p4({x}, {y})"));
+        command(app, &format!("fact q1({x}, {y})"));
+    }
+    let during = described(app);
+    kept_ahead(&before, &during);
+    none_shown_twice(app);
+    ranked_once_focus_leaves(app, &during);
+}
+
+fn focus_the_suggestions(app: &mut App) {
+    command(app, "pane suggestions");
+    command(app, "switch");
+    let view = &app.session.view;
+    assert_eq!(view.panes[view.focus].kind, PaneKind::Suggestions);
+}
+
+/// A suggestion whose evidence no longer holds may leave; those that stay
+/// keep their order, ahead of new ones.
+fn kept_ahead(before: &[String], during: &[String]) {
     let kept: Vec<&String> = before.iter().filter(|b| during.contains(b)).collect();
     assert!(!kept.is_empty(), "the test needs some suggestions to stay");
-    assert_eq!(
-        during.iter().take(kept.len()).collect::<Vec<_>>(),
-        kept,
-        "reordered under the pointer"
-    );
-    // One that leaves the held order gives its place to the next, and
-    // none is shown twice.
-    command(&mut app, "dismiss 1");
-    let after = described(&app);
+    let first: Vec<&String> = during.iter().take(kept.len()).collect();
+    assert_eq!(first, kept, "reordered under the pointer");
+}
+
+/// One that leaves the held order gives its place to the next, and none
+/// is shown twice.
+fn none_shown_twice(app: &mut App) {
+    command(app, "dismiss 1");
+    let after = described(app);
     let distinct: std::collections::BTreeSet<&String> = after.iter().collect();
     assert_eq!((distinct.len(), after.len()), (5, 5), "{after:?}");
-    // Once the pane loses focus, the order is the ranking again.
-    let ranked: Vec<String> = app
-        .reason
-        .suggestions
-        .list
-        .iter()
-        .take(5)
-        .map(|s| s.describe())
-        .collect();
+}
+
+/// Once the pane loses focus, the order is the ranking again.
+fn ranked_once_focus_leaves(app: &mut App, during: &[String]) {
+    let list = app.reason.suggestions.list.iter().take(5);
+    let ranked: Vec<String> = list.map(|s| s.describe()).collect();
     assert_ne!(during, ranked, "the test needs the held order to differ");
-    command(&mut app, "switch");
+    command(app, "switch");
     assert_eq!(
-        described(&app),
+        described(app),
         ranked,
         "the order is held after focus leaves"
     );
-    // A replay keeps the dismissal.
+}
+
+/// A replay keeps the dismissal: the first is not suggested again.
+fn a_replay_keeps_the_dismissal(app: &mut Room, first: &str) {
     app.flush();
     let mut r = replayed(&app.dir);
     r.evaluate().unwrap();
@@ -420,13 +441,13 @@ fn the_pane_keeps_its_rules() {
         r.reason.suggestions.dismissed,
         app.reason.suggestions.dismissed
     );
-    assert!(
-        !r.reason
-            .suggestions
-            .list
-            .iter()
-            .any(|s| s.describe() == first)
-    );
+    assert!(!suggests(&r, first));
+}
+
+/// Whether a memex suggests what a text describes.
+fn suggests(app: &App, text: &str) -> bool {
+    let mut list = app.reason.suggestions.list.iter();
+    list.any(|s| s.describe() == text)
 }
 
 #[test]
