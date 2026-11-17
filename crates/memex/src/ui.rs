@@ -1250,7 +1250,11 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
                         format!("{d} ({})", where_from(&app.notebook.outline, &sol.prov[*s]))
                     })
                     .collect();
-                lines.push(Line::styled(format!("{key}: {}", parts.join(" · ")), style));
+                let row = match key.as_str() {
+                    "" => parts.join(" · "),
+                    key => format!("{key}: {}", parts.join(" · ")),
+                };
+                lines.push(Line::styled(row, style));
             }
             lines.push(Line::raw(""));
         }

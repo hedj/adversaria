@@ -169,3 +169,14 @@ fn a_finding_on_one_fact_is_listed_as_that_fact() {
     let r = over_the_limit("limit-listed");
     assert!(r.shows("  cell(rent, 1200) (1)"));
 }
+
+#[test]
+fn a_finding_whose_facts_share_nothing_is_listed_without_a_key() {
+    // Catches a row that begins with the key of what its facts share,
+    // empty here: ": rent, 1200 (1) · food, 300 (2)".
+    let mut r = over_the_limit("no-key");
+    r.command("constraint rent first: false :- cell(rent, R), cell(food, F), R > F.");
+    r.app.flush();
+    r.app.evaluate().unwrap();
+    assert!(r.shows("│  rent, 1200 (1) · food, 300 (2)"));
+}
