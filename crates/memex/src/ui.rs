@@ -1108,8 +1108,8 @@ fn status(e: &WorldEval) -> String {
     parts.join(" · ")
 }
 
-/// The predicates a goal or body reads, by name, and through the world's
-/// rules, those their bodies read.
+/// The predicates a goal or body calls, by name, and through the world's
+/// rules, those their bodies call.
 fn predicates(e: &WorldEval, t: &Term, out: &mut Vec<String>) {
     let (f, a) = match t {
         Term::Compound(f, a) => (f, a.as_slice()),
@@ -1119,15 +1119,17 @@ fn predicates(e: &WorldEval, t: &Term, out: &mut Vec<String>) {
     if let Some(goals) = goals_within(f, a) {
         return goals.iter().for_each(|x| predicates(e, x, out));
     }
-    let builtins = [
-        "is", "=", "\\=", "<", ">", "=<", ">=", "=:=", "=\\=", "==", "\\==", "true", "fail",
-        "false",
-    ];
-    if builtins.contains(&f.as_str()) || out.contains(f) {
+    if out.contains(f) {
         return;
     }
     out.push(f.clone());
     rule_bodies(e, f).for_each(|b| predicates(e, b, out));
+}
+
+/// Whether a fact of the world, believed or claimed, is of a predicate,
+/// by name: what a goal of it may read. A builtin is never one.
+fn is_stated(e: &WorldEval, name: &str) -> bool {
+    e.facts.iter().any(|(_, f)| head_name(inner(f)) == name)
 }
 
 /// The bodies of the world's rules for a predicate, by name.
@@ -1140,7 +1142,7 @@ fn rule_bodies<'a>(e: &'a WorldEval, name: &'a str) -> impl Iterator<Item = &'a 
     })
 }
 
-/// The name of a rule's head.
+/// The name of a rule's head or of a fact: its predicate.
 fn head_name(t: &Term) -> &str {
     match t {
         Term::Compound(n, _) | Term::Atom(n) => n,
@@ -1238,6 +1240,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
         if let Some(Term::Compound(_, a)) = node_def(e, c.seq) {
             predicates(e, &a[2], &mut reads);
         }
+        reads.retain(|p| is_stated(e, p));
         let mut deps: Vec<u64> = app
             .notebook
             .outline

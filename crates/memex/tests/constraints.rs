@@ -103,3 +103,14 @@ fn a_derived_text_that_reads_the_facts_through_a_rule_depends_on_them() {
         assert!(r.shows("depends on these facts"), "{rule}");
     }
 }
+
+#[test]
+fn a_derived_text_that_shares_only_a_builtin_does_not_depend_on_the_facts() {
+    // Catches a builtin, which reads no fact, taken as a read.
+    let constraint =
+        "constraint one value: false :- cell(C, A), cell(C, B), A \\= B, atom_length(C, N), N > 0.";
+    let derive = "derive {L} letters where atom_length(word, L)";
+    let r = rents_with("deps-builtin", &[constraint, derive]);
+    assert!(r.shows("CONSTRAINT · ONE VALUE"));
+    assert!(!r.shows("depends on these facts"));
+}
