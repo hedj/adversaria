@@ -3,21 +3,15 @@
 //! tests/memex_in_a_pty.py.
 
 use memex::app::{App, Click, Event, Key, Mode, PaneKind, Quasi};
-use memex::ui::{Hits, draw_hits};
-use ratatui::Terminal;
-use ratatui::backend::TestBackend;
-use std::path::PathBuf;
+use memex::ui::Hits;
+
+mod support;
+use support::{Room, replayed};
 
 const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../tests/fixtures/wikidata-buran.pl"
 );
-
-fn temp(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("adversaria-mouse-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    d
-}
 
 fn tap(app: &mut App, k: Key) {
     app.handle(Event::down(k));
@@ -42,43 +36,18 @@ fn command(app: &mut App, line: &str) {
     app.evaluate().unwrap();
 }
 
-/// Draw, as the terminal loop does, and return the screen's text and hits.
-fn draw(app: &App) -> (Vec<String>, Hits) {
-    let (w, h) = (160, 40);
-    let mut t = Terminal::new(TestBackend::new(w, h)).unwrap();
-    let mut hits = Hits::default();
-    t.draw(|f| hits = draw_hits(f, app)).unwrap();
-    let buf = t.backend().buffer().clone();
-    let lines = (0..h)
-        .map(|y| {
-            (0..w)
-                .map(|x| buf[(x, y)].symbol().to_string())
-                .collect::<String>()
-        })
-        .collect();
-    (lines, hits)
-}
-
-/// Where on screen a text is: (column, row) of its first character.
-fn find(lines: &[String], text: &str) -> (u16, u16) {
-    for (y, l) in lines.iter().enumerate() {
-        if let Some(i) = l.find(text) {
-            return (l[..i].chars().count() as u16, y as u16);
-        }
-    }
-    panic!("no {text:?} on screen:\n{}", lines.join("\n"))
+/// What a click where a text is first drawn, on a wide screen, would act
+/// on.
+fn hit_on(r: &Room, text: &str) -> Option<Click> {
+    let (x, y) = r.find(text);
+    r.hits().at(x, y).cloned()
 }
 
 /// Click where a text is drawn, as the terminal loop would.
-fn click_on(app: &mut App, text: &str) -> Click {
-    let (lines, hits) = draw(app);
-    let (x, y) = find(&lines, text);
-    let c = hits
-        .at(x, y)
-        .unwrap_or_else(|| panic!("nothing to click at {text:?}"))
-        .clone();
-    app.click(&c);
-    app.evaluate().unwrap();
+fn click_on(r: &mut Room, text: &str) -> Click {
+    let c = hit_on(r, text).unwrap_or_else(|| panic!("nothing to click at {text:?}"));
+    r.app.click(&c);
+    r.app.evaluate().unwrap();
     c
 }
 
@@ -95,8 +64,8 @@ fn last_kind(app: &App) -> String {
 }
 
 /// Three items, the middle one under the first, with a claim to adopt.
-fn notes(dir: &std::path::Path) -> App {
-    let mut app = App::open(dir).unwrap();
+fn notes(name: &str) -> Room {
+    let mut app = Room::new(&format!("mouse-{name}"));
     app.set_durable(false);
     typ(&mut app, "The programme");
     tap(&mut app, Key::Enter);
@@ -123,68 +92,45 @@ fn notes(dir: &std::path::Path) -> App {
 fn a_click_on_an_item_moves_the_cursor_there() {
     // Catches clicks mapped to the wrong row, for instance one that counts
     // an item's mark lines as items.
-    let dir = temp("item");
-    let mut app = notes(&dir);
+    let mut app = notes("item");
     let talk = app.cursor();
     let c = click_on(&mut app, "The programme");
     assert!(matches!(c, Click::Item { pane: 0, .. }));
-    assert_eq!(app.notebook.outline.text(app.cursor()), "The programme");
+    assert_eq!(app.here(), "The programme");
     // The Buran item has a mark line under it; the next row is still Talk notes.
     click_on(&mut app, "Talk notes");
     assert_eq!(app.cursor(), talk);
     click_on(&mut app, "Buran flew");
-    assert_eq!(
-        app.notebook.outline.text(app.cursor()),
-        "Buran flew once, in 1988."
-    );
+    assert_eq!(app.here(), "Buran flew once, in 1988.");
     // A click on the mark line itself acts on nothing.
-    let (lines, hits) = draw(&app);
-    let (x, y) = find(&lines, "⚑ one date per event");
-    assert_eq!(hits.at(x, y), None);
+    assert_eq!(hit_on(&app, "⚑ one date per event"), None);
     // Typing after a click goes into the clicked item.
     typ(&mut app, " Once.");
     app.flush();
-    assert_eq!(
-        app.notebook.outline.text(app.cursor()),
-        "Buran flew once, in 1988. Once."
-    );
+    assert_eq!(app.here(), "Buran flew once, in 1988. Once.");
     // The click is a view change in the journal, so replay agrees.
-    let here = app.cursor();
-    drop(app);
-    let again = App::open(&dir).unwrap();
-    assert_eq!(
-        again.cursor(),
-        here,
-        "replay puts the cursor where the click did"
-    );
-    std::fs::remove_dir_all(&dir).unwrap();
+    let again = replayed(&app.dir);
+    let here = "replay puts the cursor where the click did";
+    assert_eq!(again.cursor(), app.cursor(), "{here}");
 }
 
 #[test]
 fn a_click_on_the_hint_adopts_and_retracts() {
     // Plan: "Adopt and retract with one click". Catches a hint that is drawn
     // but not clickable, or whose two halves run the wrong commands.
-    let dir = temp("hint");
-    let mut app = notes(&dir);
+    let mut app = notes("hint");
     tap(&mut app, Key::F(2));
     app.evaluate().unwrap();
-    assert_eq!(
-        click_on(&mut app, "F3 adopts"),
-        Click::Command("adopt".into())
-    );
+    let adopt = Click::Command("adopt".into());
+    assert_eq!(click_on(&mut app, "F3 adopts"), adopt);
     assert_eq!(last_kind(&app), "adopt");
-    let (lines, _) = draw(&app);
-    assert!(lines.iter().any(|l| l.contains("1 constraint violation")));
-    assert_eq!(
-        click_on(&mut app, "F4 retracts an adoption"),
-        Click::Command("unadopt".into())
-    );
+    assert!(app.shows("1 constraint violation"));
+    let unadopt = Click::Command("unadopt".into());
+    assert_eq!(click_on(&mut app, "F4 retracts an adoption"), unadopt);
     assert_eq!(last_kind(&app), "retract");
     // The " · " between them does nothing.
-    let (lines, hits) = draw(&app);
-    let (x, y) = find(&lines, "F3 adopts");
-    assert_eq!(hits.at(x + "F3 adopts".len() as u16 + 1, y), None);
-    std::fs::remove_dir_all(&dir).unwrap();
+    let (x, y) = app.find("F3 adopts");
+    assert_eq!(app.hits().at(x + "F3 adopts".len() as u16 + 1, y), None);
 }
 
 #[test]
@@ -192,8 +138,7 @@ fn a_click_on_a_suggestion_accepts_it() {
     // Plan: suggestions "adopted ... by a click". Catches a click that
     // accepts a different suggestion from the one under it, which wrapped
     // evidence lines would cause if heights were guessed.
-    let dir = temp("suggestion");
-    let mut app = App::open(&dir).unwrap();
+    let mut app = Room::new("mouse-suggestion");
     app.set_durable(false);
     typ(&mut app, "Buran flew once, unmanned, in 1989.");
     app.flush();
@@ -202,46 +147,42 @@ fn a_click_on_a_suggestion_accepts_it() {
     command(&mut app, &format!("import wikidata {FIXTURE}"));
     command(&mut app, "pane suggestions");
     assert_eq!(app.session.view.panes[1].kind, PaneKind::Suggestions);
-    let shown: Vec<String> = app
-        .reason
-        .suggestions
-        .shown()
-        .iter()
-        .map(|s| s.describe())
-        .collect();
+    let shown = shown_suggestions(&app);
     assert!(shown.len() >= 2, "{shown:?}");
     // Click the second suggestion's last line: its evidence, not its title.
-    let (lines, hits) = draw(&app);
-    let (x, y) = find(&lines, &format!("2. {}", shown[1]));
+    let (x, y) = app.find(&format!("2. {}", shown[1]));
     let accept_2 = Click::Command("accept 2".into());
+    let hits = app.hits();
     assert_eq!(
         hits.at(x, y),
         Some(&accept_2),
         "the title is part of suggestion 2"
     );
-    let evidence_row = (y + 1..y + 6)
-        .rev()
-        .find(|r| hits.at(x, *r) == Some(&Click::Command("accept 2".into())))
-        .expect("the evidence lines are part of suggestion 2");
-    assert!(evidence_row > y);
-    app.click(&hits.at(x, evidence_row).unwrap().clone());
-    assert!(
-        app.session.message.starts_with("adopted: "),
-        "{}",
-        app.session.message
-    );
+    let below = last_row_of(&hits, (x, y), &accept_2);
+    assert!(below > y, "the evidence lines are part of suggestion 2");
+    app.click(&accept_2);
     assert_eq!(app.session.message, format!("adopted: {}", shown[1]));
-    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The suggestions shown, described.
+fn shown_suggestions(app: &App) -> Vec<String> {
+    let shown = app.reason.suggestions.shown();
+    shown.iter().map(|s| s.describe()).collect()
+}
+
+/// The last of the five rows below a place in its column where a click
+/// acts as this one does.
+fn last_row_of(hits: &Hits, (x, y): (u16, u16), click: &Click) -> u16 {
+    let rows = (y + 1..y + 6).rev();
+    let mut same = rows.filter(|r| hits.at(x, *r) == Some(click));
+    same.next().expect("a row below acts so")
 }
 
 #[test]
 fn a_click_does_nothing_while_a_quasimode_or_question_is_open() {
     // Catches a click that cuts across a held quasimode or a confirmation.
-    let dir = temp("modal");
-    let mut app = notes(&dir);
-    let (lines, hits) = draw(&app);
-    let (x, y) = find(&lines, "The programme");
-    let c = hits.at(x, y).unwrap().clone();
+    let mut app = notes("modal");
+    let c = hit_on(&app, "The programme").unwrap();
     let before = app.cursor();
     app.handle(Event::down(Key::Quasi(Quasi::Command)));
     app.click(&c);
@@ -255,10 +196,5 @@ fn a_click_does_nothing_while_a_quasimode_or_question_is_open() {
     tap(&mut app, Key::Enter);
     assert!(matches!(app.session.mode, Mode::Normal));
     app.click(&c);
-    assert_eq!(
-        app.notebook.outline.text(app.cursor()),
-        "The programme",
-        "and acts once it is closed"
-    );
-    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(app.here(), "The programme", "and acts once it is closed");
 }
