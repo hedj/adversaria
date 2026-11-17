@@ -113,6 +113,19 @@ fn add_blob(dir: &Path, blob: &[u8]) {
     fs::write(dir.join(BLOBS).join(sha256_hex(blob)), blob).unwrap();
 }
 
+/// The first blob of a directory's, as the system lists them.
+fn first_blob(dir: &Path) -> PathBuf {
+    let mut blobs = fs::read_dir(dir.join(BLOBS)).unwrap();
+    blobs.next().unwrap().unwrap().path()
+}
+
+/// Change a file's first byte.
+fn flip_first_byte(file: &Path) {
+    let mut b = fs::read(file).unwrap();
+    b[0] ^= 1;
+    fs::write(file, b).unwrap();
+}
+
 fn cleanup(dir: &Path, key: &Path) {
     fs::remove_dir_all(dir).unwrap();
     fs::remove_file(key).unwrap();
@@ -262,15 +275,7 @@ fn start_of_line(bytes: &[u8], n: usize) -> usize {
 fn a_changed_blob_is_named() {
     // Catches a changed blob passing, or blamed elsewhere.
     let (dir, key) = generate("blob", 5, 0);
-    let blob = fs::read_dir(dir.join(BLOBS))
-        .unwrap()
-        .next()
-        .unwrap()
-        .unwrap()
-        .path();
-    let mut b = fs::read(&blob).unwrap();
-    b[0] ^= 1;
-    fs::write(&blob, b).unwrap();
+    flip_first_byte(&first_blob(&dir));
     let e = check::check_dir(&dir).unwrap_err();
     assert!(e.file.starts_with("blobs/") && e.line == 0, "{e}");
     cleanup(&dir, &key);
