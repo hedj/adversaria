@@ -290,34 +290,38 @@ fn no_suggested_reference_names_a_work_outside_the_store() {
     // synthetic, ids QTEST1 to QTEST3: QTEST3 is about Buran and cited by
     // both others, the obvious answer, and it is not in the store.
     let mut app = references("refs");
-    let refs: Vec<String> = app
-        .reason
-        .suggestions
-        .list
-        .iter()
-        .filter(|s| s.kind_name() == "reference")
-        .map(|s| s.describe())
-        .collect();
-    assert_eq!(
-        refs,
-        vec!["cite paper_a for the claims about buran_flight".to_string()]
-    );
-    for s in &app.reason.suggestions.list {
-        assert!(
-            !s.describe().contains("QTEST3") && !s.evidence.contains("QTEST3"),
-            "names a work outside the store: {s:?}"
-        );
-    }
+    let only = ["cite paper_a for the claims about buran_flight"];
+    assert_eq!(suggested_references(&app), only);
+    names_no_work_outside_the_store(&app);
     accept(&mut app, "cite paper_a");
+    let (a, b) = (numbered(&app, "1"), numbered(&app, "2"));
+    assert_eq!(last_link(&app), (a, b, "cites".to_string()));
+}
+
+/// The references suggested, described.
+fn suggested_references(app: &App) -> Vec<String> {
+    let list = app.reason.suggestions.list.iter();
+    let refs = list.filter(|s| s.kind_name() == "reference");
+    refs.map(|s| s.describe()).collect()
+}
+
+/// No suggestion names QTEST3, the work outside the store, nor rests on it.
+fn names_no_work_outside_the_store(app: &App) {
+    for s in &app.reason.suggestions.list {
+        let named = s.describe().contains("QTEST3") || s.evidence.contains("QTEST3");
+        assert!(!named, "names a work outside the store: {s:?}");
+    }
+}
+
+/// The item of a number in the outline.
+fn numbered(app: &App, n: &str) -> u64 {
+    app.notebook.outline.by_number(n).unwrap()
+}
+
+/// The outline's last link: from, to, and its kind.
+fn last_link(app: &App) -> (u64, u64, String) {
     let link = app.notebook.outline.links.last().unwrap();
-    assert_eq!(
-        (link.from, link.to, link.kind.as_str()),
-        (
-            app.notebook.outline.by_number("1").unwrap(),
-            app.notebook.outline.by_number("2").unwrap(),
-            "cites"
-        )
-    );
+    (link.from, link.to, link.kind.clone())
 }
 
 #[test]
