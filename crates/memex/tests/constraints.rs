@@ -87,3 +87,19 @@ fn a_derived_text_that_reads_the_facts_within_a_construct_depends_on_them() {
         assert!(r.shows("depends on these facts"), "{goal}");
     }
 }
+
+#[test]
+fn a_derived_text_that_reads_the_facts_through_a_rule_depends_on_them() {
+    // Catches a rule taken as the end of what a definition reads.
+    for (n, (rule, goal)) in [
+        ("rule costly(C) :- cell(C, V), V > 1000.", "costly(_)"),
+        ("rule costly :- cell(_, V), V > 1000.", "costly"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let derive = format!("derive {{N}} where {goal}, N = 1");
+        let r = rents_with(&format!("deps-rule-{n}"), &[ONE_VALUE, rule, &derive]);
+        assert!(r.shows("depends on these facts"), "{rule}");
+    }
+}

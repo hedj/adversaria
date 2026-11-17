@@ -1108,18 +1108,43 @@ fn status(e: &WorldEval) -> String {
     parts.join(" · ")
 }
 
-/// The predicates a goal or body reads, by name.
-fn predicates(t: &Term, out: &mut Vec<String>) {
-    if let Term::Compound(f, a) = t {
-        if let Some(goals) = goals_within(f, a) {
-            goals.iter().for_each(|x| predicates(x, out));
-        } else if ![
-            "is", "=", "\\=", "<", ">", "=<", ">=", "=:=", "=\\=", "==", "\\==",
-        ]
-        .contains(&f.as_str())
-        {
-            out.push(f.clone());
+/// The predicates a goal or body reads, by name, and through the world's
+/// rules, those their bodies read.
+fn predicates(e: &WorldEval, t: &Term, out: &mut Vec<String>) {
+    let (f, a) = match t {
+        Term::Compound(f, a) => (f, a.as_slice()),
+        Term::Atom(f) => (f, &[][..]),
+        _ => return,
+    };
+    if let Some(goals) = goals_within(f, a) {
+        return goals.iter().for_each(|x| predicates(e, x, out));
+    }
+    let builtins = [
+        "is", "=", "\\=", "<", ">", "=<", ">=", "=:=", "=\\=", "==", "\\==", "true", "fail",
+        "false",
+    ];
+    if builtins.contains(&f.as_str()) || out.contains(f) {
+        return;
+    }
+    out.push(f.clone());
+    rule_bodies(e, f).for_each(|b| predicates(e, b, out));
+}
+
+/// The bodies of the world's rules for a predicate, by name.
+fn rule_bodies<'a>(e: &'a WorldEval, name: &'a str) -> impl Iterator<Item = &'a Term> {
+    e.facts.iter().filter_map(move |(_, f)| match f {
+        Term::Compound(n, a) if n == "rule_def" && a.len() == 3 && head_name(&a[1]) == name => {
+            Some(&a[2])
         }
+        _ => None,
+    })
+}
+
+/// The name of a rule's head.
+fn head_name(t: &Term) -> &str {
+    match t {
+        Term::Compound(n, _) | Term::Atom(n) => n,
+        _ => "",
     }
 }
 
@@ -1211,7 +1236,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
         // whose queries read the same predicates.
         let mut reads = Vec::new();
         if let Some(Term::Compound(_, a)) = node_def(e, c.seq) {
-            predicates(&a[2], &mut reads);
+            predicates(e, &a[2], &mut reads);
         }
         let mut deps: Vec<u64> = app
             .notebook
@@ -1221,7 +1246,7 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
             .filter(|d| {
                 let mut r = Vec::new();
                 if let Some(Term::Compound(_, a)) = node_def(e, **d) {
-                    predicates(&a[1], &mut r);
+                    predicates(e, &a[1], &mut r);
                 }
                 r.iter().any(|p| reads.contains(p))
             })
@@ -1782,6 +1807,21 @@ fn change_line((seq, what, retracted): &(u64, String, bool)) -> Line<'static> {
 mod tests {
     use super::*;
     use view::Ink;
+
+    #[test]
+    fn a_rule_that_reaches_itself_is_read_once() {
+        // Catches an endless walk of a journal's recursive rules, which
+        // the rule command refuses but a journal may hold.
+        let call = |n: &str| Term::Atom(n.into());
+        let rule = |h, b| Term::Compound("rule_def".into(), vec![Term::Int(1), call(h), call(b)]);
+        let e = WorldEval {
+            facts: vec![(1, rule("a", "b")), (2, rule("b", "a"))],
+            ..WorldEval::default()
+        };
+        let mut reads = vec![];
+        predicates(&e, &call("a"), &mut reads);
+        assert_eq!(reads, ["a", "b"]);
+    }
 
     fn figure(row: &str, ink: Ink) -> view::Figure {
         let rows = vec![row.chars().map(|c| (c, ink)).collect()];
