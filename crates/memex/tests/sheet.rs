@@ -277,21 +277,38 @@ fn a_violation_through_a_rule_rests_on_the_facts_under_it() {
         "constraint within income: false :- spent(S), cell(income, I), S > I.",
     );
     command(&mut app, "set cell(food, 900)");
+    let facts = violation_facts(&app, "within income");
+    assert!(
+        facts.iter().all(|(s, _)| *s != rule),
+        "not the rule: {facts:?}"
+    );
+    for f in ["cell(rent, 1200)", "cell(food, 900)", "cell(income, 2000)"] {
+        assert!(facts.iter().any(|(_, x)| x == f), "{f} in {facts:?}");
+    }
+    shows(&app, "within income, violation");
+}
+
+/// The facts the one violation of a constraint rests on: each entry, and
+/// its fact shown.
+fn violation_facts(app: &App, name: &str) -> Vec<(u64, String)> {
     let eval = app.reason.eval[0].as_ref().unwrap();
+    let seqs = violation_seqs(eval, name);
+    seqs.into_iter().map(|s| (s, fact_shown(eval, s))).collect()
+}
+
+/// The entries a constraint's violation rests on, which must be its only
+/// one.
+fn violation_seqs(eval: &memex::reason::WorldEval, name: &str) -> Vec<u64> {
     let c = eval
         .constraints
         .iter()
-        .find(|c| c.constraint.name == "within income")
+        .find(|c| c.constraint.name == name)
         .unwrap();
     assert_eq!(c.violations.len(), 1);
-    let seqs: Vec<u64> = c.violations[0].prov.iter().map(|p| p.seq()).collect();
-    assert!(!seqs.contains(&rule), "not the rule: {seqs:?}");
-    let facts: Vec<String> = seqs
-        .iter()
-        .map(|s| memex::reason::show(&eval.facts.iter().find(|(q, _)| q == s).unwrap().1))
-        .collect();
-    for f in ["cell(rent, 1200)", "cell(food, 900)", "cell(income, 2000)"] {
-        assert!(facts.contains(&f.to_string()), "{f} in {facts:?}");
-    }
-    shows(&app, "within income, violation");
+    c.violations[0].prov.iter().map(|p| p.seq()).collect()
+}
+
+/// The fact an entry states in a world, shown.
+fn fact_shown(eval: &memex::reason::WorldEval, seq: u64) -> String {
+    memex::reason::show(eval.fact(seq).unwrap())
 }
