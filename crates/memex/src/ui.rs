@@ -905,7 +905,9 @@ fn draw_prompt(f: &mut Frame, app: &App, prompt: Rect, guide: Rect) {
                 Quasi::Scope => {
                     format!("Space widens the target: word, statement, branch · {end} keeps it")
                 }
-                Quasi::Suppose => format!("name the world · {end} starts it"),
+                Quasi::Suppose => format!(
+                    "type a statement · {end} offers its readings, or a world of that name if none"
+                ),
             };
             (line, g)
         }
