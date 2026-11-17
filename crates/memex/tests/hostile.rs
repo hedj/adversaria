@@ -166,28 +166,28 @@ fn an_exported_word_file_embeds_no_local_file() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// The paths a fake server was asked for, shared with its thread.
+type Seen = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+
 /// A fake Crossref: answers 404 to every request; returns the paths asked.
-fn fake_crossref() -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
-    use std::io::{BufRead, BufReader, Write};
+fn fake_crossref() -> (String, Seen) {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let base = format!("http://{}/works/", l.local_addr().unwrap());
-    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    let s2 = seen.clone();
-    std::thread::spawn(move || {
-        for c in l.incoming().flatten() {
-            let mut r = BufReader::new(c.try_clone().unwrap());
-            let mut line = String::new();
-            let _ = r.read_line(&mut line);
-            s2.lock()
-                .unwrap()
-                .push(line.split(' ').nth(1).unwrap_or("").to_string());
-            let mut c = c;
-            let _ = c.write_all(
-                b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-            );
-        }
-    });
+    let seen = Seen::default();
+    let noted = seen.clone();
+    std::thread::spawn(move || l.incoming().flatten().for_each(|c| answer_404(c, &noted)));
     (base, seen)
+}
+
+/// Read a request's first line, note the path it asks for, and answer 404.
+fn answer_404(mut c: std::net::TcpStream, seen: &Seen) {
+    use std::io::{BufRead, BufReader, Write};
+    let mut line = String::new();
+    let _ = BufReader::new(c.try_clone().unwrap()).read_line(&mut line);
+    let path = line.split(' ').nth(1).unwrap_or("").to_string();
+    seen.lock().unwrap().push(path);
+    let _ =
+        c.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
 }
 
 #[test]
