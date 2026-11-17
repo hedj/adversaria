@@ -148,15 +148,24 @@ fn unified_with(t: Term) -> Term {
 /// variables: X and the goal's own variables, under one renaming.
 fn round_trip(p: &mut Prolog, t: Term, k: usize) {
     let q = p.query(&unified_with(t.clone())).unwrap();
-    let (ans, end) = p.next(&q, 2).unwrap();
-    assert_eq!((ans.len(), end), (1, Some(End::Exhausted)), "term {k}");
+    let ans = only_answer(p, &q, k);
     let want = expected(&q, &t);
-    let back = c("t", ans[0].clone());
     assert!(
-        protocol::variant(&back, &want),
-        "term {k}: {t:?} came back as {:?}",
-        ans[0]
+        came_back(&ans, &want),
+        "term {k}: {t:?} came back as {ans:?}"
     );
+}
+
+/// Whether an answer is what was wanted, up to renaming its variables.
+fn came_back(ans: &[Term], want: &Term) -> bool {
+    protocol::variant(&c("t", ans.to_vec()), want)
+}
+
+/// A query's one answer, after which it is exhausted.
+fn only_answer(p: &mut Prolog, q: &Query, k: usize) -> Vec<Term> {
+    let (ans, end) = p.next(q, 2).unwrap();
+    assert_eq!((ans.len(), end), (1, Some(End::Exhausted)), "term {k}");
+    ans.into_iter().next().unwrap()
 }
 
 /// What a query of X = t gives back: t for X, and each other variable as
