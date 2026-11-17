@@ -101,6 +101,10 @@ impl T {
             self.app.session.message
         );
     }
+    /// The text of the item at the cursor.
+    fn here(&self) -> String {
+        self.app.notebook.outline.text(self.app.cursor())
+    }
     fn look(&self, at: &str) {
         if self.dump {
             println!(
@@ -132,6 +136,27 @@ fn the_tutorial_works_as_written() {
     t.look("start");
     t.shows("(empty: type to write the first item)");
 
+    part_one(&mut t);
+
+    // Part C, then part D, in the same session.
+    part_two(&mut t);
+    part_three(&mut t);
+
+    // Step 16: leave. The journal, opened again, replays to the same budget.
+    t.key(Key::F(10));
+    assert!(t.app.session.quit);
+    t.app.flush();
+    let mut app = replayed(&dir);
+    app.set_durable(false);
+    app.evaluate().unwrap();
+    let t = T { app, dump: t.dump };
+    t.shows("Left over: 300 [derived]");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Steps 2 to 8: an outline, beliefs, a derived sentence, a claim and a
+/// constraint, Leap, interrogation and adoption, and a supposition.
+fn part_one(t: &mut T) {
     // Step 2: an outline.
     t.typ("The programme");
     t.tap(Key::Enter);
@@ -172,13 +197,7 @@ fn the_tutorial_works_as_written() {
     // Step 6: Leap, from the end of the outline, wrapping to the top.
     t.hold(Quasi::LeapForward, "buran");
     t.look("leap");
-    assert!(
-        t.app
-            .notebook
-            .outline
-            .text(t.app.cursor())
-            .starts_with("Buran")
-    );
+    assert!(t.here().starts_with("Buran"));
     t.shows("CONSTRAINT · ONE DATE PER EVENT");
 
     // Step 7: interrogate, adopt, unadopt.
@@ -213,21 +232,6 @@ fn the_tutorial_works_as_written() {
     t.says("it stays in the journal");
     assert_eq!(t.app.reason.world(), "actual");
     t.shows("The flight came a year after Energia's first launch.");
-
-    // Part C, then part D, in the same session.
-    part_two(&mut t);
-    part_three(&mut t);
-
-    // Step 16: leave. The journal, opened again, replays to the same budget.
-    t.key(Key::F(10));
-    assert!(t.app.session.quit);
-    t.app.flush();
-    let mut app = replayed(&dir);
-    app.set_durable(false);
-    app.evaluate().unwrap();
-    let t = T { app, dump: t.dump };
-    t.shows("Left over: 300 [derived]");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 fn part_two(t: &mut T) {
