@@ -575,10 +575,7 @@ impl App {
 
     /// The items whose facts are about an entity: facts with it first.
     pub(crate) fn items_about(&self, entity: &Term) -> Vec<u64> {
-        let facts = self
-            .notebook
-            .facts_at(self.notebook.tip)
-            .unwrap_or_default();
+        let facts = self.notebook.facts_now().unwrap_or_default();
         let mut out: Vec<u64> = facts
             .iter()
             .filter(|(_, f)| matches!(f, Term::Compound(_, a) if a.first() == Some(entity)))

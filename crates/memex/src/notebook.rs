@@ -240,6 +240,11 @@ impl Notebook {
         crate::store::facts(self.journal.entries(), head)
     }
 
+    /// The facts of the world at the tip.
+    pub(crate) fn facts_now(&self) -> Result<Vec<(u64, Term)>, String> {
+        self.facts_at(self.tip)
+    }
+
     /// The facts at the tip, and these claims adopted as beliefs by the
     /// entry `by`.
     pub(crate) fn facts_adopting(

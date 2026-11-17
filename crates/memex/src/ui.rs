@@ -59,7 +59,7 @@ pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
     let [top, body, foot @ ..] = screen_areas(f.area());
     draw_top(f, app, top);
     let hits = draw_body(f, app, body);
-    draw_prompt(f, app, foot[0], foot[1]);
+    draw_prompt(f, app, foot);
     hits
 }
 
@@ -862,105 +862,132 @@ fn bold_between(text: &str, i: usize, j: usize) -> [Span<'static>; 3] {
     ]
 }
 
-fn draw_prompt(f: &mut Frame, app: &App, prompt: Rect, guide: Rect) {
-    let (p, g): (Line, String) = match &app.session.mode {
-        Mode::Quasi(a) => {
-            let shown = match a.q {
-                Quasi::Command => app.guided(&a.input),
-                _ => a.input.clone(),
-            };
-            let label = if a.latched {
-                format!(" {} (latched) ", a.q.label())
-            } else {
-                format!(" {} ", a.q.label())
-            };
-            let line = Line::from(vec![
-                Span::styled(label, Style::default().add_modifier(Modifier::REVERSED)),
-                Span::raw(" "),
-                Span::raw(shown),
-            ]);
-            let end = if a.latched {
-                "Enter, or tap again,".to_string()
-            } else {
-                format!(
-                    "release {}",
-                    if a.q == Quasi::Command {
-                        "Command"
-                    } else if a.q == Quasi::Scope {
-                        "Scope"
-                    } else if a.q == Quasi::Suppose {
-                        "Suppose"
-                    } else {
-                        "Leap"
-                    }
-                )
-            };
-            let g = match a.q {
-                Quasi::LeapForward | Quasi::LeapBack => format!(
-                    "{end} to go to the first match · Esc completes · ? lists every match · Leap again repeats"
-                ),
-                Quasi::Command => format!(
-                    "{end} to run on the target · Esc completes · ? lists what may come next"
-                ),
-                Quasi::Scope => {
-                    format!("Space widens the target: word, statement, branch · {end} keeps it")
-                }
-                Quasi::Suppose => format!(
-                    "type a statement · {end} offers its readings, or a world of that name if none"
-                ),
-            };
-            (line, g)
-        }
-        Mode::ConfirmRetract { target, dependents } => {
-            let line = Line::from(vec![
-                Span::styled(
-                    " RETRACT ",
-                    Style::default().add_modifier(Modifier::REVERSED),
-                ),
-                Span::raw(format!(" entry {target}")),
-            ]);
-            let dep = if dependents.is_empty() {
-                "nothing depends on it".to_string()
-            } else {
-                format!(
-                    "entries that depend on it and will no longer apply: {}",
-                    dependents
-                        .iter()
-                        .map(|d| d.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            };
-            (line, format!("{dep} · Enter retracts · Esc keeps it"))
-        }
-        Mode::ConfirmSuppose { text, readings, at } => {
-            let line = Line::from(vec![
-                Span::styled(
-                    " SUPPOSE ",
-                    Style::default().add_modifier(Modifier::REVERSED),
-                ),
-                Span::raw(format!(" {text}")),
-            ]);
-            let facts =
-                crate::store::facts(app.journal().entries(), app.notebook.tip).unwrap_or_default();
-            let r = reason::restate(&facts, &readings[*at]);
-            let more = if readings.len() > 1 {
-                " · Tab next reading"
-            } else {
-                ""
-            };
-            (
-                line,
-                format!("Do you mean: Suppose that {r}.  ⏎ yes · Esc no{more}"),
-            )
-        }
-        Mode::Normal => match hint(app) {
-            Some((p, g)) if app.session.message.is_empty() => (Line::raw(p), g),
-            _ => (Line::raw(""), app.session.message.clone()),
-        },
+/// The foot: what is typed or asked, and under it what to do, or the
+/// message.
+fn draw_prompt(f: &mut Frame, app: &App, rows: [Rect; 2]) {
+    let (line, said) = foot(app);
+    f.render_widget(Paragraph::new(line), rows[0]);
+    f.render_widget(Paragraph::new(Span::styled(said, dim())), rows[1]);
+}
+
+/// The foot's two lines, by the mode.
+fn foot(app: &App) -> (Line<'static>, String) {
+    match &app.session.mode {
+        Mode::Quasi(a) => (quasi_line(app, a), quasi_guide(a)),
+        Mode::ConfirmRetract { target, dependents } => retract_foot(*target, dependents),
+        Mode::ConfirmSuppose { text, readings, at } => suppose_foot(app, text, readings, *at),
+        Mode::Normal => normal_foot(app),
+    }
+}
+
+/// A held quasimode's name, reversed, and what is typed in it.
+fn quasi_line(app: &App, a: &Active) -> Line<'static> {
+    let shown = if a.q == Quasi::Command {
+        app.guided(&a.input)
+    } else {
+        a.input.clone()
     };
-    f.render_widget(Paragraph::new(p), prompt);
-    f.render_widget(Paragraph::new(Span::styled(g, dim())), guide);
+    Line::from(vec![quasi_name(a), Span::raw(" "), Span::raw(shown)])
+}
+
+/// A quasimode's name, and whether it is latched, reversed.
+fn quasi_name(a: &Active) -> Span<'static> {
+    let latched = if a.latched { " (latched)" } else { "" };
+    Span::styled(format!(" {}{latched} ", a.q.label()), reversed())
+}
+
+/// What a held quasimode does, and how it ends.
+fn quasi_guide(a: &Active) -> String {
+    let end = release_text(a);
+    match a.q {
+        Quasi::LeapForward | Quasi::LeapBack => format!(
+            "{end} to go to the first match · Esc completes · ? lists every match · Leap again repeats"
+        ),
+        Quasi::Command => {
+            format!("{end} to run on the target · Esc completes · ? lists what may come next")
+        }
+        Quasi::Scope => {
+            format!("Space widens the target: word, statement, branch · {end} keeps it")
+        }
+        Quasi::Suppose => {
+            format!("type a statement · {end} offers its readings, or a world of that name if none")
+        }
+    }
+}
+
+/// How a quasimode ends: by Enter or a second tap when latched, else by
+/// its key's release.
+fn release_text(a: &Active) -> String {
+    if a.latched {
+        return "Enter, or tap again,".into();
+    }
+    let name = match a.q {
+        Quasi::Command => "Command",
+        Quasi::Scope => "Scope",
+        Quasi::Suppose => "Suppose",
+        Quasi::LeapForward | Quasi::LeapBack => "Leap",
+    };
+    format!("release {name}")
+}
+
+/// The foot while a retraction is asked: the entry, what depends on it,
+/// and how to answer.
+fn retract_foot(target: u64, dependents: &[u64]) -> (Line<'static>, String) {
+    (
+        asked("RETRACT", format!(" entry {target}")),
+        retract_guide(dependents),
+    )
+}
+
+/// The foot while a supposition's reading is offered: the statement, the
+/// reading restated, and how to answer.
+fn suppose_foot(app: &App, text: &str, readings: &[Term], at: usize) -> (Line<'static>, String) {
+    (
+        asked("SUPPOSE", format!(" {text}")),
+        suppose_guide(app, readings, at),
+    )
+}
+
+/// A question's name, reversed, and what it is about.
+fn asked(name: &str, about: String) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(format!(" {name} "), reversed()),
+        Span::raw(about),
+    ])
+}
+
+/// What retracting an entry would undo, and how to answer.
+fn retract_guide(dependents: &[u64]) -> String {
+    let numbers: Vec<String> = dependents.iter().map(u64::to_string).collect();
+    let dep = match numbers.is_empty() {
+        true => "nothing depends on it".to_string(),
+        false => format!(
+            "entries that depend on it and will no longer apply: {}",
+            numbers.join(", ")
+        ),
+    };
+    format!("{dep} · Enter retracts · Esc keeps it")
+}
+
+/// The reading of a supposition offered, restated, and how to answer.
+fn suppose_guide(app: &App, readings: &[Term], at: usize) -> String {
+    let facts = app.notebook.facts_now().unwrap_or_default();
+    let r = reason::restate(&facts, &readings[at]);
+    let more = if readings.len() > 1 {
+        " · Tab next reading"
+    } else {
+        ""
+    };
+    format!("Do you mean: Suppose that {r}.  ⏎ yes · Esc no{more}")
+}
+
+/// The foot in normal mode: a hint, while there is no message; else the
+/// message.
+fn normal_foot(app: &App) -> (Line<'static>, String) {
+    match hint(app) {
+        Some((p, g)) if app.session.message.is_empty() => (Line::raw(p), g),
+        _ => (Line::raw(""), app.session.message.clone()),
+    }
 }
 
 /// The fact a fact entry states: for a claim, what is claimed.

@@ -242,10 +242,7 @@ impl App {
     /// What a supposition with no reading says: that it is believed
     /// already, or that it has no reading.
     fn nothing_to_suppose(&self, text: &str) -> String {
-        let facts = self
-            .notebook
-            .facts_at(self.notebook.tip)
-            .unwrap_or_default();
+        let facts = self.notebook.facts_now().unwrap_or_default();
         match reason::believed_already(&facts, text) {
             true => {
                 format!("“{text}” is believed already: a world of that name, with nothing changed")
@@ -288,10 +285,7 @@ impl App {
                 if text.is_empty() {
                     return Mode::Normal;
                 }
-                let facts = self
-                    .notebook
-                    .facts_at(self.notebook.tip)
-                    .unwrap_or_default();
+                let facts = self.notebook.facts_now().unwrap_or_default();
                 let readings = reason::readings(&facts, &text);
                 if readings.is_empty() {
                     self.suppose_named(&text);

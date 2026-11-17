@@ -11,10 +11,7 @@ use serde_json::{Value, json};
 impl App {
     /// An item's claims: (entry seq, source, claimed fact).
     pub fn claims_of(&self, item: u64) -> Vec<(u64, String, Term)> {
-        let facts = self
-            .notebook
-            .facts_at(self.notebook.tip)
-            .unwrap_or_default();
+        let facts = self.notebook.facts_now().unwrap_or_default();
         facts
             .into_iter()
             .filter(|(s, _)| self.notebook.outline.fact_item.get(s) == Some(&item))
