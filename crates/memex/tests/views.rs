@@ -561,24 +561,34 @@ fn gallery_the_outline_itself_as_a_tree() {
         &mut app,
         "layer edge(from(P), to(C)) where item_under(C, P)",
     );
-    let f = figure(&app, "Tree");
-    let row = |t: &str| {
-        f.iter()
-            .position(|l| l.contains(t))
-            .unwrap_or_else(|| panic!("{t}:\n{}", f.join("\n")))
-    };
-    assert!(
-        row("│ Plan │") < row("Research") && row("Research") < row("Read papers"),
-        "{}",
-        f.join("\n")
-    );
-    assert_eq!(row("Read papers"), row("Interview"));
-    assert_eq!(row("Research"), row("Write"));
-    // Click the Interview box: the cursor goes to that item.
-    let (s, hits, _) = screen(&app);
-    let (x, y) = below(&s, "│ Interview │", 0);
-    let x = x + 2;
-    app.click(&hits.at(x, y).cloned().expect("clickable"));
+    each_child_is_drawn_under_its_parent(&app);
+    a_click_on_the_interview_box_goes_to_its_item(&mut app);
+}
+
+/// Plan above Research above Read papers; Interview beside Read papers,
+/// and Write beside Research.
+fn each_child_is_drawn_under_its_parent(app: &App) {
+    let f = figure(app, "Tree");
+    let plan = line_of(&f, "│ Plan │");
+    let research = line_of(&f, "Research");
+    let papers = line_of(&f, "Read papers");
+    assert!(plan < research && research < papers, "{}", f.join("\n"));
+    assert_eq!(papers, line_of(&f, "Interview"));
+    assert_eq!(research, line_of(&f, "Write"));
+}
+
+/// The first line of a figure that holds text.
+fn line_of(f: &[String], text: &str) -> usize {
+    let found = f.iter().position(|l| l.contains(text));
+    found.unwrap_or_else(|| panic!("{text}:\n{}", f.join("\n")))
+}
+
+/// Click the Interview box: the cursor goes to that item.
+fn a_click_on_the_interview_box_goes_to_its_item(app: &mut Room) {
+    let (s, hits, _) = screen(app);
+    let (x, y) = at(&s, "│ Interview │");
+    let c = hits.at(x + 2, y).cloned().expect("clickable");
+    app.click(&c);
     assert_eq!(app.notebook.outline.text(app.cursor()), "Interview");
 }
 
