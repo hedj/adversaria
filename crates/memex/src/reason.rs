@@ -573,8 +573,11 @@ impl Said {
         if is_meta(fact) {
             return vec![];
         }
-        let numbered = (0..args.len()).filter(|k| matches!(args[*k], Term::Int(_)));
-        let changes = |k| self.changes(facts, &Number { name, args, k });
+        let numbered = args
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| matches!(a, Term::Int(_)));
+        let changes = |(k, _)| self.changes(facts, &Number { name, args, k });
         numbered.flat_map(changes).collect()
     }
 
