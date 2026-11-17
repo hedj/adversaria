@@ -898,15 +898,7 @@ impl Found {
 
 impl<'ast> Visit<'ast> for FnCollector<'_> {
     fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
-        let owner = match &*i.self_ty {
-            syn::Type::Path(p) => p
-                .path
-                .segments
-                .last()
-                .map(|s| s.ident.to_string())
-                .unwrap_or_default(),
-            _ => String::new(),
-        };
+        let owner = named_type(&i.self_ty).unwrap_or_default();
         self.owner.push(owner);
         syn::visit::visit_item_impl(self, i);
         self.owner.pop();
