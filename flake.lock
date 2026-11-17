@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "ape": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1713732912,
+        "narHash": "sha256-pAJUPtSacwWrLEv6b8hWjXqzQJRxBkrMNuDKGKJzqKw=",
+        "ref": "refs/heads/master",
+        "rev": "5f4d5354a45fb772763bf1a9543f508f15b28982",
+        "revCount": 129,
+        "type": "git",
+        "url": "https://github.com/Attempto/APE.git"
+      },
+      "original": {
+        "rev": "5f4d5354a45fb772763bf1a9543f508f15b28982",
+        "type": "git",
+        "url": "https://github.com/Attempto/APE.git"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1794165970,
@@ -15,6 +32,7 @@
     },
     "root": {
       "inputs": {
+        "ape": "ape",
         "nixpkgs": "nixpkgs",
         "scasp": "scasp"
       }

@@ -1,11 +1,12 @@
 # The development shell for `nix-shell`, which needs no experimental
-# features. It reads the pins from flake.lock, so it uses the same nixpkgs
-# and s(CASP) as `nix develop`, and fetches them with Nix's stable
+# features. It reads the pins from flake.lock, so it uses the same nixpkgs,
+# s(CASP) and APE as `nix develop`, and fetches them with Nix's stable
 # built-ins. The shell is defined once, in nix/devshell.nix.
 let
   lock = builtins.fromJSON (builtins.readFile ./flake.lock);
   nixpkgsLock = lock.nodes.nixpkgs.locked;
   scaspLock = lock.nodes.scasp.locked;
+  apeLock = lock.nodes.ape.locked;
   nixpkgs = builtins.fetchTarball {
     url = nixpkgsLock.url;
     sha256 = nixpkgsLock.narHash;
@@ -15,7 +16,11 @@ let
     rev = scaspLock.rev;
     ref = scaspLock.ref;
   };
+  apeSrc = builtins.fetchGit {
+    url = apeLock.url;
+    rev = apeLock.rev;
+  };
   # No user config or overlays, as with a flake: the same packages for all.
   pkgs = import nixpkgs { config = { }; overlays = [ ]; };
 in
-(import ./nix/devshell.nix { inherit pkgs scaspSrc; }).shell
+(import ./nix/devshell.nix { inherit pkgs scaspSrc apeSrc; }).shell
