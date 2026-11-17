@@ -377,3 +377,24 @@ impl Prolog {
         self.fact_message(Kind::Retract, fact, seq)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_retracted_fact_is_gone_from_the_server() {
+        // Catches a retraction that drops the server's record of a fact
+        // and leaves the fact, which a query still finds.
+        let mut p = Prolog::start().unwrap();
+        let cell = |v| Term::Compound("cell".into(), vec![Term::Atom("rent".into()), v]);
+        let fact = cell(Term::Int(1200));
+        p.assert_fact(&fact, 1).unwrap();
+        assert_eq!(p.all(&cell(Term::Var(0)), 2).unwrap().len(), 1);
+        p.retract_fact(&fact, 1).unwrap();
+        assert_eq!(
+            p.all(&cell(Term::Var(0)), 2).unwrap(),
+            Vec::<Vec<Term>>::new()
+        );
+    }
+}

@@ -73,26 +73,38 @@ handle(cancel, Req, _, Out) :-
     done(Out, Req, 2).
 handle(assert, Req, Body, Out) :-
     cells_terms(Body, [Fact, Seq], _),
-    fact_seq(Fact, Seq),
-    declare(Fact),
-    assertz(user:Fact, Ref),
-    assertz(fact_ref(Seq, Fact, Ref)),
+    store_fact(Fact, Seq),
     done(Out, Req, 0).
 handle(retract, Req, Body, Out) :-
     cells_terms(Body, [Fact, Seq], _),
-    fact_seq(Fact, Seq),
-    (   fact_ref(Seq, F, Ref), F =@= Fact
-    ->  erase(Ref), retract(fact_ref(Seq, F, Ref))
-    ;   throw(protocol_error(no_such_fact(Seq)))
-    ),
+    erase_fact(Fact, Seq),
     done(Out, Req, 0).
 handle(atom, Req, Body, Out) :-
     cells_terms(Body, [Name0], []),
     (   string(Name0) -> atom_string(Name, Name0) ; throw(protocol_error(atom_needs_string)) ),
-    intern(Name, No, _),
-    atom_is(Out, Req, Name, No).
+    reply_atom(Out, Req, Name).
 handle(Type, _, _, _) :-
     throw(protocol_error(not_a_request(Type))).
+
+%   Store a fact the memex states, by its entry's number.
+store_fact(Fact, Seq) :-
+    fact_seq(Fact, Seq),
+    declare(Fact),
+    assertz(user:Fact, Ref),
+    assertz(fact_ref(Seq, Fact, Ref)).
+
+%   Erase a fact the memex stated, by its entry's number.
+erase_fact(Fact, Seq) :-
+    fact_seq(Fact, Seq),
+    (   fact_ref(Seq, F, Ref), F =@= Fact
+    ->  erase(Ref), retract(fact_ref(Seq, F, Ref))
+    ;   throw(protocol_error(no_such_fact(Seq)))
+    ).
+
+%   An atom's number, numbered now if it is new, sent to the memex.
+reply_atom(Out, Req, Name) :-
+    intern(Name, No, _),
+    atom_is(Out, Req, Name, No).
 
 %!  memex_fact(?Seq, ?Fact) is nondet.
 %   The facts the memex added, in the order it added them.
