@@ -683,37 +683,77 @@ impl Revision {
     }
 }
 
-/// The longest common subsequence of two lists, as matched index pairs.
+/// The longest common subsequence of two lists, as matched index pairs,
+/// in memory in proportion to their lengths (Hirschberg, 1975): a's first
+/// half aligned with b up to the best place to cut it, then the rest.
 pub fn align<T: PartialEq>(a: &[T], b: &[T]) -> Vec<(usize, usize)> {
-    let t = common_lengths(a, b);
-    let (mut i, mut j, mut out) = (0, 0, Vec::new());
-    while i < a.len() && j < b.len() {
-        if a[i] == b[j] {
-            out.push((i, j));
-            (i, j) = (i + 1, j + 1);
-        } else if t[i + 1][j] >= t[i][j + 1] {
-            i += 1;
-        } else {
-            j += 1;
-        }
+    if a.is_empty() || b.is_empty() {
+        return vec![];
     }
-    out
+    if a.len() == 1 {
+        return b
+            .iter()
+            .position(|x| *x == a[0])
+            .map(|j| (0, j))
+            .into_iter()
+            .collect();
+    }
+    let (mid, split) = cut(a, b);
+    let first = align(&a[..mid], &b[..split]);
+    joined(first, align(&a[mid..], &b[split..]), (mid, split))
 }
 
-/// t[i][j]: the length of the longest common subsequence of a from i and
-/// b from j (the usual table, filled from the ends).
-fn common_lengths<T: PartialEq>(a: &[T], b: &[T]) -> Vec<Vec<u32>> {
-    let mut t = vec![vec![0u32; b.len() + 1]; a.len() + 1];
-    for i in (0..a.len()).rev() {
-        for j in (0..b.len()).rev() {
-            t[i][j] = if a[i] == b[j] {
-                t[i + 1][j + 1] + 1
+/// Where to cut each list: a in half, and b where its parts align best
+/// with a's halves.
+fn cut<T: PartialEq>(a: &[T], b: &[T]) -> (usize, usize) {
+    let mid = a.len() / 2;
+    (mid, best_split(&a[..mid], &a[mid..], b))
+}
+
+/// The pairs of two parts, the second's moved to where its part starts.
+fn joined(
+    mut first: Vec<(usize, usize)>,
+    second: Vec<(usize, usize)>,
+    (i0, j0): (usize, usize),
+) -> Vec<(usize, usize)> {
+    first.extend(second.into_iter().map(|(i, j)| (i + i0, j + j0)));
+    first
+}
+
+/// Where to cut b so that the first half of a aligns with the part before
+/// and the second half with the part after, most alike: the first such
+/// place.
+fn best_split<T: PartialEq>(first: &[T], second: &[T], b: &[T]) -> usize {
+    let before = common_lengths(first, b);
+    let mut after = common_lengths(&reversed(second), &reversed(b));
+    after.reverse();
+    let total = |j: &usize| before[*j] + after[*j];
+    let best = (0..=b.len()).map(|j| total(&j)).max().unwrap_or(0);
+    (0..=b.len()).find(|j| total(j) == best).unwrap_or(0)
+}
+
+/// A list's elements, last first.
+fn reversed<T>(s: &[T]) -> Vec<&T> {
+    s.iter().rev().collect()
+}
+
+/// For each j, the length of the longest common subsequence of a and the
+/// first j of b: the last row of the usual table, one row kept at a time.
+fn common_lengths<T: PartialEq>(a: &[T], b: &[T]) -> Vec<u32> {
+    let mut row = vec![0u32; b.len() + 1];
+    for x in a {
+        let mut diagonal = 0;
+        for (j, y) in b.iter().enumerate() {
+            let above = row[j + 1];
+            row[j + 1] = if x == y {
+                diagonal + 1
             } else {
-                t[i + 1][j].max(t[i][j + 1])
+                above.max(row[j])
             };
+            diagonal = above;
         }
     }
-    t
+    row
 }
 
 /// Markdown text as plain text, through Pandoc.
@@ -806,6 +846,49 @@ mod tests {
             vec![(0, 0), (2, 1), (3, 2)]
         );
         assert_eq!(align::<u8>(&[], &[1]), vec![]);
+    }
+
+    #[test]
+    fn an_alignment_is_a_longest_common_subsequence() {
+        // Catches an alignment that pairs unlike elements, pairs out of
+        // order, or misses a longer common run, on lists over a small
+        // alphabet, where many runs tie. The lengths come from the full
+        // table, kept here as the reference.
+        let mut seed = 7u64;
+        let mut list = |n: u64| -> Vec<u8> {
+            let len = (next(&mut seed) % n) as usize;
+            (0..len).map(|_| (next(&mut seed) % 3) as u8).collect()
+        };
+        for _ in 0..500 {
+            let (a, b) = (list(12), list(12));
+            let pairs = align(&a, &b);
+            assert!(pairs.iter().all(|&(i, j)| a[i] == b[j]), "{a:?} {b:?}");
+            assert!(pairs.windows(2).all(|w| w[0].0 < w[1].0 && w[0].1 < w[1].1));
+            assert_eq!(pairs.len(), longest_common(&a, &b), "{a:?} {b:?}");
+        }
+    }
+
+    /// A pseudo-random number (a linear congruential generator).
+    fn next(seed: &mut u64) -> u64 {
+        *seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        *seed >> 33
+    }
+
+    /// The length of the longest common subsequence, from the full table.
+    fn longest_common(a: &[u8], b: &[u8]) -> usize {
+        let mut t = vec![vec![0usize; b.len() + 1]; a.len() + 1];
+        for i in 0..a.len() {
+            for j in 0..b.len() {
+                t[i + 1][j + 1] = if a[i] == b[j] {
+                    t[i][j] + 1
+                } else {
+                    t[i][j + 1].max(t[i + 1][j])
+                };
+            }
+        }
+        t[a.len()][b.len()]
     }
 
     #[test]
