@@ -1244,101 +1244,202 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
     lines
 }
 
-/// The right pane when a claim is interrogated (one key, F2).
+/// The right pane when a claim is interrogated (one key, F2): each of the
+/// item's claims, then what adopting them would do. The hint follows,
+/// drawn by draw_interrogation, where a click can find it.
 fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
     let Some(e) = app.reason.eval[0].as_ref() else {
         return vec![Line::raw("not yet evaluated")];
     };
-    let mut lines = vec![
-        Line::styled("INTERROGATE · WHAT IS CLAIMED HERE", dim()),
-        Line::raw(""),
-        Line::raw(app.notebook.outline.text(item)),
-        Line::raw(""),
-    ];
-    for (seq, src, p) in app.claims_of(item) {
-        lines.push(Line::raw(format!(
-            "claims: {} — from {src}",
-            reason::restate(&e.facts, &p)
-        )));
-        lines.push(Line::styled(format!("  entry {seq}"), dim()));
-        lines.push(Line::styled("who else claims it", dim()));
-        let others: Vec<String> = e
-            .facts
-            .iter()
-            .filter(|(s, f)| *s != seq && inner(f) == &p)
-            .map(|(s, f)| match f {
-                Term::Compound(n, a) if n == "claims" => {
-                    format!(
-                        "  {} ({})",
-                        place(&app.notebook.outline, *s),
-                        reason::show(&a[0])
-                    )
-                }
-                _ => format!("  {} (a belief)", place(&app.notebook.outline, *s)),
-            })
-            .collect();
-        if others.is_empty() {
-            lines.push(Line::raw("  no one else"));
-        }
-        lines.extend(others.into_iter().map(Line::raw));
-        lines.push(Line::styled("who claims the contrary", dim()));
-        let mut contrary = Vec::new();
-        for c in &e.constraints {
-            for sol in c.disagreements.iter().chain(&c.violations) {
-                if !sol.prov.iter().any(|q| q.seq() == seq) {
-                    continue;
-                }
-                for (k, o) in sol.prov.iter().enumerate().filter(|(_, q)| q.seq() != seq) {
-                    {
-                        let f = &sol.facts[k];
-                        contrary.push(format!(
-                            "  {}: {} ({})",
-                            where_from(&app.notebook.outline, o),
-                            reason::restate(&e.facts, inner(f)),
-                            c.constraint.name
-                        ));
-                    }
-                }
-            }
-        }
-        if contrary.is_empty() {
-            contrary.push("  no one".into());
-        }
-        lines.extend(contrary.into_iter().map(Line::raw));
-        lines.push(Line::styled("the source's record", dim()));
-        let path_adopts: Vec<&format::record::Entry> = app
-            .journal()
-            .entries()
-            .iter()
-            .filter(|x| {
-                x.kind() == "adopt" && x.body().is_some_and(|b| b["source"] == src.as_str())
-            })
-            .collect();
-        let retracted = path_adopts
-            .iter()
-            .filter(|a| {
-                app.journal().entries().iter().any(|r| {
-                    r.kind() == "retract"
-                        && r.body().and_then(|b| b["target"].as_u64()) == Some(a.seq)
-                })
-            })
-            .count();
-        lines.push(Line::raw(format!(
-            "  {} of its claims adopted, {retracted} of them retracted since",
-            path_adopts.len()
-        )));
-    }
-    lines.push(Line::styled("if adopted", dim()));
-    lines.push(Line::raw(format!(
-        "  {}",
-        app.reason
-            .preview
-            .clone()
-            .unwrap_or_else(|| "not yet computed".into())
-    )));
-    lines.push(Line::raw(""));
-    // The hint follows, drawn by draw_links, where a click can find it.
+    let mut lines = interrogation_head(&app.notebook.outline, item);
+    let claims = app.claims_of(item);
+    lines.extend(claims.into_iter().flat_map(|c| claim_lines(app, e, c)));
+    lines.extend(adoption_lines(app));
     lines
+}
+
+/// The interrogation's heading, and the item interrogated.
+fn interrogation_head(outline: &Outline, item: u64) -> Vec<Line<'static>> {
+    let heading = Line::styled("INTERROGATE · WHAT IS CLAIMED HERE", dim());
+    vec![
+        heading,
+        Line::raw(""),
+        Line::raw(outline.text(item)),
+        Line::raw(""),
+    ]
+}
+
+/// A claim interrogated: what it says and its entry, who else claims it,
+/// who claims the contrary, and its source's record.
+fn claim_lines(app: &App, e: &WorldEval, claim: (u64, String, Term)) -> Vec<Line<'static>> {
+    let asking = Asking::of(app, e, &claim);
+    let mut lines = asking.said();
+    lines.extend(section(
+        "who else claims it",
+        asking.claimants(),
+        "no one else",
+    ));
+    lines.extend(section(
+        "who claims the contrary",
+        asking.contrary(),
+        "no one",
+    ));
+    lines.extend(section(
+        "the source's record",
+        vec![record(app, &claim.1)],
+        "",
+    ));
+    lines
+}
+
+/// A claim being interrogated: the outline it is in, what reasoning
+/// found, and the claim: its entry, its source and its fact.
+struct Asking<'a> {
+    outline: &'a Outline,
+    eval: &'a WorldEval,
+    claim: &'a (u64, String, Term),
+}
+
+impl<'a> Asking<'a> {
+    fn of(app: &'a App, eval: &'a WorldEval, claim: &'a (u64, String, Term)) -> Self {
+        let outline = &app.notebook.outline;
+        Asking {
+            outline,
+            eval,
+            claim,
+        }
+    }
+
+    /// What the claim says, restated, with its source, and its entry.
+    fn said(&self) -> Vec<Line<'static>> {
+        let (seq, src, p) = self.claim;
+        let said = format!("claims: {} — from {src}", self.restated(p));
+        vec![
+            Line::raw(said),
+            Line::styled(format!("  entry {seq}"), dim()),
+        ]
+    }
+
+    /// A fact restated in words, by the world's labels.
+    fn restated(&self, f: &Term) -> String {
+        reason::restate(&self.eval.facts, inner(f))
+    }
+
+    /// Who else states the claim's fact: each other entry, by its place,
+    /// with its source, or as a belief.
+    fn claimants(&self) -> Vec<String> {
+        let (seq, _, p) = self.claim;
+        let others = self.eval.stating(p, *seq);
+        others
+            .into_iter()
+            .map(|(s, f)| claimant(self.outline, s, f))
+            .collect()
+    }
+
+    /// Who claims the contrary: each other fact of each disagreement that
+    /// rests on the claim, constraint by constraint. A violation rests on
+    /// beliefs alone, never on a claim.
+    fn contrary(&self) -> Vec<String> {
+        let found = self.eval.constraints.iter().flat_map(disagreements);
+        let resting = found.filter(|(_, sol)| sol.prov.iter().any(|q| q.seq() == self.claim.0));
+        resting
+            .flat_map(|(name, sol)| self.against(name, sol))
+            .collect()
+    }
+
+    /// The facts of a finding other than the claim's, each a row of who
+    /// claims the contrary.
+    fn against(&self, name: &str, sol: &Solution) -> Vec<String> {
+        let others = sol.sourced().filter(|(q, _)| q.seq() != self.claim.0);
+        others.map(|(q, f)| self.contrary_row(name, q, f)).collect()
+    }
+
+    /// A row of who claims the contrary: where the fact comes from, the
+    /// fact restated, and the constraint it breaks.
+    fn contrary_row(&self, name: &str, q: &Prov, f: &Term) -> String {
+        let said = self.restated(f);
+        let from = where_from(self.outline, q);
+        format!("  {from}: {said} ({name})")
+    }
+}
+
+/// A constraint's disagreements, by its name.
+fn disagreements(c: &ConstraintEval) -> impl Iterator<Item = (&str, &Solution)> {
+    let name = c.constraint.name.as_str();
+    c.disagreements.iter().map(move |sol| (name, sol))
+}
+
+/// A section of an interrogation: its heading, then its rows, or, if it
+/// has none, what says so.
+fn section(heading: &str, rows: Vec<String>, none: &str) -> Vec<Line<'static>> {
+    let rows = if rows.is_empty() {
+        vec![format!("  {none}")]
+    } else {
+        rows
+    };
+    let heading = Line::styled(heading.to_string(), dim());
+    std::iter::once(heading)
+        .chain(rows.into_iter().map(Line::raw))
+        .collect()
+}
+
+/// An entry that states a fact: where it is, and its source, or that it
+/// is a belief.
+fn claimant(outline: &Outline, seq: u64, f: &Term) -> String {
+    let at = place(outline, seq);
+    match f {
+        Term::Compound(n, a) if n == "claims" => format!("  {at} ({})", reason::show(&a[0])),
+        _ => format!("  {at} (a belief)"),
+    }
+}
+
+/// A source's record: how many of its claims were adopted, and how many
+/// of those adoptions were retracted since, anywhere in the journal.
+fn record(app: &App, src: &str) -> String {
+    let entries = app.journal().entries();
+    let adopted = adoptions_from(entries, src);
+    let retracted = retracted_among(entries, &adopted);
+    format!(
+        "  {} of its claims adopted, {retracted} of them retracted since",
+        adopted.len()
+    )
+}
+
+/// How many of these entries a retraction names, anywhere in the journal.
+fn retracted_among(entries: &[format::record::Entry], seqs: &[u64]) -> usize {
+    let retracted = |s: &&u64| entries.iter().any(|r| retracts(r, **s));
+    seqs.iter().filter(retracted).count()
+}
+
+/// The entries that adopt a claim from a source, by number.
+fn adoptions_from(entries: &[format::record::Entry], src: &str) -> Vec<u64> {
+    let adopting = entries.iter().filter(|x| adopts_from(x, src));
+    adopting.map(|x| x.seq).collect()
+}
+
+/// Whether an entry adopts a claim from a source.
+fn adopts_from(e: &format::record::Entry, src: &str) -> bool {
+    e.kind() == "adopt" && e.body().is_some_and(|b| b["source"] == src)
+}
+
+/// Whether an entry retracts another, by its number.
+fn retracts(e: &format::record::Entry, target: u64) -> bool {
+    e.kind() == "retract" && e.body().and_then(|b| b["target"].as_u64()) == Some(target)
+}
+
+/// What adopting the interrogated claims would do, then the blank line
+/// before the hint.
+fn adoption_lines(app: &App) -> [Line<'static>; 3] {
+    let preview = app
+        .reason
+        .preview
+        .clone()
+        .unwrap_or_else(|| "not yet computed".into());
+    [
+        Line::styled("if adopted", dim()),
+        Line::raw(format!("  {preview}")),
+        Line::raw(""),
+    ]
 }
 
 /// Fading hint: while the cursor is on an item with marks, how to try the

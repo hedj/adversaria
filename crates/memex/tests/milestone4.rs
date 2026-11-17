@@ -264,6 +264,67 @@ fn the_interrogation_hint_follows_the_configured_keys() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// The scene, with a second source that claims what the talk notes claim.
+fn wikipedia_too(dir: &Path) -> App {
+    let mut app = scene(dir);
+    leap(&mut app, "talk notes");
+    item(&mut app, "Wikipedia gives 1989 too.");
+    command(&mut app, "claim date(buran_flight, 1989) from Wikipedia");
+    app.flush();
+    app
+}
+
+/// What the interrogation of the talk notes shows.
+fn talk_interrogated(app: &mut App) -> Screen {
+    leap(app, "Talk notes:");
+    tap(app, Key::F(2));
+    app.evaluate().unwrap();
+    screen(app)
+}
+
+#[test]
+fn the_contrary_of_a_claim_is_not_the_claim_itself() {
+    // Catches a finding's rows that keep the claim's own fact.
+    let dir = temp("interrogate-own");
+    let mut app = scene(&dir);
+    let s = talk_interrogated(&mut app);
+    s.assert("1.1: the date of Buran's flight is 1988 (one date per event)");
+    assert!(!s.has("is 1989 (one date per event)"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn an_adoption_kept_is_not_counted_as_retracted() {
+    // Catches a record that counts each adoption as retracted.
+    let dir = temp("interrogate-kept");
+    let mut app = scene(&dir);
+    leap(&mut app, "talk notes");
+    tap(&mut app, Key::F(3));
+    let s = talk_interrogated(&mut app);
+    s.assert("1 of its claims adopted, 0 of them retracted since");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn another_source_that_claims_the_fact_is_listed() {
+    // Catches a list of who else claims it that keeps beliefs alone.
+    let dir = temp("interrogate-others");
+    let mut app = wikipedia_too(&dir);
+    talk_interrogated(&mut app).assert("2.2 (\"Wikipedia\")");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn another_sources_adoption_is_not_on_the_record() {
+    // Catches a source's record that counts every adoption.
+    let dir = temp("interrogate-record");
+    let mut app = wikipedia_too(&dir);
+    tap(&mut app, Key::F(3));
+    let s = talk_interrogated(&mut app);
+    s.assert("0 of its claims adopted, 0 of them retracted since");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 fn scene_three_as_written() {
     // Plan: "The user story's scene 3 works as written, except the

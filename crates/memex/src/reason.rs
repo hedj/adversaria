@@ -224,6 +224,16 @@ impl WorldEval {
         Some(fill(&d.template, &d.names, answer, &self.facts))
     }
 
+    /// The facts stated by entries other than one that are this fact,
+    /// claims of it included: each entry, and its fact as stated.
+    pub fn stating(&self, fact: &Term, except: u64) -> Vec<(u64, &Term)> {
+        let others = self
+            .facts
+            .iter()
+            .filter(|(s, f)| *s != except && claimed(f) == fact);
+        others.map(|(s, f)| (*s, f)).collect()
+    }
+
     pub fn fact(&self, seq: u64) -> Option<&Term> {
         self.facts.iter().find(|(s, _)| *s == seq).map(|(_, t)| t)
     }
