@@ -272,54 +272,64 @@ fn command_guide_words_recognition_and_help() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// A room of two items, "first" then "second": the room, and the second.
+fn two_items(name: &str) -> (Room, u64) {
+    let mut r = Room::new(name);
+    r.items(&["first", "second"]);
+    let second = r.app.cursor();
+    (r, second)
+}
+
 #[test]
 fn undo_redo_and_branches() {
-    // Catches undo that loses later state, redo that cannot return, or an
-    // edit after undo that does not start a branch.
-    let dir = temp("undo");
-    let mut app = App::open(&dir).unwrap();
-    app.set_durable(false);
-    typ(&mut app, "first");
-    item(&mut app, "second");
-    app.flush();
-    let second = app.cursor();
-    command(&mut app, "undo"); // the text of "second"
-    assert_eq!(app.notebook.outline.text(second), "");
-    command(&mut app, "undo"); // the creation of "second"
-    assert!(!app.notebook.outline.items.contains_key(&second));
-    command(&mut app, "redo");
-    command(&mut app, "redo");
-    assert_eq!(app.notebook.outline.text(second), "second");
-    command(&mut app, "redo");
-    assert!(app.session.message.contains("nothing to redo"));
-    command(&mut app, "undo");
-    command(&mut app, "undo");
-    let undo_seq = app.notebook.tip;
-    item(&mut app, "another");
-    app.flush();
+    // Catches undo that loses later state, or redo that cannot return.
+    let (mut r, second) = two_items("undo");
+    r.command("undo"); // the text of "second"
+    assert_eq!(r.text(second), "");
+    r.command("undo"); // the creation of "second"
+    assert!(!r.outline().contains(second));
+    r.command("redo");
+    r.command("redo");
+    assert_eq!(r.text(second), "second");
+    r.command("redo");
+    assert!(r.app.session.message.contains("nothing to redo"));
+}
+
+/// The first edit after an entry.
+fn edit_after(r: &Room, seq: u64) -> &format::record::Entry {
+    let mut entries = r.app.journal().entries().iter();
+    entries.find(|e| e.seq > seq && e.kind() == "edit").unwrap()
+}
+
+/// Whether the journal holds an entry that adds an item of a text.
+fn added(r: &Room, text: &str) -> bool {
+    let mut entries = r.app.journal().entries().iter();
+    entries.any(|e| e.body().is_some_and(|b| b["add"] == text))
+}
+
+#[test]
+fn an_edit_after_undo_starts_a_branch() {
+    // Catches an edit after undo that does not start a branch, or that
+    // loses the branch undone.
+    let (mut r, _) = two_items("branch");
+    r.command("undo");
+    r.command("undo");
+    let undo_seq = r.app.notebook.tip;
+    r.items(&["", "another"]);
     assert!(
-        app.notebook.redo.is_empty(),
+        r.app.notebook.redo.is_empty(),
         "an edit after undo clears redo"
     );
-    let e = app
-        .journal()
-        .entries()
-        .iter()
-        .find(|e| e.seq > undo_seq && e.kind() == "edit")
-        .unwrap();
+    let parent = edit_after(&r, undo_seq).parent_seq();
     assert_eq!(
-        e.parent_seq(),
+        parent,
         Some(undo_seq),
         "the edit follows the undo: a new branch"
     );
-    // The undone branch is still in the journal.
     assert!(
-        app.journal()
-            .entries()
-            .iter()
-            .any(|e| e.body().is_some_and(|b| b["add"] == "second"))
+        added(&r, "second"),
+        "the undone branch is still in the journal"
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// A room where a link and a revision depend on a claim, and an item does
