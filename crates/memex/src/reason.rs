@@ -605,11 +605,11 @@ impl Said {
         readings.filter(|_| score > 0).collect()
     }
 
-    /// How many of the text's words are in a fact's name or its other
-    /// arguments.
+    /// How many of the text's words are words of a fact's name or of its
+    /// other arguments: whole words, so "the" does not name "other".
     fn score(&self, name: &str, others: &str) -> usize {
-        let names = |w: &&String| others.contains(w.as_str()) || name.contains(w.as_str());
-        self.words.iter().filter(names).count()
+        let named = words_of(&format!("{name} {others}").to_lowercase());
+        self.words.iter().filter(|w| named.contains(w)).count()
     }
 }
 
@@ -1087,6 +1087,16 @@ mod tests {
         let facts = vec![(2, date("launch", 1987)), (3, date("buran_flight", 1988))];
         let r = readings(&facts, "the buran flight or launch, 1990");
         assert_eq!(r, [date("buran_flight", 1990), date("launch", 1990)]);
+    }
+
+    #[test]
+    fn a_word_names_a_fact_only_as_a_whole_word() {
+        // Catches a word found inside another: "the" in "other", "light"
+        // in "flight", so "the cat is 5" read as other's date.
+        let facts = vec![(2, date("other", 3)), (3, date("buran_flight", 1988))];
+        assert_eq!(readings(&facts, "the cat is 5"), Vec::<Term>::new());
+        assert_eq!(readings(&facts, "a light in 1990"), Vec::<Term>::new());
+        assert!(!believed_already(&facts, "the cat is 3"));
     }
 
     #[test]
