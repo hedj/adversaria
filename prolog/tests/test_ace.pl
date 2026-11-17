@@ -97,4 +97,15 @@ test(setting_the_lexicon_leaves_no_choice_point) :-
     call_cleanup(ace_lexicon(Twice, _), Det = true),
     assertion(Det == true).
 
+test(a_long_sentence_is_paraphrased_within_a_quarter_second) :-
+    % Catches APE's paraphraser left to its own half second: with
+    % relative clauses it ran out its 0.5 s limit at every parse of this
+    % sentence before falling back to full sentences.
+    ace_lexicon([], []),
+    Long = "If a man owns a dog then the man feeds the dog and the dog barks and the man walks to a park that is green and that is large and that is near a river.",
+    get_time(Start),
+    ace_parse(Long, parsed(_, _, _)),
+    get_time(End),
+    assertion(End - Start < 0.25).
+
 :- end_tests(ace).

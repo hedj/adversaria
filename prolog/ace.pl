@@ -29,7 +29,9 @@ advice.
    ).
 
 :- use_module(ape(parser/ace_to_drs), [acetext_to_drs/5]).
-:- use_module(ape(utils/drs_to_ace), [drs_to_ace/2]).
+:- use_module(ape(utils/drs_to_drslist), [drs_to_drslist/2]).
+:- use_module(ape(utils/drs_to_npace), [drs_to_npace/2]).
+:- use_module(ape(utils/drs_to_coreace), [drs_to_coreace/2]).
 :- use_module(ape(lexicon/ulex), [add_lexicon_entries/1, discard_ulex/0]).
 :- use_module(ape(lexicon/functionwords), [functionword/1]).
 :- use_module(ape(logger/error_logger), [clear_messages/0, get_messages/1]).
@@ -95,10 +97,24 @@ ace_parse(Text, Result) :-
 
 %   APE's paraphrase of a DRS, its sentences joined by spaces.
 paraphrase(Drs, Paraphrase) :-
-    drs_to_ace(Drs, Groups),
+    drs_to_drslist(Drs, Parts),
+    maplist(restated, Parts, Groups),
     append(Groups, Sentences),
     atomic_list_concat(Sentences, ' ', Atom),
     atom_string(Atom, Paraphrase).
+
+%   A part of a DRS restated, as APE's drs_to_ace/2 does: with relative
+%   clauses if that takes at most 50 ms, else in full sentences (core
+%   ACE). APE allows 0.5 s, noting that this may take very long "due to a
+%   bug?"; for a long sentence it took 0.5 s at each parse (measured),
+%   too long for a check at each key typed.
+restated(Drs, Ace) :-
+    catch(call_with_time_limit(0.05, drs_to_npace(Drs, Ace)), time_limit_exceeded, fail),
+    Ace \= [],
+    \+ memberchk('ERROR', Ace),
+    !.
+restated(Drs, Ace) :-
+    drs_to_coreace(Drs, Ace).
 
 %   A message of APE's, with its place as two numbers (0 for none) and
 %   its texts as strings.
