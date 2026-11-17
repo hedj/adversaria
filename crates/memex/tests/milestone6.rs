@@ -200,60 +200,65 @@ fn word_round_trip_keeps_structure_citations_and_mathematics() {
     // The same through Word: Markdown to .docx by Pandoc, imported, exported
     // to .docx by the memex, imported again.
     let dir = temp("docx");
-    let md = dir.join("essay.md");
-    std::fs::write(&md, ESSAY).unwrap();
-    let docx = dir.join("essay.docx");
-    let ok = std::process::Command::new("pandoc")
+    let md = write_essay(&dir, "essay.md");
+    let docx = to_docx(&md, &dir.join("essay.docx"));
+    let (said, out) = through_the_memex(&dir, &docx, "out.docx");
+    word_keeps_the_shape(&docx, &out, &md);
+    eprintln!("Word import: {said}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A Markdown file made into Word by Pandoc: the Word file.
+fn to_docx(md: &Path, docx: &Path) -> PathBuf {
+    let mut pandoc = std::process::Command::new("pandoc");
+    pandoc
         .args(["-f", "markdown", "-t", "docx", "-o"])
-        .arg(&docx)
-        .arg(&md)
-        .status()
-        .unwrap();
-    assert!(ok.success());
-    let mut app = open(&dir);
-    command(&mut app, &format!("import document {}", docx.display()));
-    let losses_msg = app.session.message.clone();
-    let out = dir.join("out.docx");
+        .arg(docx)
+        .arg(md);
+    assert!(pandoc.status().unwrap().success());
+    docx.to_path_buf()
+}
+
+/// A document imported into a memex in a directory, then exported to a
+/// file of a name there: what the import said, and the export.
+fn through_the_memex(dir: &Path, doc: &Path, name: &str) -> (String, PathBuf) {
+    let mut app = open(dir);
+    command(&mut app, &format!("import document {}", doc.display()));
+    let said = app.session.message.clone();
+    let out = dir.join(name);
     command(&mut app, &format!("export {}", out.display()));
-    let (first, _, _) = docs::read(&docx).unwrap();
-    let (second, _, _) = docs::read(&out).unwrap();
+    (said, out)
+}
+
+/// The Word round trip keeps the outline, and against the Markdown
+/// original, the same headings, items and citations, and the mathematics
+/// as LaTeX.
+fn word_keeps_the_shape(docx: &Path, out: &Path, md: &Path) {
+    let (first, _, _) = docs::read(docx).unwrap();
+    let (second, _, _) = docs::read(out).unwrap();
     assert_eq!(
         shape(&second),
         shape(&first),
         "the Word round trip changed the outline"
     );
-    // Against the Markdown original: the same headings, items and citations,
-    // and the mathematics as LaTeX.
-    let (orig, _, _) = docs::read(&md).unwrap();
-    let styles = |b: &[Block]| {
-        b.iter()
-            .map(|x| (x.style.clone(), x.depth))
-            .collect::<Vec<_>>()
-    };
+    let (orig, _, _) = docs::read(md).unwrap();
     assert_eq!(styles(&first), styles(&orig), "Word lost structure");
-    let headings = |b: &[Block]| {
-        b.iter()
-            .filter(|x| x.style == "heading")
-            .map(|x| x.text.clone())
-            .collect::<Vec<_>>()
-    };
     assert_eq!(headings(&first), headings(&orig));
-    assert_eq!(
-        first
-            .iter()
-            .flat_map(|b| b.cites.clone())
-            .collect::<Vec<_>>(),
-        vec!["buran1988".to_string()],
-        "citations through Word"
-    );
+    assert_eq!(cited(&first), ["buran1988"], "citations through Word");
     let math = first.iter().find(|b| b.style == "math").unwrap();
-    assert!(
-        math.text.contains("\\int") && math.text.contains("\\frac"),
-        "{}",
-        math.text
-    );
-    eprintln!("Word import: {losses_msg}");
-    std::fs::remove_dir_all(&dir).unwrap();
+    let latex = math.text.contains("\\int") && math.text.contains("\\frac");
+    assert!(latex, "{}", math.text);
+}
+
+/// Each block's style and depth.
+fn styles(blocks: &[Block]) -> Vec<(String, usize)> {
+    blocks.iter().map(|x| (x.style.clone(), x.depth)).collect()
+}
+
+/// The text of each heading.
+fn headings(blocks: &[Block]) -> Vec<String> {
+    let headings = blocks.iter().filter(|x| x.style == "heading");
+    headings.map(|x| x.text.clone()).collect()
 }
 
 #[test]
