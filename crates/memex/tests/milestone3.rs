@@ -495,69 +495,132 @@ fn keystroke_to_visible_change_on_ten_thousand_items() {
     // key and draw the whole screen into a 160 x 50 test terminal; writing
     // to a real terminal is not included.
     let dir = temp("timing");
-    {
-        let mut j = Journal::open(&dir).unwrap();
-        j.durable = false;
-        j.append("edit", json!({"op": "init"})).unwrap();
-        let mut last_top = None;
-        for t in 0..100u64 {
-            let text = format!("Section {t}");
-            let e = j.append("edit", json!({"op":"create","under":0,"after":last_top,"add":text,"spans":[[0,0,text.chars().count()]]})).unwrap();
-            last_top = Some(e.seq);
-            let mut last = None;
-            for c in 0..99u64 {
-                let text = format!(
-                    "Item {t}.{c}: a statement about Buran, Energia or DRAKON number {}",
-                    t * 100 + c
-                );
-                let e = j.append("edit", json!({"op":"create","under":e.seq,"after":last,"add":text,"spans":[[0,0,text.chars().count()]]})).unwrap();
-                last = Some(e.seq);
-            }
-        }
-    }
-    let t0 = Instant::now();
-    let mut app = App::open(&dir).unwrap();
-    let opened = t0.elapsed();
-    app.set_durable(false);
-    assert_eq!(app.notebook.outline.items.len(), 10_000);
-    let mut term = Terminal::new(TestBackend::new(160, 50)).unwrap();
-    let mut worst = Duration::ZERO;
-    let mut total = Duration::ZERO;
-    let mut n = 0;
-    let mut time = |app: &mut App, ev: Event| {
-        let t = Instant::now();
-        app.handle(ev);
-        term.draw(|f| memex::ui::draw(f, app)).unwrap();
-        let d = t.elapsed();
-        worst = worst.max(d);
-        total += d;
-        n += 1;
-    };
-    for _ in 0..20 {
-        time(&mut app, Event::down(Key::Down));
-    }
-    for c in "typed".chars() {
-        time(&mut app, Event::down(Key::Char(c)));
-    }
-    time(&mut app, Event::down(Key::Quasi(Quasi::LeapForward)));
-    for c in "number 9876".chars() {
-        time(&mut app, Event::down(Key::Char(c)));
-    }
-    time(&mut app, Event::up(Key::Quasi(Quasi::LeapForward)));
-    time(&mut app, Event::down(Key::Enter));
-    let mean = total / n;
-    eprintln!(
-        "10,000 items: replayed in {opened:?}; {n} keystrokes, mean {mean:?}, worst {worst:?} (handle + draw, 160x50)"
-    );
-    assert!(
-        app.notebook.outline.text(app.cursor()).is_empty(),
-        "Enter made a new item"
-    );
+    ten_thousand_items(&dir);
+    let (mut app, opened) = open_ten_thousand(&dir);
+    let mut timer = Timer::new();
+    timer.keystrokes(&mut app);
+    eprintln!("{}", timer.report(opened));
+    assert!(cursor_text(&app).is_empty(), "Enter made a new item");
+    let worst = timer.worst;
     assert!(
         worst < Duration::from_millis(100),
         "worst keystroke took {worst:?}"
     );
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A journal of 10,000 items: 100 sections of 99 items each.
+fn ten_thousand_items(dir: &std::path::Path) {
+    let mut j = Journal::open(dir).unwrap();
+    j.durable = false;
+    j.append("edit", json!({"op": "init"})).unwrap();
+    let mut last_top = None;
+    for t in 0..100u64 {
+        last_top = Some(section(&mut j, t, last_top));
+    }
+}
+
+/// A section and its 99 items, after the last section: the section's
+/// entry.
+fn section(j: &mut Journal, t: u64, after: Option<u64>) -> u64 {
+    let top = create(j, 0, after, format!("Section {t}"));
+    items_under(j, top, (0..99u64).map(|c| item_text(t, c)));
+    top
+}
+
+/// The text of item c of section t.
+fn item_text(t: u64, c: u64) -> String {
+    let n = t * 100 + c;
+    format!("Item {t}.{c}: a statement about Buran, Energia or DRAKON number {n}")
+}
+
+/// Items of these texts under one, each after the last.
+fn items_under(j: &mut Journal, top: u64, texts: impl Iterator<Item = String>) {
+    let mut last = None;
+    for text in texts {
+        last = Some(create(j, top, last, text));
+    }
+}
+
+/// An item of a text created under one item, after another: its entry.
+fn create(j: &mut Journal, under: u64, after: Option<u64>, text: String) -> u64 {
+    let spans = [[0, 0, text.chars().count()]];
+    let body = json!({"op":"create","under":under,"after":after,"add":text,"spans":spans});
+    j.append("edit", body).unwrap().seq
+}
+
+/// A memex opened on a directory of 10,000 items, and how long its replay
+/// took.
+fn open_ten_thousand(dir: &std::path::Path) -> (App, Duration) {
+    let t0 = Instant::now();
+    let mut app = App::open(dir).unwrap();
+    let opened = t0.elapsed();
+    app.set_durable(false);
+    assert_eq!(app.notebook.outline.items.len(), 10_000);
+    (app, opened)
+}
+
+/// Keystrokes timed: each handled, and the whole screen drawn into a 160 x
+/// 50 test terminal.
+struct Timer {
+    term: Terminal<TestBackend>,
+    worst: Duration,
+    total: Duration,
+    n: u32,
+}
+
+impl Timer {
+    fn new() -> Timer {
+        let term = Terminal::new(TestBackend::new(160, 50)).unwrap();
+        let (worst, total, n) = (Duration::ZERO, Duration::ZERO, 0);
+        Timer {
+            term,
+            worst,
+            total,
+            n,
+        }
+    }
+
+    /// Handle a key and draw the screen, timed.
+    fn time(&mut self, app: &mut App, ev: Event) {
+        let t = Instant::now();
+        app.handle(ev);
+        self.term.draw(|f| memex::ui::draw(f, app)).unwrap();
+        self.note(t.elapsed());
+    }
+
+    fn note(&mut self, d: Duration) {
+        self.worst = self.worst.max(d);
+        self.total += d;
+        self.n += 1;
+    }
+
+    /// Twenty steps down, a word typed, a Leap to a number, and a new item.
+    fn keystrokes(&mut self, app: &mut App) {
+        for _ in 0..20 {
+            self.time(app, Event::down(Key::Down));
+        }
+        self.typed(app, "typed");
+        self.time(app, Event::down(Key::Quasi(Quasi::LeapForward)));
+        self.typed(app, "number 9876");
+        self.time(app, Event::up(Key::Quasi(Quasi::LeapForward)));
+        self.time(app, Event::down(Key::Enter));
+    }
+
+    fn typed(&mut self, app: &mut App, text: &str) {
+        for c in text.chars() {
+            self.time(app, Event::down(Key::Char(c)));
+        }
+    }
+
+    /// What was measured, to log.
+    fn report(&self, opened: Duration) -> String {
+        let mean = self.total / self.n;
+        let (n, worst) = (self.n, self.worst);
+        format!(
+            "10,000 items: replayed in {opened:?}; {n} keystrokes, mean {mean:?}, worst {worst:?} (handle + draw, 160x50)"
+        )
+    }
 }
 
 /// One action on a memex.
