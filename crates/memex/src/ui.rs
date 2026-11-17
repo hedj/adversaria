@@ -752,68 +752,114 @@ fn transcluded_at(outline: &Outline, t: u64) -> String {
 /// The matches of a Leap, or the commands a Command may be, in a box at the
 /// foot of the outline pane.
 fn draw_list(f: &mut Frame, app: &App, a: &Active, area: Rect) {
-    let (q, input, listing) = (a.q, a.input.as_str(), a.listing);
-    let lines: Vec<Line> = match q {
-        Quasi::Command => command_help(input).into_iter().map(Line::raw).collect(),
-        _ => {
-            let m = app.leap_matches(input, q == Quasi::LeapForward);
-            let shown = if listing { m.len() } else { m.len().min(5) };
-            let mut ls = vec![Line::styled(format!("LEAP · {} MATCHES", m.len()), dim())];
-            for (k, id) in m.iter().take(shown).enumerate() {
-                let mut spans = Vec::new();
-                let mut chain = Vec::new();
-                let mut at = app.notebook.outline.parent(*id).filter(|p| *p != TOP);
-                while let Some(p) = at.filter(|p| *p != TOP) {
-                    chain.push(p);
-                    at = app.notebook.outline.parent(p);
-                }
-                chain.reverse();
-                let num = app
-                    .notebook
-                    .outline
-                    .number(chain.first().copied().unwrap_or(*id));
-                spans.push(Span::raw(format!("{num}. ")));
-                for p in chain {
-                    spans.push(Span::raw(format!("{} › ", app.notebook.outline.text(p))));
-                }
-                let t = app.notebook.outline.text(*id);
-                let lt = t.to_lowercase();
-                let pattern = input.to_lowercase();
-                let ends =
-                    |i: usize| t.is_char_boundary(i) && t.is_char_boundary(i + pattern.len());
-                match lt
-                    .find(&pattern)
-                    .filter(|i| lt.len() == t.len() && ends(*i))
-                {
-                    Some(i) => {
-                        let j = i + pattern.len();
-                        spans.push(Span::raw(t[..i].to_string()));
-                        spans.push(Span::styled(t[i..j].to_string(), bold()));
-                        spans.push(Span::raw(t[j..].to_string()));
-                    }
-                    None => spans.push(Span::raw(t)),
-                }
-                let mut line = Line::from(spans);
-                if k == 0 {
-                    line = line.style(Style::default().add_modifier(Modifier::REVERSED));
-                }
-                ls.push(line);
-            }
-            ls
-        }
-    };
-    let h = (lines.len() as u16 + 2).min(area.height);
-    let r = Rect {
-        x: area.x,
-        y: area.y + area.height - h,
-        width: area.width.saturating_sub(1),
-        height: h,
-    };
+    let lines = list_lines(app, a);
+    let r = foot_box(area, lines.len());
     f.render_widget(Clear, r);
-    f.render_widget(
-        Paragraph::new(lines).block(Block::default().borders(Borders::ALL)),
-        r,
-    );
+    let boxed = Paragraph::new(lines).block(Block::default().borders(Borders::ALL));
+    f.render_widget(boxed, r);
+}
+
+/// A box at the foot of an area, as high as its lines and borders need,
+/// at most the area, and a column short of it, for the pane's border.
+fn foot_box(area: Rect, lines: usize) -> Rect {
+    let height = (lines as u16 + 2).min(area.height);
+    let y = area.y + area.height - height;
+    let width = area.width.saturating_sub(1);
+    Rect {
+        y,
+        width,
+        height,
+        ..area
+    }
+}
+
+/// What a quasimode lists: the commands a Command may be, or a Leap's
+/// matches.
+fn list_lines(app: &App, a: &Active) -> Vec<Line<'static>> {
+    match a.q {
+        Quasi::Command => command_help(&a.input).into_iter().map(Line::raw).collect(),
+        q => leap_lines(app, a, q == Quasi::LeapForward),
+    }
+}
+
+/// A Leap's matches: how many, then the first five, or every one while
+/// listing, the one it goes to first reversed.
+fn leap_lines(app: &App, a: &Active, forward: bool) -> Vec<Line<'static>> {
+    let matches = app.leap_matches(&a.input, forward);
+    let mut lines = vec![leap_heading(&matches)];
+    let shown = if a.listing {
+        matches.len()
+    } else {
+        matches.len().min(5)
+    };
+    lines.extend(match_lines(app, a, &matches[..shown]));
+    lines
+}
+
+/// How many matches a Leap has.
+fn leap_heading(matches: &[u64]) -> Line<'static> {
+    Line::styled(format!("LEAP · {} MATCHES", matches.len()), dim())
+}
+
+/// A Leap's matches shown, the one it goes to first reversed.
+fn match_lines(app: &App, a: &Active, ids: &[u64]) -> Vec<Line<'static>> {
+    let outline = &app.notebook.outline;
+    let lines = ids.iter().map(|id| match_line(outline, *id, &a.input));
+    let first = |(k, l): (usize, Line<'static>)| if k == 0 { l.style(reversed()) } else { l };
+    lines.enumerate().map(first).collect()
+}
+
+fn reversed() -> Style {
+    Style::default().add_modifier(Modifier::REVERSED)
+}
+
+/// A match of a Leap: where it is, then its text with the match bold.
+fn match_line(outline: &Outline, id: u64, pattern: &str) -> Line<'static> {
+    let mut spans = vec![Span::raw(trail(outline, id))];
+    spans.extend(text_spans(outline.text(id), pattern));
+    Line::from(spans)
+}
+
+/// A text, with where a pattern is in it bold, if it can say.
+fn text_spans(text: String, pattern: &str) -> Vec<Span<'static>> {
+    match match_at(&text, pattern) {
+        Some((i, j)) => bold_between(&text, i, j).to_vec(),
+        None => vec![Span::raw(text)],
+    }
+}
+
+/// Where an item is: its top-level item's number, then the text of each
+/// item above it, from the top.
+fn trail(outline: &Outline, id: u64) -> String {
+    let mut above: Vec<u64> =
+        std::iter::successors(outline.parent_item(id), |p| outline.parent_item(*p)).collect();
+    above.reverse();
+    let number = outline.number(above.first().copied().unwrap_or(id));
+    let names: String = above
+        .iter()
+        .map(|p| format!("{} › ", outline.text(*p)))
+        .collect();
+    format!("{number}. {names}")
+}
+
+/// Where a pattern is in a text, ignoring case: its start and end, if
+/// both fall between characters of the text as written (a letter's small
+/// form can take more bytes, as "İ" does).
+fn match_at(text: &str, pattern: &str) -> Option<(usize, usize)> {
+    let (lt, p) = (text.to_lowercase(), pattern.to_lowercase());
+    let i = lt.find(&p).filter(|_| lt.len() == text.len())?;
+    let j = i + p.len();
+    (text.is_char_boundary(i) && text.is_char_boundary(j)).then_some((i, j))
+}
+
+/// A text with the part between two places bold.
+fn bold_between(text: &str, i: usize, j: usize) -> [Span<'static>; 3] {
+    let part = |a: usize, b: usize| text[a..b].to_string();
+    [
+        Span::raw(part(0, i)),
+        Span::styled(part(i, j), bold()),
+        Span::raw(part(j, text.len())),
+    ]
 }
 
 fn draw_prompt(f: &mut Frame, app: &App, prompt: Rect, guide: Rect) {
