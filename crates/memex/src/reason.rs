@@ -205,6 +205,8 @@ impl WorldEval {
 pub struct Nodes {
     /// Each derived item's answers.
     pub derived: BTreeMap<u64, Term>,
+    /// Each derived item whose node could not be read: what went wrong.
+    pub failed: BTreeMap<u64, String>,
     /// Each layer's marks, by the layer's seq: the mark, and the seqs of
     /// the facts it rests on.
     pub layers: BTreeMap<u64, Vec<(Term, Vec<u64>)>>,
@@ -218,8 +220,12 @@ impl Nodes {
 }
 
 impl WorldEval {
-    /// A derived item's text in this world, if its node has answered.
+    /// A derived item's text in this world, if its node has answered or
+    /// failed.
     pub fn derived_text(&self, id: u64, d: &Derive) -> Option<String> {
+        if let Some(why) = self.nodes.failed.get(&id) {
+            return Some(format!("{} (cannot answer: {why})", d.template));
+        }
         let answer = self.nodes.derived.get(&id)?;
         Some(fill(&d.template, &d.names, answer, &self.facts))
     }

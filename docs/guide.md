@@ -328,6 +328,10 @@ derive The flight came {N:years} after Energia's first launch. where date(buran_
 `derive timeline where date(E, Y)` draws a timeline of the solutions, using
 labels where there are any.
 
+A goal with no solution shows the template and `(no answer)`. A goal that
+raises an error shows the template and what went wrong, such as `(cannot
+answer: type_error(evaluable, foo / 0))`.
+
 **Rules.** A computation used in several places can be written once, as
 a rule, and then used like a fact:
 

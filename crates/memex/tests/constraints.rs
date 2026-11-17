@@ -242,12 +242,13 @@ fn a_derived_text_longer_than_40_characters_is_cut() {
 }
 
 #[test]
-fn a_derived_text_with_no_answer_is_listed_as_the_outline_shows_it() {
+fn a_derived_text_that_cannot_answer_is_listed_as_the_outline_shows_it() {
     // Catches the text of a derived item taken from its answer alone: a
     // goal that raises an error has none.
     let derive = "derive {N} broken where cell(rent, R), N is R + foo";
     let r = rents_with("deps-no-answer", &[ONE_VALUE, derive]);
-    assert!(r.shows("  3 defined"));
+    assert!(r.shows("3. {N} broken (cannot answer: type_error"));
+    assert!(r.shows("  3 {N} broken (cannot answer: type_error"));
 }
 
 #[test]

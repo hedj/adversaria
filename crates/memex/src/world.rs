@@ -102,19 +102,25 @@ impl World {
     }
 
     fn read_nodes(&self, engine: &mut Engine) -> Nodes {
+        let (derived, failed) = self.read_derived(engine);
         Nodes {
-            derived: self.read_derived(engine),
+            derived,
+            failed,
             layers: self.read_layers(engine),
         }
     }
 
-    /// Each derived item's answers, where its node can be read.
-    fn read_derived(&self, engine: &mut Engine) -> BTreeMap<u64, Term> {
-        self.outline
-            .derived
-            .keys()
-            .filter_map(|item| engine.node(*item).ok().map(|v| (*item, v)))
-            .collect()
+    /// Each derived item's answers, and each whose node cannot be read,
+    /// with what went wrong.
+    fn read_derived(&self, engine: &mut Engine) -> (BTreeMap<u64, Term>, BTreeMap<u64, String>) {
+        let (mut answers, mut failed) = (BTreeMap::new(), BTreeMap::new());
+        for item in self.outline.derived.keys() {
+            match engine.node(*item) {
+                Ok(v) => drop(answers.insert(*item, v)),
+                Err(e) => drop(failed.insert(*item, why(e))),
+            }
+        }
+        (answers, failed)
     }
 
     /// Each layer's marks, where its node can be read.
@@ -132,6 +138,17 @@ impl World {
             .flatten()
             .map(|l| l.seq)
             .collect()
+    }
+}
+
+/// Why a node could not be read: of a Prolog error, its formal part,
+/// such as type_error(evaluable, foo/0).
+fn why(e: crate::prolog::Error) -> String {
+    match e {
+        crate::prolog::Error::Prolog(Term::Compound(n, a)) if n == "error" && a.len() == 2 => {
+            crate::reason::show(&a[0])
+        }
+        e => e.to_string(),
     }
 }
 
