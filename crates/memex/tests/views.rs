@@ -422,58 +422,82 @@ fn gallery_a_line_chart_a_timeline_and_a_gantt_chart() {
     // a task's span on the wrong lane.
     let mut app = open("gallery-time");
     typ(&mut app, "Data");
+    state_times(&mut app);
+    a_line_chart_draws_each_value(&mut app);
+    a_timeline_orders_its_labels(&mut app);
+    a_gantt_chart_puts_each_task_on_its_lane(&mut app);
+}
+
+/// Spending by month, events by year, and tasks by their first and last
+/// weeks.
+fn state_times(app: &mut Room) {
     for (m, v) in [(1, 300), (2, 450), (3, 380), (4, 520)] {
-        command(&mut app, &format!("fact spend({m}, {v})"));
+        command(app, &format!("fact spend({m}, {v})"));
     }
     for (e, y, l) in [
         ("energia", 1987, "Energia"),
         ("buran", 1988, "Buran flight"),
         ("end", 1993, "Programme ends"),
     ] {
-        command(&mut app, &format!("fact event({e}, {y}, \"{l}\")"));
+        command(app, &format!("fact event({e}, {y}, \"{l}\")"));
     }
     for (t, a, b) in [("design", 1, 4), ("build", 3, 9), ("test", 8, 10)] {
-        command(&mut app, &format!("fact task({t}, {a}, {b})"));
+        command(app, &format!("fact task({t}, {a}, {b})"));
     }
-    item(&mut app, "Spending");
-    command(&mut app, "layer line(x(M), y(V)) where spend(M, V)");
-    let f = figure(&app, "Spending");
-    assert!(
-        f.iter().any(|l| l.contains("520")) && f.iter().any(|l| l.contains("300")),
-        "{}",
-        f.join("\n")
+}
+
+/// A line through the spending: its range on the axis, and one point a
+/// month.
+fn a_line_chart_draws_each_value(app: &mut Room) {
+    item(app, "Spending");
+    command(app, "layer line(x(M), y(V)) where spend(M, V)");
+    let f = figure(app, "Spending");
+    let range = f.iter().any(|l| l.contains("520")) && f.iter().any(|l| l.contains("300"));
+    assert!(range, "{}", f.join("\n"));
+    let points: usize = f.iter().map(|l| l.matches('●').count()).sum();
+    assert_eq!(points, 4, "{}", f.join("\n"));
+}
+
+/// The events on a timeline, their labels left to right by year.
+fn a_timeline_orders_its_labels(app: &mut Room) {
+    item(app, "Timeline");
+    command(app, "layer tick(x(Y), text(L)) where event(_, Y, L)");
+    let f = figure(app, "Timeline");
+    let (e, b, p) = (
+        column_of(&f, "Energia"),
+        column_of(&f, "Buran flight"),
+        column_of(&f, "Programme ends"),
     );
-    assert_eq!(
-        f.iter().map(|l| l.matches('●').count()).sum::<usize>(),
-        4,
-        "{}",
-        f.join("\n")
-    );
-    item(&mut app, "Timeline");
-    command(&mut app, "layer tick(x(Y), text(L)) where event(_, Y, L)");
-    let f = figure(&app, "Timeline");
-    let x = |t: &str| {
-        f.iter()
-            .find_map(|l| l.find(t))
-            .unwrap_or_else(|| panic!("{t}:\n{}", f.join("\n")))
-    };
-    assert!(x("Energia") < x("Buran flight") && x("Buran flight") < x("Programme ends"));
-    item(&mut app, "Plan");
+    assert!(e < b && b < p, "{}", f.join("\n"));
+}
+
+/// The tasks on a Gantt chart, each on its own lane, the lanes in order of
+/// name.
+fn a_gantt_chart_puts_each_task_on_its_lane(app: &mut Room) {
+    item(app, "Plan");
     command(
-        &mut app,
+        app,
         "layer span(y(T), x1(A), x2(B), text(T)) where task(T, A, B)",
     );
-    let f = figure(&app, "Plan");
-    let row = |t: &str| {
-        f.iter()
-            .position(|l| l.trim_start().starts_with(t))
-            .unwrap_or_else(|| panic!("{t}:\n{}", f.join("\n")))
-    };
-    assert!(
-        row("build") < row("design") && row("design") < row("test"),
-        "{}",
-        f.join("\n")
+    let f = figure(app, "Plan");
+    let (b, d, t) = (
+        row_of(&f, "build"),
+        row_of(&f, "design"),
+        row_of(&f, "test"),
     );
+    assert!(b < d && d < t, "{}", f.join("\n"));
+}
+
+/// Where text first starts in a figure's lines, in bytes from the left.
+fn column_of(f: &[String], text: &str) -> usize {
+    let found = f.iter().find_map(|l| l.find(text));
+    found.unwrap_or_else(|| panic!("{text}:\n{}", f.join("\n")))
+}
+
+/// The line of a figure that starts with text, after its indent.
+fn row_of(f: &[String], text: &str) -> usize {
+    let found = f.iter().position(|l| l.trim_start().starts_with(text));
+    found.unwrap_or_else(|| panic!("{text}:\n{}", f.join("\n")))
 }
 
 #[test]
