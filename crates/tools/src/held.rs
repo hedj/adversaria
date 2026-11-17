@@ -672,6 +672,16 @@ mod tests {
     }
 
     #[test]
+    fn a_method_of_a_slice_is_not_the_projects() {
+        // Catches a.len() counted as the project's len, maybe, where a is
+        // declared a slice or an array.
+        let src = "struct T;\nimpl T { fn len(&self) -> usize { 0 } }\n\
+                   fn f(a: &[u8], b: [u8; 2]) -> usize { a.len() + b.len() }";
+        let h = peak_of(src, "f");
+        assert_eq!((things(&h), h.upper), (vec!["local a", "local b"], 2));
+    }
+
+    #[test]
     fn a_field_of_a_declared_type_without_it_is_no_other_structs() {
         // Catches r.width counted as Columns, the one project struct with a
         // field width, where r is declared a Rect: a library's Rect, as

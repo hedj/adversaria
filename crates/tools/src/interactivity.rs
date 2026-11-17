@@ -769,12 +769,13 @@ impl<'ast> Visit<'ast> for Refs<'_> {
 }
 
 /// A type's name, if it is a named type, or a reference to one: the last
-/// segment of its path.
+/// segment of its path; "[]" for a slice or an array, a library's type.
 fn named_type(t: &syn::Type) -> Option<String> {
     match t {
         syn::Type::Path(p) => p.path.segments.last().map(|s| s.ident.to_string()),
         syn::Type::Reference(r) => named_type(&r.elem),
         syn::Type::Paren(p) => named_type(&p.elem),
+        syn::Type::Slice(_) | syn::Type::Array(_) => Some("[]".into()),
         _ => None,
     }
 }
