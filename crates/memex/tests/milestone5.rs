@@ -112,59 +112,66 @@ fn open(name: &str) -> Room {
 fn a_planted_wrong_date_is_reported_against_wikidata() {
     // Plan: "A planted wrong date in the user's notes is reported against
     // Wikidata." The notes say Buran flew in 1989; Wikidata says 1988.
-    let mut app = open("planted-date");
+    let mut app = notes_of_1989("planted-date");
+    command(&mut app, &format!("import wikidata {FIXTURE}"));
+    the_import_is_kept(&app);
+    the_spaceplane_comes_first(&app);
+    command(&mut app, "pane suggestions");
+    accept(&mut app, "buran_flight is Wikidata Q2548");
+    the_adoption_keeps_its_evidence(&app);
+    accept(&mut app, "date is Wikidata's P606");
+    let s = screen(&app);
+    assert_shows(&s, "1 disagreement between sources");
+    let mark = "⚑ one date per event, sources disagree: 1989 here, 1988 in Wikidata";
+    assert_shows(&s, mark);
+}
+
+/// Notes that say Buran flew in 1989, with its label and the constraint of
+/// one date per event.
+fn notes_of_1989(name: &str) -> Room {
+    let mut app = open(name);
     typ(&mut app, "Buran flew once, unmanned, in 1989.");
     app.flush();
     command(&mut app, "fact date(buran_flight, 1989)");
     command(&mut app, "fact label(buran_flight, \"Buran's flight\")");
+    let one_date = "false :- date(E, D1), date(E, D2), D1 \\= D2.";
     command(
         &mut app,
-        "constraint one date per event: false :- date(E, D1), date(E, D2), D1 \\= D2.",
+        &format!("constraint one date per event: {one_date}"),
     );
-    command(&mut app, &format!("import wikidata {FIXTURE}"));
-    let import = app.journal().entries().last().unwrap().clone();
-    assert_eq!(import.kind(), "import");
-    assert_eq!(import.body().unwrap()["source"], "Wikidata");
-    assert!(
-        app.dir
-            .join("blobs")
-            .join(import.body().unwrap()["blob"].as_str().unwrap())
-            .exists()
-    );
-    // The spaceplane, not the village of the same name, comes first.
+    app
+}
+
+/// The last entry is an import from Wikidata, whose blob is kept.
+fn the_import_is_kept(app: &Room) {
+    let import = app.journal().entries().last().unwrap().body().unwrap();
+    assert_eq!(import["source"], "Wikidata");
+    let blob = app.dir.join("blobs").join(import["blob"].as_str().unwrap());
+    assert!(blob.exists());
+    assert_eq!(app.journal().entries().last().unwrap().kind(), "import");
+}
+
+/// The spaceplane, not the village of the same name, comes first, for a
+/// launch within five years.
+fn the_spaceplane_comes_first(app: &App) {
+    let described = described(app);
+    let first = described.first().map(String::as_str);
     assert_eq!(
-        described(&app).first().map(String::as_str),
+        first,
         Some("buran_flight is Wikidata Q2548"),
-        "{:?}",
-        described(&app)
+        "{described:?}"
     );
+    let evidence = &app.reason.suggestions.shown()[0].evidence;
+    assert!(evidence.contains("within five years"));
+}
+
+/// The last adoption keeps the evidence of what it accepted.
+fn the_adoption_keeps_its_evidence(app: &App) {
+    let adopt = &app.journal().entries()[last_of(app, "adopt") as usize - 1];
+    let evidence = adopt.body().unwrap()["suggestion"]["evidence"].as_str();
     assert!(
-        app.reason.suggestions.shown()[0]
-            .evidence
-            .contains("within five years")
-    );
-    command(&mut app, "pane suggestions");
-    accept(&mut app, "buran_flight is Wikidata Q2548");
-    let adopt = app
-        .journal()
-        .entries()
-        .iter()
-        .rev()
-        .find(|e| e.kind() == "adopt")
-        .unwrap();
-    assert!(
-        adopt.body().unwrap()["suggestion"]["evidence"]
-            .as_str()
-            .unwrap()
-            .contains("Q2548"),
+        evidence.unwrap().contains("Q2548"),
         "the adoption keeps its evidence"
-    );
-    accept(&mut app, "date is Wikidata's P606");
-    let s = screen(&app);
-    assert_shows(&s, "1 disagreement between sources");
-    assert_shows(
-        &s,
-        "⚑ one date per event, sources disagree: 1989 here, 1988 in Wikidata",
     );
 }
 
