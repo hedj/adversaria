@@ -607,16 +607,18 @@ fn a_retracted_constraint_is_not_read() {
     item(&mut app, "rules");
     command(&mut app, "constraint same: false :- p(X), q(X).");
     let seq = app.journal().entries().last().unwrap().seq;
-    let count = |app: &mut App| {
-        app.evaluate().unwrap();
-        app.reason.eval[0]
-            .as_ref()
-            .map_or(0, |e| e.constraints.len())
-    };
-    let before = count(&mut app);
+    let before = constraints_read(&mut app);
     command(&mut app, &format!("retract {seq}"));
     tap(&mut app, Key::Enter);
-    assert_eq!((before, count(&mut app)), (1, 0));
+    assert_eq!((before, constraints_read(&mut app)), (Some(1), Some(0)));
+}
+
+/// How many constraints the world reads, once evaluated; none if it was
+/// not.
+fn constraints_read(app: &mut App) -> Option<usize> {
+    app.evaluate().unwrap();
+    let e = app.reason.eval[0].as_ref();
+    e.map(|e| e.constraints.len())
 }
 
 #[test]
