@@ -78,11 +78,19 @@ fn budget(name: &str) -> Room {
 /// The marks of the view at an item, as text, in order.
 fn marks(app: &App, item: u64) -> Vec<String> {
     let eval = app.reason.eval[0].as_ref().unwrap();
-    app.notebook.outline.views[&item]
+    let layers = &app.notebook.outline.views[&item];
+    layers
         .iter()
-        .flat_map(|l| eval.nodes.layers.get(&l.seq).cloned().unwrap_or_default())
-        .map(|(m, _)| memex::reason::show(&m))
+        .flat_map(|l| layer_marks(eval, l.seq))
         .collect()
+}
+
+/// The marks one layer gives in a world, as text, in order.
+fn layer_marks(eval: &memex::reason::WorldEval, seq: u64) -> Vec<String> {
+    let Some(marks) = eval.nodes.layers.get(&seq) else {
+        return Vec::new();
+    };
+    marks.iter().map(|(m, _)| memex::reason::show(m)).collect()
 }
 
 fn find(app: &App, text: &str) -> u64 {
