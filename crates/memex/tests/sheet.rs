@@ -146,48 +146,48 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
     // whatever item the cursor happens to be on.
     let mut app = budget("set");
     // The cursor is on the last item ("Left over"), not on Food.
-    assert!(app.notebook.outline.text(app.cursor()).starts_with("left"));
-    let m = command(&mut app, "set cell(food, 900)");
-    assert!(m.contains("replaced the fact at 1.3"), "{m}");
-    assert!(
-        m.contains("left for you: 1 violation of spending within income"),
-        "{m}"
-    );
-    shows(&app, "Food: 900 [derived]");
-    shows(&app, "Income: 2000 [derived]");
-    shows(&app, "Left over: -100 [derived]");
-    shows(&app, "1 constraint violation");
-    let new = app
-        .journal()
-        .entries()
-        .iter()
-        .rev()
-        .find(|e| e.kind() == "edit")
-        .unwrap()
-        .seq;
-    let food = app.notebook.outline.fact_item[&new];
-    assert_eq!(
-        app.notebook.outline.text(food),
-        "food",
-        "the new value is on the Food box"
-    );
-    // Back within income: the violation goes, nothing else changes.
-    let m = command(&mut app, "set cell(food, 500)");
-    assert!(
-        m.contains("replaced the fact at 1.3") && !m.contains("left for you"),
-        "{m}"
-    );
-    shows(&app, "Left over: 300 [derived]");
-    let s = screen(&app);
-    assert!(
-        !s.iter().any(|l| l.contains("constraint violation")),
-        "{}",
-        s.join("\n")
-    );
+    assert!(app.here().starts_with("left"));
+    over_budget_on_the_food_box(&mut app);
+    back_within_income(&mut app);
     // A fact nothing contradicts is simply added, on the cursor's item.
     let m = command(&mut app, "set cell(savings, 300)");
     assert!(m.contains("nothing replaced"), "{m}");
-    // The journal replays to the same values.
+    the_journal_replays_to_the_same_values(&app);
+}
+
+/// Food set to 900: the old value replaced, income and rent kept, the
+/// violation left, and the new value on the Food box.
+fn over_budget_on_the_food_box(app: &mut Room) {
+    let m = command(app, "set cell(food, 900)");
+    assert!(m.contains("replaced the fact at 1.3"), "{m}");
+    let left = "left for you: 1 violation of spending within income";
+    assert!(m.contains(left), "{m}");
+    for text in [
+        "Food: 900 [derived]",
+        "Income: 2000 [derived]",
+        "Left over: -100 [derived]",
+        "1 constraint violation",
+    ] {
+        shows(app, text);
+    }
+    let food = app.notebook.outline.fact_item[&app.last("edit")];
+    assert_eq!(app.text(food), "food", "the new value is on the Food box");
+}
+
+/// Food set to 500: back within income, the violation goes, nothing else
+/// changes.
+fn back_within_income(app: &mut Room) {
+    let m = command(app, "set cell(food, 500)");
+    let only = m.contains("replaced the fact at 1.3") && !m.contains("left for you");
+    assert!(only, "{m}");
+    shows(app, "Left over: 300 [derived]");
+    let s = screen(app);
+    let violated = s.iter().any(|l| l.contains("constraint violation"));
+    assert!(!violated, "{}", s.join("\n"));
+}
+
+/// The journal replays to the same tip and values.
+fn the_journal_replays_to_the_same_values(app: &Room) {
     let mut again = replayed(&app.dir);
     again.evaluate().unwrap();
     assert_eq!(again.notebook.tip, app.notebook.tip);
