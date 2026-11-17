@@ -6,21 +6,14 @@ use format::terms::Term;
 use memex::app::{App, Event, Key, PaneKind, Quasi};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
-use std::path::{Path, PathBuf};
 
 mod support;
-use support::replayed;
+use support::{Room, replayed};
 
 const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../tests/fixtures/wikidata-buran.pl"
 );
-
-fn temp(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("adversaria-m5-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    d
-}
 
 fn tap(app: &mut App, k: Key) {
     app.handle(Event::down(k));
@@ -109,8 +102,8 @@ fn last_of(app: &App, kind: &str) -> u64 {
     entries.rev().find(|e| e.kind() == kind).unwrap().seq
 }
 
-fn open(dir: &Path) -> App {
-    let mut app = App::open(dir).unwrap();
+fn open(name: &str) -> Room {
+    let mut app = Room::new(&format!("m5-{name}"));
     app.set_durable(false);
     app
 }
@@ -119,8 +112,7 @@ fn open(dir: &Path) -> App {
 fn a_planted_wrong_date_is_reported_against_wikidata() {
     // Plan: "A planted wrong date in the user's notes is reported against
     // Wikidata." The notes say Buran flew in 1989; Wikidata says 1988.
-    let dir = temp("planted-date");
-    let mut app = open(&dir);
+    let mut app = open("planted-date");
     typ(&mut app, "Buran flew once, unmanned, in 1989.");
     app.flush();
     command(&mut app, "fact date(buran_flight, 1989)");
@@ -134,7 +126,8 @@ fn a_planted_wrong_date_is_reported_against_wikidata() {
     assert_eq!(import.kind(), "import");
     assert_eq!(import.body().unwrap()["source"], "Wikidata");
     assert!(
-        dir.join("blobs")
+        app.dir
+            .join("blobs")
             .join(import.body().unwrap()["blob"].as_str().unwrap())
             .exists()
     );
@@ -173,13 +166,12 @@ fn a_planted_wrong_date_is_reported_against_wikidata() {
         &s,
         "⚑ one date per event, sources disagree: 1989 here, 1988 in Wikidata",
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// Sputnik 1's launch, its Wikidata mappings accepted, and Wikidata's
 /// constraint of one launch per entity adopted.
-fn launch_constraint(dir: &Path) -> App {
-    let mut app = open(dir);
+fn launch_constraint(name: &str) -> Room {
+    let mut app = open(name);
     typ(&mut app, "Sputnik 1 was launched in 1957.");
     app.flush();
     command(&mut app, "fact launched(sputnik_1, 1957)");
@@ -199,8 +191,7 @@ fn wikidata_offers_its_own_constraint() {
     // Plan: "Wikidata's property constraints offered as constraints". On
     // real data: P619 (UTC date of spacecraft launch) has a single-value
     // constraint. Tried against a planted violation before it is kept.
-    let dir = temp("wd-constraint");
-    let app = launch_constraint(&dir);
+    let app = launch_constraint("wd-constraint");
     assert!(
         app.notebook
             .outline
@@ -217,12 +208,11 @@ fn wikidata_offers_its_own_constraint() {
         !described(&app).iter().any(|d| d.starts_with("constraint")),
         "not offered again once adopted"
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// Places, each part of a country and located in it: a rule to mine.
-fn mined(dir: &Path) -> App {
-    let mut app = open(dir);
+fn mined(name: &str) -> Room {
+    let mut app = open(name);
     typ(&mut app, "Places");
     app.flush();
     for f in [
@@ -241,8 +231,7 @@ fn a_mined_rule_shows_its_evidence_and_derives_once_adopted() {
     // Plan: "rules mined from the facts (... a simpler miner with support
     // and confidence)". Catches a rule offered without its support and
     // exceptions, or one that derives nothing once adopted.
-    let dir = temp("rules");
-    let mut app = mined(&dir);
+    let mut app = mined("rules");
     accept(&mut app, "rule located_in(_");
     let e = app.journal().entries().last().unwrap();
     assert!(
@@ -259,15 +248,14 @@ fn a_mined_rule_shows_its_evidence_and_derives_once_adopted() {
         "derive Vostochny is in {C}. where located_in(vostochny, C)",
     );
     assert_shows(&screen(&app), "Vostochny is in russia. [derived]");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// Buran's flight and two papers, each the same as a work of a Wikidata
 /// subset of synthetic works, QTEST1 to QTEST3: QTEST3 is about Buran and
 /// cited by both others, and it is not in the store.
-fn references(dir: &Path) -> App {
-    std::fs::create_dir_all(dir).unwrap();
-    let subset = dir.join("subset.pl");
+fn references(name: &str) -> Room {
+    let mut app = open(name);
+    let subset = app.dir.join("subset.pl");
     std::fs::write(
         &subset,
         "wd('Q2548', 'P606', date(1988, 11, 15)).\nwd_label('Q2548', \"Buran\").\n\
@@ -276,7 +264,6 @@ fn references(dir: &Path) -> App {
          wd('QTEST3', 'P31', 'Q13442814').\nwd('QTEST3', 'P921', 'Q2548').\nwd_label('QTEST3', \"The obvious answer\").\n",
     )
     .unwrap();
-    let mut app = open(dir);
     typ(&mut app, "Buran flew once, in 1988.");
     app.flush();
     command(&mut app, "fact date(buran_flight, 1988)");
@@ -295,8 +282,7 @@ fn no_suggested_reference_names_a_work_outside_the_store() {
     // with a store that lacks the obvious answer)." The works here are
     // synthetic, ids QTEST1 to QTEST3: QTEST3 is about Buran and cited by
     // both others, the obvious answer, and it is not in the store.
-    let dir = temp("refs");
-    let mut app = references(&dir);
+    let mut app = references("refs");
     let refs: Vec<String> = app
         .reason
         .suggestions
@@ -325,15 +311,13 @@ fn no_suggested_reference_names_a_work_outside_the_store() {
             "cites"
         )
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn the_pane_keeps_its_rules() {
     // Plan: "never takes the keyboard, never reorders under the pointer,
     // ranked by evidence, few in view, dismissals recorded".
-    let dir = temp("pane");
-    let mut app = open(&dir);
+    let mut app = open("pane");
     typ(&mut app, "Places");
     app.flush();
     let pairs = [("a", "x"), ("b", "y"), ("c", "z")];
@@ -419,7 +403,7 @@ fn the_pane_keeps_its_rules() {
     );
     // A replay keeps the dismissal.
     app.flush();
-    let mut r = replayed(&dir);
+    let mut r = replayed(&app.dir);
     r.evaluate().unwrap();
     assert_eq!(
         r.reason.suggestions.dismissed,
@@ -432,15 +416,13 @@ fn the_pane_keeps_its_rules() {
             .iter()
             .any(|s| s.describe() == first)
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn a_suggestion_is_offered_once() {
     // The measures count the suggestions offered (shown in the pane), so
     // each is recorded once, even after more changes or a replay.
-    let dir = temp("offered");
-    let mut app = open(&dir);
+    let mut app = open("offered");
     typ(&mut app, "Places");
     app.flush();
     command(&mut app, "pane suggestions");
@@ -456,10 +438,9 @@ fn a_suggestion_is_offered_once() {
     once.dedup();
     assert_eq!(offered.len(), once.len(), "offered twice: {offered:?}");
     app.flush();
-    let mut r = replayed(&dir);
+    let mut r = replayed(&app.dir);
     r.evaluate().unwrap();
     assert_eq!(offered_keys(&r), offered, "offered again after a replay");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// The keys of the suggestions offered, in the order the journal records
@@ -474,8 +455,7 @@ fn offered_keys(app: &App) -> Vec<String> {
 #[test]
 fn a_retracted_import_is_not_read() {
     // Catches a world that still reads a Wikidata import retracted from it.
-    let dir = temp("retracted-import");
-    let mut app = open(&dir);
+    let mut app = open("retracted-import");
     typ(&mut app, "Buran flew once, unmanned, in 1989.");
     app.flush();
     command(&mut app, "fact date(buran_flight, 1989)");
@@ -489,35 +469,28 @@ fn a_retracted_import_is_not_read() {
     tap(&mut app, Key::Enter);
     app.evaluate().unwrap();
     assert_eq!(described(&app), Vec::<String>::new());
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn an_adopted_constraint_keeps_its_rule() {
-    let dir = temp("wd-constraint-rule");
-    let app = launch_constraint(&dir);
+    let app = launch_constraint("wd-constraint-rule");
     let rules = app.notebook.outline.constraints.values();
     assert!(rules.into_iter().any(|c| c.rule.starts_with("false :- ")));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn an_adopted_rule_is_numbered_by_its_own_entry() {
-    let dir = temp("rule-number");
-    let mut app = mined(&dir);
+    let mut app = mined("rule-number");
     accept(&mut app, "rule located_in(_");
     let seq = Term::Int(last_of(&app, "adopt") as i64);
     assert!(matches!(last_fact(&app), Term::Compound(_, a) if a[0] == seq));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn an_accepted_reference_cites_the_work_from_the_item_it_is_about() {
-    let dir = temp("refs-accepted");
-    let mut app = references(&dir);
+    let mut app = references("refs-accepted");
     accept(&mut app, "cite paper_a for the claims about buran_flight");
     assert_eq!(last_fact(&app), cites(&app, 0, 1));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// The fact that the item at one place in the outline cites the item at
