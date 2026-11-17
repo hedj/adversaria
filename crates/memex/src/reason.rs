@@ -670,18 +670,21 @@ impl Number<'_> {
 /// A fact restated in English, by a generic frame: "the date of Buran's
 /// flight is 1989".
 pub fn restate(facts: &[(u64, Term)], t: &Term) -> String {
-    match t {
-        Term::Compound(n, a) if a.len() == 2 => attribute(facts, n, a),
-        Term::Compound(n, a) if a.len() == 1 => quality(facts, n, &a[0]),
-        t => show(t),
+    let Term::Compound(n, a) = t else {
+        return show(t);
+    };
+    match a.as_slice() {
+        [e, v] => attribute(facts, n, e, v),
+        [e] => quality(facts, n, e),
+        _ => show(t),
     }
 }
 
 /// A fact of two arguments, as an attribute: "the date of Buran's flight
 /// is 1989".
-fn attribute(facts: &[(u64, Term)], name: &str, a: &[Term]) -> String {
+fn attribute(facts: &[(u64, Term)], name: &str, e: &Term, v: &Term) -> String {
     let what = name.replace('_', " ");
-    format!("the {what} of {} is {}", label(facts, &a[0]), show(&a[1]))
+    format!("the {what} of {} is {}", label(facts, e), show(v))
 }
 
 /// A fact of one argument, as a quality: "Buran is reusable".
