@@ -1146,7 +1146,7 @@ fn quasi_line(app: &App, a: &Active) -> Line<'static> {
 
 /// A quasimode's name, and whether it is latched, reversed.
 fn quasi_name(a: &Active) -> Span<'static> {
-    let latched = if a.latched { " (latched)" } else { "" };
+    let latched = if a.latched() { " (latched)" } else { "" };
     Span::styled(format!(" {}{latched} ", a.q.label()), reversed())
 }
 
@@ -1175,7 +1175,7 @@ fn quasi_guide(a: &Active) -> String {
 /// How a quasimode ends: by Enter or a second tap when latched, else by
 /// its key's release.
 fn release_text(a: &Active) -> String {
-    if a.latched {
+    if a.latched() {
         return "Enter, or tap again,".into();
     }
     let name = match a.q {

@@ -353,10 +353,8 @@ pub(crate) struct Spot {
 pub struct Active {
     pub q: Quasi,
     pub input: String,
-    /// Tapped rather than held: it stays until Enter, or a second tap.
-    pub latched: bool,
-    /// Another key was pressed while the quasimode key was down.
-    pub used: bool,
+    /// How its key is held.
+    pub hold: Hold,
     /// `?` was pressed: list everything that may come next.
     pub listing: bool,
     /// In Suppose, what APE makes of what is typed.
@@ -373,7 +371,23 @@ pub struct Hint {
     pub listing: Vec<String>,
 }
 
+/// How a quasimode's key is held: down, with nothing else pressed yet;
+/// down after another key was pressed (its release ends the quasimode);
+/// or latched, tapped rather than held, so it stays until Enter or a
+/// second tap.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Hold {
+    Down,
+    Used,
+    Latched,
+}
+
 impl Active {
+    /// Whether it was tapped rather than held, and stays.
+    pub fn latched(&self) -> bool {
+        self.hold == Hold::Latched
+    }
+
     /// Whether it lists over the outline: a Leap or Command, listing
     /// everything or with something typed.
     pub(crate) fn lists(&self) -> bool {
@@ -391,8 +405,7 @@ impl Active {
         Active {
             q,
             input,
-            latched: false,
-            used: false,
+            hold: Hold::Down,
             listing: false,
             hint: None,
         }
@@ -412,7 +425,7 @@ impl Active {
     pub(crate) fn palette() -> Active {
         let held = Active::held(Quasi::Command);
         Active {
-            latched: true,
+            hold: Hold::Latched,
             listing: true,
             ..held
         }

@@ -18,7 +18,7 @@ fn the_scope_key_starts_at_a_word() {
 fn the_palette_key_opens_the_command_quasimode_latched_and_listing() {
     let mut r = Room::new("palette");
     r.tap(&[Key::F(1)]);
-    let open = matches!(&r.app.session.mode, Mode::Quasi(a) if a.q == Quasi::Command && a.latched && a.listing);
+    let open = matches!(&r.app.session.mode, Mode::Quasi(a) if a.q == Quasi::Command && a.latched() && a.listing);
     assert!(open, "{:?}", r.app.session.mode);
 }
 

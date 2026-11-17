@@ -2,7 +2,7 @@
 //! items by their text (docs/design.md § Quasimodes).
 
 use crate::actions::dispatch::{complete_command, in_quotes};
-use crate::app::{Active, App, Click, Event, Key, Mode, PaneKind, Press, Quasi, ScopeLevel};
+use crate::app::{Active, App, Click, Event, Hold, Key, Mode, PaneKind, Press, Quasi, ScopeLevel};
 use crate::outline::TOP;
 use crate::reason;
 use format::terms::Term;
@@ -179,13 +179,13 @@ impl App {
         // The quasimode's own key: release ends a held quasimode; a tap latches.
         if ev.key == Key::Quasi(a.q) {
             match ev.press {
-                Press::Up if !a.used && !a.latched => {
-                    a.latched = true;
+                Press::Up if a.hold == Hold::Down => {
+                    a.hold = Hold::Latched;
                     return Mode::Quasi(a);
                 }
-                Press::Up if a.latched => return Mode::Quasi(a),
+                Press::Up if a.latched() => return Mode::Quasi(a),
                 Press::Up => return self.finish(a),
-                Press::Down if a.latched => {
+                Press::Down if a.latched() => {
                     // A second tap ends a latched quasimode; on an empty Leap it repeats the last one.
                     return self.finish(a);
                 }
@@ -195,7 +195,9 @@ impl App {
         if ev.press == Press::Up {
             return Mode::Quasi(a);
         }
-        a.used = true;
+        if a.hold == Hold::Down {
+            a.hold = Hold::Used;
+        }
         match ev.key {
             Key::Char('?') if asks_help(&a) => a.listing = !a.listing,
             Key::Char(' ') if a.q == Quasi::Scope => {
@@ -209,7 +211,7 @@ impl App {
                 // Erase a character; with none left, Backspace leaves a
                 // latched quasimode without acting.
                 let erased = a.input.pop().is_some();
-                if !erased && a.latched {
+                if !erased && a.latched() {
                     self.session.message.clear();
                     return Mode::Normal;
                 }

@@ -212,7 +212,7 @@ fn leap_recognition_listing_latching_and_repeat() {
     assert_eq!(app.notebook.outline.text(app.cursor()), "Sources");
     // A tap latches; typing then Enter goes.
     tap(&mut app, Key::Quasi(Quasi::LeapBack));
-    assert!(matches!(&app.session.mode, Mode::Quasi(a) if a.latched));
+    assert!(matches!(&app.session.mode, Mode::Quasi(a) if a.latched()));
     typ(&mut app, "energia");
     tap(&mut app, Key::Enter);
     assert!(
