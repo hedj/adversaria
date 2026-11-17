@@ -764,12 +764,19 @@ enum Scale {
     None,
 }
 
+/// The marks' values on some channels, where they have them.
+fn values_on<'a>(ms: &'a [M], channels: &[&str]) -> Vec<&'a V> {
+    let values = ms
+        .iter()
+        .flat_map(|m| channels.iter().filter_map(|c| m.get(c)));
+    values.collect()
+}
+
 impl Scale {
     /// The scale of the marks' values on some channels, reaching zero if
     /// asked.
     fn of(ms: &[M], channels: &[&str], zero: bool) -> Scale {
-        let values = ms.iter().flat_map(|m| channels.iter().map(|c| m.get(c)));
-        Scale::train(&values.flatten().collect::<Vec<&V>>(), zero)
+        Scale::train(&values_on(ms, channels), zero)
     }
 
     /// A line scale if every value is a number, else a band scale; none if
