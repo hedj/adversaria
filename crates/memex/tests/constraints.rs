@@ -114,3 +114,50 @@ fn a_derived_text_that_shares_only_a_builtin_does_not_depend_on_the_facts() {
     assert!(r.shows("CONSTRAINT · ONE VALUE"));
     assert!(!r.shows("depends on these facts"));
 }
+
+/// A room where rent breaks a limit and food keeps it, with the cursor on
+/// the rent.
+fn over_the_limit(name: &str) -> Room {
+    let mut r = Room::new(name);
+    r.items(&["rent", "food"]);
+    r.command("fact cell(food, 300)");
+    r.leap(Quasi::LeapBack, "rent");
+    r.command("fact cell(rent, 1200)");
+    r.command("constraint limit: false :- cell(C, R), R > 1000.");
+    r.app.flush();
+    r.app.evaluate().unwrap();
+    r
+}
+
+#[test]
+fn a_finding_on_one_fact_is_marked_under_its_item() {
+    // Catches a mark only for a fact against another: a violation of one
+    // fact was counted in the top bar and shown nowhere.
+    let r = over_the_limit("limit-marked");
+    let marks = r
+        .lines_at(160, 40)
+        .iter()
+        .filter(|l| l.contains('⚑'))
+        .count();
+    assert_eq!(marks, 1);
+    assert!(r.shows("⚑ limit, violation: cell(rent, 1200) here"));
+    assert!(r.shows("CONSTRAINT · LIMIT"));
+}
+
+#[test]
+fn a_finding_on_no_fact_is_marked_under_no_item() {
+    // Catches a finding with no facts taken as resting on each item's.
+    let mut r = Room::new("no-fact-marks");
+    r.items(&["rent"]);
+    r.command("fact cell(rent, 1200)");
+    r.command("constraint always: false :- 2 > 1.");
+    assert!(
+        r.app.session.message.contains("kept"),
+        "{}",
+        r.app.session.message
+    );
+    r.app.flush();
+    r.app.evaluate().unwrap();
+    assert!(r.shows("1 constraint violation"));
+    assert!(!r.shows("⚑"));
+}

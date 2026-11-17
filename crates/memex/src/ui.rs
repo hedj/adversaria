@@ -1032,8 +1032,22 @@ pub fn item_marks(e: &WorldEval, outline: &Outline, item: u64) -> Vec<(bool, Str
         .iter()
         .flat_map(ConstraintEval::findings)
         .collect();
-    let against = findings.iter().flat_map(|f| against_item(f, outline, item));
-    against.map(|a| a.mark(outline)).collect()
+    let marks = findings.iter().flat_map(|f| {
+        let against = against_item(f, outline, item);
+        let marks = against.into_iter().map(|a| a.mark(outline));
+        marks.chain(alone_mark(f, outline, item))
+    });
+    marks.collect()
+}
+
+/// The mark of a finding that rests on an item's facts alone: those facts.
+fn alone_mark(f: &Finding, outline: &Outline, item: u64) -> Option<(bool, String)> {
+    let (mine, others) = split_by_item(f.sol, outline, item);
+    if mine.is_empty() || !others.is_empty() {
+        return None;
+    }
+    let facts: Vec<String> = mine.iter().map(|(_, t)| reason::show(inner(t))).collect();
+    Some(f.mark(&format!("{} here", facts.join(", "))))
 }
 
 /// A fact of an item against another fact of a finding that rests on both.
