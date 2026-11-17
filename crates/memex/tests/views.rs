@@ -206,21 +206,24 @@ fn a_layer_that_could_not_be_drawn_or_would_act_is_refused() {
 /// The screen, its text and its click regions, as the terminal would draw it.
 fn screen(app: &App) -> (Vec<String>, memex::ui::Hits, ratatui::buffer::Buffer) {
     use ratatui::{Terminal, backend::TestBackend};
-    let (w, h) = (160, 60);
-    let mut t = Terminal::new(TestBackend::new(w, h)).unwrap();
+    let mut t = Terminal::new(TestBackend::new(160, 60)).unwrap();
     let mut hits = memex::ui::Hits::default();
     t.draw(|f| hits = memex::ui::draw_hits(f, app)).unwrap();
     let buf = t.backend().buffer().clone();
-    let lines = (0..h)
-        .map(|y| {
-            (0..w)
-                .map(|x| buf[(x, y)].symbol().to_string())
-                .collect::<String>()
-                .trim_end()
-                .to_string()
-        })
-        .collect();
-    (lines, hits, buf)
+    (rows_of(&buf), hits, buf)
+}
+
+/// Each row of a screen, as text, without trailing spaces.
+fn rows_of(buf: &ratatui::buffer::Buffer) -> Vec<String> {
+    let area = buf.area;
+    let row = |y| {
+        (0..area.width)
+            .map(|x| buf[(x, y)].symbol())
+            .collect::<String>()
+    };
+    (0..area.height)
+        .map(|y| row(y).trim_end().to_string())
+        .collect()
 }
 
 fn at(lines: &[String], text: &str) -> (u16, u16) {
