@@ -756,8 +756,9 @@ fn years(v: &Term) -> String {
     }
 }
 
-/// The beliefs a new fact (entry `new`) directly contradicts, and the
-/// violations it is part of that have no single repair. A violation that
+/// The beliefs a new fact (entry `new`) directly contradicts, each with
+/// the constraints it does so under, and the violations it is part of
+/// that have no single repair. A violation that
 /// rests on the new fact and exactly one other belief is a direct
 /// contradiction: giving up that belief is the only way to keep the new
 /// fact and the constraint. A violation resting on two or more other
@@ -767,15 +768,28 @@ fn years(v: &Term) -> String {
 pub(crate) fn direct_conflicts(
     constraints: &[ConstraintEval],
     new: u64,
-) -> (Vec<u64>, Vec<String>) {
+) -> (Vec<Contradicted>, Vec<String>) {
     let found: Vec<_> = constraints.iter().map(|c| conflicts_of(c, new)).collect();
-    let mut direct: Vec<u64> = found.iter().flat_map(|(one, _)| one.clone()).collect();
-    direct.sort();
-    direct.dedup();
-    (
-        direct,
-        found.into_iter().filter_map(|(_, left)| left).collect(),
-    )
+    let mut direct: BTreeMap<u64, Vec<u64>> = BTreeMap::new();
+    for (c, (beliefs, _)) in constraints.iter().zip(&found) {
+        for b in beliefs {
+            under(&mut direct, *b, c.seq);
+        }
+    }
+    let left = found.into_iter().filter_map(|(_, left)| left).collect();
+    (direct.into_iter().collect(), left)
+}
+
+/// A belief a new fact directly contradicts, and the entries of the
+/// constraints it does so under.
+pub(crate) type Contradicted = (u64, Vec<u64>);
+
+/// Note a belief as contradicted under a constraint, once.
+fn under(direct: &mut BTreeMap<u64, Vec<u64>>, belief: u64, constraint: u64) {
+    let constraints = direct.entry(belief).or_default();
+    if !constraints.contains(&constraint) {
+        constraints.push(constraint);
+    }
 }
 
 /// Of a constraint's violations that rest on a new fact: the beliefs that
@@ -834,13 +848,24 @@ mod tests {
     #[test]
     fn a_belief_named_twice_in_one_violation_is_contradicted_directly() {
         let c = violated("c", &[&[9, 3, 3]]);
-        assert_eq!(direct_conflicts(&[c], 9), (vec![3], vec![]));
+        assert_eq!(direct_conflicts(&[c], 9), (vec![(3, vec![1])], vec![]));
     }
 
     #[test]
     fn a_belief_contradicted_twice_is_named_once() {
         let c = violated("c", &[&[9, 3], &[3, 9]]);
-        assert_eq!(direct_conflicts(&[c], 9).0, vec![3]);
+        assert_eq!(direct_conflicts(&[c], 9).0, vec![(3, vec![1])]);
+    }
+
+    #[test]
+    fn a_belief_contradicted_under_two_constraints_names_both() {
+        // Catches the constraints a belief is set aside under kept from
+        // one constraint only, or named twice.
+        let mut other = violated("d", &[&[9, 3]]);
+        other.seq = 2;
+        let c = violated("c", &[&[9, 3], &[3, 9]]);
+        let found = direct_conflicts(&[c, other], 9).0;
+        assert_eq!(found, vec![(3, vec![1, 2])]);
     }
 
     #[test]

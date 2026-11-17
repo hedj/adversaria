@@ -250,3 +250,63 @@ fn supposed_facts(r: &Room) -> Vec<String> {
     let facts = &r.app.reason.eval[0].as_ref().unwrap().facts;
     facts.iter().map(|(_, f)| memex::reason::show(f)).collect()
 }
+
+#[test]
+fn a_fact_set_aside_is_named_on_the_line_of_its_constraint_alone() {
+    // Catches every fact set aside named on every constraint line: with
+    // food supposed at 900, the old food value is set aside under "one
+    // value", but "within income", still violated, said it too.
+    let mut r = Room::new("worlds-aside-by-constraint");
+    r.items(&["income", "rent", "food"]);
+    r.command("fact cell(food, 400)");
+    r.leap(Quasi::LeapBack, "rent");
+    r.command("fact cell(rent, 1200)");
+    r.leap(Quasi::LeapBack, "income");
+    r.command("fact cell(income, 2000)");
+    r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
+    r.command("constraint within income: false :- cell(income, I), cell(rent, R), cell(food, F), R + F > I.");
+    r.app.evaluate().unwrap();
+    suppose(&mut r, "cell(food, 900)");
+    r.app.evaluate().unwrap();
+    let lines = column(&r, 1);
+    let line = |name: &str| {
+        lines
+            .iter()
+            .find(|l| l.contains(name))
+            .cloned()
+            .unwrap_or_default()
+    };
+    assert!(
+        line("Constraint one value:").contains("retracted here"),
+        "{lines:#?}"
+    );
+    assert!(
+        !line("Constraint within income:").contains("retracted here"),
+        "{lines:#?}"
+    );
+}
+
+#[test]
+fn a_fact_retracted_by_hand_is_named_on_a_line_of_its_own() {
+    // Catches a retraction that records no constraint named on every
+    // constraint line, or not at all: no constraint asked for it.
+    let mut r = Room::new("worlds-aside-by-hand");
+    r.items(&["food"]);
+    r.command("fact cell(food, 400)");
+    let fact = r.last("edit");
+    r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
+    r.app.evaluate().unwrap();
+    suppose(&mut r, "plan b");
+    r.command(&format!("retract {fact}"));
+    r.tap(&[Key::Enter]);
+    r.app.evaluate().unwrap();
+    let lines = column(&r, 1);
+    let on_constraint = lines
+        .iter()
+        .any(|l| l.starts_with("Constraint") && l.contains("retracted here"));
+    let own = lines
+        .iter()
+        .filter(|l| l.starts_with("Retracted here: "))
+        .count();
+    assert_eq!((on_constraint, own), (false, 1), "{lines:#?}");
+}

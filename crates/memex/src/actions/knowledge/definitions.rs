@@ -5,7 +5,7 @@ use super::{all_bound, encoded, functor_of, node_def, reserved, var_list};
 use crate::actions::worlds::with_left;
 use crate::app::App;
 use crate::outline::TOP;
-use crate::reason::direct_conflicts;
+use crate::reason::{Contradicted, direct_conflicts};
 use format::terms::Term;
 use serde_json::{Value, json};
 
@@ -200,8 +200,9 @@ impl App {
     /// the item that held the first of them, or on `target` if none.
     pub(crate) fn set_fact(&mut self, fact: &Term, target: u64) -> Result<String, String> {
         let (replaced, left) = self.replaced_by(fact)?;
-        let item = self.set_item(&replaced, target)?;
-        let said = self.replaced_said(&replaced, item);
+        let beliefs: Vec<u64> = replaced.iter().map(|(t, _)| *t).collect();
+        let item = self.set_item(&beliefs, target)?;
+        let said = self.replaced_said(&beliefs, item);
         self.retract_all(&replaced)?;
         self.write_fact(item, fact, None)?;
         Ok(with_left(said, &left))
@@ -209,11 +210,11 @@ impl App {
 
     /// The beliefs a fact directly contradicts that can be retracted, and
     /// the violations it leaves, tried in the spare engine.
-    fn replaced_by(&mut self, fact: &Term) -> Result<(Vec<u64>, Vec<String>), String> {
+    fn replaced_by(&mut self, fact: &Term) -> Result<(Vec<Contradicted>, Vec<String>), String> {
         let trial = self.notebook.trial(fact)?;
         let evals = self.reason.try_out(&trial)?;
         let (mut replaced, left) = direct_conflicts(&evals, trial.by);
-        replaced.retain(|t| self.retractable(*t).is_ok());
+        replaced.retain(|(t, _)| self.retractable(*t).is_ok());
         Ok((replaced, left))
     }
 

@@ -15,6 +15,7 @@ use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
+use std::collections::BTreeMap;
 
 fn dim() -> Style {
     Style::default().add_modifier(Modifier::DIM)
@@ -1928,14 +1929,30 @@ impl<'a> Side<'a> {
 
 /// A supposition drawn side by side: the actual world's outline, at the
 /// head it was sprouted from, and the supposition's name; the rows the
-/// worlds share; and the entries the supposed world sets aside. Rows are
-/// the items that state facts or show derived values.
+/// worlds share; and what the supposed world sets aside, and why. Rows
+/// are the items that state facts or show derived values.
 struct Sides<'a> {
     app: &'a App,
     actual: Outline,
     name: String,
     rows: Vec<u64>,
-    set_aside: Vec<u64>,
+    aside: SetAside,
+}
+
+/// The entries a supposed world sets aside, and the constraints each was
+/// set aside under, where its retraction records them.
+#[derive(Default)]
+struct SetAside {
+    entries: Vec<u64>,
+    reasons: BTreeMap<u64, Vec<u64>>,
+}
+
+impl SetAside {
+    /// The entries whose recorded constraints, if any, pass a test.
+    fn chosen(&self, test: impl Fn(Option<&Vec<u64>>) -> bool) -> Vec<u64> {
+        let passes = |s: &&u64| test(self.reasons.get(*s));
+        self.entries.iter().filter(passes).copied().collect()
+    }
 }
 
 impl<'a> Sides<'a> {
@@ -1943,17 +1960,29 @@ impl<'a> Sides<'a> {
     fn of(app: &'a App) -> Option<Self> {
         let sup = app.reason.supposition.as_ref()?;
         let actual = app.notebook.outline_at(sup.actual);
+        let sides = Sides::new(app, actual, sup.name.clone());
+        Some(sides.with_set_aside())
+    }
+
+    /// The sides of a supposition by this name, beside the actual world's
+    /// outline, with nothing yet set aside.
+    fn new(app: &'a App, actual: Outline, name: String) -> Self {
         let rows = shared_rows(&actual, &app.notebook.outline);
-        let name = sup.name.clone();
-        let mut sides = Sides {
+        Sides {
             app,
             actual,
             name,
             rows,
-            set_aside: vec![],
-        };
-        sides.set_aside = set_aside(&[sides.side(0), sides.side(1)]);
-        Some(sides)
+            aside: SetAside::default(),
+        }
+    }
+
+    /// The sides, with what the supposed world sets aside and why.
+    fn with_set_aside(mut self) -> Self {
+        let entries = set_aside(&[self.side(0), self.side(1)]);
+        let reasons = reasons_of(self.app, &entries);
+        self.aside = SetAside { entries, reasons };
+        self
     }
 
     /// A world, by its place: the actual one, then the supposed one.
@@ -2035,7 +2064,7 @@ impl<'a> Sides<'a> {
     /// actual world.
     fn sets_aside_at(&self, i: u64) -> bool {
         let actual = &self.actual;
-        self.set_aside.iter().any(|s| actual.states(i, *s))
+        self.aside.entries.iter().any(|s| actual.states(i, *s))
     }
 
     /// A line for each constraint of a world: how many violations and
@@ -2045,8 +2074,15 @@ impl<'a> Sides<'a> {
         let Some(e) = self.side(k).eval else {
             return vec![];
         };
-        let lines = e.constraints.iter().map(|c| self.constraint_line(k, c));
-        lines.map(Line::raw).collect()
+        let mut lines: Vec<String> = e
+            .constraints
+            .iter()
+            .map(|c| self.constraint_line(k, c))
+            .collect();
+        if k == 1 {
+            lines.extend(self.unexplained_line());
+        }
+        lines.into_iter().map(Line::raw).collect()
     }
 
     fn constraint_line(&self, k: usize, c: &ConstraintEval) -> String {
@@ -2055,17 +2091,26 @@ impl<'a> Sides<'a> {
         if !c.disagreements.is_empty() {
             line += &format!(", {}", counted(c.disagreements.len(), "disagreement"));
         }
-        if k == 1 && !self.set_aside.is_empty() {
-            line += &format!(" · {} retracted here", self.set_aside_places());
+        let under = self.set_aside_where(|cs| cs.is_some_and(|cs| cs.contains(&c.seq)));
+        if k == 1 && !under.is_empty() {
+            line += &format!(" · {under} retracted here");
         }
         line
     }
 
-    /// Where the facts the supposed world sets aside are, in the actual
-    /// world.
-    fn set_aside_places(&self) -> String {
-        let actual = &self.actual;
-        let places: Vec<String> = self.set_aside.iter().map(|s| place(actual, *s)).collect();
+    /// The facts set aside whose retraction records no constraint (one
+    /// retracted by hand, or written before retractions recorded them),
+    /// on a line of their own.
+    fn unexplained_line(&self) -> Option<String> {
+        let places = self.set_aside_where(|cs| cs.is_none());
+        (!places.is_empty()).then(|| format!("Retracted here: {places}"))
+    }
+
+    /// Where the facts set aside are, in the actual world, of those whose
+    /// recorded constraints pass a test.
+    fn set_aside_where(&self, test: impl Fn(Option<&Vec<u64>>) -> bool) -> String {
+        let chosen = self.aside.chosen(test);
+        let places: Vec<String> = chosen.iter().map(|s| place(&self.actual, *s)).collect();
         places.join(", ")
     }
 
@@ -2121,6 +2166,26 @@ fn fact_rows(o: &Outline) -> Vec<u64> {
 
 /// The entries whose facts the actual world states and the supposed one
 /// does not.
+/// The constraints each of these entries was set aside under, from the
+/// retraction of it on the current branch that records them.
+fn reasons_of(app: &App, set_aside: &[u64]) -> BTreeMap<u64, Vec<u64>> {
+    let branch = app.notebook.branch(app.notebook.tip);
+    let reasons = branch.entries.iter().filter_map(|e| recorded_reason(e));
+    reasons.filter(|(t, _)| set_aside.contains(t)).collect()
+}
+
+/// A retraction's target and the constraints it records, if it records
+/// any.
+fn recorded_reason(e: &format::record::Entry) -> Option<(u64, Vec<u64>)> {
+    let body = e.body().filter(|_| e.kind() == "retract")?;
+    let target = body["target"].as_u64()?;
+    let constraints = body.get("constraints")?.as_array()?;
+    Some((
+        target,
+        constraints.iter().filter_map(|c| c.as_u64()).collect(),
+    ))
+}
+
 fn set_aside(worlds: &[Side; 2]) -> Vec<u64> {
     let kept = worlds[1].fact_seqs();
     let actual = worlds[0].fact_seqs();

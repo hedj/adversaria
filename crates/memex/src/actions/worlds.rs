@@ -2,7 +2,7 @@
 //! (docs/guide.md, § 2.4, Worlds and history).
 
 use crate::app::{App, Mode};
-use crate::reason::direct_conflicts;
+use crate::reason::{Contradicted, direct_conflicts};
 use format::terms::{self, Term};
 use serde_json::{Value, json};
 
@@ -127,18 +127,21 @@ impl App {
                 break;
             }
             self.retract_all(&targets)?;
-            set_aside.extend(targets);
+            set_aside.extend(targets.into_iter().map(|(t, _)| t));
         }
         Ok((set_aside, left))
     }
 
     /// After reasoning again, the beliefs that the fact of an entry directly
     /// contradicts and that can be retracted, and the violations left.
-    fn retractable_conflicts(&mut self, seq: u64) -> Result<(Vec<u64>, Vec<String>), String> {
+    fn retractable_conflicts(
+        &mut self,
+        seq: u64,
+    ) -> Result<(Vec<Contradicted>, Vec<String>), String> {
         self.evaluate()?;
         let eval = self.reason.eval[0].as_ref().ok_or("no evaluation")?;
         let (mut targets, left) = direct_conflicts(&eval.constraints, seq);
-        targets.retain(|t| self.retractable(*t).is_ok());
+        targets.retain(|(t, _)| self.retractable(*t).is_ok());
         Ok((targets, left))
     }
 
@@ -168,9 +171,12 @@ impl App {
         self.parse_fact(text).ok()
     }
 
-    pub(crate) fn retract_all(&mut self, targets: &[u64]) -> Result<(), String> {
-        for t in targets {
-            self.write_here("retract", json!({"target": t}))?;
+    /// Retract each belief, naming the constraints it was contradicted
+    /// under, so that a world can say which constraint each answered.
+    pub(crate) fn retract_all(&mut self, targets: &[Contradicted]) -> Result<(), String> {
+        for (t, constraints) in targets {
+            let body = json!({"target": t, "constraints": constraints});
+            self.write_here("retract", body)?;
         }
         Ok(())
     }
