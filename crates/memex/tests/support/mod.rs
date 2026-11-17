@@ -193,6 +193,20 @@ impl Room {
     }
 }
 
+/// A room is its memex, to the helpers that drive an App.
+impl std::ops::Deref for Room {
+    type Target = App;
+    fn deref(&self) -> &App {
+        &self.app
+    }
+}
+
+impl std::ops::DerefMut for Room {
+    fn deref_mut(&mut self) -> &mut App {
+        &mut self.app
+    }
+}
+
 impl Drop for Room {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.dir);

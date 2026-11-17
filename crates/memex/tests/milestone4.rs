@@ -6,16 +6,9 @@ use memex::config::Config;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::style::Modifier;
-use std::path::{Path, PathBuf};
 
 mod support;
-use support::replayed;
-
-fn temp(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("adversaria-m4-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    d
-}
+use support::{Room, replayed};
 
 fn tap(app: &mut App, k: Key) {
     app.handle(Event::down(k));
@@ -103,8 +96,8 @@ impl Screen {
 
 /// The scene's essay: a belief, a claim, a derived sentence, a timeline and
 /// the constraint one date per event.
-fn scene(dir: &Path) -> App {
-    let mut app = App::open(dir).unwrap();
+fn scene(name: &str) -> Room {
+    let mut app = Room::new(&format!("m4-{name}"));
     app.set_durable(false);
     typ(&mut app, "The programme");
     item(&mut app, "Buran flew once, unmanned, on 15 November 1988.");
@@ -154,8 +147,7 @@ fn scene_two_as_written() {
     // not a broken fact; both items marked, naming the other; the right pane
     // shows the rule, the disagreement, and what depends on the date; a
     // fading hint suggests Suppose.
-    let dir = temp("scene2");
-    let mut app = scene(&dir);
+    let mut app = scene("scene2");
     leap(&mut app, "talk notes");
     let s = screen(&app);
     s.assert("1 disagreement between sources");
@@ -185,7 +177,6 @@ fn scene_two_as_written() {
     s.assert("    3 1987 Energia's first launch ── 1988 Bura …");
     s.assert("Hold SUPPOSE and type a statement to try it in a new world. Nothing in this world changes.");
     s.assert("fading hint · shown until Suppose has been used 4 more times");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -193,8 +184,7 @@ fn adopting_turns_a_disagreement_into_a_violation_and_back() {
     // Plan: adopt and retract with one key each. Catches an adoption that
     // does not make the claim a belief (so the conflict stays a mere
     // disagreement), or a retraction that does not undo it.
-    let dir = temp("adopt");
-    let mut app = scene(&dir);
+    let mut app = scene("adopt");
     leap(&mut app, "talk notes");
     tap(&mut app, Key::F(3));
     let adopt = app.journal().entries().last().unwrap().clone();
@@ -217,7 +207,6 @@ fn adopting_turns_a_disagreement_into_a_violation_and_back() {
     let s = screen(&app);
     s.assert("1 disagreement between sources");
     assert!(!s.has("constraint violation"));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -225,8 +214,7 @@ fn interrogation_answers_its_five_questions() {
     // Plan: "interrogate with one key: who else claims it, who claims the
     // contrary, its provenance, the source's record, and a preview of
     // adopting it as a world".
-    let dir = temp("interrogate");
-    let mut app = scene(&dir);
+    let mut app = scene("interrogate");
     leap(&mut app, "talk notes");
     tap(&mut app, Key::F(2));
     app.evaluate().unwrap();
@@ -247,26 +235,23 @@ fn interrogation_answers_its_five_questions() {
         "interrogate",
         "interrogation is journaled as an action"
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn the_interrogation_hint_follows_the_configured_keys() {
     // Catches a hint that names the default keys after they are rebound.
-    let dir = temp("interrogate-keys");
-    let mut app = scene(&dir);
+    let mut app = scene("interrogate-keys");
     leap(&mut app, "talk notes");
     tap(&mut app, Key::F(2));
     app.evaluate().unwrap();
     let config = Config::parse("[keys]\nF3 = \"\"\nInsert = \"adopt\"\nF4 = \"\"\n");
     app.session.keys = config.unwrap().keys();
     screen(&app).assert("Insert adopts · command unadopt retracts an adoption");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// The scene, with a second source that claims what the talk notes claim.
-fn wikipedia_too(dir: &Path) -> App {
-    let mut app = scene(dir);
+fn wikipedia_too(name: &str) -> Room {
+    let mut app = scene(name);
     leap(&mut app, "talk notes");
     item(&mut app, "Wikipedia gives 1989 too.");
     command(&mut app, "claim date(buran_flight, 1989) from Wikipedia");
@@ -285,44 +270,36 @@ fn talk_interrogated(app: &mut App) -> Screen {
 #[test]
 fn the_contrary_of_a_claim_is_not_the_claim_itself() {
     // Catches a finding's rows that keep the claim's own fact.
-    let dir = temp("interrogate-own");
-    let mut app = scene(&dir);
+    let mut app = scene("interrogate-own");
     let s = talk_interrogated(&mut app);
     s.assert("1.1: the date of Buran's flight is 1988 (one date per event)");
     assert!(!s.has("is 1989 (one date per event)"));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn an_adoption_kept_is_not_counted_as_retracted() {
     // Catches a record that counts each adoption as retracted.
-    let dir = temp("interrogate-kept");
-    let mut app = scene(&dir);
+    let mut app = scene("interrogate-kept");
     leap(&mut app, "talk notes");
     tap(&mut app, Key::F(3));
     let s = talk_interrogated(&mut app);
     s.assert("1 of its claims adopted, 0 of them retracted since");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn another_source_that_claims_the_fact_is_listed() {
     // Catches a list of who else claims it that keeps beliefs alone.
-    let dir = temp("interrogate-others");
-    let mut app = wikipedia_too(&dir);
+    let mut app = wikipedia_too("interrogate-others");
     talk_interrogated(&mut app).assert("2.2 (Wikipedia)");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn another_sources_adoption_is_not_on_the_record() {
     // Catches a source's record that counts every adoption.
-    let dir = temp("interrogate-record");
-    let mut app = wikipedia_too(&dir);
+    let mut app = wikipedia_too("interrogate-record");
     tap(&mut app, Key::F(3));
     let s = talk_interrogated(&mut app);
     s.assert("0 of its claims adopted, 0 of them retracted since");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -334,8 +311,7 @@ fn scene_three_as_written() {
     // "two years", the timeline's point moves, and the constraint has no
     // violation, because the source's date is retracted there. The actual
     // world is untouched. Then close the supposition.
-    let dir = temp("scene3");
-    let mut app = scene(&dir);
+    let mut app = scene("scene3");
     let actual_head = app.notebook.tip;
     let actual_facts = memex::store::facts(app.journal().entries(), actual_head).unwrap();
     app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
@@ -394,15 +370,13 @@ fn scene_three_as_written() {
             .any(|e| e.kind() == "suppose"),
         "the supposition stays in the journal"
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn a_constraint_that_cannot_fire_is_not_kept() {
     // Plan: "Each constraint the user adopts is tried against a planted
     // violation". Catches a broken constraint kept, as if it guarded anything.
-    let dir = temp("planted");
-    let mut app = scene(&dir);
+    let mut app = scene("planted");
     let n = app.journal().entries().len();
     app.handle(Event::down(Key::Quasi(Quasi::Command)));
     typ(
@@ -416,7 +390,6 @@ fn a_constraint_that_cannot_fire_is_not_kept() {
         app.session.message
     );
     assert_eq!(app.journal().entries().len(), n, "nothing written");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -424,8 +397,7 @@ fn a_constraint_on_negative_or_zero_values_can_be_kept() {
     // The planted check gave variables only 1, 2, ..., so a constraint
     // such as "no balance below zero" could never fire on them and was
     // refused. Catches that, and a constraint that cannot fire kept.
-    let dir = temp("planted-sign");
-    let mut app = scene(&dir);
+    let mut app = scene("planted-sign");
     for (line, kept) in [
         ("constraint overdrawn: false :- balance(B), B < 0.", true),
         ("constraint empty: false :- stock(S), S =< 0.", true),
@@ -445,7 +417,6 @@ fn a_constraint_on_negative_or_zero_values_can_be_kept() {
             app.session.message
         );
     }
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -456,8 +427,7 @@ fn recomputation_touches_only_dependent_nodes() {
     // nodes that read every date (the constraint, the timeline) once each;
     // not the sentence, which reads only the dates of Buran's flight and
     // Energia's launch; and not the capital constraint.
-    let dir = temp("recompute");
-    let mut app = scene(&dir);
+    let mut app = scene("recompute");
     item(&mut app, "Paris is the capital of France.");
     command(&mut app, "fact capital(france, paris)");
     command(
@@ -513,15 +483,13 @@ fn recomputation_touches_only_dependent_nodes() {
         };
         assert_eq!(*d, want, "{name}");
     }
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn a_second_adoption_is_the_one_retracted() {
     // Catches the retraction of an item's first adoption, already
     // retracted, in place of its last.
-    let dir = temp("adopt-twice");
-    let mut app = scene(&dir);
+    let mut app = scene("adopt-twice");
     leap(&mut app, "talk notes");
     tap(&mut app, Key::F(3));
     tap(&mut app, Key::F(4));
@@ -529,15 +497,13 @@ fn a_second_adoption_is_the_one_retracted() {
     let second = app.journal().entries().last().unwrap().seq;
     tap(&mut app, Key::F(4));
     assert_eq!(app.session.message, format!("adoption {second} retracted"));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn a_disagreement_shown_first_is_recorded() {
     // Catches the first observation written only when it shows a
     // violation: the scene's first shows a disagreement alone.
-    let dir = temp("observed-first");
-    let app = scene(&dir);
+    let app = scene("observed-first");
     let entries = app.journal().entries();
     let first = entries
         .iter()
@@ -545,15 +511,13 @@ fn a_disagreement_shown_first_is_recorded() {
     let first = first.expect("an observation was recorded");
     assert_eq!(first["violations"], serde_json::json!([]));
     assert_ne!(first["disagreements"], serde_json::json!([]));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn replay_reproduces_claims_constraints_and_worlds() {
     // Catches state of milestone 4 that lives outside the journal: a replay
     // must give the same outline, view, world and reasoning.
-    let dir = temp("replay4");
-    let mut app = scene(&dir);
+    let mut app = scene("replay4");
     leap(&mut app, "talk notes");
     tap(&mut app, Key::F(2));
     tap(&mut app, Key::F(3));
@@ -564,7 +528,7 @@ fn replay_reproduces_claims_constraints_and_worlds() {
     tap(&mut app, Key::Enter);
     app.flush();
     app.evaluate().unwrap();
-    let mut r = replayed(&dir);
+    let mut r = replayed(&app.dir);
     r.evaluate().unwrap();
     assert_eq!(r.notebook.outline, app.notebook.outline);
     assert_eq!(r.session.view, app.session.view);
@@ -579,7 +543,6 @@ fn replay_reproduces_claims_constraints_and_worlds() {
     assert_eq!(r.reason.eval, app.reason.eval);
     let n = screen(&app).lines.len() - 1;
     assert_eq!(screen(&r).lines[..n], screen(&app).lines[..n]);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -587,8 +550,7 @@ fn the_text_cursor_sits_on_its_item_below_mark_lines() {
     // Catches the text cursor drawn by item count, which puts it on a mark
     // line when an item above has marks (found 12 November 2026).
     use ratatui::backend::Backend;
-    let dir = temp("cursor-row");
-    let mut app = scene(&dir);
+    let mut app = scene("cursor-row");
     leap(&mut app, "talk notes");
     let mut t = Terminal::new(TestBackend::new(200, 45)).unwrap();
     t.draw(|f| memex::ui::draw(f, &app)).unwrap();
@@ -598,7 +560,6 @@ fn the_text_cursor_sits_on_its_item_below_mark_lines() {
         .map(|x| buf[(x, p.y)].symbol().to_string())
         .collect();
     assert!(row.contains("Talk notes"), "the cursor is on {row:?}");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// Which command the last world-ending view entry records: "close" or
@@ -620,23 +581,20 @@ fn ended_by(app: &App) -> &'static str {
 
 #[test]
 fn ending_a_world_records_whether_it_was_closed_or_committed() {
-    let dir = temp("ended-by");
-    let mut app = App::open(&dir).unwrap();
+    let mut app = Room::new("m4-ended-by");
     command(&mut app, "suppose first");
     command(&mut app, "close");
     let closed = ended_by(&app);
     command(&mut app, "suppose second");
     command(&mut app, "commit");
     assert_eq!((closed, ended_by(&app)), ("close", "commit"));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn an_item_with_no_claim_cannot_be_adopted() {
     // Catches adopt writing nothing, silently, for an item that states a
     // belief but no claim.
-    let dir = temp("adopt-none");
-    let mut app = App::open(&dir).unwrap();
+    let mut app = Room::new("m4-adopt-none");
     item(&mut app, "the sky");
     command(&mut app, "fact colour(sky, blue)");
     let before = app.journal().entries().len();
@@ -645,15 +603,13 @@ fn an_item_with_no_claim_cannot_be_adopted() {
         (app.session.message.as_str(), app.journal().entries().len()),
         ("the target states no claim to adopt", before)
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn a_retracted_constraint_is_not_read() {
     // Catches a world reading every constraint in its outline, including
     // one whose definition is retracted in it.
-    let dir = temp("retracted-constraint");
-    let mut app = App::open(&dir).unwrap();
+    let mut app = Room::new("m4-retracted-constraint");
     item(&mut app, "rules");
     command(&mut app, "constraint same: false :- p(X), q(X).");
     let seq = app.journal().entries().last().unwrap().seq;
@@ -667,19 +623,17 @@ fn a_retracted_constraint_is_not_read() {
     command(&mut app, &format!("retract {seq}"));
     tap(&mut app, Key::Enter);
     assert_eq!((before, count(&mut app)), (1, 0));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn an_observation_is_not_recorded_again_after_reopening() {
     // Catches the last observation kept only while the memex runs: after a
     // replay, what is shown unchanged is not written again.
-    let dir = temp("observed-again");
-    let entries = scene(&dir).journal().entries().len();
-    let mut app = App::open(&dir).unwrap();
+    let room = scene("observed-again");
+    let entries = room.journal().entries().len();
+    let mut app = replayed(&room.dir);
     app.evaluate().unwrap();
     assert_eq!(app.journal().entries().len(), entries);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -687,13 +641,11 @@ fn an_observation_names_each_finding_by_its_constraint_and_facts() {
     // The measures read observations, so what they hold is the journal's:
     // each finding as its constraint and the facts it rests on, sorted,
     // and the world they were seen in.
-    let dir = temp("observed-names");
-    let app = scene(&dir);
+    let app = scene("observed-names");
     let entries = app.journal().entries().iter();
     let observed = entries.filter_map(|e| e.body().filter(|b| b["op"] == "observed"));
     let first = observed.into_iter().next().unwrap();
     let names = "one date per event: date(buran_flight, 1988) · date(buran_flight, 1989)";
     assert_eq!(first["disagreements"], serde_json::json!([names]));
     assert_eq!(first["world"], "actual");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
