@@ -4,10 +4,10 @@
 
 use format::terms::Term;
 use memex::app::{App, Event, Key, Quasi};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 mod support;
-use support::Room;
+use support::{Room, replayed};
 
 fn temp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("adversaria-views-{name}-{}", std::process::id()));
@@ -54,15 +54,15 @@ fn item(app: &mut App, text: &str) {
     app.flush();
 }
 
-fn open(dir: &Path) -> App {
-    let mut app = App::open(dir).unwrap();
+fn open(name: &str) -> Room {
+    let mut app = Room::new(&format!("views-{name}"));
     app.set_durable(false);
     app
 }
 
 /// Three values, as the budget in the tutorial's part 2.
-fn budget(dir: &Path) -> App {
-    let mut app = open(dir);
+fn budget(name: &str) -> Room {
+    let mut app = open(name);
     typ(&mut app, "Budget");
     for (name, v) in [("income", 2000), ("rent", 1200), ("food", 400)] {
         item(&mut app, name);
@@ -95,8 +95,7 @@ fn find(app: &App, text: &str) -> u64 {
 fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
     // Catches a layer that misses solutions, loses provenance, or does not
     // change when a fact it rests on changes.
-    let dir = temp("layer");
-    let mut app = budget(&dir);
+    let mut app = budget("layer");
     item(&mut app, "chart");
     let m = command(&mut app, "layer bar(x(C), y(V)) where cell(C, V)");
     assert!(m.starts_with("layer kept"), "{m}");
@@ -163,19 +162,16 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
     assert!(!app.notebook.outline.views.contains_key(&spent));
     // Replay gives the same marks.
     let before = marks(&app, chart);
-    drop(app);
-    let mut again = App::open(&dir).unwrap();
+    let mut again = replayed(&app.dir);
     again.evaluate().unwrap();
     assert_eq!(marks(&again, chart), before);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn a_layer_that_could_not_be_drawn_or_would_act_is_refused() {
     // Catches a layer kept with an unknown mark or channel, a variable the
     // goal never binds, or a goal that calls what definitions may not.
-    let dir = temp("refuse");
-    let mut app = budget(&dir);
+    let mut app = budget("refuse");
     item(&mut app, "chart");
     for (line, why) in [
         ("layer pie(x(C)) where cell(C, _)", "no mark “pie”"),
@@ -205,7 +201,6 @@ fn a_layer_that_could_not_be_drawn_or_would_act_is_refused() {
             .views
             .contains_key(&find(&app, "chart"))
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// The screen, its text and its click regions, as the terminal would draw it.
@@ -247,8 +242,7 @@ fn a_view_is_drawn_under_its_item_and_its_marks_lead_to_their_facts() {
     // Catches a view not drawn, drawn away from its item, a click on a mark
     // that goes nowhere or to the wrong item, a mark on a violated fact
     // drawn quietly, and a view missing from a supposition's two worlds.
-    let dir = temp("screen");
-    let mut app = budget(&dir);
+    let mut app = budget("screen");
     command(
         &mut app,
         "constraint spending within income: false :- cell(income, I), cell(rent, R), cell(food, F), R + F > I.",
@@ -315,7 +309,6 @@ fn a_view_is_drawn_under_its_item_and_its_marks_lead_to_their_facts() {
         "rent before and after:\n{}",
         s.join("\n")
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// The lines of the view at the item with this text, as the outline draws
@@ -343,8 +336,7 @@ fn gallery_a_spreadsheet_with_a_computed_box() {
     // Boxes at grid places, one computed by a rule: a spreadsheet. Catches
     // a grid that loses a box, a computed box that does not follow its
     // inputs, or a broken rule's box drawn quietly.
-    let dir = temp("gallery-sheet");
-    let mut app = budget(&dir);
+    let mut app = budget("gallery-sheet");
     for (b, c, r) in [
         ("income", "b", 1),
         ("rent", "b", 2),
@@ -391,15 +383,13 @@ fn gallery_a_spreadsheet_with_a_computed_box() {
         "computed, and loud:\n{}",
         f.join("\n")
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn gallery_a_line_chart_a_timeline_and_a_gantt_chart() {
     // Catches a series out of order, a timeline label lost or misplaced, or
     // a task's span on the wrong lane.
-    let dir = temp("gallery-time");
-    let mut app = open(&dir);
+    let mut app = open("gallery-time");
     typ(&mut app, "Data");
     for (m, v) in [(1, 300), (2, 450), (3, 380), (4, 520)] {
         command(&mut app, &format!("fact spend({m}, {v})"));
@@ -453,7 +443,6 @@ fn gallery_a_line_chart_a_timeline_and_a_gantt_chart() {
         "{}",
         f.join("\n")
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -461,8 +450,7 @@ fn gallery_a_flowchart_from_steps_and_choices() {
     // Steps, decisions and transitions as facts; nodes and edges as layers.
     // Catches a decision drawn as a plain step, a choice's label lost, or
     // a step added by a fact not appearing.
-    let dir = temp("gallery-flow");
-    let mut app = open(&dir);
+    let mut app = open("gallery-flow");
     typ(&mut app, "Process");
     command(&mut app, "fact step(start, \"Start\")");
     command(&mut app, "fact decision(late, \"Is it late?\")");
@@ -491,7 +479,6 @@ fn gallery_a_flowchart_from_steps_and_choices() {
     command(&mut app, "fact next(home, sleep, \"\")");
     let s = figure(&app, "Flow").join("\n");
     assert!(s.contains("Sleep"), "{s}");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -499,8 +486,7 @@ fn gallery_the_outline_itself_as_a_tree() {
     // The outline is offered to goals as item_text/2 and item_under/2.
     // Catches a tree missing an item, a child drawn above its parent, or a
     // click on a box that does not go to its item.
-    let dir = temp("gallery-tree");
-    let mut app = open(&dir);
+    let mut app = open("gallery-tree");
     typ(&mut app, "Plan");
     item(&mut app, "Research");
     tap(&mut app, Key::Tab);
@@ -539,7 +525,6 @@ fn gallery_the_outline_itself_as_a_tree() {
     let x = x + 2;
     app.click(&hits.at(x, y).cloned().expect("clickable"));
     assert_eq!(app.notebook.outline.text(app.cursor()), "Interview");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
