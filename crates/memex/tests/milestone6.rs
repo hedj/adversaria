@@ -267,75 +267,66 @@ fn a_revised_document_opens_a_world_of_changes() {
     // lists each change to adopt or retract."
     let dir = temp("revise");
     let src = dir.join("essay.md");
-    std::fs::write(
+    let mut app = open(&dir);
+    import_text(
+        &mut app,
         &src,
         "# Essay\n\nBuran flew in 1988.\n\nIt was unmanned.\n\nThe end.\n",
-    )
-    .unwrap();
-    let mut app = open(&dir);
-    command(&mut app, &format!("import document {}", src.display()));
+    );
     let actual = app.notebook.outline.clone();
-    std::fs::write(
+    import_text(
+        &mut app,
         &src,
         "# Essay\n\nBuran flew in 1989.\n\nThe end.\n\nA new closing line.\n",
-    )
-    .unwrap();
-    command(&mut app, &format!("import document {}", src.display()));
-    assert!(
-        app.reason
-            .supposition
-            .as_ref()
-            .is_some_and(|s| s.name == "revision of essay.md")
     );
+    the_revision_lists_each_change(&app);
+    keep_all_but_the_deletion(&mut app);
+    let kept = [
+        "Essay",
+        "Buran flew in 1989.",
+        "It was unmanned.",
+        "The end.",
+        "A new closing line.",
+    ];
+    assert_eq!(outline_texts(&app), kept);
+    assert_ne!(app.notebook.outline, actual);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Write a text to a file, and import it as a document.
+fn import_text(app: &mut App, src: &Path, text: &str) {
+    std::fs::write(src, text).unwrap();
+    command(app, &format!("import document {}", src.display()));
+}
+
+/// A revision of essay.md is open, listing the change, the deletion and
+/// the addition.
+fn the_revision_lists_each_change(app: &App) {
+    let sup = app.reason.supposition.as_ref();
+    assert!(sup.is_some_and(|s| s.name == "revision of essay.md"));
     let changes = app.revision_changes();
     let whats: Vec<&str> = changes.iter().map(|c| c.1.as_str()).collect();
-    assert!(
-        whats
-            .iter()
-            .any(|w| w.starts_with("changed 1.1: “Buran flew in 1988.” → “Buran flew in 1989.”")),
-        "{whats:?}"
-    );
-    assert!(
-        whats
-            .iter()
-            .any(|w| w.starts_with("deleted 1.2: “It was unmanned.”")),
-        "{whats:?}"
-    );
-    assert!(
-        whats
-            .iter()
-            .any(|w| w.starts_with("added: “A new closing line.”")),
-        "{whats:?}"
-    );
-    // Keep all but the deletion: retract it, then commit.
+    for want in [
+        "changed 1.1: “Buran flew in 1988.” → “Buran flew in 1989.”",
+        "deleted 1.2: “It was unmanned.”",
+        "added: “A new closing line.”",
+    ] {
+        assert!(whats.iter().any(|w| w.starts_with(want)), "{whats:?}");
+    }
+}
+
+/// Keep all but the deletion: retract it, then commit.
+fn keep_all_but_the_deletion(app: &mut App) {
+    let changes = app.revision_changes();
     let deletion = changes
         .iter()
         .find(|c| c.1.starts_with("deleted"))
         .unwrap()
         .0;
-    command(&mut app, &format!("retract {deletion}"));
-    tap(&mut app, Key::Enter);
-    command(&mut app, "commit");
+    command(app, &format!("retract {deletion}"));
+    tap(app, Key::Enter);
+    command(app, "commit");
     assert!(app.reason.supposition.is_none());
-    let texts: Vec<String> = app
-        .notebook
-        .outline
-        .in_order()
-        .iter()
-        .map(|i| app.notebook.outline.text(*i))
-        .collect();
-    assert_eq!(
-        texts,
-        vec![
-            "Essay",
-            "Buran flew in 1989.",
-            "It was unmanned.",
-            "The end.",
-            "A new closing line."
-        ]
-    );
-    assert_ne!(app.notebook.outline, actual);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// A results file that an analysis of data.csv wrote with the Python
