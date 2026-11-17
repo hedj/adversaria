@@ -407,15 +407,9 @@ fn a_constraint_on_negative_or_zero_values_can_be_kept() {
         ),
         ("constraint never: false :- n(X), X < 0, X > 0.", false),
     ] {
-        app.handle(Event::down(Key::Quasi(Quasi::Command)));
-        typ(&mut app, line);
-        app.handle(Event::up(Key::Quasi(Quasi::Command)));
-        assert_eq!(
-            app.session.message.contains("kept: it fires"),
-            kept,
-            "{line}: {}",
-            app.session.message
-        );
+        app.command(line);
+        let said = &app.session.message;
+        assert_eq!(said.contains("kept: it fires"), kept, "{line}: {said}");
     }
 }
 
