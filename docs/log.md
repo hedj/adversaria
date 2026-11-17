@@ -625,6 +625,43 @@ commit); `make test` passes in the Nix shell. The APE tests need APE_HOME, so `m
 shell. Not built yet: repair hints in Suppose, the predictive editor,
 `?` in Suppose, the memory of confirmed pairs.
 
+#### Repair hints in Suppose (17 November 2026)
+
+While Suppose is held, each key checks what is typed (`ace_check/2`),
+ended with a full stop if it has none: the line below the typing says
+`ACE:` and APE's paraphrase, or `not ACE:` with the sentence marked where
+parsing stopped and up to three repairs, the first applied by Esc.
+
+APE's own advice for a word was weaker than the design assumed: it gives
+the first word one edit away in its lexicon, in a fixed order, whether or
+not it fits (`was` → `as`, `dat` → `at`, `flew` → `few`), and has nothing
+for the past tense. A repair here is an edit of one word that makes the
+text ACE, tried in the sentence: the word where parsing stopped, then
+each word APE does not know; replaced by its present if it is a past
+(`was`, `were`, `had`, `did`, and `-ed` forms whose present is in the
+lexicon), or by each word one edit away. So `dat` becomes `date` and
+`was` becomes `is`.
+
+Measured, for the time a key waits:
+
+* APE's paraphrase of a long sentence with relative clauses took 0.5 s at
+  every parse: APE tries that paraphrase under its own 0.5 s limit, with
+  the comment "due to a bug?", before falling back to full sentences.
+  `ace.pl` now allows 50 ms (0.531 s → 0.055 s for the test's sentence;
+  commit 3bec6cc).
+* The repair search parsed every candidate, and APE catches exceptions
+  inside its parser, so a time limit did not stop it: 3.8 s for one long
+  sentence. It now checks a deadline (0.25 s) before each candidate, and
+  a candidate is parsed without its paraphrase. The four probe sentences,
+  up to 33 words: 32–73 ms per check, from 56 ms to 3.8 s before.
+* A check is still a parse at each key, and the key waits for it: about
+  2 ms for a short sentence that is ACE, 38–57 ms for "The flight was in
+  1989", where repairs are sought (measured on this machine).
+
+Checked: 19 Prolog tests and 6 tests through the memex, 14 unit tests in
+`ace.rs`; 13 breaks, each made a test fail (listed in the commit);
+`make test` passes in the Nix shell. Not checked: a real terminal.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

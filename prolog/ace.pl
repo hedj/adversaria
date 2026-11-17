@@ -14,7 +14,7 @@ word, or the sentence with <> where parsing failed); Repair is APE's
 advice.
 */
 
-:- module(ace, [ace_lexicon/2, ace_parse/2]).
+:- module(ace, [ace_lexicon/2, ace_parse/2, ace_check/2]).
 
 %   APE's files declare no encoding, and one holds UTF-8 in a comment.
 :- set_prolog_flag(encoding, utf8).
@@ -34,6 +34,8 @@ advice.
 :- use_module(ape(utils/drs_to_coreace), [drs_to_coreace/2]).
 :- use_module(ape(lexicon/ulex), [add_lexicon_entries/1, discard_ulex/0]).
 :- use_module(ape(lexicon/functionwords), [functionword/1]).
+:- use_module(ape(lexicon/is_in_lexicon), [is_functionword/1, is_contentword/1]).
+:- use_module(ape(lexicon/spellcheck), []).
 :- use_module(ape(logger/error_logger), [clear_messages/0, get_messages/1]).
 :- use_module(library(time), [call_with_time_limit/2]).
 
@@ -94,6 +96,137 @@ ace_parse(Text, Result) :-
         numbervars(Numbered, 0, _),
         Result = parsed(Paraphrase, Numbered, Messages)
     ).
+
+%!  ace_check(+Text:string, -Check) is det.
+%   What a text being typed is, ended with a full stop if it has no end
+%   mark: ace(Paraphrase) when it is ACE, else
+%   not_ace(Failure, Notes, Repairs). Failure is the first sentence with
+%   <> where parsing stopped ("" if APE gave none); Notes are APE's other
+%   messages; Repairs are up to three repair(From, To, Mended): a word of
+%   Text, a word for its place, and Text so mended, which is ACE.
+ace_check(Text, Check) :-
+    must_be(string, Text),
+    ended(Text, Ended),
+    ace_parse(Ended, Result),
+    checked(Result, Text, Check).
+
+checked(parsed(Paraphrase, _, _), _, ace(Paraphrase)).
+checked(not_ace(Messages), Text, not_ace(Failure, Notes, Repairs)) :-
+    failure(Messages, Failure, Notes),
+    repairs(Text, Failure, Notes, Repairs).
+
+%   A text with a full stop after it, unless it ends with . ? or !.
+ended(Text, Ended) :-
+    split_string(Text, "", " \t\n", [Trimmed]),
+    (   sub_string(Trimmed, _, 1, 0, Last), sub_atom(".?!", _, 1, _, Last)
+    ->  Ended = Trimmed
+    ;   string_concat(Trimmed, ".", Ended)
+    ).
+
+%   The message that marks where parsing stopped, and the others.
+failure(Messages, Failure, Notes) :-
+    (   selectchk(message(error, sentence, _, _, F, _), Messages, Rest)
+    ->  Failure = F, Notes = Rest
+    ;   Failure = "", Notes = Messages
+    ).
+
+%   Up to three edits of one word each that make the text ACE: of the
+%   word where parsing stopped, then of each word APE did not know. A
+%   check runs at each key typed, and each candidate is a parse, which
+%   for a long sentence takes tens of milliseconds: no candidate is
+%   parsed after a quarter of a second. (A time limit's exception does
+%   not stop it: APE catches exceptions inside its parser.)
+repairs(Text, Failure, Notes, Repairs) :-
+    split_string(Text, " ", "", Words),
+    findall(Target, target(Failure, Notes, Target), Targets),
+    get_time(Now),
+    Deadline is Now + 0.25,
+    findall(R, limit(3, distinct(R, repair(Words, Targets, Deadline, R))), Repairs).
+
+%   An edit of one word that makes the text ACE, tried before a deadline.
+repair(Words, Targets, Deadline, repair(From, To, Mended)) :-
+    member(At-From, Targets),
+    candidate(From, To),
+    mended(Words, At-From, To, Mended),
+    ended(Mended, Ended),
+    get_time(Now),
+    Now < Deadline,
+    is_ace(Ended).
+
+%   Whether APE finds no error in a text: a parse, without its
+%   paraphrase, which a repair does not need.
+is_ace(Text) :-
+    clear_messages,
+    call_with_time_limit(5, acetext_to_drs(Text, _, _, _, Found)),
+    \+ memberchk(message(error, _, _, _, _), Found).
+
+%   A word to mend, as Index-Word: the index of the word in the text, or
+%   0 for its first occurrence.
+target(Failure, _, At-Word) :-
+    sub_string(Failure, Before, _, _, "<> "),
+    sub_string(Failure, 0, Before, _, Prefix),
+    split_string(Prefix, " ", " ", Ws),
+    exclude(==(""), Ws, Counted),
+    length(Counted, N),
+    At is N + 1,
+    sub_string(Failure, _, _, 0, After0),
+    string_concat("<> ", After, After0),
+    split_string(After, " ", ".?!,;:", [Word|_]),
+    Word \== "".
+target(_, Notes, 0-Word) :-
+    member(message(error, word, _, _, Word, _), Notes).
+
+%   A word to put in place of another: the present for a past (ACE has no
+%   other tense), or a word of the lexicon one edit away.
+candidate(From, To) :-
+    atom_string(F, From),
+    (   present(F, T)
+    ;   spelled(F, T)
+    ),
+    atom_string(T, To).
+
+present(was, is).
+present(were, are).
+present(had, has).
+present(did, does).
+present(Past, Present) :-
+    member(End, [ed, d]),
+    atom_concat(Stem, End, Past),
+    Stem \== '',
+    member(S, [s, es]),
+    atom_concat(Stem, S, Present),
+    is_contentword(Present).
+
+%   A word one edit away (APE's: two letters swapped, one extra, one
+%   missing, one wrong) that is a word of ACE.
+spelled(Word, Near) :-
+    spellcheck:convert_token_char(Word, Chars),
+    (   spellcheck:transposition(Chars, New)
+    ;   spellcheck:one_letter_extra(Chars, New)
+    ;   spellcheck:one_letter_missing(Chars, New)
+    ;   spellcheck:one_letter_wrong(Chars, New)
+    ),
+    spellcheck:convert_token_char(Near, New),
+    Near \== Word,
+    once(( is_functionword(Near) ; is_contentword(Near) )).
+
+%   The words with one put in place of another: the one at an index, or
+%   the first occurrence; its punctuation kept.
+mended(Words, At-From, To, Mended) :-
+    nth1(I, Words, Word),
+    (   At > 0 -> I =:= At ; true ),
+    string_concat(From, Rest, Word),
+    punctuation(Rest),
+    !,
+    string_concat(To, Rest, New),
+    nth1(I, Words, _, Others),
+    nth1(I, NewWords, New, Others),
+    atomic_list_concat(NewWords, ' ', Atom),
+    atom_string(Atom, Mended).
+
+%   Nothing, or one mark of punctuation.
+punctuation("").
+punctuation(Mark) :- string_length(Mark, 1), sub_string(".?!,;:", _, 1, _, Mark).
 
 %   APE's paraphrase of a DRS, its sentences joined by spaces.
 paraphrase(Drs, Paraphrase) :-

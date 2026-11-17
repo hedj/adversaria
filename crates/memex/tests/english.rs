@@ -2,8 +2,27 @@
 //! world gives it. These tests need APE: run them in the Nix shell, which
 //! sets APE_HOME.
 
+use memex::app::{Key, Mode, Quasi};
+
 mod support;
 use support::Room;
+
+/// What is typed in the quasimode held, if one is.
+fn typed(r: &Room) -> String {
+    match &r.app.session.mode {
+        Mode::Quasi(a) => a.input.clone(),
+        other => panic!("no quasimode: {other:?}"),
+    }
+}
+
+/// The screen's line that holds a text, trimmed; none if none does.
+fn line_with(r: &Room, text: &str) -> Option<String> {
+    let lines = r.lines_at(160, 30);
+    lines
+        .into_iter()
+        .find(|l| l.contains(text))
+        .map(|l| l.trim_end().to_string())
+}
 
 #[test]
 fn a_word_of_the_notebook_makes_a_sentence_ace() {
@@ -48,4 +67,39 @@ fn a_command_without_a_sentence_says_what_it_wants() {
         r.app.session.message,
         "ace (sentence) a sentence of controlled English"
     );
+}
+
+#[test]
+fn a_supposition_being_typed_is_checked_as_it_is_typed() {
+    // Catches the hint left as it was before APE: nothing said of what is
+    // typed. Without a full stop yet, a sentence of ACE is said to be one.
+    let mut r = Room::new("english-suppose-ace");
+    r.hold(Quasi::Suppose, "John waits");
+    let hint = line_with(&r, "ACE: John waits.");
+    assert!(hint.is_some_and(|l| l.contains("release Suppose offers its readings")));
+}
+
+#[test]
+fn a_supposition_not_ace_shows_where_and_esc_mends_it() {
+    // Catches the failure's place or the repair left unsaid, Esc doing
+    // nothing in Suppose, or the hint not following what is typed.
+    let mut r = Room::new("english-suppose-mend");
+    r.hold(Quasi::Suppose, "The flight was in 1989");
+    let hint = line_with(&r, "not ACE: The flight <> was in 1989.");
+    assert!(hint.is_some_and(|l| l.contains("Esc: was → is")));
+    r.tap(&[Key::Escape]);
+    assert_eq!(typed(&r), "The flight is in 1989");
+    assert!(line_with(&r, "ACE: There is a flight X1. The flight X1 is in 1989.").is_some());
+}
+
+#[test]
+fn a_supposition_with_no_repair_names_the_words_ace_does_not_know() {
+    // Catches a failure with no repair and no reason, and Esc changing
+    // the text when there is nothing to apply. APE takes the capitalised
+    // Qzx for a proper name, so only vbn is unknown.
+    let mut r = Room::new("english-suppose-unknown");
+    r.hold(Quasi::Suppose, "Qzx vbn.");
+    assert!(line_with(&r, "not ACE: Qzx <> vbn. · words ACE does not know: vbn").is_some());
+    r.tap(&[Key::Escape]);
+    assert_eq!(typed(&r), "Qzx vbn.");
 }

@@ -223,11 +223,12 @@ impl App {
                     a.input = self.leap_complete(&a.input, a.q == Quasi::LeapForward)
                 }
                 Quasi::Command => a.input = complete_command(&a.input),
-                _ => {}
+                _ => a.apply_repair(),
             },
             Key::Enter => return self.finish(a),
             _ => {}
         }
+        self.recheck(&mut a);
         Mode::Quasi(a)
     }
 

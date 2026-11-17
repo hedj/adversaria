@@ -359,6 +359,16 @@ pub struct Active {
     pub used: bool,
     /// `?` was pressed: list everything that may come next.
     pub listing: bool,
+    /// In Suppose, what APE makes of what is typed.
+    pub hint: Option<Hint>,
+}
+
+/// What APE makes of a supposition being typed, in words (or why there is
+/// no parser), and the text mended by its first repair, which Esc applies.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Hint {
+    pub said: String,
+    pub mended: Option<String>,
 }
 
 impl Active {
@@ -381,6 +391,16 @@ impl Active {
             latched: false,
             used: false,
             listing: false,
+            hint: None,
+        }
+    }
+
+    /// Put the first repair of what is typed in its place, if there is
+    /// one (Esc in Suppose).
+    pub(crate) fn apply_repair(&mut self) {
+        let mended = self.hint.as_ref().and_then(|h| h.mended.clone());
+        if let Some(m) = mended {
+            self.input = m;
         }
     }
 

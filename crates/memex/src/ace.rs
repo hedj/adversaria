@@ -46,6 +46,39 @@ pub struct Note {
     pub repair: String,
 }
 
+/// What a text being typed is: ACE, with its paraphrase, or not, and why.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Check {
+    Ace(String),
+    NotAce(Failure),
+}
+
+/// Why a text is not ACE: the sentence marked where parsing stopped (<>),
+/// APE's other messages, and up to three repairs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Failure {
+    pub at: String,
+    pub notes: Vec<Message>,
+    pub repairs: Vec<Repair>,
+}
+
+/// An edit of one word that makes a text ACE: the word, the word for its
+/// place, and the text so mended.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Repair {
+    pub from: String,
+    pub to: String,
+    pub mended: String,
+}
+
+impl Check {
+    /// The text mended by the first repair, if there is one.
+    pub fn mended(&self) -> Option<String> {
+        let Check::NotAce(f) = self else { return None };
+        f.repairs.first().map(|r| r.mended.clone())
+    }
+}
+
 impl Note {
     /// The note in words: its subject, then APE's advice.
     fn said(&self) -> String {
@@ -93,6 +126,14 @@ impl Ace {
         Ok(parse)
     }
 
+    /// What a text being typed is, with this user lexicon (ace_check/2):
+    /// ACE, or where it fails, and repairs.
+    pub fn check_with(&mut self, lexicon: Vec<Term>, text: &str) -> Result<Check, Error> {
+        self.set_lexicon(lexicon)?;
+        let goal = call("ace_check", vec![Term::Str(text.into()), Term::Var(0)]);
+        check_of(&self.only_answer(&goal)?)
+    }
+
     /// What APE makes of a text.
     pub fn parse(&mut self, text: &str) -> Result<Parse, Error> {
         let goal = call("ace_parse", vec![Term::Str(text.into()), Term::Var(0)]);
@@ -138,6 +179,28 @@ fn parsed(a: &[Term]) -> Result<Parse, Error> {
     let ace = Some((text(&a[0])?, a[1].clone()));
     let messages = messages(&a[2])?;
     Ok(Parse { ace, messages })
+}
+
+/// A check, from ace(Paraphrase) or not_ace(Failure, Notes, Repairs).
+fn check_of(t: &Term) -> Result<Check, Error> {
+    if let Some(a) = parts(t, "ace", 1) {
+        return Ok(Check::Ace(text(&a[0])?));
+    }
+    let a = parts(t, "not_ace", 3).ok_or_else(|| bad("check", t))?;
+    let (at, notes) = (text(&a[0])?, messages(&a[1])?);
+    let repairs = list(&a[2]).iter().map(repair).collect::<Result<_, _>>()?;
+    Ok(Check::NotAce(Failure { at, notes, repairs }))
+}
+
+/// A repair, from repair(From, To, Mended).
+fn repair(t: &Term) -> Result<Repair, Error> {
+    let a = parts(t, "repair", 3).ok_or_else(|| bad("repair", t))?;
+    let (from, to) = (text(&a[0])?, text(&a[1])?);
+    Ok(Repair {
+        from,
+        to,
+        mended: text(&a[2])?,
+    })
 }
 
 fn messages(t: &Term) -> Result<Vec<Message>, Error> {
@@ -212,6 +275,43 @@ fn failed(messages: &[Message]) -> (String, Vec<&Message>) {
         None => "not ACE".to_string(),
     };
     (head, messages.iter().filter(|m| !at(m)).collect())
+}
+
+/// A check as a hint while typing: ACE and its paraphrase; or "not ACE",
+/// where, and the first repair, which Esc applies, with the others; or,
+/// with no repair, why: each word APE does not know.
+pub fn hint(check: &Check) -> String {
+    match check {
+        Check::Ace(paraphrase) => format!("ACE: {paraphrase}"),
+        Check::NotAce(f) => format!("not ACE: {} · {}", f.at, mend_or_why(f)),
+    }
+}
+
+/// The repairs, the first with the key that applies it; or, with none,
+/// the words APE does not know.
+fn mend_or_why(f: &Failure) -> String {
+    let Some((first, rest)) = f.repairs.split_first() else {
+        return unknown_words(&f.notes);
+    };
+    let others = rest.iter().map(|r| format!("{} → {}", r.from, r.to));
+    let others = others.collect::<Vec<_>>().join(", ");
+    let also = if others.is_empty() {
+        String::new()
+    } else {
+        format!(" (or {others})")
+    };
+    format!("Esc: {} → {}{also}", first.from, first.to)
+}
+
+/// The words APE does not know, said so; else that no one-word edit
+/// makes it ACE.
+fn unknown_words(notes: &[Message]) -> String {
+    let unknown = notes.iter().filter(|m| m.error && m.kind == "word");
+    let words: Vec<String> = unknown.map(|m| m.note.subject.clone()).collect();
+    match words.as_slice() {
+        [] => "no edit of one word makes it ACE".into(),
+        _ => format!("words ACE does not know: {}", words.join(", ")),
+    }
 }
 
 /// The user lexicon a world's facts give, each entry once, in order.
@@ -424,6 +524,76 @@ mod tests {
             messages: vec![],
         };
         assert_eq!(said(&bare), "not ACE");
+    }
+
+    fn failure(repairs: Vec<Repair>, notes: Vec<Message>) -> Check {
+        let at = "The flight <> was in 1989.".to_string();
+        Check::NotAce(Failure { at, notes, repairs })
+    }
+
+    fn mend(from: &str, to: &str) -> Repair {
+        let mended = format!("The flight {to} in 1989");
+        Repair {
+            from: from.into(),
+            to: to.into(),
+            mended,
+        }
+    }
+
+    #[test]
+    fn a_hint_gives_the_first_repair_with_its_key_and_the_others() {
+        // Catches the key that applies a repair left unsaid, or the other
+        // repairs dropped.
+        let one = failure(vec![mend("was", "is")], vec![]);
+        assert_eq!(
+            hint(&one),
+            "not ACE: The flight <> was in 1989. · Esc: was → is"
+        );
+        let two = failure(vec![mend("was", "is"), mend("was", "has")], vec![]);
+        assert!(hint(&two).ends_with("Esc: was → is (or was → has)"));
+        assert_eq!(hint(&Check::Ace("John waits.".into())), "ACE: John waits.");
+    }
+
+    #[test]
+    fn a_hint_without_a_repair_says_why() {
+        // Catches a failure with no repair said with no reason.
+        let unknown = told(
+            ["error", "word"],
+            ["Qzx", "Use the prefix n:, v:, a: or p:."],
+        );
+        let shown = hint(&failure(vec![], vec![unknown]));
+        assert!(shown.ends_with("words ACE does not know: Qzx"), "{shown}");
+        let bare = hint(&failure(vec![], vec![]));
+        assert!(bare.ends_with("no edit of one word makes it ACE"), "{bare}");
+    }
+
+    #[test]
+    fn a_check_and_its_repairs_are_read() {
+        // Catches a repair's words or its mended text misread, or a term
+        // of another shape taken for a check.
+        let r = c(
+            "repair",
+            ["was", "is", "The flight is in 1989"]
+                .map(|s| Term::Str(s.into()))
+                .to_vec(),
+        );
+        let t = c(
+            "not_ace",
+            vec![Term::Str("at".into()), atom("[]"), make_list(vec![r])],
+        );
+        assert_eq!(
+            check_of(&t).unwrap(),
+            failure_at("at", vec![mend("was", "is")])
+        );
+        assert!(check_of(&atom("ace")).is_err());
+    }
+
+    fn failure_at(at: &str, repairs: Vec<Repair>) -> Check {
+        Check::NotAce(Failure {
+            at: at.into(),
+            notes: vec![],
+            repairs,
+        })
     }
 
     #[test]

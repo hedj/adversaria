@@ -97,6 +97,51 @@ test(setting_the_lexicon_leaves_no_choice_point) :-
     call_cleanup(ace_lexicon(Twice, _), Det = true),
     assertion(Det == true).
 
+test(a_sentence_of_ace_is_checked_without_its_full_stop) :-
+    % Catches a sentence being typed refused only for wanting its full
+    % stop.
+    ace_lexicon([], []),
+    ace_check("John waits", Check),
+    assertion(Check == ace("John waits.")).
+
+test(a_past_tense_is_mended_to_the_present) :-
+    % Catches no repair for the commonest error: ACE has no past tense,
+    % and APE's own advice for "was" is "as".
+    ace_lexicon([], []),
+    ace_check("The flight was in 1989", not_ace(Failure, _, Repairs)),
+    assertion(Failure == "The flight <> was in 1989."),
+    assertion(Repairs = [repair("was", "is", "The flight is in 1989")|_]).
+
+test(a_misspelt_word_is_mended_to_the_one_that_parses) :-
+    % Catches only APE's first spelling (at for dat) offered, which does
+    % not parse, and not date, which does.
+    ace_lexicon([pn_sg(buran_flight, buran_flight, neutr)], _),
+    ace_check("The dat of buran_flight is 1989.", not_ace(_, _, Repairs)),
+    assertion(memberchk(repair("dat", "date", "The date of buran_flight is 1989."), Repairs)),
+    assertion(\+ memberchk(repair(_, "at", _), Repairs)).
+
+test(a_regular_past_is_mended_to_its_present) :-
+    % Catches the -ed past not mended: happened is happens in ACE.
+    ace_lexicon([pn_sg(buran_flight, buran_flight, neutr)], _),
+    ace_check("buran_flight happened.", not_ace(_, _, Repairs)),
+    assertion(Repairs = [repair("happened", "happens", "buran_flight happens.")|_]).
+
+test(only_the_word_where_parsing_stopped_is_mended) :-
+    % Catches a word mended where it first occurs, not where parsing
+    % stopped, and a word mended inside a longer one.
+    ace_lexicon([], []),
+    ace_check("John waits and the man was happy", not_ace(_, _, Repairs)),
+    assertion(Repairs = [repair("was", "is", "John waits and the man is happy")|_]),
+    ace_check("The washer was red", not_ace(_, _, [repair(_, _, Mended)|_])),
+    assertion(Mended == "The washer is red").
+
+test(no_repair_is_offered_when_none_parses) :-
+    % Catches a repair offered that does not make the text ACE.
+    ace_lexicon([], []),
+    ace_check("Qzx vbn.", not_ace(_, Notes, Repairs)),
+    assertion(Repairs == []),
+    assertion(Notes \== []).
+
 test(a_long_sentence_is_paraphrased_within_a_quarter_second) :-
     % Catches APE's paraphraser left to its own half second: with
     % relative clauses it ran out its 0.5 s limit at every parse of this

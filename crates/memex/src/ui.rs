@@ -1148,9 +1148,12 @@ fn quasi_guide(a: &Active) -> String {
         Quasi::Scope => {
             format!("Space widens the target: word, statement, branch · {end} keeps it")
         }
-        Quasi::Suppose => {
-            format!("type a statement · {end} offers its readings, or a world of that name if none")
-        }
+        Quasi::Suppose => match &a.hint {
+            None => format!(
+                "type a statement · {end} offers its readings, or a world of that name if none"
+            ),
+            Some(h) => format!("{} · {end} offers its readings", h.said),
+        },
     }
 }
 
