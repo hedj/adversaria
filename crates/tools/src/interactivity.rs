@@ -1557,8 +1557,8 @@ fn pct(k: usize, n: usize) -> usize {
 /// How many units are over the limit, and how many by the upper bound if
 /// that is more.
 fn over_part(units: &[Unit], limit: usize) -> String {
-    let over = units.iter().filter(|u| u.load() > limit).count();
-    let over_up = units.iter().filter(|u| u.upper() > limit).count();
+    let over = over_by(units, limit, Unit::load);
+    let over_up = over_by(units, limit, Unit::upper);
     let upper = format!(" (upper bound {over_up}, {}%)", pct(over_up, units.len()));
     let upper = if over_up != over {
         upper
@@ -1566,6 +1566,11 @@ fn over_part(units: &[Unit], limit: usize) -> String {
         String::new()
     };
     format!("{over} over {limit} ({}%){upper}", pct(over, units.len()))
+}
+
+/// How many units hold more than the limit, by a measure of each.
+fn over_by(units: &[Unit], limit: usize, held: fn(&Unit) -> usize) -> usize {
+    units.iter().filter(|u| held(u) > limit).count()
 }
 
 /// How many are over the limit counting each field or term apart, where
@@ -1690,6 +1695,21 @@ mod tests {
         };
         let s = summary(&[unit(5, None), unit(3, Some(6)), unit(1, None)], 4);
         assert!(s.contains("2 over 4 counting each field apart"), "{s}");
+    }
+
+    #[test]
+    fn the_summary_counts_the_units_over_the_limit_and_by_the_upper_bound() {
+        // Catches a unit at the limit counted as over it, or the upper
+        // bound left out where it is more.
+        let unit = |load: usize, ambiguous: usize| Unit {
+            ambiguous: (0..ambiguous).map(|i| format!("a{i}")).collect(),
+            ..Unit::new("a.rs", "", (0..load).map(|i| i.to_string()).collect())
+        };
+        let s = summary(&[unit(5, 0), unit(4, 1), unit(1, 0)], 4);
+        assert!(
+            s.starts_with("3 units; 1 over 4 (33%) (upper bound 2, 66%)"),
+            "{s}"
+        );
     }
 
     /// The referents of each function of one file.
