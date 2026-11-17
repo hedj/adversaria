@@ -161,3 +161,11 @@ fn a_finding_on_no_fact_is_marked_under_no_item() {
     assert!(r.shows("1 constraint violation"));
     assert!(!r.shows("⚑"));
 }
+
+#[test]
+fn a_finding_on_one_fact_is_listed_as_that_fact() {
+    // Catches a row of the arguments its facts share and of how they
+    // differ, which for one fact is "rent, 1200:  (1)".
+    let r = over_the_limit("limit-listed");
+    assert!(r.shows("  cell(rent, 1200) (1)"));
+}

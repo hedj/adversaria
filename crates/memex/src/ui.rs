@@ -1223,6 +1223,12 @@ fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
                 dim(),
             ));
             for sol in sols {
+                if let [f] = sol.facts.as_slice() {
+                    let from = where_from(&app.notebook.outline, &sol.prov[0]);
+                    let row = format!("{} ({from})", reason::show(inner(f)));
+                    lines.push(Line::styled(row, style));
+                    continue;
+                }
                 let facts: Vec<(usize, &Term)> = sol.facts.iter().enumerate().collect();
                 let key = match facts.first().map(|(_, f)| inner(f)) {
                     Some(Term::Compound(_, a)) => {
