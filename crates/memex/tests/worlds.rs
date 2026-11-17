@@ -95,3 +95,23 @@ fn the_foot_says_what_holding_suppose_does() {
         "type a statement · release Suppose offers its readings, or a world of that name if none";
     assert!(r.shows(said), "{:?}", r.lines_at(160, 40).last());
 }
+
+#[test]
+fn a_derived_text_that_cannot_answer_says_so_in_both_worlds() {
+    // Catches the worlds' rows filled from answers alone: the item showed
+    // the text typed into it.
+    let mut r = Room::new("worlds-cannot-answer");
+    r.items(&["rent", "broken"]);
+    r.command("derive {N} broken where cell(rent, R), N is R + foo");
+    r.leap(Quasi::LeapBack, "rent");
+    r.command("fact cell(rent, 1200)");
+    r.app.evaluate().unwrap();
+    suppose(&mut r, "cell(food, 300)");
+    r.app.evaluate().unwrap();
+    let rows = r.lines_at(160, 10);
+    let row = rows
+        .iter()
+        .find(|l| l.contains("{N} broken"))
+        .expect("a row");
+    assert_eq!(row.matches("(cannot answer: type_error").count(), 2);
+}

@@ -1661,13 +1661,9 @@ fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
         }
     }
     let text = |o: &Outline, e: Option<&WorldEval>, i: u64| -> String {
-        match (
-            o.derived.get(&i),
-            e.and_then(|e| e.nodes.derived.get(&i).map(|v| (e, v))),
-        ) {
-            (Some(d), Some((e, v))) => reason::fill(&d.template, &d.names, v, &e.facts),
-            _ => o.text(i),
-        }
+        let derived = o.derived.get(&i).zip(e);
+        let derived = derived.and_then(|(d, e)| e.derived_text(i, d));
+        derived.unwrap_or_else(|| o.text(i))
     };
     let left_facts: Vec<u64> = worlds[0]
         .1
