@@ -184,11 +184,11 @@ fn a_click_does_nothing_while_a_quasimode_or_question_is_open() {
     let mut app = notes("modal");
     let c = hit_on(&app, "The programme").unwrap();
     let before = app.cursor();
-    app.handle(Event::down(Key::Quasi(Quasi::Command)));
+    app.hold(Quasi::Command, "");
     app.click(&c);
     assert_eq!(app.cursor(), before);
     // Released with nothing typed, Command latches; the click still does nothing.
-    app.handle(Event::up(Key::Quasi(Quasi::Command)));
+    app.release(Quasi::Command);
     assert!(matches!(app.session.mode, Mode::Quasi(_)));
     app.click(&c);
     assert_eq!(app.cursor(), before);
