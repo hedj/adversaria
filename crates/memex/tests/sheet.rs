@@ -6,13 +6,9 @@
 use memex::app::{App, Event, Key, Mode, Quasi};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
-use std::path::{Path, PathBuf};
 
-fn temp(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("adversaria-sheet-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    d
-}
+mod support;
+use support::{Room, replayed};
 
 fn tap(app: &mut App, k: Key) {
     app.handle(Event::down(k));
@@ -86,8 +82,8 @@ fn cell(app: &mut App, name: &str, label: &str, value: i64) {
 }
 
 /// The budget: three boxes, two derived from them, and two rules.
-fn budget(dir: &Path) -> App {
-    let mut app = App::open(dir).unwrap();
+fn budget(name: &str) -> Room {
+    let mut app = Room::new(&format!("sheet-{name}"));
     app.set_durable(false);
     typ(&mut app, "Budget");
     cell(&mut app, "income", "Income", 2000);
@@ -121,8 +117,7 @@ fn a_supposition_sets_aside_only_what_it_directly_contradicts() {
     // income together with income and rent (three facts: no single repair).
     // Catches a supposition that sets aside income and rent too, so every
     // formula has no answer in the supposed world, and commit removes them.
-    let dir = temp("suppose");
-    let mut app = budget(&dir);
+    let mut app = budget("suppose");
     let m = suppose(&mut app, "food is 900");
     assert!(m.contains("set aside in this world: 1.3"), "{m}");
     assert!(
@@ -140,7 +135,6 @@ fn a_supposition_sets_aside_only_what_it_directly_contradicts() {
     shows(&app, "Rent: 1200 [derived]");
     shows(&app, "Left over: -100 [derived]");
     shows(&app, "1 constraint violation");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -150,8 +144,7 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
     // one it replaces. Catches a set that leaves the old value (two values,
     // a violation), removes income and rent, or attaches the new value to
     // whatever item the cursor happens to be on.
-    let dir = temp("set");
-    let mut app = budget(&dir);
+    let mut app = budget("set");
     // The cursor is on the last item ("Left over"), not on Food.
     assert!(app.notebook.outline.text(app.cursor()).starts_with("left"));
     let m = command(&mut app, "set cell(food, 900)");
@@ -195,14 +188,11 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
     let m = command(&mut app, "set cell(savings, 300)");
     assert!(m.contains("nothing replaced"), "{m}");
     // The journal replays to the same values.
-    let tip = app.notebook.tip;
-    drop(app);
-    let mut again = App::open(&dir).unwrap();
+    let mut again = replayed(&app.dir);
     again.evaluate().unwrap();
-    assert_eq!(again.notebook.tip, tip);
+    assert_eq!(again.notebook.tip, app.notebook.tip);
     shows(&again, "Food: 500 [derived]");
     shows(&again, "Left over: 300 [derived]");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -211,8 +201,7 @@ fn a_rule_is_written_once_and_used_everywhere() {
     // derived text or constraints, a recursive rule accepted (it would loop
     // the reasoner), a rule whose head has a variable its body never binds,
     // and a rule body that calls what definitions may not.
-    let dir = temp("rule");
-    let mut app = budget(&dir);
+    let mut app = budget("rule");
     let m = command(
         &mut app,
         "rule spent(S) :- cell(rent, R), cell(food, F), S is R + F.",
@@ -247,7 +236,6 @@ fn a_rule_is_written_once_and_used_everywhere() {
             assert!(m.contains("not kept") && m.contains(why), "{line}: {m}");
         }
     }
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -255,8 +243,7 @@ fn rules_work_under_negation_disjunction_and_findall() {
     // Catches control constructs that call a rule's head directly, where
     // only facts are defined, so a rule inside \+, ; or findall raises an
     // unknown-procedure error or never holds.
-    let dir = temp("rule-control");
-    let mut app = budget(&dir);
+    let mut app = budget("rule-control");
     command(&mut app, "rule big(C) :- cell(C, V), V >= 1000.");
     tap(&mut app, Key::Enter);
     typ(&mut app, "small");
@@ -272,7 +259,6 @@ fn rules_work_under_negation_disjunction_and_findall() {
         "derive Either: {N} where findall(C, (big(C) ; C = none), L), length(L, N)",
     );
     shows(&app, "Either: 3 [derived]");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -280,8 +266,7 @@ fn a_violation_through_a_rule_rests_on_the_facts_under_it() {
     // Catches a violation that names the rule, not the facts the user would
     // change, so marks appear on the rule's item and views drawing those
     // facts are not drawn loudly.
-    let dir = temp("rule-prov");
-    let mut app = budget(&dir);
+    let mut app = budget("rule-prov");
     command(
         &mut app,
         "rule spent(S) :- cell(rent, R), cell(food, F), S is R + F.",
@@ -309,5 +294,4 @@ fn a_violation_through_a_rule_rests_on_the_facts_under_it() {
         assert!(facts.contains(&f.to_string()), "{f} in {facts:?}");
     }
     shows(&app, "within income, violation");
-    std::fs::remove_dir_all(&dir).unwrap();
 }
