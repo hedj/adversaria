@@ -405,14 +405,16 @@ impl<'s, 'ast> Head<'s, 'ast> {
         }
     }
 
-    /// A field read: a piece of its base's type where that is known, else
-    /// of the one struct that has a field so named, else the field alone.
+    /// A field read: a piece of its base's type where that is known, and
+    /// nothing if that type has no such field, as a library's type of the
+    /// same name as one of the project's; else, the type unknown, of the
+    /// one struct that has a field so named, else the field alone.
     fn field(&mut self, base: &syn::Expr, f: &str) {
         let scope = self.scope;
         match scope.type_of(base) {
             Some(t) if scope.has(&t, f) => self.piece(&holder(base, t), f),
-            Some(t) if scope.is_library(&t) => {}
-            _ => self.field_by_name(f),
+            Some(_) => {}
+            None => self.field_by_name(f),
         }
     }
 
@@ -667,6 +669,16 @@ mod tests {
                    impl T { fn push(&self) {} }\nimpl S { fn f(&mut self) { self.list.push(1); } }";
         let h = peak_of(src, "S::f");
         assert_eq!((things(&h), h.upper), (vec![], 0));
+    }
+
+    #[test]
+    fn a_field_of_a_declared_type_without_it_is_no_other_structs() {
+        // Catches r.width counted as Columns, the one project struct with a
+        // field width, where r is declared a Rect: a library's Rect, as
+        // ratatui's, beside a project Rect that has no such field.
+        let src = "struct Rect { w: u16 }\nstruct Columns { width: u16 }\n\
+                   fn f(r: Rect) -> u16 { r.width }";
+        assert_eq!(things(&peak_of(src, "f")), ["local r"]);
     }
 
     #[test]
