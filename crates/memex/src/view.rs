@@ -2827,17 +2827,28 @@ mod tests {
         assert!(yc > yb);
     }
 
-    #[test]
-    fn a_loud_bar_is_drawn_loud_and_found_where_it_landed() {
-        // Catches a mark on a violated fact drawn quietly, or a click region
-        // that misses its mark.
+    /// Two bars, the first loud and resting on entry 7.
+    fn loud_bar() -> Figure {
         let mut a = mk("bar x:a y:5");
         a.loud = true;
         a.prov = vec![7];
-        let f = render(&[a, mk("bar x:b y:3")], 20, 8);
+        render(&[a, mk("bar x:b y:3")], 20, 8)
+    }
+
+    #[test]
+    fn a_loud_bar_is_drawn_loud() {
+        // Catches a mark on a violated fact drawn quietly.
+        let f = loud_bar();
         let loud_bar = |(c, i): &&(char, Ink)| *c == '█' && *i == Ink::Loud;
         assert!(f.rows.iter().flatten().any(|c| loud_bar(&c)));
-        let at = f.hits.iter().find(|h| h.prov == [7]).unwrap().area;
+    }
+
+    #[test]
+    fn a_bar_is_found_where_it_landed() {
+        // Catches a click region that misses its mark.
+        let f = loud_bar();
+        let hit = f.hits.iter().find(|h| h.prov == [7]);
+        let at = hit.expect("a click region on the loud bar").area;
         assert_eq!(f.rows[at.y][at.x].0, '█');
     }
 
