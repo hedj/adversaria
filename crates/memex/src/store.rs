@@ -22,8 +22,10 @@ pub fn facts(entries: &[Entry], head: u64) -> Result<Vec<(u64, Term)>, String> {
     Ok(world.facts)
 }
 
+/// The entry of this number, which sits at place seq - 1.
 fn entry(entries: &[Entry], seq: u64) -> Result<&Entry, String> {
     let found = entries.get((seq as usize).wrapping_sub(1));
+    let found = found.filter(|e| e.seq == seq);
     found.ok_or(format!("entry {seq} does not exist"))
 }
 
@@ -265,5 +267,19 @@ mod tests {
             facts(&es, 2),
             Err("entry 2: a retract needs a target".into())
         );
+    }
+
+    #[test]
+    fn an_entry_out_of_its_place_is_refused() {
+        // Catches a lookup that takes whatever entry sits at a place as the
+        // entry of that number: a list holding only entry 2, whose parent is
+        // 1, found entry 2 again as its own parent and looped for ever.
+        let es = journal(&[
+            (None, "edit", json!({"facts": [date("a", 1)]})),
+            (Some(1), "edit", json!({"facts": [date("b", 2)]})),
+        ]);
+        let only_second = &es[1..];
+        let m = facts(only_second, 1).unwrap_err();
+        assert_eq!(m, "entry 1 does not exist");
     }
 }
