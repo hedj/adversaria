@@ -125,49 +125,58 @@ fn scene_one_as_written() {
     // what it supports, what cites it, and where it is transcluded.
     let dir = temp("scene1");
     let mut app = essay(&dir);
-    assert_eq!(
-        app.notebook.outline.text(app.cursor()),
-        "Buran flew once, unmanned, on 15 November 1988."
-    );
+    let buran = "Buran flew once, unmanned, on 15 November 1988.";
+    assert_eq!(cursor_text(&app), buran);
     let before = app.journal().entries().len();
-
     hold(&mut app, Quasi::LeapForward, "dra");
-    let s = screen(&app, 140, 40);
+    leap_held_lists_matches(&app, before);
+    release(&mut app, Quasi::LeapForward);
+    leap_released_lands_on_drakon(&app, before);
+    the_right_pane_shows_drakons_links(&app);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The text of the item at the cursor, as the outline holds it.
+fn cursor_text(app: &App) -> String {
+    app.notebook.outline.text(app.cursor())
+}
+
+/// Scene 1, Leap held on "dra": three matches, the transcluded copy among
+/// them, the guide line beneath, and nothing written.
+fn leap_held_lists_matches(app: &App, before: usize) {
+    let s = screen(app, 140, 40);
     assert!(shows(&s, "LEAP · 3 MATCHES"), "{}", s.join("\n"));
     assert!(shows(&s, "2. DRAKON"));
-    assert!(
-        shows(&s, "6. Timeline (chart) › DRAKON"),
-        "the transcluded copy matches too"
-    );
+    let copy = "6. Timeline (chart) › DRAKON";
+    assert!(shows(&s, copy), "the transcluded copy matches too");
     assert!(shows(&s, "the drafts of chapter 2"));
     assert!(shows(&s, "LEAP  dra"));
-    assert!(shows(
-        &s,
-        "release Leap to go to the first match · Esc completes · ? lists every match · Leap again repeats"
-    ));
-    assert_eq!(
-        app.journal().entries().len(),
-        before,
-        "nothing is written while Leap is held"
-    );
+    let guide = "release Leap to go to the first match · Esc completes · ? lists every match · Leap again repeats";
+    assert!(shows(&s, guide));
+    let written = app.journal().entries().len();
+    assert_eq!(written, before, "nothing is written while Leap is held");
+}
 
-    release(&mut app, Quasi::LeapForward);
-    assert_eq!(app.notebook.outline.text(app.cursor()), "DRAKON");
+/// Scene 1, Leap released: on DRAKON, in normal mode, with one entry
+/// written, the Leap.
+fn leap_released_lands_on_drakon(app: &App, before: usize) {
+    assert_eq!(cursor_text(app), "DRAKON");
     assert_eq!(app.session.mode, Mode::Normal);
     let after = app.journal().entries();
     assert_eq!(after.len(), before + 1, "one entry, for the Leap");
-    let leap = after.last().unwrap();
+    let leap = after.last().unwrap().body().unwrap();
     assert_eq!(
-        (leap.kind(), &leap.body().unwrap()["op"]),
-        ("view", &json!("leap"))
+        (&leap["op"], &leap["pattern"]),
+        (&json!("leap"), &json!("dra"))
     );
-    assert_eq!(leap.body().unwrap()["pattern"], json!("dra"));
+    assert_eq!(after.last().unwrap().kind(), "view");
+}
 
-    let s = screen(&app, 140, 40);
-    let right: Vec<String> = s
-        .iter()
-        .map(|l| l.chars().skip(84).collect::<String>())
-        .collect();
+/// Scene 1, on DRAKON: the right pane lists what it supports, what cites
+/// it, and where it is transcluded.
+fn the_right_pane_shows_drakons_links(app: &App) {
+    let s = screen(app, 140, 40);
+    let right: Vec<String> = s.iter().map(|l| l.chars().skip(84).collect()).collect();
     for want in [
         "LINKS OF THE SELECTED ITEM",
         "supports →",
@@ -182,7 +191,6 @@ fn scene_one_as_written() {
             right.join("\n")
         );
     }
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
