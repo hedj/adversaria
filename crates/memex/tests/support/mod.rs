@@ -112,7 +112,12 @@ impl Room {
 
     /// What a click would act on where, on a wide screen.
     pub fn hits(&self) -> Hits {
-        let mut t = Terminal::new(TestBackend::new(160, 40)).unwrap();
+        self.hits_at(160, 40)
+    }
+
+    /// What a click would act on where, on a screen of a width and a height.
+    pub fn hits_at(&self, width: u16, height: u16) -> Hits {
+        let mut t = Terminal::new(TestBackend::new(width, height)).unwrap();
         let mut hits = Hits::default();
         t.draw(|f| hits = memex::ui::draw_hits(f, &self.app))
             .unwrap();

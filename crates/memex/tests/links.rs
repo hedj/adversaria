@@ -119,13 +119,9 @@ fn a_hint_with_no_room_under_the_interrogation_is_no_click() {
     let room = interrogated("hint-no-room");
     let lines = room.lines_at(80, 7);
     assert!(!lines.concat().contains("adopts"), "no room for the hint");
-    let mut t = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 7)).unwrap();
-    let mut hits = memex::ui::Hits::default();
-    t.draw(|f| hits = memex::ui::draw_hits(f, &room.app))
-        .unwrap();
+    let clicks = room.hits_at(80, 7).0;
     assert!(
-        !hits
-            .0
+        !clicks
             .iter()
             .any(|(_, c)| format!("{c:?}").contains("adopt"))
     );
