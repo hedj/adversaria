@@ -572,7 +572,8 @@ fn right_panel(app: &App, id: u64) -> Paragraph<'static> {
     }
     match app.reason.eval[0].as_ref() {
         Some(e) if !item_marks(e, &app.notebook.outline, id).is_empty() => {
-            wrapped(constraint_panel(app, e, id))
+            let outline = &app.notebook.outline;
+            wrapped(ConstraintPane { outline, e }.of(id))
         }
         _ => Paragraph::new(links_lines(&app.notebook.outline, id)),
     }
@@ -1183,128 +1184,216 @@ fn node_def(e: &WorldEval, id: u64) -> Option<&Term> {
     })
 }
 
-/// The right pane for an item with marks: the constraint, its rule, its
-/// solutions, and what depends on the facts it reads.
-fn constraint_panel(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
-    let mut lines = Vec::new();
-    for c in &e.constraints {
-        let touches = |sols: &Vec<reason::Solution>| {
-            sols.iter().any(|s| {
-                s.prov
-                    .iter()
-                    .any(|p| app.notebook.outline.fact_item.get(&p.seq()) == Some(&item))
-            })
+/// A constraint's heading, then its rule, set in.
+fn constraint_head(c: &ConstraintEval) -> Vec<Line<'static>> {
+    let heading = format!("CONSTRAINT · {}", c.constraint.name.to_uppercase());
+    let rule = rule_lines(&c.constraint.rule);
+    let rule = rule.into_iter().map(|l| Line::raw(format!("  {l}")));
+    let head = [Line::styled(heading, dim()), Line::raw("")];
+    head.into_iter()
+        .chain(rule)
+        .chain([Line::raw("")])
+        .collect()
+}
+
+/// The constraints of a world, drawn against the outline.
+struct ConstraintPane<'a> {
+    outline: &'a Outline,
+    e: &'a WorldEval,
+}
+
+impl ConstraintPane<'_> {
+    /// The right pane for an item with marks: each constraint with a
+    /// finding that rests on one of its facts.
+    fn of(&self, item: u64) -> Vec<Line<'static>> {
+        let touching = self.e.constraints.iter().filter(|c| self.touches(c, item));
+        touching.flat_map(|c| self.constraint(c)).collect()
+    }
+
+    /// Whether a constraint has a finding that rests on one of an item's
+    /// facts.
+    fn touches(&self, c: &ConstraintEval, item: u64) -> bool {
+        let found = c.violations.iter().chain(&c.disagreements);
+        let mut prov = found.flat_map(|s| &s.prov);
+        prov.any(|p| self.outline.states(item, p.seq()))
+    }
+
+    /// A constraint: its heading and rule, its findings, and what depends
+    /// on the facts it reads.
+    fn constraint(&self, c: &ConstraintEval) -> Vec<Line<'static>> {
+        let found = self.found(c);
+        [constraint_head(c), found, self.dependents(c)].concat()
+    }
+
+    /// A constraint's violations, loud, then its disagreements.
+    fn found(&self, c: &ConstraintEval) -> Vec<Line<'static>> {
+        let violations = self.kind("violations", &c.violations, bold());
+        let disagreements = "disagreements between sources";
+        let disagreements = self.kind(disagreements, &c.disagreements, Style::default());
+        [violations, disagreements].concat()
+    }
+
+    /// Findings of one kind, if there are any: a heading that says when
+    /// they were recomputed, then a row for each.
+    fn kind(&self, title: &str, found: &[Solution], style: Style) -> Vec<Line<'static>> {
+        if found.is_empty() {
+            return vec![];
+        }
+        let heading = format!("{title} · recomputed at journal {}", self.e.at);
+        let rows = found.iter().map(|s| Line::styled(self.row(s), style));
+        let heading = std::iter::once(Line::styled(heading, dim()));
+        heading.chain(rows).chain([Line::raw("")]).collect()
+    }
+
+    /// A finding's row: what its facts share, then how each differs and
+    /// where it comes from; for one fact, the fact.
+    fn row(&self, sol: &Solution) -> String {
+        if let [f] = sol.facts.as_slice() {
+            let from = where_from(self.outline, &sol.prov[0]);
+            return format!("{} ({from})", reason::show(inner(f)));
+        }
+        let parts = self.parts(sol);
+        match shared_key(&sol.facts).as_str() {
+            "" => parts,
+            key => format!("{key}: {parts}"),
+        }
+    }
+
+    /// Each fact of a finding, how it differs and where it comes from.
+    fn parts(&self, sol: &Solution) -> String {
+        let parts: Vec<String> = (0..sol.facts.len()).map(|i| self.part(sol, i)).collect();
+        parts.join(" · ")
+    }
+
+    /// A fact of a finding, by its place: how it differs from the first
+    /// other fact, and where it comes from.
+    fn part(&self, sol: &Solution, i: usize) -> String {
+        let from = where_from(self.outline, &sol.prov[i]);
+        format!("{} ({from})", differing(&sol.facts, i))
+    }
+
+    /// What depends on the facts a constraint reads, if anything: the
+    /// derived items that read one of its predicates.
+    fn dependents(&self, c: &ConstraintEval) -> Vec<Line<'static>> {
+        let deps = self.derived_reading(&self.fact_reads(c.seq));
+        if deps.is_empty() {
+            return vec![];
+        }
+        let heading = std::iter::once(Line::styled("depends on these facts", dim()));
+        let rows = deps.into_iter().map(|d| self.dependent(d));
+        heading.chain(rows).chain([Line::raw("")]).collect()
+    }
+
+    /// The predicates a definition reads that the world's facts state.
+    fn fact_reads(&self, id: u64) -> Vec<String> {
+        let mut reads = definition_reads(self.e, id);
+        reads.retain(|p| is_stated(self.e, p));
+        reads
+    }
+
+    /// The derived items that read one of these predicates, in outline
+    /// order.
+    fn derived_reading(&self, reads: &[String]) -> Vec<u64> {
+        let reading = |d: &u64| {
+            definition_reads(self.e, *d)
+                .iter()
+                .any(|p| reads.contains(p))
         };
-        if !touches(&c.violations) && !touches(&c.disagreements) {
-            continue;
-        }
-        lines.push(Line::styled(
-            format!("CONSTRAINT · {}", c.constraint.name.to_uppercase()),
-            dim(),
-        ));
-        lines.push(Line::raw(""));
-        for l in rule_lines(&c.constraint.rule) {
-            lines.push(Line::raw(format!("  {l}")));
-        }
-        lines.push(Line::raw(""));
-        for (sols, title, style) in [
-            (&c.violations, "violations", bold()),
-            (
-                &c.disagreements,
-                "disagreements between sources",
-                Style::default(),
-            ),
-        ] {
-            if sols.is_empty() {
-                continue;
-            }
-            lines.push(Line::styled(
-                format!("{title} · recomputed at journal {}", e.at),
-                dim(),
-            ));
-            for sol in sols {
-                if let [f] = sol.facts.as_slice() {
-                    let from = where_from(&app.notebook.outline, &sol.prov[0]);
-                    let row = format!("{} ({from})", reason::show(inner(f)));
-                    lines.push(Line::styled(row, style));
-                    continue;
-                }
-                let facts: Vec<(usize, &Term)> = sol.facts.iter().enumerate().collect();
-                let key = match facts.first().map(|(_, f)| inner(f)) {
-                    Some(Term::Compound(_, a)) => {
-                        let shared: Vec<String> = (0..a.len())
-                            .filter(|k| facts.iter().all(|(_, f)| matches!(inner(f), Term::Compound(_, b) if b.get(*k) == a.get(*k))))
-                            .map(|k| reason::show(&a[k]))
-                            .collect();
-                        shared.join(", ")
-                    }
-                    _ => String::new(),
-                };
-                let parts: Vec<String> = facts
-                    .iter()
-                    .map(|(s, f)| {
-                        let (d, _) = difference(
-                            f,
-                            facts.iter().find(|(t, _)| t != s).map(|x| x.1).unwrap_or(f),
-                        );
-                        format!("{d} ({})", where_from(&app.notebook.outline, &sol.prov[*s]))
-                    })
-                    .collect();
-                let row = match key.as_str() {
-                    "" => parts.join(" · "),
-                    key => format!("{key}: {}", parts.join(" · ")),
-                };
-                lines.push(Line::styled(row, style));
-            }
-            lines.push(Line::raw(""));
-        }
-        // What depends on the facts this constraint reads: derived items
-        // whose queries read the same predicates.
-        let mut reads = Vec::new();
-        if let Some(Term::Compound(_, a)) = node_def(e, c.seq) {
-            predicates(e, &a[2], &mut reads);
-        }
-        reads.retain(|p| is_stated(e, p));
-        let mut deps: Vec<u64> = app
-            .notebook
+        let mut deps: Vec<u64> = self
             .outline
             .derived
             .keys()
-            .filter(|d| {
-                let mut r = Vec::new();
-                if let Some(Term::Compound(_, a)) = node_def(e, **d) {
-                    predicates(e, &a[1], &mut r);
-                }
-                r.iter().any(|p| reads.contains(p))
-            })
             .copied()
+            .filter(reading)
             .collect();
-        deps.sort_by_key(|d| app.notebook.outline.in_order().iter().position(|x| x == d));
-        if !deps.is_empty() {
-            lines.push(Line::styled("depends on these facts", dim()));
-            for d in deps {
-                let text = match (
-                    app.notebook.outline.derived.get(&d),
-                    e.nodes.derived.get(&d),
-                ) {
-                    (Some(t), Some(v)) => reason::fill(&t.template, &t.names, v, &e.facts),
-                    _ => app.notebook.outline.text(d),
-                };
-                let short: String = text.chars().take(40).collect();
-                lines.push(Line::raw(format!(
-                    "  {} {short}{}",
-                    app.notebook.outline.number(d),
-                    if text.chars().count() > 40 {
-                        " …"
-                    } else {
-                        ""
-                    }
-                )));
-            }
-            lines.push(Line::raw(""));
-        }
+        let order = self.outline.in_order();
+        deps.sort_by_key(|d| order.iter().position(|x| x == d));
+        deps
     }
-    lines
+
+    /// A derived item that depends on the facts: its number, and its text,
+    /// cut at 40 characters.
+    fn dependent(&self, d: u64) -> Line<'static> {
+        let text = self.derived_text(d);
+        let short: String = text.chars().take(40).collect();
+        let more = if text.chars().count() > 40 {
+            " …"
+        } else {
+            ""
+        };
+        Line::raw(format!("  {} {short}{more}", self.outline.number(d)))
+    }
+
+    /// A derived item's text in the world, or as the outline holds it.
+    fn derived_text(&self, d: u64) -> String {
+        let derive = self.outline.derived.get(&d);
+        let text = derive.and_then(|t| self.e.derived_text(d, t));
+        text.unwrap_or_else(|| self.outline.text(d))
+    }
+}
+
+/// What a finding's facts share: each argument of the first that every
+/// fact has in the same place.
+fn shared_key(facts: &[Term]) -> String {
+    let shared: Vec<String> = shared_args(facts).map(reason::show).collect();
+    shared.join(", ")
+}
+
+/// The arguments of the first fact that every fact has in the same place.
+fn shared_args(facts: &[Term]) -> impl Iterator<Item = &Term> {
+    let n = facts.first().map_or(0, arity);
+    (0..n).filter_map(move |k| shared_at(facts, k))
+}
+
+/// The first fact's argument at a place, if every fact has it there.
+fn shared_at(facts: &[Term], k: usize) -> Option<&Term> {
+    let first = arg_of(facts.first()?, k)?;
+    facts
+        .iter()
+        .all(|f| arg_of(f, k) == Some(first))
+        .then_some(first)
+}
+
+/// How many arguments a fact has.
+fn arity(f: &Term) -> usize {
+    match inner(f) {
+        Term::Compound(_, a) => a.len(),
+        _ => 0,
+    }
+}
+
+/// A fact's argument at a place.
+fn arg_of(f: &Term, k: usize) -> Option<&Term> {
+    match inner(f) {
+        Term::Compound(_, a) => a.get(k),
+        _ => None,
+    }
+}
+
+/// How the fact at a place differs from the first other fact, or from
+/// itself if it is alone.
+fn differing(facts: &[Term], at: usize) -> String {
+    let others = facts.iter().enumerate().filter(|(i, _)| *i != at);
+    let other = others.map(|(_, f)| f).next().unwrap_or(&facts[at]);
+    difference(&facts[at], other).0
+}
+
+/// What a definition reads: the predicates its goal calls.
+fn definition_reads(e: &WorldEval, id: u64) -> Vec<String> {
+    let mut reads = vec![];
+    if let Some(goal) = definition_goal(e, id) {
+        predicates(e, goal, &mut reads);
+    }
+    reads
+}
+
+/// A definition's goal: the last argument of its node,
+/// constraint(Name, Vars, Body) or query(Vars, Goal).
+fn definition_goal(e: &WorldEval, id: u64) -> Option<&Term> {
+    match node_def(e, id)? {
+        Term::Compound(_, a) => a.last(),
+        _ => None,
+    }
 }
 
 /// The right pane when a claim is interrogated (one key, F2): each of the

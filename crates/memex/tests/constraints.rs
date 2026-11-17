@@ -56,9 +56,19 @@ const ONE_VALUE: &str = "constraint one value: false :- cell(C, A), cell(C, B), 
 /// a third item; the cursor on the second rent, so the right pane is the
 /// constraint's.
 fn rents_with(name: &str, definitions: &[&str]) -> Room {
+    rents_defined(name, &[definitions])
+}
+
+/// A room with two rents that break a constraint, and an item after them
+/// for each list of definitions, made there; the cursor on the second
+/// rent.
+fn rents_defined(name: &str, items: &[&[&str]]) -> Room {
     let mut r = Room::new(name);
-    r.items(&["rent", "rent again", "defined"]);
-    definitions.iter().for_each(|d| r.command(d));
+    r.items(&["rent", "rent again"]);
+    for definitions in items {
+        r.items(&["", "defined"]);
+        definitions.iter().for_each(|d| r.command(d));
+    }
     r.leap(Quasi::LeapBack, "rent again");
     r.command("fact cell(rent, 1300)");
     r.leap(Quasi::LeapBack, "rent");
@@ -192,4 +202,63 @@ fn the_constraints_of_an_item_are_drawn_apart() {
     let at = lines.iter().position(|l| l.contains("CONSTRAINT · LIMIT"));
     let above = &lines[at.expect("the second constraint") - 1];
     assert_eq!(above.split('│').nth(1).map(str::trim), Some(""));
+}
+
+#[test]
+fn a_kind_with_no_findings_has_no_heading() {
+    // Catches the heading of each kind drawn whether or not it has rows.
+    let r = over_the_limit("no-kind");
+    assert!(r.shows("violations · recomputed at journal"));
+    assert!(!r.shows("disagreements between sources ·"));
+}
+
+/// A derived text, at an item of its own, that reads the rents.
+fn counting(template: &str) -> String {
+    format!("derive {template} where findall(C, cell(C, _), L), length(L, N)")
+}
+
+#[test]
+fn what_depends_on_the_facts_is_listed_in_outline_order() {
+    // Catches the derived items listed in the order the memex holds them.
+    let first = counting("{N} first");
+    let second = counting("{N} second");
+    let r = rents_defined("deps-order", &[&[ONE_VALUE, &first], &[&second]]);
+    let lines = r.lines_at(160, 40);
+    let at = |text| lines.iter().position(|l| l.contains(text));
+    assert!(at("  3 2 first") < at("  4 2 second"));
+    assert!(at("  3 2 first").is_some());
+}
+
+#[test]
+fn a_derived_text_longer_than_40_characters_is_cut() {
+    // Catches a cut at another length: the first text has 40 characters,
+    // the second 41.
+    let forty = counting("{N} cells are stated in this tiny notebook");
+    let more = counting("{N} cells are stated in this tiny notebook.");
+    let r = rents_defined("deps-cut", &[&[ONE_VALUE, &forty], &[&more]]);
+    assert!(r.shows("  3 2 cells are stated in this tiny notebook"));
+    assert!(!r.shows("  3 2 cells are stated in this tiny notebook …"));
+    assert!(r.shows("  4 2 cells are stated in this tiny notebook …"));
+}
+
+#[test]
+fn a_derived_text_with_no_answer_is_listed_as_the_outline_shows_it() {
+    // Catches the text of a derived item taken from its answer alone: a
+    // goal that raises an error has none.
+    let derive = "derive {N} broken where cell(rent, R), N is R + foo";
+    let r = rents_with("deps-no-answer", &[ONE_VALUE, derive]);
+    assert!(r.shows("  3 defined"));
+}
+
+#[test]
+fn a_finding_whose_facts_share_two_arguments_is_keyed_by_both() {
+    // Catches a key of the first shared argument alone.
+    let one_price = "constraint one price: false :- price(I, M, A), price(I, M, B), A \\= B.";
+    let mut r = rents_with("two-keys", &[one_price]);
+    r.command("fact price(rent, june, 1300)");
+    r.leap(Quasi::LeapBack, "rent");
+    r.command("fact price(rent, june, 1200)");
+    r.app.flush();
+    r.app.evaluate().unwrap();
+    assert!(r.shows("rent, june: 1200 (1) · 1300 (2)"));
 }
