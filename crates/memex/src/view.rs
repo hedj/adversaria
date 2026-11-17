@@ -1298,9 +1298,9 @@ impl Plot {
         self.cv.hit(Rect::cell(x, y), &m.prov);
     }
 
-    fn text_mark(&mut self, m: &M, (x, y): (usize, usize)) {
+    fn text_mark(&mut self, m: &M, place: (usize, usize)) {
         let t = m.get("text").map(V::text).unwrap_or_default();
-        let at = Rect::row(x, y, t.chars().count());
+        let at = Rect::row(place.0, place.1, t.chars().count());
         self.cv.text_in(at, &t, m.ink());
         self.cv.hit(at, &m.prov);
     }
