@@ -451,16 +451,30 @@ fn last_of_kind(app: &App, kind: &str) -> u64 {
 }
 
 /// A replay is the live memex: the same screen but for its message line,
-/// the same tip, redo list and world, view and outline.
+/// and the same state.
 fn replay_matches(app: &App, replayed: &App) {
     let (live, again) = (screen(app, 140, 40), screen(replayed, 140, 40));
     let n = live.len() - 1; // the last line holds messages
     assert_eq!(live[..n], again[..n]);
-    assert_eq!(replayed.notebook.tip, app.notebook.tip);
-    assert_eq!(replayed.notebook.redo, app.notebook.redo);
-    assert_eq!(replayed.reason.world(), app.reason.world());
-    assert_eq!(replayed.session.view, app.session.view);
-    assert_eq!(replayed.notebook.outline, app.notebook.outline);
+    same_state(replayed, app, "at the end");
+}
+
+/// A replay holds the live memex's state: its view and outline, its tip,
+/// redo list and world.
+fn same_state(replayed: &App, app: &App, at: &str) {
+    assert_eq!(replayed.session.view, app.session.view, "view differs {at}");
+    let outline = &app.notebook.outline;
+    assert_eq!(&replayed.notebook.outline, outline, "outline differs {at}");
+    assert_eq!(replayed.notebook.tip, app.notebook.tip, "tip differs {at}");
+    assert_eq!(
+        replayed.notebook.redo, app.notebook.redo,
+        "redo differs {at}"
+    );
+    assert_eq!(
+        replayed.reason.world(),
+        app.reason.world(),
+        "world differs {at}"
+    );
 }
 
 /// Every kind of entry the session used is in the journal.
@@ -546,16 +560,18 @@ fn keystroke_to_visible_change_on_ten_thousand_items() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-#[test]
-fn replay_matches_after_every_action() {
-    // The screen comparison above cannot see the terminal cursor, and a late
-    // view entry can hide an early difference. So after each step: flush,
-    // replay into a fresh app, and compare the whole state, view included.
-    let dir = temp("every");
-    let mut app = App::open(&dir).unwrap();
-    app.set_durable(false);
-    type Step = Box<dyn Fn(&mut App)>;
-    let steps: Vec<Step> = vec![
+/// One action on a memex.
+type Step = Box<dyn Fn(&mut App)>;
+
+/// A step of each kind: the editing steps, then the commands and
+/// quasimodes.
+fn every_step() -> Vec<Step> {
+    editing_steps().into_iter().chain(command_steps()).collect()
+}
+
+/// Typing, the cursor's keys, a new item, indenting and erasing.
+fn editing_steps() -> Vec<Step> {
+    vec![
         Box::new(|a| typ(a, "Buran")),
         Box::new(|a| tap(a, Key::Left)),
         Box::new(|a| typ(a, "x")),
@@ -564,6 +580,13 @@ fn replay_matches_after_every_action() {
         Box::new(|a| tap(a, Key::Home)),
         Box::new(|a| tap(a, Key::Backspace)),
         Box::new(|a| tap(a, Key::Up)),
+    ]
+}
+
+/// Fold, undo, redo, unfold, Leap, a link, a switch of pane and back, and
+/// a scope.
+fn command_steps() -> Vec<Step> {
+    vec![
         Box::new(|a| command(a, "fold")),
         Box::new(|a| command(a, "undo")),
         Box::new(|a| command(a, "redo")),
@@ -579,26 +602,28 @@ fn replay_matches_after_every_action() {
             hold(a, Quasi::Scope, " ");
             release(a, Quasi::Scope)
         }),
-    ];
-    for (i, step) in steps.iter().enumerate() {
+    ]
+}
+
+#[test]
+fn replay_matches_after_every_action() {
+    // The screen comparison above cannot see the terminal cursor, and a late
+    // view entry can hide an early difference. So after each step: flush,
+    // replay into a fresh app, and compare the whole state, view included.
+    let dir = temp("every");
+    let mut app = App::open(&dir).unwrap();
+    app.set_durable(false);
+    for (i, step) in every_step().iter().enumerate() {
         step(&mut app);
-        app.flush();
-        let r = replayed(&dir);
-        assert_eq!(
-            r.session.view, app.session.view,
-            "view differs after step {i}"
-        );
-        assert_eq!(
-            r.notebook.outline, app.notebook.outline,
-            "outline differs after step {i}"
-        );
-        assert_eq!(
-            (r.notebook.tip, &r.notebook.redo, &r.reason.world()),
-            (app.notebook.tip, &app.notebook.redo, &app.reason.world()),
-            "after step {i}"
-        );
+        replays_the_same(&dir, &mut app, &format!("after step {i}"));
     }
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Flush, replay the journal into a fresh memex, and see the same state.
+fn replays_the_same(dir: &std::path::Path, app: &mut App, at: &str) {
+    app.flush();
+    same_state(&replayed(dir), app, at);
 }
 
 #[test]
