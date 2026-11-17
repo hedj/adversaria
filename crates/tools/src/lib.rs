@@ -202,23 +202,8 @@ pub fn top_query(min_sitelinks: u32, limit: u32) -> String {
 /// Run a SPARQL query with curl, which honours the machine's proxy and
 /// certificates. Returns the parsed JSON result.
 pub fn sparql(query: &str) -> Result<Value, String> {
-    let out = Command::new("curl")
-        .args([
-            "-sS",
-            "--fail",
-            "--max-time",
-            "300",
-            "-G",
-            "-A",
-            USER_AGENT,
-            "-H",
-            "Accept: application/sparql-results+json",
-        ])
-        .arg("--data-urlencode")
-        .arg(format!("query={query}"))
-        .arg(ENDPOINT)
-        .output()
-        .map_err(|e| format!("cannot run curl: {e}"))?;
+    let run = query_command(query).output();
+    let out = run.map_err(|e| format!("cannot run curl: {e}"))?;
     if !out.status.success() {
         return Err(format!(
             "the query service refused: {}",
@@ -228,10 +213,42 @@ pub fn sparql(query: &str) -> Result<Value, String> {
     serde_json::from_slice(&out.stdout).map_err(|e| format!("not a SPARQL JSON result: {e}"))
 }
 
+/// curl, asking the endpoint for a SPARQL query's result as JSON, within
+/// five minutes, and failing on an HTTP error.
+fn query_command(query: &str) -> Command {
+    let mut curl = Command::new("curl");
+    let json = "Accept: application/sparql-results+json";
+    curl.args(["-sS", "--fail", "--max-time", "300", "-G"]);
+    curl.args(["-A", USER_AGENT, "-H", json, "--data-urlencode"]);
+    curl.arg(format!("query={query}")).arg(ENDPOINT);
+    curl
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_query_asks_curl_for_json_from_the_endpoint() {
+        // Catches an argument of the query's command lost or moved.
+        let command = query_command("SELECT 1");
+        let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
+        let json = "Accept: application/sparql-results+json";
+        let curl = [
+            "-sS",
+            "--fail",
+            "--max-time",
+            "300",
+            "-G",
+            "-A",
+            USER_AGENT,
+            "-H",
+            json,
+        ];
+        let query = ["--data-urlencode", "query=SELECT 1", ENDPOINT];
+        assert_eq!(args, [&curl[..], &query[..]].concat());
+    }
 
     #[test]
     fn text_in_english_is_kept_and_other_languages_are_not() {
