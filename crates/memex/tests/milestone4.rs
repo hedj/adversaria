@@ -559,18 +559,20 @@ fn the_text_cursor_sits_on_its_item_below_mark_lines() {
 /// Which command the last world-ending view entry records: "close" or
 /// "commit".
 fn ended_by(app: &App) -> &'static str {
-    let e = app
-        .journal()
-        .entries()
-        .iter()
-        .rev()
-        .find(|e| e.kind() == "view" && e.body().is_some_and(|b| b["op"] == "world"))
-        .expect("a world-ending view entry");
-    let b = e.body().unwrap();
-    ["close", "commit"]
-        .into_iter()
+    let b = last_world_ending(app);
+    let ways = ["close", "commit"];
+    ways.into_iter()
         .find(|k| b[*k] == true)
         .unwrap_or("neither")
+}
+
+/// The body of the last view entry that ends a world.
+fn last_world_ending(app: &App) -> &serde_json::Value {
+    let ends = |e: &format::record::Entry| {
+        e.kind() == "view" && e.body().is_some_and(|b| b["op"] == "world")
+    };
+    let e = app.journal().entries().iter().rev().find(|e| ends(e));
+    e.expect("a world-ending view entry").body().unwrap()
 }
 
 #[test]
