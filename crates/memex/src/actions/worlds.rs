@@ -142,6 +142,32 @@ impl App {
         Ok((targets, left))
     }
 
+    /// The readings of a typed supposition. A fact written as Prolog is
+    /// exact: it is its only reading, or it has none when the world holds
+    /// it already. Other text is read through the world's own facts
+    /// (reason::readings).
+    pub(crate) fn suppose_readings(&mut self, facts: &[(u64, Term)], text: &str) -> Vec<Term> {
+        let Some(typed) = self.typed_fact(text) else {
+            return crate::reason::readings(facts, text);
+        };
+        let held = facts.iter().any(|(_, f)| *f == typed);
+        if held { vec![] } else { vec![typed] }
+    }
+
+    /// The compound fact a text is, if it is written as one: a name, then
+    /// its arguments in brackets. English such as "food is 900" is Prolog
+    /// too (is(food, 900)), so the form is checked first.
+    fn typed_fact(&mut self, text: &str) -> Option<Term> {
+        let text = text.trim().trim_end_matches('.');
+        let (name, _) = text.split_once('(')?;
+        let named = name.starts_with(|c: char| c.is_ascii_lowercase())
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !named || !text.ends_with(')') {
+            return None;
+        }
+        self.parse_fact(text).ok()
+    }
+
     pub(crate) fn retract_all(&mut self, targets: &[u64]) -> Result<(), String> {
         for t in targets {
             self.write_here("retract", json!({"target": t}))?;

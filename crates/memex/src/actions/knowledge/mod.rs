@@ -25,7 +25,7 @@ impl App {
     }
 
     /// A fact as typed: an atom or a compound term, ground, not reserved.
-    fn parse_fact(&mut self, text: &str) -> Result<Term, String> {
+    pub(crate) fn parse_fact(&mut self, text: &str) -> Result<Term, String> {
         let (t, _) = self.parse_term(text.trim_end_matches('.'), "not a Prolog fact")?;
         check_fact(&t)?;
         Ok(t)

@@ -286,7 +286,7 @@ impl App {
                     return Mode::Normal;
                 }
                 let facts = self.notebook.facts_now().unwrap_or_default();
-                let readings = reason::readings(&facts, &text);
+                let readings = self.suppose_readings(&facts, &text);
                 if readings.is_empty() {
                     self.suppose_named(&text);
                 } else {

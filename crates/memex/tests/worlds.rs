@@ -195,3 +195,58 @@ fn each_fact_set_aside_is_marked_on_its_own_row() {
         .count();
     assert_eq!(marked, 2, "{}", r.app.session.message);
 }
+
+#[test]
+fn a_fact_typed_for_an_entity_the_world_lacks_is_supposed_as_typed() {
+    // Catches a typed fact read as another entity's: "cell(fuel, 80)",
+    // where only rent and food have cells, was offered as "the cell of
+    // rent is 80" and "the cell of food is 80", never as typed.
+    let mut r = Room::new("worlds-typed-fact");
+    r.items(&["rent", "food"]);
+    r.command("fact cell(food, 300)");
+    r.leap(Quasi::LeapBack, "rent");
+    r.command("fact cell(rent, 1200)");
+    r.app.evaluate().unwrap();
+    suppose(&mut r, "cell(fuel, 80)");
+    r.app.evaluate().unwrap();
+    let said = &r.app.session.message;
+    assert_eq!(said, "supposed; nothing set aside");
+    assert!(supposed_facts(&r).contains(&"cell(fuel, 80)".to_string()));
+}
+
+#[test]
+fn a_typed_fact_already_held_is_believed_already() {
+    // Catches a typed fact that is held read as another entity's: with
+    // rent at 1200 and food at 300, "cell(rent, 1200)" was offered as "the
+    // cell of food is 1200".
+    let mut r = Room::new("worlds-typed-held");
+    r.items(&["rent", "food"]);
+    r.command("fact cell(food, 300)");
+    r.leap(Quasi::LeapBack, "rent");
+    r.command("fact cell(rent, 1200)");
+    r.app.evaluate().unwrap();
+    r.hold(Quasi::Suppose, "cell(rent, 1200)");
+    r.release(Quasi::Suppose);
+    let said = &r.app.session.message;
+    assert!(said.contains("is believed already"), "{said}");
+}
+
+#[test]
+fn english_with_brackets_is_read_through_the_worlds_facts() {
+    // Catches English taken as a typed fact because Prolog reads it too:
+    // "rent is f(1300)" is is(rent, f(1300)), which no one meant.
+    let mut r = Room::new("worlds-english-brackets");
+    r.items(&["rent"]);
+    r.command("fact cell(rent, 1200)");
+    r.app.evaluate().unwrap();
+    suppose(&mut r, "rent is f(1300)");
+    r.app.evaluate().unwrap();
+    let facts = supposed_facts(&r);
+    assert!(facts.contains(&"cell(rent, 1300)".to_string()), "{facts:?}");
+}
+
+/// The facts of the world shown first, as text.
+fn supposed_facts(r: &Room) -> Vec<String> {
+    let facts = &r.app.reason.eval[0].as_ref().unwrap().facts;
+    facts.iter().map(|(_, f)| memex::reason::show(f)).collect()
+}
