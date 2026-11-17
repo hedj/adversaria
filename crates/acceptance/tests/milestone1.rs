@@ -90,8 +90,8 @@ fn write_entries(dir: &Path, n: u64, purges: u64) {
 /// An entry of a kind at random. One in ten starts a branch from an
 /// earlier entry.
 fn append_one(j: &mut Journal, rng: &mut Rng) {
-    let last = j.last().unwrap().seq;
-    let (parent, kind, body) = random_entry(rng, last);
+    let entry = random_entry(rng, j.last().unwrap().seq);
+    let (parent, kind, body) = entry;
     j.append_after(Some(parent), kind, body).unwrap();
 }
 
