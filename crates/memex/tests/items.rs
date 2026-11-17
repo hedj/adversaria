@@ -58,3 +58,17 @@ fn an_items_source_is_drawn_before_what_it_cites() {
         room.app.session.message
     );
 }
+
+#[test]
+fn the_text_cursor_counts_the_cells_of_wide_characters() {
+    // Catches the cursor placed by characters: each of 日本語 takes two
+    // cells, so the cursor at the end of "日本語 text" fell on the "e".
+    use ratatui::{Terminal, backend::Backend, backend::TestBackend};
+    let mut r = Room::new("wide-cursor");
+    r.items(&["日本語 text"]);
+    let mut t = Terminal::new(TestBackend::new(80, 10)).unwrap();
+    t.draw(|f| memex::ui::draw(f, &r.app)).unwrap();
+    let at = t.backend_mut().get_cursor_position().unwrap();
+    let (x, y) = r.find("日");
+    assert_eq!((at.x, at.y), (x + 6 + 5, y), "after 日本語 and \" text\"");
+}

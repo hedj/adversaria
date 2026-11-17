@@ -436,7 +436,11 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Hits {
         } else {
             0
         };
-        let x = rows_area.x as usize + 2 * cursor_depth + 2 + num + app.session.view.pos;
+        let x = rows_area.x as usize
+            + 2 * cursor_depth
+            + 2
+            + num
+            + cells(&app.text_of(cursor), app.session.view.pos);
         if x < (rows_area.x + rows_area.width) as usize {
             f.set_cursor_position(Position {
                 x: x as u16,
@@ -445,6 +449,13 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Hits {
         }
     }
     hits
+}
+
+/// How many cells the first characters of a text take: a wide character,
+/// such as 日, takes two.
+fn cells(text: &[char], n: usize) -> usize {
+    let before: String = text.iter().take(n).collect();
+    Span::raw(before).width()
 }
 
 /// The view at an item, drawn as world k computes it.
