@@ -70,3 +70,18 @@ fn recognition_stops_where_the_matches_differ() {
     r.items(&["Energia", "Enigma"]);
     assert_eq!(recognised(&mut r, "en"), "en");
 }
+
+#[test]
+fn a_pattern_whose_small_letters_are_longer_lists_without_a_crash() {
+    // Catches the match's end found by the pattern's own length, where
+    // its small letters take more bytes ("İ" is "i̇"): the cut fell inside
+    // a character of the item's text, and the memex panicked.
+    let mut r = Room::new("leap-dotted");
+    r.items(&["ai\u{307}b", "plain"]);
+    r.hold(Quasi::LeapForward, "İ");
+    let lines = r.lines_at(80, 12);
+    assert!(
+        lines.iter().any(|l| l.contains("LEAP · 1 MATCHES")),
+        "{lines:?}"
+    );
+}

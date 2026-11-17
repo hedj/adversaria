@@ -778,12 +778,15 @@ fn draw_list(f: &mut Frame, app: &App, a: &Active, area: Rect) {
                 }
                 let t = app.notebook.outline.text(*id);
                 let lt = t.to_lowercase();
+                let pattern = input.to_lowercase();
+                let ends =
+                    |i: usize| t.is_char_boundary(i) && t.is_char_boundary(i + pattern.len());
                 match lt
-                    .find(&input.to_lowercase())
-                    .filter(|_| lt.len() == t.len())
+                    .find(&pattern)
+                    .filter(|i| lt.len() == t.len() && ends(*i))
                 {
                     Some(i) => {
-                        let j = i + input.len();
+                        let j = i + pattern.len();
                         spans.push(Span::raw(t[..i].to_string()));
                         spans.push(Span::styled(t[i..j].to_string(), bold()));
                         spans.push(Span::raw(t[j..].to_string()));
