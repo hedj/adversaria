@@ -60,6 +60,7 @@ refused_term(T) :- compound_name_arguments(T, '.', [a, b]).  % '.'(a,b) in sourc
 refused_term(T) :- compound_name_arguments(T, foo, []).
 refused_term(T) :- T is inf.
 refused_term(T) :- T is nan.
+refused_term(T) :- T is 1r3.  % a rational: atomic, but no number of the protocol
 
 test(refused, [forall(refused_term(T)), throws(protocol_error(_))]) :-
     % Catches terms that would clash with lists, or have no cell form.

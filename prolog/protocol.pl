@@ -169,23 +169,35 @@ seq_cells([], _, S, S) --> [].
 seq_cells([T|Ts], D, S0, S) --> term_cells(T, D, S0, S1), seq_cells(Ts, D, S1, S).
 
 term_cells(T, _, S0, S) --> { var(T) }, !, var_cell(T, S0, S).
-term_cells(T, _, S0, S0) --> { integer(T) }, !, int_cells(T).
-term_cells(T, _, S0, S0) --> { float(T) }, !, float_cells(T).
-term_cells(T, _, S0, S0) --> { string(T) }, !, { string_utf8(T, Bytes) }, blob_cells(0's, Bytes).
-term_cells(T, _, S0, S) --> { ( T == [] ; atom(T) ) }, !, { atom_name(T, Name), atom_number_new(Name, No, S0, S), cell(atom, No, C) }, [C].
+term_cells(T, _, S0, S) --> { atomic(T) }, !, atomic_cells(T, S0, S).
 term_cells(T, D, _, _) -->
     { compound(T), max_depth(M), D >= M, !, throw(protocol_error(nested_deeper_than(M))) }.
-term_cells([H|T], D, S0, S) -->
-    % A list cell: its tail is at the list's own depth, so a long list's
-    % spine is not counted.
-    !,
+term_cells([H|T], D, S0, S) --> !, list_cells(H, T, D, S0, S).
+term_cells(T, D, S0, S) --> { compound(T) }, !, compound_cells(T, D, S0, S).
+term_cells(T, _, _, _) --> { throw(protocol_error(cannot_encode(T))) }.
+
+%   An atomic term's cells: a number's, a string's, or an atom's; any
+%   other, such as a rational or a stream, cannot be encoded.
+atomic_cells(T, S, S) --> { integer(T) }, !, int_cells(T).
+atomic_cells(T, S, S) --> { float(T) }, !, float_cells(T).
+atomic_cells(T, S, S) --> { string(T) }, !, string_cells(T).
+atomic_cells(T, S0, S) --> { ( T == [] ; atom(T) ) }, !, atom_cell(T, S0, S).
+atomic_cells(T, _, _) --> { throw(protocol_error(cannot_encode(T))) }.
+
+string_cells(T) --> { string_utf8(T, Bytes) }, blob_cells(0's, Bytes).
+
+atom_cell(T, S0, S) --> { atom_name(T, Name), atom_number_new(Name, No, S0, S), cell(atom, No, C) }, [C].
+
+%   A list cell: its tail is at the list's own depth, so a long list's
+%   spine is not counted.
+list_cells(H, T, D, S0, S) -->
     { atom_number_new('.', No, S0, S1), V is (2 << 21) \/ No, cell(struct, V, C), D1 is D + 1 },
     [C],
     term_cells(H, D1, S1, S2),
     term_cells(T, D, S2, S).
-term_cells(T, D, S0, S) -->
-    { compound(T), !,
-      compound_name_arity(T, F, A),
+
+compound_cells(T, D, S0, S) -->
+    { compound_name_arity(T, F, A),
       (   F == '[|]', A == 2 -> Name = '.'
       ;   F == '.', A == 2 -> throw(protocol_error(dot_compound))
       ;   A =:= 0 -> throw(protocol_error(zero_arity_compound(F)))
@@ -201,7 +213,6 @@ term_cells(T, D, S0, S) -->
     [C],
     { D1 is D + 1 },
     seq_cells(Args, D1, S1, S).
-term_cells(T, _, _, _) --> { throw(protocol_error(cannot_encode(T))) }.
 
 var_cell(T, s(Vs, N, New), S) -->
     (   { var_number(Vs, T, K) }
