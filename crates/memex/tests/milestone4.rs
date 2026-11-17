@@ -422,60 +422,76 @@ fn recomputation_touches_only_dependent_nodes() {
     // not the sentence, which reads only the dates of Buran's flight and
     // Energia's launch; and not the capital constraint.
     let mut app = scene("recompute");
-    item(&mut app, "Paris is the capital of France.");
-    command(&mut app, "fact capital(france, paris)");
+    with_a_capital(&mut app);
+    let nodes = nodes_of(&app.notebook.outline);
+    let before = evals(&mut app, &nodes);
+    with_a_new_date(&mut app);
+    let after = evals(&mut app, &nodes);
+    let delta = deltas(&nodes, &before, &after);
+    eprintln!("evaluations after one new date fact: {delta:?}");
+    for (name, d) in &delta {
+        assert_eq!(*d, evaluations_wanted(name), "{name}");
+    }
+}
+
+/// The scene, with a capital and a constraint of one capital per country,
+/// evaluated.
+fn with_a_capital(app: &mut App) {
+    item(app, "Paris is the capital of France.");
+    command(app, "fact capital(france, paris)");
+    let one_capital = "false :- capital(C, X), capital(C, Y), X \\= Y.";
     command(
-        &mut app,
-        "constraint one capital per country: false :- capital(C, X), capital(C, Y), X \\= Y.",
+        app,
+        &format!("constraint one capital per country: {one_capital}"),
     );
     app.flush();
     app.evaluate().unwrap();
-    let constraints: Vec<(u64, String)> = app
-        .notebook
-        .outline
-        .constraints
-        .iter()
-        .map(|(s, c)| (*s, c.name.clone()))
-        .collect();
-    let derived: Vec<u64> = app.notebook.outline.derived.keys().copied().collect();
-    let nodes: Vec<(u64, String)> = constraints
-        .into_iter()
-        .chain(derived.iter().map(|d| {
-            (
-                *d,
-                app.notebook.outline.derived[d]
-                    .template
-                    .chars()
-                    .take(16)
-                    .collect::<String>(),
-            )
-        }))
-        .collect();
-    let count = |app: &mut App| -> Vec<i64> {
-        nodes
-            .iter()
-            .map(|(id, _)| app.current_engine().unwrap().evals(*id).unwrap())
-            .collect()
-    };
-    let before = count(&mut app);
-    item(&mut app, "The programme was cancelled in 1993.");
-    command(&mut app, "fact date(cancellation, 1993)");
+}
+
+/// A third event's date, evaluated.
+fn with_a_new_date(app: &mut App) {
+    item(app, "The programme was cancelled in 1993.");
+    command(app, "fact date(cancellation, 1993)");
     app.flush();
     app.evaluate().unwrap();
-    let after = count(&mut app);
-    let delta: Vec<(String, i64)> = nodes
+}
+
+/// The outline's nodes, each with a name: its constraints by name, and
+/// its derived items by their template's first 16 characters.
+fn nodes_of(o: &memex::outline::Outline) -> Vec<(u64, String)> {
+    let constraints = o.constraints.iter().map(|(s, c)| (*s, c.name.clone()));
+    let template = |d: &u64| o.derived[d].template.chars().take(16).collect::<String>();
+    let derived = o.derived.keys().map(|d| (*d, template(d)));
+    constraints.chain(derived).collect()
+}
+
+/// How many times each node has been evaluated.
+fn evals(app: &mut App, nodes: &[(u64, String)]) -> Vec<i64> {
+    let engine = app.current_engine().unwrap();
+    nodes
         .iter()
-        .zip(before.iter().zip(&after))
+        .map(|(id, _)| engine.evals(*id).unwrap())
+        .collect()
+}
+
+/// How many more times each node was evaluated, by its name.
+fn deltas(nodes: &[(u64, String)], before: &[i64], after: &[i64]) -> Vec<(String, i64)> {
+    let counts = before.iter().zip(after);
+    nodes
+        .iter()
+        .zip(counts)
         .map(|((_, n), (b, a))| (n.clone(), a - b))
-        .collect();
-    eprintln!("evaluations after one new date fact: {delta:?}");
-    for (name, d) in &delta {
-        let want = match name.as_str() {
-            "one date per event" | "timeline" => 1,
-            "one capital per country" | "The flight came " => 0,
-            n => panic!("unexpected node {n}"),
-        };
-        assert_eq!(*d, want, "{name}");
+        .collect()
+}
+
+/// How many more times a node should be evaluated after a new date: once
+/// for those that read every date, the constraint and the timeline; not at
+/// all for the sentence, which reads only two, nor for the capitals.
+fn evaluations_wanted(name: &str) -> i64 {
+    match name {
+        "one date per event" | "timeline" => 1,
+        "one capital per country" | "The flight came " => 0,
+        n => panic!("unexpected node {n}"),
     }
 }
 
