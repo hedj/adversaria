@@ -146,12 +146,18 @@ mod tests {
     /// Entries from (parent, kind, body), numbered from 1.
     fn journal(spec: &[(Option<u64>, &str, Value)]) -> Vec<Entry> {
         let mut es: Vec<Entry> = Vec::new();
-        for (row, seq) in spec.iter().zip(1..) {
-            let parent = parent_of(&es, row);
-            let (_, kind, body) = row;
-            es.push(Entry::new(seq, parent, kind, body.clone()).unwrap());
+        for row in spec {
+            let entry = next_entry(&es, row);
+            es.push(entry);
         }
         es
+    }
+
+    /// The entry a row makes after these, numbered after the last.
+    fn next_entry(es: &[Entry], row: &(Option<u64>, &str, Value)) -> Entry {
+        let (_, kind, body) = row;
+        let parent = parent_of(es, row);
+        Entry::new(es.len() as u64 + 1, parent, kind, body.clone()).unwrap()
     }
 
     /// The parent a row names, of these entries, as Entry::new names it.
