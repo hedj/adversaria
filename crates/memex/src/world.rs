@@ -2,7 +2,7 @@
 //! (docs/design.md § Dataflow).
 
 use crate::engine::{Engine, told};
-use crate::outline::{Constraint, Outline};
+use crate::outline::Outline;
 use crate::reason::{ConstraintEval, Nodes, WorldEval, marks};
 use format::terms::Term;
 use std::collections::BTreeMap;
@@ -78,27 +78,13 @@ impl World {
         })
     }
 
-    /// Each constraint still stated in this world, read.
+    /// Each constraint of this world's outline, read. The outline has none
+    /// whose definition the world retracts: its replay leaves those out.
     fn read_constraints(&self, engine: &mut Engine) -> Result<Vec<ConstraintEval>, String> {
-        self.stated_constraints()
-            .into_iter()
-            .map(|(seq, c)| ConstraintEval::read(engine, seq, c))
+        let constraints = self.outline.constraints.iter();
+        constraints
+            .map(|(seq, c)| ConstraintEval::read(engine, *seq, c))
             .collect()
-    }
-
-    /// The outline's constraints whose definitions are facts of this
-    /// world: one retracted in it is not.
-    fn stated_constraints(&self) -> Vec<(u64, &Constraint)> {
-        self.outline
-            .constraints
-            .iter()
-            .filter(|(seq, _)| self.states(**seq))
-            .map(|(seq, c)| (*seq, c))
-            .collect()
-    }
-
-    fn states(&self, seq: u64) -> bool {
-        self.facts.iter().any(|(s, _)| *s == seq)
     }
 
     fn read_nodes(&self, engine: &mut Engine) -> Nodes {
