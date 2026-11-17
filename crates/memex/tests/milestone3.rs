@@ -404,55 +404,67 @@ fn replay_reproduces_the_screen() {
     // cell, but for the message line (feedback, not state).
     let dir = temp("replay");
     let mut app = essay(&dir);
-    command(&mut app, "name title");
-    typ(&mut app, " Buran");
-    command(&mut app, "undo");
-    command(&mut app, "redo");
-    hold(&mut app, Quasi::LeapForward, "open");
-    release(&mut app, Quasi::LeapForward);
-    command(&mut app, "fold");
-    hold(&mut app, Quasi::Scope, " ");
-    release(&mut app, Quasi::Scope);
-    hold(&mut app, Quasi::LeapForward, "energia");
-    release(&mut app, Quasi::LeapForward);
+    every_kind_of_action(&mut app);
+    replay_matches(&app, &replayed(&dir));
+    assert_eq!(app.reason.world(), "the flight was in 1989");
+    journal_holds_every_kind(&app);
+    // And the journal checks as a chain.
+    let text = std::fs::read_to_string(dir.join("journal.jsonl")).unwrap();
+    assert!(format::chain::check_journal(&text).is_ok());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// On the essay: a name, typing, undo and redo, Leap, fold, each scope, a
+/// deletion, a retraction confirmed, a supposition, a pane and a switch,
+/// and moving the cursor.
+fn every_kind_of_action(app: &mut App) {
+    command(app, "name title");
+    typ(app, " Buran");
+    command(app, "undo");
+    command(app, "redo");
+    hold(app, Quasi::LeapForward, "open");
+    release(app, Quasi::LeapForward);
+    command(app, "fold");
+    hold(app, Quasi::Scope, " ");
+    release(app, Quasi::Scope);
+    hold(app, Quasi::LeapForward, "energia");
+    release(app, Quasi::LeapForward);
     app.handle(Event::down(Key::Quasi(Quasi::Scope)));
-    release(&mut app, Quasi::Scope);
-    tap(&mut app, Key::Quasi(Quasi::Scope)); // latched, then a second tap ends it at word scope
-    command(&mut app, "delete");
-    let to_retract = app
-        .journal()
-        .entries()
-        .iter()
-        .rev()
-        .find(|e| e.kind() == "link")
-        .unwrap()
-        .seq;
-    command(&mut app, &format!("retract {to_retract}"));
-    tap(&mut app, Key::Enter);
-    hold(&mut app, Quasi::Suppose, "the flight was in 1989");
-    release(&mut app, Quasi::Suppose);
-    command(&mut app, "pane outline");
-    command(&mut app, "switch");
-    tap(&mut app, Key::Down);
-    tap(&mut app, Key::Right);
+    release(app, Quasi::Scope);
+    tap(app, Key::Quasi(Quasi::Scope)); // latched, then a second tap ends it at word scope
+    command(app, "delete");
+    command(app, &format!("retract {}", last_of_kind(app, "link")));
+    tap(app, Key::Enter);
+    hold(app, Quasi::Suppose, "the flight was in 1989");
+    release(app, Quasi::Suppose);
+    command(app, "pane outline");
+    command(app, "switch");
+    tap(app, Key::Down);
+    tap(app, Key::Right);
     app.flush();
-    let live = screen(&app, 140, 40);
-    let replayed = replayed(&dir);
-    let again = screen(&replayed, 140, 40);
+}
+
+/// The number of the last entry of a kind.
+fn last_of_kind(app: &App, kind: &str) -> u64 {
+    let mut entries = app.journal().entries().iter().rev();
+    entries.find(|e| e.kind() == kind).unwrap().seq
+}
+
+/// A replay is the live memex: the same screen but for its message line,
+/// the same tip, redo list and world, view and outline.
+fn replay_matches(app: &App, replayed: &App) {
+    let (live, again) = (screen(app, 140, 40), screen(replayed, 140, 40));
     let n = live.len() - 1; // the last line holds messages
     assert_eq!(live[..n], again[..n]);
-    assert_eq!(
-        (
-            replayed.notebook.tip,
-            &replayed.notebook.redo,
-            &replayed.reason.world()
-        ),
-        (app.notebook.tip, &app.notebook.redo, &app.reason.world())
-    );
+    assert_eq!(replayed.notebook.tip, app.notebook.tip);
+    assert_eq!(replayed.notebook.redo, app.notebook.redo);
+    assert_eq!(replayed.reason.world(), app.reason.world());
     assert_eq!(replayed.session.view, app.session.view);
     assert_eq!(replayed.notebook.outline, app.notebook.outline);
-    assert_eq!(app.reason.world(), "the flight was in 1989");
-    // Every kind the session used is in the journal.
+}
+
+/// Every kind of entry the session used is in the journal.
+fn journal_holds_every_kind(app: &App) {
     let kinds: std::collections::BTreeSet<&str> =
         app.journal().entries().iter().map(|e| e.kind()).collect();
     for k in [
@@ -460,10 +472,6 @@ fn replay_reproduces_the_screen() {
     ] {
         assert!(kinds.contains(k), "no {k} entry");
     }
-    // And the journal checks as a chain.
-    let text = std::fs::read_to_string(dir.join("journal.jsonl")).unwrap();
-    assert!(format::chain::check_journal(&text).is_ok());
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
