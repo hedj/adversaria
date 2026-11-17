@@ -10,12 +10,13 @@ use tools::interactivity::*;
 const LIMIT: usize = 4;
 
 /// The Prolog files measured.
-const PROLOG: [&str; 5] = [
+const PROLOG: [&str; 6] = [
     "prolog/protocol.pl",
     "prolog/server.pl",
     "prolog/dataflow.pl",
     "prolog/ace.pl",
     "prolog/ace_server.pl",
+    "prolog/ace_next.pl",
 ];
 
 /// The documents measured, where they are there.

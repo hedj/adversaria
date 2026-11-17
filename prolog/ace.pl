@@ -38,6 +38,7 @@ advice.
 :- use_module(ape(lexicon/spellcheck), []).
 :- use_module(ape(logger/error_logger), [clear_messages/0, get_messages/1]).
 :- use_module(library(time), [call_with_time_limit/2]).
+:- use_module(ace_next, [next_words/2, users_word/1]).
 
 %!  ace_lexicon(+Entries:list, -Told:list) is det.
 %   Make the user lexicon these entries, in APE's lexicon format
@@ -99,8 +100,11 @@ ace_parse(Text, Result) :-
 
 %!  ace_check(+Text:string, -Check) is det.
 %   What a text being typed is, ended with a full stop if it has no end
-%   mark: ace(Paraphrase) when it is ACE, else
-%   not_ace(Failure, Notes, Repairs). Failure is the first sentence with
+%   mark: ace(Paraphrase) when it is ACE; open(Next, Completed) when it
+%   is not, but can go on as ACE (ace_next.pl): Next the words and kinds
+%   of word that may come next, those that the word being typed begins,
+%   and Completed the text with that word completed, if one word alone
+%   fits ("" if not); else not_ace(Failure, Notes, Repairs). Failure is the first sentence with
 %   <> where parsing stopped ("" if APE gave none); Notes are APE's other
 %   messages; Repairs are up to three repair(From, To, Mended): a word of
 %   Text, a word for its place, and Text so mended, which is ACE.
@@ -111,9 +115,57 @@ ace_check(Text, Check) :-
     checked(Result, Text, Check).
 
 checked(parsed(Paraphrase, _, _), _, ace(Paraphrase)).
+checked(not_ace(_), Text, open(Next, Completed)) :-
+    going_on(Text, Next, Completed),
+    !.
 checked(not_ace(Messages), Text, not_ace(Failure, Notes, Repairs)) :-
     failure(Messages, Failure, Notes),
     repairs(Text, Failure, Notes, Repairs).
+
+%   What may come next in a text that has no end mark: after its last
+%   space, filtered by the word being typed, if any; none means it
+%   cannot go on. A word being typed is not judged before it ends.
+going_on(Text, Next, Completed) :-
+    \+ ended_by_mark(Text),
+    typing(Text, Done, Typed),
+    next_words(Done, All),
+    include(begun_by(Typed), All, Next),
+    Next \== [],
+    completed(Done, Typed, Next, Completed).
+
+ended_by_mark(Text) :-
+    split_string(Text, "", " \t\n", [T]),
+    sub_string(T, _, 1, 0, Last),
+    sub_atom(".?!", _, 1, _, Last).
+
+%   A text as what is done (up to its last space) and the word being
+%   typed after it ("" when it ends with a space).
+typing(Text, Done, Typed) :-
+    (   sub_string(Text, Before, 1, After, " "),
+        \+ ( sub_string(Text, B2, 1, _, " "), B2 > Before )
+    ->  sub_string(Text, 0, Before, _, Done0),
+        string_concat(Done0, " ", Done),
+        sub_string(Text, _, After, 0, Typed)
+    ;   Done = "", Typed = Text
+    ).
+
+%   A next word the word being typed begins (ignoring case), or a kind of
+%   word, which it may begin.
+begun_by(_, kind(_)).
+begun_by(Typed, word(W)) :-
+    string_lower(Typed, T),
+    atom_string(W, S),
+    string_lower(S, L),
+    string_concat(T, _, L).
+
+%   The text with the word being typed completed, if one word alone fits
+%   and something is typed; else "".
+completed(Done, Typed, Next, Completed) :-
+    (   Typed \== "",
+        findall(W, member(word(W), Next), [W])
+    ->  format(string(Completed), "~w~w ", [Done, W])
+    ;   Completed = ""
+    ).
 
 %   A text with a full stop after it, unless it ends with . ? or !.
 ended(Text, Ended) :-
@@ -148,10 +200,19 @@ repair(Words, Targets, Deadline, repair(From, To, Mended)) :-
     member(At-From, Targets),
     candidate(From, To),
     mended(Words, At-From, To, Mended),
-    ended(Mended, Ended),
     get_time(Now),
     Now < Deadline,
-    is_ace(Ended).
+    ace_or_open(Mended).
+
+%   Whether a text, ended with a full stop if it has none, is ACE; or,
+%   if it ends with a space, can go on as ACE ("The flight is ").
+ace_or_open(Text) :-
+    ended(Text, Ended),
+    is_ace(Ended),
+    !.
+ace_or_open(Text) :-
+    typing(Text, Text, ""),
+    next_words(Text, [_|_]).
 
 %   Whether APE finds no error in a text: a parse, without its
 %   paraphrase, which a repair does not need.
@@ -181,9 +242,16 @@ target(_, Notes, 0-Word) :-
 candidate(From, To) :-
     atom_string(F, From),
     (   present(F, T)
-    ;   spelled(F, T)
+    ;   near(F, T)
     ),
     atom_string(T, To).
+
+%   The words one edit away: the notebook's first.
+near(Word, Near) :-
+    findall(N, spelled(Word, N), All),
+    partition(users_word, All, Users, Others),
+    append(Users, Others, Ordered),
+    member(Near, Ordered).
 
 present(was, is).
 present(were, are).

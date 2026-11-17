@@ -4,6 +4,7 @@
 % Run: swipl -g run_tests -t halt prolog/tests/test_ace.pl
 
 :- use_module('../ace').
+:- use_module('../ace_next').
 :- use_module(library(plunit)).
 
 :- begin_tests(ace).
@@ -152,5 +153,70 @@ test(a_long_sentence_is_paraphrased_within_a_quarter_second) :-
     ace_parse(Long, parsed(_, _, _)),
     get_time(End),
     assertion(End - Start < 0.25).
+
+test(the_words_that_may_come_next_are_the_grammars) :-
+    % Catches a lookahead that misses a function word, a kind of word, or
+    % the notebook's words of that kind, or that offers a word the grammar
+    % does not take there: after "The date of" comes a name or "the", not
+    % a verb.
+    ace_lexicon([pn_sg(buran_flight, buran_flight, neutr), adj_itr(reusable, reusable)], _),
+    next_words("The date of", Next),
+    assertion(memberchk(word(buran_flight), Next)),
+    assertion(memberchk(kind(name), Next)),
+    assertion(memberchk(word(the), Next)),
+    assertion(\+ memberchk(kind(verb), Next)),
+    assertion(\+ memberchk(word(reusable), Next)),
+    Next = [First|_],
+    assertion(First == word(buran_flight)).
+
+test(nothing_may_come_after_a_broken_beginning) :-
+    % Catches a text that cannot go on as ACE given next words: ACE has no
+    % past tense.
+    ace_lexicon([], []),
+    next_words("The flight was", Next),
+    assertion(Next == []).
+
+test(the_next_words_follow_the_last_sentence) :-
+    % Catches a text of two sentences read as one.
+    ace_lexicon([], []),
+    next_words("John waits. The", Next),
+    assertion(memberchk(kind(noun), Next)).
+
+test(a_beginning_of_ace_is_open_with_what_may_come_next) :-
+    % Catches a sentence still being typed reported as not ACE.
+    ace_lexicon([pn_sg(buran_flight, buran_flight, neutr)], _),
+    ace_check("The date of ", open(Next, "")),
+    assertion(memberchk(word(buran_flight), Next)).
+
+test(a_word_being_typed_filters_the_next_words_and_one_alone_completes) :-
+    % Catches next words not filtered by what is typed, ignoring case, or
+    % no completion when one word alone fits.
+    ace_lexicon([pn_sg(buran_flight, buran_flight, neutr)], _),
+    ace_check("The date of BUR", open(Next, Completed)),
+    assertion(\+ memberchk(word(the), Next)),
+    assertion(Completed == "The date of buran_flight "),
+    ace_check("The date of ", open(_, None)),
+    assertion(None == "").
+
+test(a_word_ended_that_breaks_the_sentence_is_mended_to_go_on) :-
+    % Catches a repair required to make a sentence still being typed
+    % whole: "The flight is" is not a sentence, but it goes on.
+    ace_lexicon([], []),
+    ace_check("The flight was ", not_ace(_, _, [First|_])),
+    assertion(First == repair("was", "is", "The flight is ")).
+
+test(the_notebooks_word_is_offered_first) :-
+    % Catches APE's order (dart, data, date) kept when the notebook has
+    % date.
+    ace_lexicon([noun_sg(date, date, neutr), pn_sg(buran_flight, buran_flight, neutr)], _),
+    ace_check("The dat of buran_flight is 1989.", not_ace(_, _, [First|_])),
+    assertion(First = repair("dat", "date", _)).
+
+test(a_word_begun_that_two_words_fit_completes_to_neither) :-
+    % Catches the first of two fitting words taken as the completion.
+    ace_lexicon([pn_sg(buran_flight, buran_flight, neutr), pn_sg(buran_orbit, buran_orbit, neutr)], _),
+    ace_check("The date of bur", open(Next, Completed)),
+    assertion(memberchk(word(buran_orbit), Next)),
+    assertion(Completed == "").
 
 :- end_tests(ace).

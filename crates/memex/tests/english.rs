@@ -103,3 +103,32 @@ fn a_supposition_with_no_repair_names_the_words_ace_does_not_know() {
     r.tap(&[Key::Escape]);
     assert_eq!(typed(&r), "Qzx vbn.");
 }
+
+/// A room whose notebook names buran_flight and its date.
+fn buran(name: &str) -> Room {
+    let mut r = Room::new(name);
+    r.items(&["flight"]);
+    r.command("fact date(buran_flight, 1988)");
+    r
+}
+
+#[test]
+fn a_supposition_still_being_typed_shows_what_may_come_next() {
+    // Catches a sentence still being typed reported as not ACE, or the
+    // notebook's words not offered first.
+    let mut r = buran("english-next");
+    r.hold(Quasi::Suppose, "The date of ");
+    let hint = line_with(&r, "next: buran_flight, a name");
+    assert!(hint.is_some(), "{:?}", r.lines_at(160, 30).last());
+}
+
+#[test]
+fn esc_completes_the_word_being_typed_when_one_alone_fits() {
+    // Catches the completion unsaid, or Esc leaving the word as typed.
+    let mut r = buran("english-complete");
+    r.hold(Quasi::Suppose, "The date of bur");
+    assert!(line_with(&r, "Esc: buran_flight").is_some());
+    r.tap(&[Key::Escape]);
+    assert_eq!(typed(&r), "The date of buran_flight ");
+    assert!(line_with(&r, "next: ").is_some());
+}

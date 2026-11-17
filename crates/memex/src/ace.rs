@@ -50,7 +50,24 @@ pub struct Note {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Check {
     Ace(String),
+    Open(Opening),
     NotAce(Failure),
+}
+
+/// A text that is not ACE yet but can go on as ACE: what may come next
+/// (those the word being typed begins), and the text with that word
+/// completed, if one word alone fits.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Opening {
+    pub next: Vec<Next>,
+    pub completed: Option<String>,
+}
+
+/// What may come next: a word, or a kind of word (noun, name, verb, ...).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Next {
+    Word(String),
+    Kind(String),
 }
 
 /// Why a text is not ACE: the sentence marked where parsing stopped (<>),
@@ -74,8 +91,11 @@ pub struct Repair {
 impl Check {
     /// The text mended by the first repair, if there is one.
     pub fn mended(&self) -> Option<String> {
-        let Check::NotAce(f) = self else { return None };
-        f.repairs.first().map(|r| r.mended.clone())
+        match self {
+            Check::Ace(_) => None,
+            Check::Open(o) => o.completed.clone(),
+            Check::NotAce(f) => f.repairs.first().map(|r| r.mended.clone()),
+        }
     }
 }
 
@@ -186,10 +206,30 @@ fn check_of(t: &Term) -> Result<Check, Error> {
     if let Some(a) = parts(t, "ace", 1) {
         return Ok(Check::Ace(text(&a[0])?));
     }
+    if let Some(a) = parts(t, "open", 2) {
+        return opening(a).map(Check::Open);
+    }
     let a = parts(t, "not_ace", 3).ok_or_else(|| bad("check", t))?;
     let (at, notes) = (text(&a[0])?, messages(&a[1])?);
     let repairs = list(&a[2]).iter().map(repair).collect::<Result<_, _>>()?;
     Ok(Check::NotAce(Failure { at, notes, repairs }))
+}
+
+/// An opening, from the arguments of open(Next, Completed); "" is no
+/// completion.
+fn opening(a: &[Term]) -> Result<Opening, Error> {
+    let next = list(&a[0]).iter().map(next_of).collect::<Result<_, _>>()?;
+    let completed = Some(text(&a[1])?).filter(|c| !c.is_empty());
+    Ok(Opening { next, completed })
+}
+
+/// What may come next, from word(Form) or kind(Name).
+fn next_of(t: &Term) -> Result<Next, Error> {
+    if let Some(a) = parts(t, "word", 1) {
+        return Ok(Next::Word(text(&a[0])?));
+    }
+    let a = parts(t, "kind", 1).ok_or_else(|| bad("next word", t))?;
+    Ok(Next::Kind(text(&a[0])?))
 }
 
 /// A repair, from repair(From, To, Mended).
@@ -283,7 +323,34 @@ fn failed(messages: &[Message]) -> (String, Vec<&Message>) {
 pub fn hint(check: &Check) -> String {
     match check {
         Check::Ace(paraphrase) => format!("ACE: {paraphrase}"),
+        Check::Open(o) => going_on(o),
         Check::NotAce(f) => format!("not ACE: {} · {}", f.at, mend_or_why(f)),
+    }
+}
+
+/// What may come next, the first twelve, and the word Esc completes.
+fn going_on(o: &Opening) -> String {
+    let shown: Vec<String> = o.next.iter().take(12).map(Next::said).collect();
+    let more = if o.next.len() > 12 { ", …" } else { "" };
+    let next = format!("next: {}{more}", shown.join(", "));
+    match o
+        .completed
+        .as_deref()
+        .and_then(|c| c.split_whitespace().last())
+    {
+        Some(word) => format!("{next} · Esc: {word}"),
+        None => next,
+    }
+}
+
+impl Next {
+    /// A word as it is; a kind with its article: "a noun", "an adverb".
+    fn said(&self) -> String {
+        match self {
+            Next::Word(w) => w.clone(),
+            Next::Kind(k) if k.starts_with(['a', 'e', 'i', 'o', 'u']) => format!("an {k}"),
+            Next::Kind(k) => format!("a {k}"),
+        }
     }
 }
 
@@ -565,6 +632,48 @@ mod tests {
         assert!(shown.ends_with("words ACE does not know: Qzx"), "{shown}");
         let bare = hint(&failure(vec![], vec![]));
         assert!(bare.ends_with("no edit of one word makes it ACE"), "{bare}");
+    }
+
+    fn opened(next: Vec<Next>, completed: Option<&str>) -> Check {
+        let completed = completed.map(String::from);
+        Check::Open(Opening { next, completed })
+    }
+
+    #[test]
+    fn an_opening_shows_what_may_come_next_and_what_esc_completes() {
+        // Catches a kind shown without its article, more than twelve shown
+        // without saying so, or the completion unsaid or not applied.
+        let words = vec![
+            Next::Word("buran_flight".into()),
+            Next::Kind("adverb".into()),
+        ];
+        let o = opened(words, Some("The date of buran_flight "));
+        assert_eq!(
+            hint(&o),
+            "next: buran_flight, an adverb · Esc: buran_flight"
+        );
+        assert_eq!(o.mended().as_deref(), Some("The date of buran_flight "));
+        let many = (0..13).map(|i| Next::Word(format!("w{i}"))).collect();
+        assert!(hint(&opened(many, None)).ends_with("w11, …"));
+        assert_eq!(opened(vec![Next::Kind("noun".into())], None).mended(), None);
+    }
+
+    #[test]
+    fn an_opening_is_read() {
+        // Catches the next words or kinds misread, or an empty completion
+        // taken for one.
+        let next = make_list(vec![
+            c("word", vec![atom("of")]),
+            c("kind", vec![atom("noun")]),
+        ]);
+        let t = c("open", vec![next, Term::Str(String::new())]);
+        let want = vec![Next::Word("of".into()), Next::Kind("noun".into())];
+        assert_eq!(check_of(&t).unwrap(), opened(want, None));
+        let odd = c(
+            "open",
+            vec![make_list(vec![atom("of")]), Term::Str(String::new())],
+        );
+        assert!(check_of(&odd).is_err());
     }
 
     #[test]

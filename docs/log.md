@@ -662,6 +662,42 @@ Checked: 19 Prolog tests and 6 tests through the memex, 14 unit tests in
 `ace.rs`; 13 breaks, each made a test fail (listed in the commit);
 `make test` passes in the Nix shell. Not checked: a real terminal.
 
+#### The predictive editor (17 November 2026)
+
+While Suppose is held, the line below the typing says what may come next
+in ACE, as the user types (`docs/translator.md`: "offers only the next
+words the ACE grammar accepts").
+
+APE has no interface for this, so `prolog/ace_next.pl` asks its grammar.
+The grammar takes every token through a few predicates of
+`grammar_words` (`word/3`, `word_noninitial/4`, ...): a function word by
+its form, a content word by a condition naming its category
+(`noun_sg(W, Lemma, Gender)`). Each is wrapped (`wrap_predicate/4`):
+where the input left is a marker, the wrapper records what was asked for
+and fails, so the grammar tries every other way on. A text parsed with the
+marker after it thus gives every word that may come next, exactly; APE's
+own files are unchanged. A first try, an attributed variable as the next
+token, failed: a grammar condition calls `atom_concat/3` on the token.
+
+`ace_check/2` now gives a third answer, `open(Next, Completed)`, for a
+text that is not a sentence yet but can go on: the next words, those the
+word being typed begins (ignoring case), the notebook's words first, then
+kinds of word, then function words; and the text completed when one word
+alone fits, which Esc applies. A word is judged once it ends (a space or
+an end mark), as in predictive editors. Two faults of the repairs, found
+while testing it: a repair had to make the text a whole sentence, so
+"The flight was " was not mended to "The flight is " (it goes on); and
+the notebook's word came after APE's (dart, data, date).
+
+Measured: the lookahead takes 1–20 ms for a beginning of up to 9 words,
+70–200 ms for one of 25 or more, and has a quarter of a second at most;
+a check of a short beginning, with it, 3–8 ms.
+
+Checked: 27 Prolog tests (8 new) and 8 tests through the memex (2 new),
+16 unit tests in `ace.rs` (2 new); 15 breaks, each made a test fail
+(listed in the commit), one only after a test was added for it: the
+first of two fitting words taken as the completion.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

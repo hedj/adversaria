@@ -151,7 +151,7 @@ The defaults are below. All of them can be changed (§ 4.3).
 | Leap back | Left Alt | type a pattern | the cursor goes to the previous item holding it |
 | Command | Left Ctrl | type a command line | the command runs on the item under the cursor |
 | Scope | Right Ctrl | Space widens the target: word, statement, branch | the target stays chosen for the next command |
-| Suppose | Super (either) | type a statement; the line below says whether it is controlled English, and if not, where it fails and how to mend it | the memex offers its readings of it (§ 3.2) |
+| Suppose | Super (either) | type a statement; the line below says what may come next in controlled English, whether it is a sentence of it, and if it breaks, where and how to mend it | the memex offers its readings of it (§ 3.2) |
 
 Within a quasimode:
 
@@ -159,8 +159,8 @@ Within a quasimode:
   and the quasimode stays on without holding. Enter, or a second tap, ends
   it. Backspace on an empty latched quasimode leaves it without acting.
 - **Esc completes:** a command name in Command, a pattern in Leap. In
-  Suppose it mends: it puts the repair the line below offers first in
-  place.
+  Suppose it completes the word being typed when one word alone fits, or
+  mends: it puts the repair the line below offers first in place.
 - **`?` lists** the commands that match (Command) or every match (Leap).
 - **Repeat a Leap:** a second tap of a latched, empty Leap repeats the last
   pattern.
@@ -388,11 +388,20 @@ Enter accepts; Tab shows the next reading; Esc cancels.
 
 While you type, the line below checks the statement as controlled English
 (ACE), with the words of your notebook, as if it ended with a full stop:
-`ACE:` and how APE, its parser, reads it back; or `not ACE:`, the
-sentence with `<>` where parsing stopped, and up to three edits of one
-word that make it ACE, such as `Esc: was → is` (ACE has only the present
-tense). Esc puts the first in place. With no such edit, it names the words
-ACE does not know. A fact written as
+
+- `ACE:` and how APE, its parser, reads it back, when it is a sentence;
+- `next:` and what may come next, when it is not yet one but can go on:
+  your notebook's words first, then kinds of word (`a noun`, `a name`,
+  `a verb`, ...), then words such as `the`, `of` and `is`. While you type
+  a word, only those it begins are shown, and when one alone fits, Esc
+  completes it (`Esc: buran_flight`);
+- `not ACE:` when it cannot go on: the sentence with `<>` where parsing
+  stopped, and up to three edits of one word that make it ACE or let it
+  go on, your notebook's words first, such as `Esc: was → is` (ACE has
+  only the present tense). Esc puts the first in place. With no such
+  edit, it names the words ACE does not know.
+
+A word is judged only once it ends, with a space or an end mark. A fact written as
 Prolog, such as `cell(fuel, 80)`, is read exactly as you wrote it, even
 for something the memex has no facts about. If there is no reading,
 releasing starts a named world with nothing supposed; if what you typed
