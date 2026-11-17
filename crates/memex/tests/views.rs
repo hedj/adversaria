@@ -691,3 +691,35 @@ fn columns_of_a_grid_cut_off_for_want_of_room_are_named() {
         "room for all at 200"
     );
 }
+
+#[test]
+fn a_layer_whose_goal_raises_an_error_says_so() {
+    // Catches the error dropped: the view said "(no marks: no solutions
+    // yet)" of a goal that has facts to read.
+    let mut r = Room::new("layer-error");
+    r.items(&["rent", "chart"]);
+    r.command("layer bar(x(C), y(V)) where cell(C, R), V is R + foo");
+    let layer = r.last("edit");
+    r.leap(Quasi::LeapBack, "rent");
+    r.command("fact cell(rent, 1200)");
+    r.app.flush();
+    r.app.evaluate().unwrap();
+    let why = "cannot answer: type_error(evaluable, foo / 0)";
+    assert!(r.shows(&format!("(layer {layer} {why})")));
+    assert!(!r.shows("no solutions yet"));
+}
+
+#[test]
+fn a_layer_that_cannot_answer_is_noted_under_the_marks_of_the_others() {
+    // Catches the note given only to a view with nothing else to draw.
+    let mut r = Room::new("layer-error-beside");
+    r.items(&["rent", "chart"]);
+    r.command("layer bar(x(C), y(V)) where cell(C, V)");
+    r.command("layer bar(x(C), y(V)) where cell(C, R), V is R + foo");
+    r.leap(Quasi::LeapBack, "rent");
+    r.command("fact cell(rent, 1200)");
+    r.app.flush();
+    r.app.evaluate().unwrap();
+    assert!(r.shows("1200 │"));
+    assert!(r.shows("cannot answer: type_error(evaluable, foo / 0))"));
+}

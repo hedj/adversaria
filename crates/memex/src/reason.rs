@@ -205,7 +205,8 @@ impl WorldEval {
 pub struct Nodes {
     /// Each derived item's answers.
     pub derived: BTreeMap<u64, Term>,
-    /// Each derived item whose node could not be read: what went wrong.
+    /// Each node, of a derived item or a layer, that could not be read:
+    /// what went wrong.
     pub failed: BTreeMap<u64, String>,
     /// Each layer's marks, by the layer's seq: the mark, and the seqs of
     /// the facts it rests on.

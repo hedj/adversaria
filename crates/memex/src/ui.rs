@@ -449,26 +449,52 @@ fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Hits {
 
 /// The view at an item, drawn as world k computes it.
 pub fn view_figure(app: &App, k: usize, item: u64, width: usize, height: usize) -> view::Figure {
-    match view_inputs(app, k, item) {
+    match view_marks(app, k, item) {
         None => view::Figure::default(),
-        Some(inputs) if inputs.is_empty() => view::Figure::noted("(no marks: no solutions yet)"),
-        Some(inputs) => view::render(&inputs, width, height),
+        Some(marks) => marks.figure(width, height),
     }
 }
 
-/// The marks of the view at an item in world k, if the item has a view.
-fn view_inputs(app: &App, k: usize, item: u64) -> Option<Vec<view::Input>> {
+/// What a view computes in a world: its marks, and a note for each layer
+/// that cannot answer, and why.
+#[derive(Default)]
+struct ViewMarks {
+    inputs: Vec<view::Input>,
+    failed: Vec<String>,
+}
+
+impl ViewMarks {
+    /// The marks drawn, then the notes of the layers that cannot answer.
+    /// With no marks and no such layer, a note that there are no
+    /// solutions yet.
+    fn figure(&self, width: usize, height: usize) -> view::Figure {
+        let mut fig = match (self.inputs.is_empty(), self.failed.is_empty()) {
+            (false, _) => view::render(&self.inputs, width, height),
+            (true, true) => view::Figure::noted("(no marks: no solutions yet)"),
+            (true, false) => view::Figure::default(),
+        };
+        fig.notes.extend_from_slice(&self.failed);
+        fig
+    }
+}
+
+/// What the view at an item computes in world k, if the item has a view.
+fn view_marks(app: &App, k: usize, item: u64) -> Option<ViewMarks> {
     let layers = app.notebook.outline.views.get(&item)?;
     let Some(eval) = app.reason.eval[k].as_ref() else {
-        return Some(vec![]);
+        return Some(ViewMarks::default());
     };
     let bad = eval.violated_facts();
-    Some(
-        layers
-            .iter()
-            .flat_map(|l| layer_inputs(eval, l, &bad))
-            .collect(),
-    )
+    let inputs = layers.iter().flat_map(|l| layer_inputs(eval, l, &bad));
+    let failed = layers.iter().filter_map(|l| layer_failure(eval, l));
+    let (inputs, failed) = (inputs.collect(), failed.collect());
+    Some(ViewMarks { inputs, failed })
+}
+
+/// A layer's note, if it cannot answer in a world: why.
+fn layer_failure(e: &WorldEval, l: &Layer) -> Option<String> {
+    let why = e.nodes.failed.get(&l.seq)?;
+    Some(format!("(layer {} cannot answer: {why})", l.seq))
 }
 
 /// A layer's marks in a world, each loud if it rests on a violated fact.

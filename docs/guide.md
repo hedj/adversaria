@@ -420,7 +420,9 @@ draws. A mark that rests on a fact in a violation is drawn bold (a grid
 box gains `!`). With the mouse on (§ 2.3), a click on a mark goes to the
 item that states its fact. In a supposition, each world draws its own
 copy of every view, side by side. `retract` removes a layer, by its entry
-number, shown in the right pane.
+number, shown in the right pane. A layer whose goal raises an error is
+noted under the view, with its entry number and what went wrong, such as
+`(layer 10 cannot answer: type_error(evaluable, foo / 0))`.
 
 #### Marks
 

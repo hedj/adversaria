@@ -102,33 +102,16 @@ impl World {
     }
 
     fn read_nodes(&self, engine: &mut Engine) -> Nodes {
-        let (derived, failed) = self.read_derived(engine);
+        let derived = self.outline.derived.keys().copied().collect();
+        let (derived, mut failed) = read(engine, derived);
+        let (layers, layers_failed) = read(engine, self.layer_seqs());
+        failed.extend(layers_failed);
+        let layers = layers.into_iter().map(|(seq, v)| (seq, marks(&v)));
         Nodes {
             derived,
             failed,
-            layers: self.read_layers(engine),
+            layers: layers.collect(),
         }
-    }
-
-    /// Each derived item's answers, and each whose node cannot be read,
-    /// with what went wrong.
-    fn read_derived(&self, engine: &mut Engine) -> (BTreeMap<u64, Term>, BTreeMap<u64, String>) {
-        let (mut answers, mut failed) = (BTreeMap::new(), BTreeMap::new());
-        for item in self.outline.derived.keys() {
-            match engine.node(*item) {
-                Ok(v) => drop(answers.insert(*item, v)),
-                Err(e) => drop(failed.insert(*item, told(e))),
-            }
-        }
-        (answers, failed)
-    }
-
-    /// Each layer's marks, where its node can be read.
-    fn read_layers(&self, engine: &mut Engine) -> BTreeMap<u64, Vec<(Term, Vec<u64>)>> {
-        self.layer_seqs()
-            .into_iter()
-            .filter_map(|seq| layer_marks(engine, seq).map(|m| (seq, m)))
-            .collect()
     }
 
     fn layer_seqs(&self) -> Vec<u64> {
@@ -141,8 +124,17 @@ impl World {
     }
 }
 
-fn layer_marks(engine: &mut Engine, seq: u64) -> Option<Vec<(Term, Vec<u64>)>> {
-    engine.node(seq).ok().map(|v| marks(&v))
+/// Each node's value, and each node that cannot be read, with what went
+/// wrong.
+fn read(engine: &mut Engine, ids: Vec<u64>) -> (BTreeMap<u64, Term>, BTreeMap<u64, String>) {
+    let (mut values, mut failed) = (BTreeMap::new(), BTreeMap::new());
+    for id in ids {
+        match engine.node(id) {
+            Ok(v) => drop(values.insert(id, v)),
+            Err(e) => drop(failed.insert(id, told(e))),
+        }
+    }
+    (values, failed)
 }
 
 /// The engine in a slot, started if there is none, or if the one there has
