@@ -593,12 +593,10 @@ fn an_item_with_no_claim_cannot_be_adopted() {
     let mut app = Room::new("m4-adopt-none");
     item(&mut app, "the sky");
     command(&mut app, "fact colour(sky, blue)");
-    let before = app.journal().entries().len();
+    let before = app.entry_count();
     command(&mut app, "adopt");
-    assert_eq!(
-        (app.session.message.as_str(), app.journal().entries().len()),
-        ("the target states no claim to adopt", before)
-    );
+    assert_eq!(app.session.message, "the target states no claim to adopt");
+    assert_eq!(app.entry_count(), before);
 }
 
 #[test]
