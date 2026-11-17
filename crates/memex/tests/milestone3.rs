@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 mod support;
-use support::replayed;
+use support::{Room, replayed};
 
 fn temp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("adversaria-m3-{name}-{}", std::process::id()));
@@ -643,15 +643,11 @@ fn a_question_mark_inside_quotes_is_text() {
 #[test]
 fn a_command_on_an_item_needs_one() {
     // Catches a command that acts on the target run with no item at all.
-    let dir = temp("no-target");
-    let mut app = App::open(&dir).unwrap();
-    let before = app.journal().entries().len();
-    command(&mut app, "fold");
-    assert_eq!(
-        (app.session.message.as_str(), app.journal().entries().len()),
-        ("there is no item to act on", before)
-    );
-    std::fs::remove_dir_all(&dir).unwrap();
+    let mut r = Room::new("no-target");
+    let before = r.app.journal().entries().len();
+    r.command("fold");
+    assert_eq!(r.app.session.message, "there is no item to act on");
+    assert_eq!(r.app.journal().entries().len(), before);
 }
 
 #[test]
