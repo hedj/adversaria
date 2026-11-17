@@ -17,6 +17,23 @@
         "url": "https://github.com/Attempto/APE.git"
       }
     },
+    "clex": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1541454993,
+        "narHash": "sha256-2MLBKkD+tNKJV676LYM5HuOe3aZLtjGVqnzoW/3tp98=",
+        "ref": "refs/heads/master",
+        "rev": "20960a5ce07776cb211a8cfb25dc8c81fcdf25e2",
+        "revCount": 6,
+        "type": "git",
+        "url": "https://github.com/Attempto/Clex.git"
+      },
+      "original": {
+        "rev": "20960a5ce07776cb211a8cfb25dc8c81fcdf25e2",
+        "type": "git",
+        "url": "https://github.com/Attempto/Clex.git"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1794165970,
@@ -33,6 +50,7 @@
     "root": {
       "inputs": {
         "ape": "ape",
+        "clex": "clex",
         "nixpkgs": "nixpkgs",
         "scasp": "scasp"
       }

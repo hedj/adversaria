@@ -20,13 +20,21 @@
     flake = false;
   };
 
+  # Clex, APE's large lexicon (about 100,000 entries, from COMLEX), which
+  # replaces the small one APE ships with. Its last commit; its only tag
+  # is from 2009. GPL-3.0.
+  inputs.clex = {
+    url = "git+https://github.com/Attempto/Clex.git?rev=20960a5ce07776cb211a8cfb25dc8c81fcdf25e2";
+    flake = false;
+  };
+
   # The shell itself is nix/devshell.nix, shared with shell.nix, which gives
   # the same shell to `nix-shell` without experimental features.
-  outputs = { self, nixpkgs, scasp, ape }:
+  outputs = { self, nixpkgs, scasp, ape, clex }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAll = f: nixpkgs.lib.genAttrs systems (s:
-        f (import ./nix/devshell.nix { pkgs = nixpkgs.legacyPackages.${s}; scaspSrc = scasp; apeSrc = ape; }));
+        f (import ./nix/devshell.nix { pkgs = nixpkgs.legacyPackages.${s}; scaspSrc = scasp; apeSrc = ape; clexSrc = clex; }));
     in {
       packages = forAll (d: { scasp = d.scasp; ape = d.ape; });
       devShells = forAll (d: { default = d.shell; });
