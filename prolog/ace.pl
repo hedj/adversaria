@@ -298,7 +298,8 @@ punctuation(Mark) :- string_length(Mark, 1), sub_string(".?!,;:", _, 1, _, Mark)
 
 %   APE's paraphrase of a DRS, its sentences joined by spaces.
 paraphrase(Drs, Paraphrase) :-
-    drs_to_drslist(Drs, Parts),
+    % APE leaves a choice point here for a text with a question.
+    once(drs_to_drslist(Drs, Parts)),
     maplist(restated, Parts, Groups),
     append(Groups, Sentences),
     atomic_list_concat(Sentences, ' ', Atom),
@@ -315,7 +316,12 @@ restated(Drs, Ace) :-
     \+ memberchk('ERROR', Ace),
     !.
 restated(Drs, Ace) :-
-    drs_to_coreace(Drs, Ace).
+    drs_to_coreace(Drs, Ace),
+    Ace \== [],
+    !.
+%   APE restates no yes-no question ("Does John wait?"): both give
+%   nothing, and APE's own paraphrase is "# ...". Say so.
+restated(_, ['(APE does not restate this sentence.)']).
 
 %   A message of APE's, with its place as two numbers (0 for none) and
 %   its texts as strings.

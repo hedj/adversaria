@@ -143,6 +143,15 @@ test(no_repair_is_offered_when_none_parses) :-
     assertion(Repairs == []),
     assertion(Notes \== []).
 
+test(a_sentence_ape_cannot_restate_says_so) :-
+    % Catches an empty paraphrase: APE restates no yes-no question, and
+    % "Does John wait?" was said to be ACE with nothing after; and the
+    % choice point APE leaves when it splits a text with a question.
+    ace_lexicon([], []),
+    call_cleanup(ace_parse("John waits. Does Mary wait?", parsed(P, _, _)), Det = true),
+    assertion(Det == true),
+    assertion(P == "John waits. (APE does not restate this sentence.)").
+
 test(a_long_sentence_is_paraphrased_within_a_quarter_second) :-
     % Catches APE's paraphraser left to its own half second: with
     % relative clauses it ran out its 0.5 s limit at every parse of this
