@@ -5,7 +5,7 @@
 use memex::app::{Key, Mode, Quasi};
 
 mod support;
-use support::Room;
+use support::{Room, replayed};
 
 /// What is typed in the quasimode held, if one is.
 fn typed(r: &Room) -> String {
@@ -170,4 +170,74 @@ fn question_mark_after_a_word_ends_a_question() {
     assert_eq!(typed(&r), "Does John wait?");
     assert!(!listing(&r));
     assert!(line_with(&r, "ACE: (APE does not restate this sentence.)").is_some());
+}
+
+/// Type free English in Suppose, mend it with Esc, release, and accept the
+/// first reading if one is offered: the pair is confirmed.
+fn mend_and_suppose(r: &mut Room, free: &str) {
+    r.hold(Quasi::Suppose, free);
+    r.tap(&[Key::Escape]);
+    r.release(Quasi::Suppose);
+    if matches!(r.app.session.mode, Mode::ConfirmSuppose { .. }) {
+        r.tap(&[Key::Enter]);
+    }
+}
+
+/// The free English and the name of the last supposition entry.
+fn last_pair(r: &Room) -> (Option<String>, String) {
+    let e = r
+        .app
+        .journal()
+        .entries()
+        .iter()
+        .rev()
+        .find(|e| e.kind() == "suppose")
+        .unwrap();
+    let body = e.body().unwrap();
+    let english = body
+        .get("english")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    (english, body["name"].as_str().unwrap().to_string())
+}
+
+#[test]
+fn free_english_mended_into_ace_and_supposed_is_kept_as_a_pair() {
+    // Catches the free English lost when the supposition is written, or
+    // the mended text recorded as the free English.
+    let mut r = buran("pairs-kept");
+    mend_and_suppose(&mut r, "the flight was in 1989");
+    let pair = (
+        Some("the flight was in 1989".to_string()),
+        "the flight is in 1989".to_string(),
+    );
+    assert_eq!(last_pair(&r), pair);
+}
+
+#[test]
+fn a_supposition_typed_in_ace_from_the_start_keeps_no_pair() {
+    // Catches a pair of a text with itself, or of a text never mended.
+    let mut r = buran("pairs-none");
+    r.hold(Quasi::Suppose, "John waits");
+    r.release(Quasi::Suppose);
+    if matches!(r.app.session.mode, Mode::ConfirmSuppose { .. }) {
+        r.tap(&[Key::Enter]);
+    }
+    assert_eq!(last_pair(&r).0, None);
+}
+
+#[test]
+fn a_text_like_an_earlier_pairs_is_offered_its_ace_adapted() {
+    // Catches the memory not consulted, its ACE offered unadapted, or Esc
+    // not putting it in place; and the pairs lost on reopening.
+    let mut r = buran("pairs-recalled");
+    mend_and_suppose(&mut r, "the flight was in 1989");
+    r.command("close");
+    r.hold(Quasi::Suppose, "the flight was in 1990");
+    assert!(line_with(&r, "as before: the flight is in 1990 · Esc").is_some());
+    r.tap(&[Key::Escape]);
+    assert_eq!(typed(&r), "the flight is in 1990");
+    let again = replayed(&r.dir);
+    let pairs = memex::pairs::pairs_of(again.journal().entries());
+    assert_eq!(pairs[0].english, "the flight was in 1989");
 }

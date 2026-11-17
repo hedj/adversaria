@@ -405,6 +405,13 @@ While you type, the line below checks the statement as controlled English
   only the present tense). Esc puts the first in place. With no such
   edit, it names the words ACE does not know.
 
+When you mend free English into ACE and suppose it, the memex keeps the
+pair: what you first typed, and the ACE. Later, when you type something
+that matches an earlier free English but for a name or a number or two
+(and the earlier ACE holds those words), the line below offers the
+earlier ACE with your new words in place, `as before: … · Esc`, and Esc
+puts it in place. The pairs are in the journal, with the suppositions.
+
 A word is judged only once it ends, with a space or an end mark. To see
 everything that may come next, not only the first twelve, type `?` (at
 the start, or after a space): the notebook's words, each kind of word

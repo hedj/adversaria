@@ -15,9 +15,12 @@ impl App {
             Mode::Normal => self.normal(ev),
             Mode::Quasi(a) => self.quasi(a, ev),
             Mode::ConfirmRetract { target, dependents } => self.confirm(target, dependents, ev),
-            Mode::ConfirmSuppose { text, readings, at } => {
-                self.confirm_suppose(text, readings, at, ev)
-            }
+            Mode::ConfirmSuppose {
+                text,
+                readings,
+                at,
+                english,
+            } => self.confirm_suppose((text, english), readings, at, ev),
         };
     }
 
@@ -232,9 +235,9 @@ impl App {
 
     /// A statement with no reading, or one believed already: a world of
     /// that name, with nothing supposed in it (guide § 3.2), and say which.
-    fn suppose_named(&mut self, text: &str) {
+    fn suppose_named(&mut self, text: &str, english: Option<String>) {
         self.session.message = self.nothing_to_suppose(text);
-        let written = self.write_here("suppose", json!({"name": text}));
+        let written = self.write_here("suppose", supposed_body(text, english, None));
         self.session.report(written);
     }
 
@@ -286,13 +289,15 @@ impl App {
                 }
                 let facts = self.notebook.facts_now().unwrap_or_default();
                 let readings = self.suppose_readings(&facts, &text);
+                let english = self.confirmed_english(&a, &text);
                 if readings.is_empty() {
-                    self.suppose_named(&text);
+                    self.suppose_named(&text, english);
                 } else {
                     return Mode::ConfirmSuppose {
                         text,
                         readings,
                         at: 0,
+                        english,
                     };
                 }
             }
@@ -324,26 +329,38 @@ impl App {
         }
     }
 
-    fn confirm_suppose(&mut self, text: String, readings: Vec<Term>, at: usize, ev: Event) -> Mode {
-        if ev.press == Press::Up {
-            return Mode::ConfirmSuppose { text, readings, at };
-        }
-        match ev.key {
-            Key::Enter => {
-                let fact = readings[at].clone();
-                let said = self.suppose(&text, &fact).unwrap_or_else(|m| m);
-                self.session.message = said;
-                Mode::Normal
+    /// Suppose a reading, and say what was set aside.
+    fn suppose_reading(&mut self, text: &str, reading: &Term, english: Option<String>) -> Mode {
+        let said = self.suppose(text, reading, english);
+        self.session.message = said.unwrap_or_else(|m| m);
+        Mode::Normal
+    }
+
+    /// "Do you mean?" answered: of a supposition's text and the free
+    /// English it was mended from, its readings, and the one shown.
+    fn confirm_suppose(
+        &mut self,
+        (text, english): (String, Option<String>),
+        readings: Vec<Term>,
+        at: usize,
+        ev: Event,
+    ) -> Mode {
+        let at = match (ev.press, ev.key) {
+            (Press::Down, Key::Enter) => {
+                return self.suppose_reading(&text, &readings[at], english);
             }
-            Key::Tab => {
-                let at = (at + 1) % readings.len();
-                Mode::ConfirmSuppose { text, readings, at }
-            }
-            Key::Escape => {
+            (Press::Down, Key::Escape) => {
                 self.session.message = "nothing supposed".into();
-                Mode::Normal
+                return Mode::Normal;
             }
-            _ => Mode::ConfirmSuppose { text, readings, at },
+            (Press::Down, Key::Tab) => (at + 1) % readings.len(),
+            _ => at,
+        };
+        Mode::ConfirmSuppose {
+            text,
+            readings,
+            at,
+            english,
         }
     }
 
@@ -425,4 +442,21 @@ fn asks_help(a: &Active) -> bool {
         Quasi::Suppose => a.input.is_empty() || a.input.ends_with(' '),
         _ => true,
     }
+}
+
+/// A supposition entry's body: its name, the free English it was mended
+/// from (making a confirmed pair, crate::pairs), and the fact supposed.
+pub(crate) fn supposed_body(
+    name: &str,
+    english: Option<String>,
+    fact: Option<serde_json::Value>,
+) -> serde_json::Value {
+    let mut body = json!({"name": name});
+    if let Some(e) = english {
+        body["english"] = json!(e);
+    }
+    if let Some(f) = fact {
+        body["facts"] = json!([f]);
+    }
+    body
 }

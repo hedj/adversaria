@@ -105,9 +105,15 @@ impl App {
     /// only, each belief it directly contradicts (the supposition is
     /// entrenched over them). See `direct_conflicts` for what "directly"
     /// means; a violation it leaves is shown, for the user to resolve.
-    pub(crate) fn suppose(&mut self, name: &str, fact: &Term) -> Result<String, String> {
+    pub(crate) fn suppose(
+        &mut self,
+        name: &str,
+        fact: &Term,
+        english: Option<String>,
+    ) -> Result<String, String> {
         let f = terms::encode(fact).map_err(|e| e.0)?;
-        let s = self.write_here("suppose", json!({"name": name, "facts": [f]}))?;
+        let body = crate::keys::supposed_body(name, english, Some(f));
+        let s = self.write_here("suppose", body)?;
         let (set_aside, left) = self.set_aside_conflicts(s.seq)?;
         self.evaluate()?;
         let places: Vec<String> = set_aside.iter().map(|t| self.fact_place(*t)).collect();

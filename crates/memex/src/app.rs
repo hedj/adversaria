@@ -357,8 +357,18 @@ pub struct Active {
     pub hold: Hold,
     /// `?` was pressed: list everything that may come next.
     pub listing: bool,
-    /// In Suppose, what APE makes of what is typed.
+    /// In Suppose, the one quasimode whose text is English: what APE
+    /// makes of it, and the free English it began as.
+    pub english: Option<English>,
+}
+
+/// The English typed in Suppose: what APE makes of it, and the fullest
+/// text typed that was not ACE, the free English, which a supposition
+/// mended into ACE keeps as a confirmed pair (crate::pairs).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct English {
     pub hint: Option<Hint>,
+    pub free: Option<String>,
 }
 
 /// What APE makes of a supposition being typed, in words (or why there is
@@ -383,6 +393,11 @@ pub enum Hold {
 }
 
 impl Active {
+    /// In Suppose, what APE makes of what is typed.
+    pub fn hint(&self) -> Option<&Hint> {
+        self.english.as_ref()?.hint.as_ref()
+    }
+
     /// Whether it was tapped rather than held, and stays.
     pub fn latched(&self) -> bool {
         self.hold == Hold::Latched
@@ -407,14 +422,14 @@ impl Active {
             input,
             hold: Hold::Down,
             listing: false,
-            hint: None,
+            english: None,
         }
     }
 
     /// Put the first repair of what is typed in its place, if there is
     /// one (Esc in Suppose).
     pub(crate) fn apply_repair(&mut self) {
-        let mended = self.hint.as_ref().and_then(|h| h.mended.clone());
+        let mended = self.hint().and_then(|h| h.mended.clone());
         if let Some(m) = mended {
             self.input = m;
         }
@@ -443,11 +458,13 @@ pub enum Mode {
         dependents: Vec<u64>,
     },
     /// "Do you mean?": a supposition's readings, the one shown, waiting for
-    /// Enter (yes), Esc (no) or Tab (the next reading).
+    /// Enter (yes), Esc (no) or Tab (the next reading); and the free
+    /// English its text, a sentence of ACE, was mended from, if any.
     ConfirmSuppose {
         text: String,
         readings: Vec<Term>,
         at: usize,
+        english: Option<String>,
     },
 }
 

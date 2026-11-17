@@ -1025,7 +1025,7 @@ fn list_lines(app: &App, a: &Active) -> Vec<Line<'static>> {
 /// What may come next in Suppose, listed with help; its first line, the
 /// heading, dim.
 fn suppose_lines(a: &Active) -> Vec<Line<'static>> {
-    let listed = a.hint.iter().flat_map(|h| h.listing.iter().cloned());
+    let listed = a.hint().into_iter().flat_map(|h| h.listing.iter().cloned());
     let lines = listed.enumerate().map(|(k, l)| {
         if k == 0 {
             Line::styled(l, dim())
@@ -1129,7 +1129,9 @@ fn foot(app: &App) -> (Line<'static>, String) {
     match &app.session.mode {
         Mode::Quasi(a) => (quasi_line(app, a), quasi_guide(a)),
         Mode::ConfirmRetract { target, dependents } => retract_foot(*target, dependents),
-        Mode::ConfirmSuppose { text, readings, at } => suppose_foot(app, text, readings, *at),
+        Mode::ConfirmSuppose {
+            text, readings, at, ..
+        } => suppose_foot(app, text, readings, *at),
         Mode::Normal => normal_foot(app),
     }
 }
@@ -1163,7 +1165,7 @@ fn quasi_guide(a: &Active) -> String {
         Quasi::Scope => {
             format!("Space widens the target: word, statement, branch · {end} keeps it")
         }
-        Quasi::Suppose => match a.hint.as_ref().and_then(|h| h.said.as_ref()) {
+        Quasi::Suppose => match a.hint().and_then(|h| h.said.as_ref()) {
             None => format!(
                 "type a statement · ? lists what may come next · {end} offers its readings, or a world of that name if none"
             ),

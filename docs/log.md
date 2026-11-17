@@ -718,6 +718,38 @@ left a choice point for a text with a question.
 Checked: 30 Prolog tests (2 new), 17 unit tests in `ace.rs` (1 new), 11
 tests through the memex (3 new); 11 breaks, each made a test fail.
 
+#### The memory of confirmed pairs (17 November 2026)
+
+The author chose pairs of free English and ACE, as the design's
+conversational loop logs them, over pairs of text and fact, which the
+journal already held. While Suppose is held, the memex keeps the fullest
+text typed that was not ACE (a word half typed or half deleted does not
+replace it). When a supposition is written from a sentence of ACE, its
+entry records that free English as `english` beside its `name`: a
+revision of format version 1, recorded in the design.
+
+`crates/memex/src/pairs.rs` reads the pairs from the journal, latest
+first, and adapts one to a new text: the two must have as many words,
+differ in at most two words and in fewer than half, each changed word
+must be in the ACE, and a word changed in two places must change the
+same way. While typing, a text like an earlier free English is offered
+the earlier ACE with the new words swapped in, if APE takes it as ACE:
+`as before: … · Esc`. No index or BM25: a scan of the pairs, as there are
+few (the design's estimate was 0.5–1K lines; this is 116 lines, without
+its tests).
+
+Found on the way: a word changed in two places was swapped twice, so
+the second swap found nothing and the pair did not adapt. Before it,
+commit 9439c4a made the quasimode's key one state (`Hold`) rather than
+two flags; two claims in its message were wrong (see the next commit).
+
+Checked: 6 unit tests in `pairs.rs`, 1 in `actions/english.rs`, 3
+through the memex (a pair kept; none for a text that was ACE from the
+start; a similar text offered the adapted ACE, Esc applying it, and the
+pairs read again after reopening); 12 breaks, each made a test fail, two
+only after a test was added for them (the latest pair first; at most two
+words changed).
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
