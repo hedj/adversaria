@@ -4,6 +4,7 @@
 mod support;
 
 use memex::app::{Key, Quasi};
+use ratatui::style::Modifier;
 use support::Room;
 
 /// Suppose a text, held in the Suppose quasimode, and take the reading
@@ -114,4 +115,83 @@ fn a_derived_text_that_cannot_answer_says_so_in_both_worlds() {
         .find(|l| l.contains("{N} broken"))
         .expect("a row");
     assert_eq!(row.matches("(cannot answer: type_error").count(), 2);
+}
+
+/// A room of rent and food, the sum they make, and a chart of them, with
+/// rent supposed to be 1300.
+fn rent_supposed(name: &str) -> Room {
+    let mut r = Room::new(name);
+    r.items(&["rent", "food", "chart", "spent"]);
+    r.command("derive Spent: {S} where cell(rent, R), cell(food, F), S is R + F");
+    r.leap(Quasi::LeapBack, "chart");
+    r.command("layer bar(x(C), y(V)) where cell(C, V)");
+    r.leap(Quasi::LeapBack, "food");
+    r.command("fact cell(food, 300)");
+    r.leap(Quasi::LeapBack, "rent");
+    r.command("fact cell(rent, 1200)");
+    r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
+    r.app.evaluate().unwrap();
+    suppose(&mut r, "cell(rent, 1300)");
+    r.app.evaluate().unwrap();
+    r
+}
+
+/// The lines of one world's column, by its place, on a wide screen.
+fn column(r: &Room, k: usize) -> Vec<String> {
+    let half = |l: &String| l.chars().skip(80 * k).take(79).collect::<String>();
+    r.lines_at(160, 40).iter().map(half).collect()
+}
+
+#[test]
+fn a_row_that_differs_is_bold_in_the_supposed_world_alone() {
+    // Catches the bold mark put on a row that is the same in both worlds,
+    // or left off one that differs.
+    let r = rent_supposed("worlds-bold");
+    let bold = |text: &str| r.style_of(text).add_modifier.contains(Modifier::BOLD);
+    assert!(bold("Spent: 1600"));
+    assert!(!bold("Spent: 1500"));
+    let food = column(&r, 1).iter().position(|l| l.trim_end() == "food");
+    let food = r.screen(160, 40)[(80, food.expect("a row of food") as u16)].style();
+    assert!(!food.add_modifier.contains(Modifier::BOLD));
+}
+
+#[test]
+fn each_row_and_view_is_drawn_once_in_each_world() {
+    // Catches a row of both worlds drawn twice, or each item drawn as a
+    // view.
+    let r = rent_supposed("worlds-once");
+    for k in 0..2 {
+        let lines = column(&r, k);
+        let count = |text: &str| lines.iter().filter(|l| l.trim_end() == text).count();
+        assert_eq!((count("food"), count("chart")), (1, 1), "world {k}");
+    }
+}
+
+#[test]
+fn a_view_in_each_world_is_drawn_from_that_worlds_facts() {
+    // Catches each world's view drawn from the other's facts.
+    let r = rent_supposed("worlds-views");
+    let shows = |k, text: &str| column(&r, k).iter().any(|l| l.starts_with(text));
+    assert!(shows(0, "  1200 │") && !shows(0, "  1300 │"));
+    assert!(shows(1, "  1300 │") && !shows(1, "  1200 │"));
+}
+
+#[test]
+fn each_fact_set_aside_is_marked_on_its_own_row() {
+    // Catches the mark given only to a row that holds every fact set
+    // aside: with two, on two items, neither was marked.
+    let mut r = Room::new("worlds-two-aside");
+    r.items(&["rent", "rent again"]);
+    r.command("fact cell(rent, 1250)");
+    r.leap(Quasi::LeapBack, "rent");
+    r.command("fact cell(rent, 1200)");
+    r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
+    r.app.evaluate().unwrap();
+    suppose(&mut r, "cell(rent, 1300)");
+    r.app.evaluate().unwrap();
+    let marked = column(&r, 1)
+        .iter()
+        .filter(|l| l.contains("(fact retracted here)"))
+        .count();
+    assert_eq!(marked, 2, "{}", r.app.session.message);
 }

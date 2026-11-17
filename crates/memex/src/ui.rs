@@ -1623,135 +1623,277 @@ fn hint(app: &App) -> Option<(String, String)> {
 }
 
 /// A supposition: the actual world and the supposed one side by side, row
-/// for row. Rows are the items that state facts or show derived values.
+/// for row; or a revision, as its own pane draws it.
 fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
     let Some(sup) = &app.reason.supposition else {
         return;
     };
-    if sup.name.starts_with("revision of ") {
-        draw_revision(f, app, area);
-        return;
+    match sup.name.starts_with("revision of ") {
+        true => draw_revision(f, app, area),
+        false => draw_sides(f, app, area),
     }
-    let [l, r] =
-        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area);
-    let actual = app.notebook.outline_at(sup.actual);
-    let worlds = [
-        (
-            &actual,
-            app.reason.eval[1].as_ref(),
-            "WORLD · ACTUAL".to_string(),
-        ),
-        (
-            &app.notebook.outline,
-            app.reason.eval[0].as_ref(),
-            format!("WORLD · SUPPOSE {}", sup.name.to_uppercase()),
-        ),
-    ];
-    let mut rows: Vec<u64> = actual
-        .in_order()
-        .into_iter()
-        .filter(|i| actual.fact_item.values().any(|x| x == i) || actual.derived.contains_key(i))
-        .collect();
-    for i in app.notebook.outline.in_order() {
-        if (app.notebook.outline.fact_item.values().any(|x| *x == i)
-            || app.notebook.outline.derived.contains_key(&i))
-            && !rows.contains(&i)
-        {
-            rows.push(i);
+}
+
+/// The open supposition side by side, if there is one.
+fn draw_sides(f: &mut Frame, app: &App, area: Rect) {
+    if let Some(sides) = Sides::of(app) {
+        sides.draw(f, area);
+    }
+}
+
+/// One world of a supposition: its outline, what reasoning found in it,
+/// and its title.
+struct Side<'a> {
+    outline: &'a Outline,
+    eval: Option<&'a WorldEval>,
+    title: String,
+}
+
+impl<'a> Side<'a> {
+    /// The actual world, at its outline: the second evaluation.
+    fn actual(app: &'a App, outline: &'a Outline) -> Self {
+        let title = "WORLD · ACTUAL".into();
+        let eval = app.reason.eval[1].as_ref();
+        Side {
+            outline,
+            eval,
+            title,
         }
     }
-    let text = |o: &Outline, e: Option<&WorldEval>, i: u64| -> String {
-        let derived = o.derived.get(&i).zip(e);
+
+    /// The supposed world, the current one, by its name: the first
+    /// evaluation.
+    fn supposed(app: &'a App, name: &str) -> Self {
+        let title = format!("WORLD · SUPPOSE {}", name.to_uppercase());
+        let eval = app.reason.eval[0].as_ref();
+        let outline = &app.notebook.outline;
+        Side {
+            outline,
+            eval,
+            title,
+        }
+    }
+
+    /// An item's text in this world: derived text as the world fills it,
+    /// else as the outline holds it.
+    fn text(&self, i: u64) -> String {
+        let derived = self.outline.derived.get(&i).zip(self.eval);
         let derived = derived.and_then(|(d, e)| e.derived_text(i, d));
-        derived.unwrap_or_else(|| o.text(i))
-    };
-    let left_facts: Vec<u64> = worlds[0]
-        .1
-        .map(|e| e.facts.iter().map(|x| x.0).collect())
-        .unwrap_or_default();
-    let right_facts: Vec<u64> = worlds[1]
-        .1
-        .map(|e| e.facts.iter().map(|x| x.0).collect())
-        .unwrap_or_default();
-    let set_aside: Vec<u64> = left_facts
-        .iter()
-        .filter(|s| !right_facts.contains(s))
-        .copied()
-        .collect();
-    for (k, (o, e, title), area) in [(0, worlds[0].clone(), l), (1, worlds[1].clone(), r)] {
-        let mut lines = vec![Line::styled(title, dim()), Line::raw("")];
-        for i in &rows {
-            let here = text(o, e, *i);
-            let there = text(worlds[1 - k].0, worlds[1 - k].1, *i);
-            let gone = k == 1 && set_aside.iter().any(|s| actual.fact_item.get(s) == Some(i));
-            let mut spans = vec![Span::styled(
-                here.clone(),
-                if here != there && k == 1 {
-                    bold()
-                } else {
-                    Style::default()
-                },
-            )];
-            if here != there && k == 0 {
-                spans.push(Span::styled("  - - -", dim()));
-            }
-            if gone {
-                spans.push(Span::styled("  (fact retracted here)", dim()));
-            }
-            lines.push(Line::from(spans));
-        }
-        lines.push(Line::raw(""));
-        if let Some(e) = e {
-            for c in &e.constraints {
-                let mut t = format!(
-                    "Constraint {}: {} violation{}",
-                    c.constraint.name,
-                    c.violations.len(),
-                    if c.violations.len() == 1 { "" } else { "s" }
-                );
-                if !c.disagreements.is_empty() {
-                    t.push_str(&format!(
-                        ", {} disagreement{}",
-                        c.disagreements.len(),
-                        if c.disagreements.len() == 1 { "" } else { "s" }
-                    ));
-                }
-                if k == 1 && !set_aside.is_empty() {
-                    t.push_str(&format!(
-                        " · {} retracted here",
-                        set_aside
-                            .iter()
-                            .map(|s| place(&actual, *s))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    ));
-                }
-                lines.push(Line::raw(t));
-            }
-        }
-        // Each view, drawn from this world's facts: the left column is
-        // the actual world (eval[1]), the right the supposed one (eval[0]).
-        let views: Vec<u64> = o
-            .in_order()
-            .into_iter()
-            .filter(|i| app.notebook.outline.views.contains_key(i))
-            .collect();
-        for i in views {
-            lines.push(Line::raw(""));
-            lines.push(Line::raw(o.text(i)));
-            let width = (area.width as usize).saturating_sub(4);
-            let fig = view_figure(app, 1 - k, i, width, 8);
-            lines.extend(figure_lines(&fig, 2));
-        }
-        f.render_widget(
-            Paragraph::new(lines).block(Block::default().borders(if k == 0 {
-                Borders::RIGHT
-            } else {
-                Borders::NONE
-            })),
-            area,
-        );
+        derived.unwrap_or_else(|| self.outline.text(i))
     }
+
+    /// The entries whose facts this world states.
+    fn fact_seqs(&self) -> Vec<u64> {
+        let facts = self.eval.map(|e| e.facts.as_slice()).unwrap_or_default();
+        facts.iter().map(|(s, _)| *s).collect()
+    }
+}
+
+/// A supposition drawn side by side: the actual world's outline, at the
+/// head it was sprouted from, and the supposition's name; the rows the
+/// worlds share; and the entries the supposed world sets aside. Rows are
+/// the items that state facts or show derived values.
+struct Sides<'a> {
+    app: &'a App,
+    actual: Outline,
+    name: String,
+    rows: Vec<u64>,
+    set_aside: Vec<u64>,
+}
+
+impl<'a> Sides<'a> {
+    /// The open supposition, if there is one.
+    fn of(app: &'a App) -> Option<Self> {
+        let sup = app.reason.supposition.as_ref()?;
+        let actual = app.notebook.outline_at(sup.actual);
+        let rows = shared_rows(&actual, &app.notebook.outline);
+        let name = sup.name.clone();
+        let mut sides = Sides {
+            app,
+            actual,
+            name,
+            rows,
+            set_aside: vec![],
+        };
+        sides.set_aside = set_aside(&[sides.side(0), sides.side(1)]);
+        Some(sides)
+    }
+
+    /// A world, by its place: the actual one, then the supposed one.
+    fn side(&self, k: usize) -> Side<'_> {
+        match k {
+            0 => Side::actual(self.app, &self.actual),
+            _ => Side::supposed(self.app, &self.name),
+        }
+    }
+
+    /// The two columns, each half the area.
+    fn draw(&self, f: &mut Frame, area: Rect) {
+        let halves = Layout::horizontal([Constraint::Percentage(50); 2]).areas::<2>(area);
+        for (k, half) in halves.into_iter().enumerate() {
+            self.draw_column(f, k, half);
+        }
+    }
+
+    /// A world's column, by its place; the first is ruled off from the
+    /// second.
+    fn draw_column(&self, f: &mut Frame, k: usize, area: Rect) {
+        let border = if k == 0 {
+            Borders::RIGHT
+        } else {
+            Borders::NONE
+        };
+        let column = Paragraph::new(self.column(k, area.width));
+        f.render_widget(column.block(Block::default().borders(border)), area);
+    }
+
+    /// A world's column: its title, its rows, its constraints, and its
+    /// views.
+    fn column(&self, k: usize, width: u16) -> Vec<Line<'static>> {
+        let mut lines = self.rows_of(k);
+        lines.extend(self.constraint_lines(k));
+        lines.extend(self.view_lines(k, width));
+        lines
+    }
+
+    /// A world's title, then its rows, then a blank line.
+    fn rows_of(&self, k: usize) -> Vec<Line<'static>> {
+        let head = [Line::styled(self.side(k).title, dim()), Line::raw("")];
+        let rows = self.rows.iter().map(|i| self.row(k, *i));
+        head.into_iter()
+            .chain(rows)
+            .chain([Line::raw("")])
+            .collect()
+    }
+
+    fn row(&self, k: usize, i: u64) -> Line<'static> {
+        match k {
+            0 => self.actual_row(i),
+            _ => self.supposed_row(i),
+        }
+    }
+
+    /// A row of the actual world: the item's text there, with a dashed
+    /// trail where the supposed world differs.
+    fn actual_row(&self, i: u64) -> Line<'static> {
+        let here = self.side(0).text(i);
+        let trail = here != self.side(1).text(i);
+        let trail = trail.then(|| Span::styled("  - - -", dim()));
+        Line::from_iter(std::iter::once(Span::raw(here)).chain(trail))
+    }
+
+    /// A row of the supposed world: the item's text there, bold where it
+    /// differs from the actual world, and whether its fact is set aside.
+    fn supposed_row(&self, i: u64) -> Line<'static> {
+        let here = self.side(1).text(i);
+        let differs = here != self.side(0).text(i);
+        let here = Span::styled(here, if differs { bold() } else { Style::default() });
+        let gone = self
+            .sets_aside_at(i)
+            .then(|| Span::styled("  (fact retracted here)", dim()));
+        Line::from_iter(std::iter::once(here).chain(gone))
+    }
+
+    /// Whether the supposed world sets aside a fact of an item of the
+    /// actual world.
+    fn sets_aside_at(&self, i: u64) -> bool {
+        let actual = &self.actual;
+        self.set_aside.iter().any(|s| actual.states(i, *s))
+    }
+
+    /// A line for each constraint of a world: how many violations and
+    /// disagreements it has, and, in the supposed world, what it sets
+    /// aside.
+    fn constraint_lines(&self, k: usize) -> Vec<Line<'static>> {
+        let Some(e) = self.side(k).eval else {
+            return vec![];
+        };
+        let lines = e.constraints.iter().map(|c| self.constraint_line(k, c));
+        lines.map(Line::raw).collect()
+    }
+
+    fn constraint_line(&self, k: usize, c: &ConstraintEval) -> String {
+        let violations = counted(c.violations.len(), "violation");
+        let mut line = format!("Constraint {}: {violations}", c.constraint.name);
+        if !c.disagreements.is_empty() {
+            line += &format!(", {}", counted(c.disagreements.len(), "disagreement"));
+        }
+        if k == 1 && !self.set_aside.is_empty() {
+            line += &format!(" · {} retracted here", self.set_aside_places());
+        }
+        line
+    }
+
+    /// Where the facts the supposed world sets aside are, in the actual
+    /// world.
+    fn set_aside_places(&self) -> String {
+        let actual = &self.actual;
+        let places: Vec<String> = self.set_aside.iter().map(|s| place(actual, *s)).collect();
+        places.join(", ")
+    }
+
+    /// Each view of a world, drawn from its facts.
+    fn view_lines(&self, k: usize, width: u16) -> Vec<Line<'static>> {
+        let views = self.views_in(k).into_iter();
+        views.flat_map(|i| self.view(k, i, width)).collect()
+    }
+
+    /// The items of a world that are views, in its order.
+    fn views_in(&self, k: usize) -> Vec<u64> {
+        let views = &self.app.notebook.outline.views;
+        let items = self.side(k).outline.in_order().into_iter();
+        items.filter(|i| views.contains_key(i)).collect()
+    }
+
+    /// A view in a world's column: a blank line, its item's text, then
+    /// its figure.
+    fn view(&self, k: usize, i: u64, width: u16) -> Vec<Line<'static>> {
+        [self.view_head(k, i), self.figure(k, i, width)].concat()
+    }
+
+    /// A blank line, then a view's item's text in a world.
+    fn view_head(&self, k: usize, i: u64) -> Vec<Line<'static>> {
+        vec![Line::raw(""), Line::raw(self.side(k).outline.text(i))]
+    }
+
+    /// A view's figure in a world's column, set in. The actual world is
+    /// the second evaluation (eval[1]), the supposed the first.
+    fn figure(&self, k: usize, i: u64, width: u16) -> Vec<Line<'static>> {
+        let inner = (width as usize).saturating_sub(4);
+        figure_lines(&view_figure(self.app, 1 - k, i, inner, 8), 2)
+    }
+}
+
+/// The items that state facts or show derived values: the actual
+/// world's in its order, then the supposed world's that it lacks.
+fn shared_rows(actual: &Outline, supposed: &Outline) -> Vec<u64> {
+    let mut rows = fact_rows(actual);
+    let more: Vec<u64> = fact_rows(supposed)
+        .into_iter()
+        .filter(|i| !rows.contains(i))
+        .collect();
+    rows.extend(more);
+    rows
+}
+
+/// An outline's items that state facts or show derived values, in order.
+fn fact_rows(o: &Outline) -> Vec<u64> {
+    let stating = |i: &u64| o.fact_item.values().any(|x| x == i) || o.derived.contains_key(i);
+    o.in_order().into_iter().filter(stating).collect()
+}
+
+/// The entries whose facts the actual world states and the supposed one
+/// does not.
+fn set_aside(worlds: &[Side; 2]) -> Vec<u64> {
+    let kept = worlds[1].fact_seqs();
+    let actual = worlds[0].fact_seqs();
+    actual.into_iter().filter(|s| !kept.contains(s)).collect()
+}
+
+/// A count and its noun: "1 violation", "2 violations".
+fn counted(n: usize, noun: &str) -> String {
+    let s = if n == 1 { "" } else { "s" };
+    format!("{n} {noun}{s}")
 }
 
 /// A rule laid out as in the design: the head, then one literal of the body
