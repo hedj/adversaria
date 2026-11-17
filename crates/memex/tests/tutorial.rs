@@ -295,7 +295,14 @@ fn part_two(t: &mut T) {
 }
 
 fn part_three(t: &mut T) {
-    // Step 13: a chart of the boxes, with a limit.
+    let chart = a_chart_with_a_limit(t);
+    loud_while_over_income(t, chart);
+    the_boxes_as_a_grid(t);
+    the_dates_as_a_timeline(t);
+}
+
+/// Step 13: a chart of the boxes, with a limit: its item.
+fn a_chart_with_a_limit(t: &mut T) -> u64 {
     t.hold(Quasi::LeapForward, "left over");
     t.tap(Key::Enter);
     t.tap(Key::BackTab);
@@ -305,62 +312,78 @@ fn part_three(t: &mut T) {
     t.look("chart");
     t.shows("VIEW · 2 LAYERS");
     let chart = find(&t.app, "Spending chart");
-    let fig = memex::ui::view_figure(&t.app, 0, chart, 100, 12).text();
+    let fig = view_of(t, chart).text();
     for label in ["food", "income", "rent", "500", "1200"] {
         assert!(fig.iter().any(|l| l.contains(label)), "{label}: {fig:#?}");
     }
+    chart
+}
+
+/// Step 13: food at 900 breaks "spending within income" with rent and
+/// income, so the three bars are loud; back at 500, none is.
+fn loud_while_over_income(t: &mut T, chart: u64) {
     t.command("set cell(food, 900)");
     t.look("chart 900");
-    // Food and rent now break "spending within income": their bars are loud.
-    let loud = |t: &T| {
-        let f = memex::ui::view_figure(&t.app, 0, chart, 100, 12);
-        f.rows
-            .iter()
-            .flatten()
-            .filter(|(c, i)| *c == '█' && *i == memex::view::Ink::Loud)
-            .count()
-    };
-    // Each of the three bars has loud cells: count the columns that do.
-    let f = memex::ui::view_figure(&t.app, 0, chart, 100, 12);
-    let w = f.rows.iter().map(|r| r.len()).max().unwrap_or(0);
-    let loud_cols: Vec<usize> = (0..w)
-        .filter(|x| {
-            f.rows
-                .iter()
-                .any(|r| r.get(*x) == Some(&('█', memex::view::Ink::Loud)))
-        })
-        .collect();
-    let runs = loud_cols.windows(2).filter(|p| p[1] != p[0] + 1).count()
-        + usize::from(!loud_cols.is_empty());
-    assert_eq!(runs, 3, "income, rent and food bars bold: {loud_cols:?}");
-    assert!(loud(t) > 0);
+    let fig = view_of(t, chart);
+    assert_eq!(loud_runs(&fig), 3, "income, rent and food bars bold");
+    assert!(loud_cells(&fig) > 0);
     t.command("set cell(food, 500)");
-    assert_eq!(loud(t), 0);
+    assert_eq!(loud_cells(&view_of(t, chart)), 0);
+}
 
-    // Step 14: the same boxes as a grid.
+/// The view at an item, as the outline draws it, 100 wide.
+fn view_of(t: &T, item: u64) -> memex::view::Figure {
+    memex::ui::view_figure(&t.app, 0, item, 100, 12)
+}
+
+/// How many cells of a figure are loud bars.
+fn loud_cells(fig: &memex::view::Figure) -> usize {
+    let cells = fig.rows.iter().flatten();
+    cells
+        .filter(|(c, i)| *c == '█' && *i == memex::view::Ink::Loud)
+        .count()
+}
+
+/// How many runs of side-by-side columns hold a loud bar: a loud bar's
+/// width each.
+fn loud_runs(fig: &memex::view::Figure) -> usize {
+    let cols = loud_columns(fig);
+    let gaps = cols.windows(2).filter(|p| p[1] != p[0] + 1).count();
+    gaps + usize::from(!cols.is_empty())
+}
+
+/// The columns of a figure that hold a loud bar's cell.
+fn loud_columns(fig: &memex::view::Figure) -> Vec<usize> {
+    let w = fig.rows.iter().map(|r| r.len()).max().unwrap_or(0);
+    let loud = Some(&('█', memex::view::Ink::Loud));
+    (0..w)
+        .filter(|x| fig.rows.iter().any(|r| r.get(*x) == loud))
+        .collect()
+}
+
+/// Step 14: the same boxes as a grid.
+fn the_boxes_as_a_grid(t: &mut T) {
     t.tap(Key::Enter);
     t.typ("Budget table");
     t.command("layer cell(x(value), y(C), text(V)) where cell(C, V)");
     t.look("table");
     t.shows("food   │   500");
     t.shows("income │  2000");
+}
 
-    // Step 15: part A's dates as a timeline.
+/// Step 15: part A's dates as a timeline; the claimed date is not a
+/// belief, so not drawn.
+fn the_dates_as_a_timeline(t: &mut T) {
     t.tap(Key::Enter);
     t.typ("Timeline of the programme");
     t.command("layer tick(x(Y), text(L)) where date(E, Y), label(E, L)");
     t.look("timeline");
     let tl = find(&t.app, "Timeline of the programme");
-    let fig = memex::ui::view_figure(&t.app, 0, tl, 100, 12)
-        .text()
-        .join("\n");
-    in_tutorial("Energia's first launch");
-    in_tutorial("Buran's flight");
-    let (e, b) = (
-        fig.find("Energia's first launch"),
-        fig.find("Buran's flight"),
-    );
-    assert!(e.is_some() && b.is_some(), "{fig}");
+    let fig = view_of(t, tl).text().join("\n");
+    for label in ["Energia's first launch", "Buran's flight"] {
+        in_tutorial(label);
+        assert!(fig.contains(label), "{fig}");
+    }
     assert!(
         !fig.contains("1989"),
         "the claimed date is not a belief, so not drawn: {fig}"
