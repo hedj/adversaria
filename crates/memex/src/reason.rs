@@ -338,7 +338,8 @@ fn place(seen: &mut Vec<u64>, v: u64) -> u64 {
     at as u64
 }
 
-fn evidence(t: &Term) -> String {
+/// A term as text: a string bare, without its quotes.
+pub(crate) fn evidence(t: &Term) -> String {
     match t {
         Term::Str(s) => s.clone(),
         t => show(t),

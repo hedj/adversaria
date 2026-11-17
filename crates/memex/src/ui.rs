@@ -1388,7 +1388,7 @@ fn section(heading: &str, rows: Vec<String>, none: &str) -> Vec<Line<'static>> {
 fn claimant(outline: &Outline, seq: u64, f: &Term) -> String {
     let at = place(outline, seq);
     match f {
-        Term::Compound(n, a) if n == "claims" => format!("  {at} ({})", reason::show(&a[0])),
+        Term::Compound(n, a) if n == "claims" => format!("  {at} ({})", reason::evidence(&a[0])),
         _ => format!("  {at} (a belief)"),
     }
 }

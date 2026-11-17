@@ -310,7 +310,7 @@ fn another_source_that_claims_the_fact_is_listed() {
     // Catches a list of who else claims it that keeps beliefs alone.
     let dir = temp("interrogate-others");
     let mut app = wikipedia_too(&dir);
-    talk_interrogated(&mut app).assert("2.2 (\"Wikipedia\")");
+    talk_interrogated(&mut app).assert("2.2 (Wikipedia)");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
