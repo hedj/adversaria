@@ -10,13 +10,16 @@ impl App {
     pub(crate) fn cmd_undo(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let t = self.undoable().ok_or("nothing to undo on this branch")?;
         self.write(self.parent_of(t), "undo", json!({"undoes": t}))?;
+        self.read_changed();
         Ok(format!("undid entry {t}"))
     }
 
     /// The entry undo would undo: the last on this branch that changed
     /// content, unless it is the journal's first.
+    /// A text edit and its reading are one change: undo takes back both.
     fn undoable(&self) -> Option<u64> {
-        self.content_tip(self.notebook.tip).filter(|t| *t > 1)
+        let t = self.content_tip(self.notebook.tip).filter(|t| *t > 1)?;
+        Some(self.read_from(t).unwrap_or(t))
     }
 
     fn parent_of(&self, seq: u64) -> Option<u64> {
@@ -28,6 +31,7 @@ impl App {
             return Err("nothing to redo".into());
         };
         self.write(Some(t), "redo", json!({"redoes": t}))?;
+        self.read_changed();
         Ok(format!("redid entry {t}"))
     }
 

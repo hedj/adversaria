@@ -22,14 +22,14 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
 /// Run the memex on a journal directory until the user quits; then write
-/// what is pending.
+/// what is pending and read what waits to be read.
 pub fn run(dir: &Path, config: Config) -> Result<(), String> {
     let mut app = App::open(dir).map_err(|e| e.to_string())?;
     app.session.keys = config.keys();
     let event_loop = EventLoop::new().map_err(|e| format!("no window: {e}"))?;
     let mut memex = Memex::new(app, config);
     event_loop.run_app(&mut memex).map_err(|e| e.to_string())?;
-    memex.app.flush();
+    memex.app.idle();
     match memex.window {
         WindowState::Failed(why) => Err(why),
         _ => Ok(()),
@@ -292,10 +292,13 @@ impl ApplicationHandler for Memex {
     }
 
     /// After a second with no event, write what is pending, so a crash
-    /// loses nothing typed.
+    /// loses nothing typed, and read what waits to be read.
     fn new_events(&mut self, _: &ActiveEventLoop, cause: StartCause) {
-        if matches!(cause, StartCause::ResumeTimeReached { .. }) && self.app.pending() {
-            self.app.flush();
+        if matches!(cause, StartCause::ResumeTimeReached { .. }) && self.app.idle_work() {
+            self.app.idle();
+            if let Some(g) = self.window.gfx() {
+                g.window.request_redraw();
+            }
         }
     }
 

@@ -11,7 +11,7 @@
 use crate::prolog::{Error, Prolog, prolog_file};
 use crate::reason::{list, make_list, parts};
 use format::terms::Term;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The parser: its server, and the user lexicon it holds.
 pub struct Ace {
@@ -198,9 +198,13 @@ impl Ace {
 
     /// What the notebook reads in a text, with this user lexicon
     /// (ace_read_text/2).
-    pub fn read_with(&mut self, lexicon: Vec<Term>, text: &str) -> Result<Reading, Error> {
-        self.set_lexicon(lexicon)?;
-        let goal = call("ace_read_text", vec![Term::Str(text.into()), Term::Var(0)]);
+    pub fn read_with(&mut self, words: Words, text: &str) -> Result<Reading, Error> {
+        self.set_lexicon(words.lexicon)?;
+        let rules = make_list(words.rules.into_iter().map(Term::Atom).collect());
+        let goal = call(
+            "ace_read_text",
+            vec![Term::Str(text.into()), rules, Term::Var(0)],
+        );
         reading_of(&self.only_answer(&goal)?)
     }
 
@@ -515,6 +519,34 @@ fn unknown_words(notes: &[Message]) -> String {
     match words.as_slice() {
         [] => "no edit of one word makes it ACE".into(),
         _ => format!("words ACE does not know: {}", words.join(", ")),
+    }
+}
+
+/// What a world gives the reader: its lexicon, and the names of its rules
+/// of one argument, whose values the reader reads in place of boxes.
+pub struct Words {
+    pub lexicon: Vec<Term>,
+    pub rules: Vec<String>,
+}
+
+/// The words a world's facts give the reader.
+pub fn words_of(facts: &[(u64, Term)]) -> Words {
+    let rules = facts.iter().filter_map(|(_, f)| one_place_rule(f));
+    let rules: BTreeSet<String> = rules.collect();
+    Words {
+        lexicon: lexicon_of(facts),
+        rules: rules.into_iter().collect(),
+    }
+}
+
+/// The name of a rule that defines a value of one argument.
+fn one_place_rule(fact: &Term) -> Option<String> {
+    let Term::Compound(f, a) = fact else {
+        return None;
+    };
+    match (f.as_str(), a.get(1)) {
+        ("rule_def", Some(Term::Compound(head, args))) if args.len() == 1 => Some(head.clone()),
+        _ => None,
     }
 }
 

@@ -12,7 +12,7 @@ use crate::view;
 use format::terms::Term;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use std::collections::BTreeMap;
@@ -242,7 +242,20 @@ fn item_text(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
     if typed != app.notebook.outline.text(id) {
         return vec![Span::raw(typed)];
     }
-    run_spans(&app.notebook.outline, id)
+    let spans = run_spans(&app.notebook.outline, id);
+    match app.notebook.outline.has_meaning(id) {
+        true => spans
+            .into_iter()
+            .map(|s| s.patch_style(read_text()))
+            .collect(),
+        false => spans,
+    }
+}
+
+/// Text the memex has read as statements: a formal meaning to it, in a
+/// colour of its own, so the user sees which text it reads.
+fn read_text() -> Style {
+    Style::default().fg(Color::Cyan)
 }
 
 /// A derived item's text, filled in from the current world, if it has
@@ -387,6 +400,7 @@ impl<'a> OutlinePane<'a> {
         let line = (drawn.lines.len(), 0, self.rows.width as usize);
         drawn.places.push(Place::of(line, self.click(id)));
         drawn.lines.push(self.item_line(id, depth));
+        drawn.lines.extend(self.prose_line(id, depth));
         drawn.lines.extend(self.mark_lines(id, depth));
         if self.outline().views.contains_key(&id) {
             self.view_lines(drawn, id, 2 * depth + 2);
@@ -449,6 +463,20 @@ impl<'a> OutlinePane<'a> {
         } else {
             reversed
         }
+    }
+
+    /// Under the item at the cursor, why its text was not read, if it was
+    /// written in this session and was not: a quiet hint, nowhere else.
+    fn prose_line(&self, id: u64, depth: usize) -> Option<Line<'static>> {
+        let hint = self.hint_here(id)?;
+        let indent = "  ".repeat(depth + 1);
+        Some(Line::styled(format!("{indent}  {hint}"), dim()))
+    }
+
+    /// The hint of an item, if it is the item at the cursor.
+    fn hint_here(&self, id: u64) -> Option<&str> {
+        let here = id == self.cursor();
+        self.app.session.prose_hint(id).filter(|_| here)
     }
 
     /// An item's marks, each under it, set in: bold if loud, else dim.

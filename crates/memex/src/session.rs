@@ -53,6 +53,11 @@ struct Outside {
     stale: BTreeMap<u64, Vec<String>>,
     /// The last violations and disagreements recorded in the journal.
     observed: Option<Observed>,
+    /// Why the text of an item was not read, last time it was written.
+    prose: Option<(u64, String)>,
+    /// The items whose text is written and waits to be read, each with the
+    /// entry that wrote it.
+    to_read: BTreeMap<u64, u64>,
 }
 
 impl Default for Outside {
@@ -61,6 +66,8 @@ impl Default for Outside {
             crossref: "https://api.crossref.org/works/".into(),
             stale: BTreeMap::new(),
             observed: None,
+            prose: None,
+            to_read: BTreeMap::new(),
         }
     }
 }
@@ -92,6 +99,33 @@ impl Session {
     pub(crate) fn saying(message: String) -> Session {
         let session = Session::default();
         Session { message, ..session }
+    }
+
+    /// Why an item's text was not read as statements, if it was written
+    /// in this session and was not.
+    pub fn prose_hint(&self, item: u64) -> Option<&str> {
+        let hint = self.outside.prose.as_ref().filter(|(i, _)| *i == item);
+        hint.map(|(_, why)| why.as_str())
+    }
+
+    /// Note why an item's text was not read, or that it was.
+    pub(crate) fn set_prose(&mut self, hint: Option<(u64, String)>) {
+        self.outside.prose = hint;
+    }
+
+    /// Let an item's text, written by the entry `of`, wait to be read.
+    pub(crate) fn wait_to_read(&mut self, item: u64, of: u64) {
+        self.outside.to_read.insert(item, of);
+    }
+
+    /// The items that wait to be read, which then wait no more.
+    pub(crate) fn take_to_read(&mut self) -> BTreeMap<u64, u64> {
+        std::mem::take(&mut self.outside.to_read)
+    }
+
+    /// Whether any item's text waits to be read.
+    pub fn waits_to_read(&self) -> bool {
+        !self.outside.to_read.is_empty()
     }
 
     /// The quasimode in progress, if it lists over the outline.

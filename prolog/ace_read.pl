@@ -18,18 +18,23 @@ from one mapping:
 | Buran is a:reusable. | fact(reusable(buran)) |
 | Buran-flight follows Energia-launch. | fact(follow(buran_flight, energia_launch)) |
 | Talk-notes says that S. | claim("Talk-notes", F) for each fact F of S |
-| If C then the rest is X - Y. | rule(cell(rest, R), (C, R is X - Y)) |
+| If C then the rest is X - Y. | rule(rest(R), (C, R is X - Y)) |
 | If C then X + Y =< Z. | constraint((C, \+ X + Y =< Z)) |
 | If C then it is false that S. | constraint((C, S)) |
 | It is false that S. | constraint(S) |
 | Nothing has more than 1 date. | constraint((date(E, A), date(E, B), A \== B)) |
+
+A rule's value has a name of its own: "If C then the rest is X - Y" is a
+rule for rest(R), not for the box cell(rest, R), as a rule may not read
+what it defines. So "the rest" is rest(R) wherever a rule defines rest,
+in the world (the names the memex gives) or in the same text.
 
 A proper name is an entity: its letters in lower case, its hyphens made
 underscores (Buran-flight is buran_flight), as the notebook's names are;
 a name the notebook gives (ace.rs, lexicon_of) comes back as it is.
 */
 
-:- module(ace_read, [ace_read/2, ace_read_text/2]).
+:- module(ace_read, [ace_read/2, ace_read/3, ace_read_text/3]).
 
 :- use_module(ace, [ace_drs/4]).
 :- use_module(library(apply)).
@@ -44,23 +49,30 @@ a name the notebook gives (ace.rs, lexicon_of) comes back as it is.
 %   variables numbered ('$VAR'(0), ...): the query protocol sends no
 %   variable a query did not have.
 ace_read(Text, Result) :-
+    ace_read(Text, [], Result).
+
+%!  ace_read(+Text:string, +Rules:list(atom), -Result) is det.
+%   As ace_read/2, where Rules are the names of the world's rules of one
+%   argument: "the N", for N one of them, is N(R), not cell(N, R).
+ace_read(Text, Rules, Result) :-
     ace_drs(Text, Paraphrase, Drs, Messages),
     (   var(Paraphrase)
     ->  Result = not_ace(Messages)
     ;   plain(Drs, drs(_, Conditions)),
-        statements(Conditions, Statements)
-    ->  numbervars(Statements, 0, _),
+        statements(Conditions, Read)
+    ->  ruled(Rules, Read, Statements),
+        numbervars(Statements, 0, _),
         Result = read(Paraphrase, Statements, Messages)
     ;   Result = unread(Paraphrase, Messages)
     ).
 
-%!  ace_read_text(+Text:string, -Result) is det.
-%   As ace_read/2, with each statement as the text of the command the
+%!  ace_read_text(+Text:string, +Rules:list(atom), -Result) is det.
+%   As ace_read/3, with each statement as the text of the command the
 %   memex runs for it, its terms written as Prolog writes them (quoted,
 %   with the brackets their operators need): said(Kind, Text), Kind fact,
 %   claim(Source), rule ("Head :- Body") or constraint ("false :- Body").
-ace_read_text(Text, Result) :-
-    ace_read(Text, Read),
+ace_read_text(Text, Rules, Result) :-
+    ace_read(Text, Rules, Read),
     (   Read = read(P, Statements, Ms)
     ->  maplist(statement_text, Statements, Texts),
         Result = read(P, Texts, Ms)
@@ -74,6 +86,39 @@ statement_text(constraint(B), said(constraint, T)) :- written((false :- B), T).
 
 written(Term, Text) :-
     format(string(Text), "~W", [Term, [quoted(true), numbervars(true), spacing(next_argument)]]).
+
+%   The statements with each box a rule defines read as the rule's
+%   value: the rules of the world, and those the statements make.
+ruled(Rules, Read, Statements) :-
+    convlist(rule_name, Read, Made),
+    append(Rules, Made, Names),
+    maplist(ruled_statement(Names), Read, Statements).
+
+ruled_statement(Names, S, RS) :- ruled_kind(S, Names, RS).
+
+ruled_kind(rule(H, B), Names, rule(RH, RB)) :- ruled_head(H, RH), ruled_goals(B, Names, RB).
+ruled_kind(constraint(B), Names, constraint(RB)) :- ruled_goals(B, Names, RB).
+ruled_kind(fact(F), Names, fact(RF)) :- ruled_goals(F, Names, RF).
+ruled_kind(claim(S, F), Names, claim(S, RF)) :- ruled_goals(F, Names, RF).
+
+rule_name(rule(cell(N, _), _), N).
+
+ruled_head(cell(N, R), H) :- !, H =.. [N, R].
+ruled_head(H, H).
+
+%   A goal, or a conjunction of goals, with each box a rule defines read
+%   as the rule's value.
+ruled_goals(G, Names, RG) :-
+    (   var(G)
+    ->  RG = G
+    ;   G = (A, B)
+    ->  RG = (RA, RB), ruled_goals(A, Names, RA), ruled_goals(B, Names, RB)
+    ;   G = (\+ A)
+    ->  RG = (\+ RA), ruled_goals(A, Names, RA)
+    ;   G = cell(N, R), atom(N), memberchk(N, Names)
+    ->  RG =.. [N, R]
+    ;   RG = G
+    ).
 
 %   A DRS without APE's places (Condition-Sentence/Token) and with its
 %   groups of conditions made one list.

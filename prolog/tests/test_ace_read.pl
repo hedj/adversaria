@@ -41,7 +41,7 @@ test(a_source_that_says_something_makes_claims_not_facts) :-
 test(if_then_a_value_is_a_rule) :-
     % Catches the head's value left unbound, or the sum not computed.
     reads("If the income is X and the rent is Y then the rest is X - Y.",
-          [rule(cell(rest, R), (cell(income, A), cell(rent, B), R is A - B))]),
+          [rule(rest(R), (cell(income, A), cell(rent, B), R is A - B))]),
     assertion(R-A-B == '$VAR'(0)-'$VAR'(1)-'$VAR'(2)).
 
 test(what_must_not_be_is_a_constraint) :-
@@ -83,9 +83,22 @@ test(each_statement_is_written_as_the_command_text_for_it) :-
     % another sum, or a string written without its quotes.
     ace_lexicon([], _),
     ace_read_text("If the income is X and the rent is Y and the food is Z then the rest is X - (Y + Z).",
-                  read(_, [said(rule, R)], _)),
-    assertion(R == "cell(rest, A):-cell(income, B), cell(rent, C), cell(food, D), A is B-(C+D)"),
-    ace_read_text("The label of Buran-flight is \"Buran's flight\".", read(_, [said(fact, F)], _)),
+                  [], read(_, [said(rule, R)], _)),
+    assertion(R == "rest(A):-cell(income, B), cell(rent, C), cell(food, D), A is B-(C+D)"),
+    ace_read_text("The label of Buran-flight is \"Buran's flight\".", [], read(_, [said(fact, F)], _)),
     assertion(F == "label(buran_flight, \"Buran's flight\")").
+
+test(a_box_a_rule_defines_is_the_rule_value) :-
+    % Catches a rule for the box it reads (refused as recursive), or "the
+    % rest" read as the box where a rule, of the world or of the same
+    % text, defines it, so a constraint on it never fires.
+    ace_lexicon([], _),
+    ace_read("It is false that the rest is smaller than 0.", [rest], read(_, [W], _)),
+    assertion(W == constraint((rest('$VAR'(0)), '$VAR'(0) < 0))),
+    ace_read("It is false that the rest is smaller than 0.", [], read(_, [B], _)),
+    assertion(B == constraint((cell(rest, '$VAR'(0)), '$VAR'(0) < 0))),
+    ace_read("If the income is X then the rest is X - 1. It is false that the rest is smaller than 0.",
+             read(_, [_, C], _)),
+    assertion(C == constraint((rest('$VAR'(2)), '$VAR'(2) < 0))).
 
 :- end_tests(ace_read).

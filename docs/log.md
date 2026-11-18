@@ -1043,6 +1043,36 @@ chain, so eight other tests fail with it). A full disk during this work
 left four test directories of about 690 MB in /tmp, from tests that
 failed before their cleanup; they were removed.
 
+### The memex reads what is written (18 November 2026)
+
+At the author's request, the memex reads each item whose text is ACE as
+the facts, claims, rules and constraints it states, and draws read text in
+cyan; prose keeps a dim hint at the cursor. The tutorial still types
+Prolog; rewriting it in ACE is the next change.
+
+Two faults found while building it:
+
+- A rule read from "then the rest is X - Y" was for `cell(rest, A)`, which
+  the memex refuses as recursive (its body reads `cell`). Rules now define
+  `rest(A)`, and "the rest" reads `rest(A)` where a rule defines it
+  (design.md § Reading controlled English).
+- Reading at the keystroke broke the plan's 0.1 s: the first read waits
+  for APE to start. Measured on 10,000 items (release build): worst
+  keystroke 1.43 s, of which reading 1.42 s; later reads took 3 to 15 ms.
+  Reading now waits for a pause (`App::idle`); worst keystroke 7.7 ms.
+
+Checked: `crates/memex/tests/reading.rs`, 11 tests, and 11 Prolog tests
+of the reader, pass; `make test` passes (2 min 42.5 s). Breaks, each
+failing a test: a claim stated as a fact; no retraction of the old
+reading; undo not grouping a reading with its text; no hint; no `read`
+entry; no world rules passed to the reader; a rule's head left as a box;
+the cyan left out; an emptied item keeping its facts (a fault this test
+found, now fixed); constraints of one text given one name; and a
+keystroke that reads. Not checked: that read text whose text later
+changes without a new reading is drawn uncoloured; this happens only
+without APE, which the test environment always has. The window loop's
+pause is exercised only by the window test, which checks no reading.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

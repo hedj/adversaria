@@ -574,6 +574,20 @@ impl App {
         self.write(Some(self.notebook.tip), kind, body)
     }
 
+    /// What the memex does when the user pauses: write whatever is pending,
+    /// then read the text that waits to be read. Reading is slower than a
+    /// keystroke may be (APE takes a second to start), so no key waits for
+    /// it.
+    pub fn idle(&mut self) {
+        self.flush();
+        self.read_waiting();
+    }
+
+    /// Whether a pause has anything to do.
+    pub fn idle_work(&self) -> bool {
+        self.pending() || self.session.waits_to_read()
+    }
+
     /// Write whatever is pending: typed text, then cursor moves.
     pub fn flush(&mut self) {
         self.flush_text();
@@ -597,8 +611,12 @@ impl App {
         let Some(p) = self.session.take_text() else {
             return;
         };
+        let before = self.notebook.tip;
         let written = self.write_text(p.item, &p.text);
         self.session.report(written);
+        if self.notebook.tip != before {
+            self.will_read(p.item, self.notebook.tip);
+        }
     }
 
     /// Write an item's new text: unchanged characters at the start and end

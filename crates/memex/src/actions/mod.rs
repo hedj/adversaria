@@ -4,6 +4,7 @@ pub mod dispatch;
 mod editing;
 mod english;
 mod knowledge;
+mod reading;
 mod worlds;
 
 pub use dispatch::{COMMANDS, Command, command_help};

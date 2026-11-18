@@ -305,6 +305,30 @@ entries, so one `undo` reverses only the new fact; reversing a whole
 
 ### 3.1 Facts, claims, constraints and derived text
 
+**Write in controlled English, and the memex reads it.** When you pause
+(a second without keys), each item you wrote whose text is ACE is read as
+the statements it makes, and its text turns cyan. Nothing asks you to
+confirm, and nothing is written twice:
+
+```
+The date of Buran-flight is 1988.
+Talk-notes says that the date of Buran-flight is 1989.
+The income is 2000.
+The rent is 1200.
+If the income is X and the rent is Y then the rest is X - Y.
+It is false that the rest is smaller than 0.
+```
+
+These are a fact, a claim from a source, two boxes, a rule and a
+constraint. Change the text, and what it said is taken back and the new
+text read; undo takes back a sentence and what it said together. Text
+that is not ACE stays prose: at the cursor, a dim line says where APE
+stopped (`prose: not ACE, it stops at …`). A text is read whole or not at
+all. The table in docs/design.md (§ Reading controlled English) lists what
+each kind of sentence is read as.
+
+The commands below state the same things in Prolog.
+
 Facts are Prolog terms: an atom or a compound, with no variables. Strings
 go in double quotes. A trailing full stop is optional.
 

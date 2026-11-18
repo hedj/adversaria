@@ -131,6 +131,14 @@ pub struct Constraint {
     pub rule: String,
 }
 
+/// What an item's text was read as (crate::actions::reading): the text
+/// read, and the entries that state what it was read as.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Reading {
+    pub text: String,
+    pub entries: Vec<u64>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Outline {
     /// The item each fact-bearing entry belongs to, by the entry's seq.
@@ -150,6 +158,8 @@ pub struct Outline {
     pub owner: HashMap<u64, u64>,
     pub links: Vec<Link>,
     pub names: BTreeMap<String, u64>,
+    /// What each item's text was last read as, by the item.
+    pub readings: HashMap<u64, Reading>,
 }
 
 /// A run of an item's text, and the item it was written for (its origin).
@@ -480,8 +490,35 @@ impl Outline {
             "constraint" => self.keep_constraint(seq, b),
             "layer" => self.add_layer(seq, b),
             "derive" => self.set_derived(b),
+            "read" => self.record_reading(b),
             _ => None,
         }
+    }
+
+    /// Record what an item's text was read as.
+    fn record_reading(&mut self, b: &Body) -> Option<()> {
+        let item = self.item_in(b)?;
+        let entries = b.0.get("entries")?.as_array()?;
+        let entries = entries.iter().filter_map(Value::as_u64).collect();
+        let text = b.text("text").to_string();
+        self.readings.insert(item, Reading { text, entries });
+        Some(())
+    }
+
+    /// The items whose text is not what was last read for them.
+    pub fn changed_since_read(&self) -> Vec<u64> {
+        let changed = self
+            .readings
+            .iter()
+            .filter(|(i, r)| r.text != self.text(**i));
+        changed.map(|(i, _)| *i).collect()
+    }
+
+    /// Whether an item's text, as it is now, was read as statements: a
+    /// formal meaning to the memex.
+    pub fn has_meaning(&self, item: u64) -> bool {
+        let read = self.readings.get(&item);
+        read.is_some_and(|r| !r.entries.is_empty() && r.text == self.text(item))
     }
 
     /// The item a body names, if it is in the outline.
