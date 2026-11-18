@@ -797,10 +797,9 @@ Faults found on the way:
 
 Limits:
 
-* Under Wayland only typing and F10 are tested. wtype loses the first key
-  after it makes its virtual keyboard, and makes up its own key codes, so
-  the quasimodes, which go by a key's place, are untested there with a
-  real keyboard.
+* Under Wayland only typing and F10 are tested. wtype makes up its own
+  key codes, so the quasimodes, which go by a key's place, are untested
+  there with a real keyboard.
 * Not run on a real desktop or GPU: the tests draw with Mesa's software
   drivers.
 
@@ -901,11 +900,7 @@ seat and "done" after each command, and the test waits for those, and
 for the window to be in sway's tree, instead of pausing. Without the
 wait for the compositor, the check fails (twice in two runs).
 
-wtype loses the first key after it makes its virtual keyboard, which the
-Wayland checks work round with a Shift typed first. It makes a keyboard
-for each run and types at once, so it is likely the same cause; that is
-not tested. The other Wayland checks still wait fixed times for the
-window.
+The other Wayland checks still wait fixed times for the window.
 
 ### A keyboard for the Wayland checks, and no fixed waits (18 November 2026)
 
