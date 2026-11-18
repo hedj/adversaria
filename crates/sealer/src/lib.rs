@@ -299,15 +299,9 @@ impl<'a> Author<'a> {
     /// An entry's seal, following the last seal; refused if the clock
     /// says a date before the last seal's.
     fn seal(&self, e: &Entry, last: Option<&Seal>) -> Result<Seal, Error> {
-        let stamp = self.stamp(&e.hash);
-        if let Some(before) = last.filter(|b| !record::may_follow(&b.stamp.date, &stamp.date)) {
-            let (now, then) = (&stamp.date, &before.stamp.date);
-            let why = format!(
-                "the clock went back: it says {now}, before the last seal's date, {then}; no seal written"
-            );
-            return Err(Error::Refused(why));
-        }
-        Ok(Seal::new(e.id(), stamp, last.map(|s| s.hash.as_str()))?)
+        let seal = Seal::new(e.id(), self.stamp(&e.hash), prev_of(last))?;
+        refuse_going_back(last, &seal)?;
+        Ok(seal)
     }
 
     /// The stamp for an entry's hash: this author's signature of it, and
@@ -318,6 +312,26 @@ impl<'a> Author<'a> {
         let date = utc_date((self.clock)());
         Stamp::new(&date, &self.record.fingerprint, &sig)
     }
+}
+
+/// The hash a seal after this one names as its prev; none for the first.
+fn prev_of(last: Option<&Seal>) -> Option<&str> {
+    last.map(|s| s.hash.as_str())
+}
+
+/// Refuse a seal dated before the last seal (record::may_follow): the
+/// clock went back.
+fn refuse_going_back(last: Option<&Seal>, seal: &Seal) -> Result<(), Error> {
+    let (Some(last), now) = (last.map(|s| &s.stamp.date), &seal.stamp.date) else {
+        return Ok(());
+    };
+    if record::may_follow(last, now) {
+        return Ok(());
+    }
+    let why = format!(
+        "the clock went back: it says {now}, before the last seal's date, {last}; no seal written"
+    );
+    Err(Error::Refused(why))
 }
 
 #[cfg(test)]

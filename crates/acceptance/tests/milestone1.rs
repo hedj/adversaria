@@ -306,27 +306,49 @@ fn purged_entry_still_verifies() {
     cleanup(&dir, &key);
 }
 
-/// Seal the first entry not yet sealed with a date given, as the sealer
-/// would but for the date: signed by the key, following the last seal.
-fn append_seal_dated(dir: &Path, key: &ed25519_dalek::SigningKey, date: &str) {
-    use ed25519_dalek::Signer;
-    let entries = chain::check_journal(&fs::read_to_string(dir.join(JOURNAL)).unwrap()).unwrap();
-    let seals = fs::read_to_string(dir.join(SEALS)).unwrap();
-    let last = format::record::Seal::parse(seals.lines().last().unwrap()).unwrap();
-    let entry = &entries[last.entry.seq as usize];
-    let sig = key.sign(&format::record::from_hex(&entry.hash, 32).unwrap());
-    let author = &check::check_keys(&fs::read_to_string(dir.join(KEYS)).unwrap()).unwrap()[0];
-    let stamp = format::record::Stamp::new(
-        date,
-        &author.fingerprint,
-        &format::record::to_hex(&sig.to_bytes()),
-    );
-    let seal = format::record::Seal::new(entry.id(), stamp, Some(&last.hash)).unwrap();
-    let mut file = fs::OpenOptions::new()
-        .append(true)
-        .open(dir.join(SEALS))
-        .unwrap();
-    std::io::Write::write_all(&mut file, (seal.to_line().unwrap() + "\n").as_bytes()).unwrap();
+/// What seals by hand, as the sealer would but for the date: the journal
+/// and its author's key.
+struct Forger<'a> {
+    dir: &'a Path,
+    key: &'a ed25519_dalek::SigningKey,
+}
+
+impl Forger<'_> {
+    /// Seal the first entry not yet sealed, dated so.
+    fn append(&self, date: &str) {
+        let line = self.seal_dated(date).to_line().unwrap() + "\n";
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .open(self.dir.join(SEALS))
+            .unwrap();
+        std::io::Write::write_all(&mut file, line.as_bytes()).unwrap();
+    }
+
+    /// The seal of the first entry not yet sealed, following the last seal.
+    fn seal_dated(&self, date: &str) -> format::record::Seal {
+        let (entry, prev) = self.next();
+        format::record::Seal::new(entry.clone(), self.stamp(&entry, date), Some(&prev)).unwrap()
+    }
+
+    /// The first entry not yet sealed, and the last seal's hash.
+    fn next(&self) -> (format::record::EntryId, String) {
+        let journal = fs::read_to_string(self.dir.join(JOURNAL)).unwrap();
+        let entries = chain::check_journal(&journal).unwrap();
+        let seals = fs::read_to_string(self.dir.join(SEALS)).unwrap();
+        let last = format::record::Seal::parse(seals.lines().last().unwrap()).unwrap();
+        (entries[last.entry.seq as usize].id(), last.hash)
+    }
+
+    /// The journal's one author's stamp of an entry, dated so.
+    fn stamp(&self, entry: &format::record::EntryId, date: &str) -> format::record::Stamp {
+        use ed25519_dalek::Signer;
+        let keys = check::check_keys(&fs::read_to_string(self.dir.join(KEYS)).unwrap()).unwrap();
+        let sig = self
+            .key
+            .sign(&format::record::from_hex(&entry.hash, 32).unwrap());
+        let sig = format::record::to_hex(&sig.to_bytes());
+        format::record::Stamp::new(date, &keys[0].fingerprint, &sig)
+    }
 }
 
 /// A clock that gives these seconds after an epoch, one per call.
@@ -359,7 +381,8 @@ fn a_seal_dated_before_the_seal_before_fails_naming_its_line() {
         2
     );
     j.append("edit", json!({ "text": "third" })).unwrap();
-    append_seal_dated(&dir, &k, "2026-11-06T21:20:09Z");
+    let forger = Forger { dir: &dir, key: &k };
+    forger.append("2026-11-06T21:20:09Z");
     let e = check::check_dir(&dir).unwrap_err();
     assert_eq!((e.file.as_str(), e.line), (SEALS, 4), "{e}");
     assert!(
