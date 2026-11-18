@@ -187,7 +187,7 @@ impl Span {
         let from = from.saturating_sub(at);
         let to = to.saturating_sub(at).min(self.len);
         let start = self.start + from;
-        (from < to).then_some(Span {
+        (from < to).then(|| Span {
             seq: self.seq,
             start,
             len: to - from,
@@ -1061,6 +1061,32 @@ mod tests {
         assert_eq!(o.by_number("2"), Some(3));
         assert_eq!(o.by_number("3"), None);
         assert_eq!(o.descendants(2), 2);
+    }
+
+    #[test]
+    fn a_slice_past_a_span_leaves_it_out() {
+        // Catches the part of a span that the slice does not reach
+        // computed anyway: its length underflows, which panics in a debug
+        // build (the end of an item of two spans, kept by an edit).
+        let mut o = Outline::default();
+        create(&mut o, 2, TOP, None, "The food is 400.");
+        let mut spans = o.slice(2, 0, 12);
+        spans.push(Span {
+            seq: 0,
+            start: 0,
+            len: 4,
+        });
+        let b = json!({"op":"text","item":2,"add":"900.","spans":span_json(&spans)});
+        assert!(o.apply(3, "edit", &b));
+        let end = o.slice(2, 14, 16);
+        assert_eq!(
+            end,
+            [Span {
+                seq: 3,
+                start: 2,
+                len: 2
+            }]
+        );
     }
 
     #[test]
