@@ -306,6 +306,43 @@ fn purged_entry_still_verifies() {
     cleanup(&dir, &key);
 }
 
+/// A clock that gives these seconds after an epoch, one per call.
+fn clock_of(seconds: &'static [u64]) -> impl Fn() -> SystemTime {
+    let next = std::cell::Cell::new(0);
+    move || {
+        next.set(next.get() + 1);
+        UNIX_EPOCH + Duration::from_secs(1_794_000_000 + seconds[next.get() - 1])
+    }
+}
+
+#[test]
+fn a_seal_dated_before_the_seal_before_fails_naming_its_line() {
+    // Catches a clock that went back passing unchecked: seal 3 is dated a
+    // second before seal 2. Seals 1 and 2 share a second, which is no
+    // fault: a check that refused equal dates would name line 3, not 4
+    // (the header is line 1).
+    let dir = temp_dir("dates");
+    let key = dir.with_extension("key");
+    let _ = fs::remove_file(&key);
+    sealer::init(&dir, &key).unwrap();
+    let k = sealer::load_key(&key).unwrap();
+    let mut j = Journal::open(&dir).unwrap();
+    for text in ["first", "second", "third"] {
+        j.append("edit", json!({ "text": text })).unwrap();
+    }
+    assert_eq!(
+        sealer::seal_pending(&dir, &k, &clock_of(&[10, 10, 9])).unwrap(),
+        3
+    );
+    let e = check::check_dir(&dir).unwrap_err();
+    assert_eq!((e.file.as_str(), e.line), (SEALS, 4), "{e}");
+    assert!(
+        e.msg.contains("is before the date of the seal before"),
+        "{e}"
+    );
+    cleanup(&dir, &key);
+}
+
 #[test]
 fn replay_rebuilds_the_same_store_twice() {
     // Plan: "Replaying the journal rebuilds the same store twice (same facts,

@@ -851,8 +851,8 @@ This is a prototype, built for a one-month trial. Known limits:
 - Re-importing a document does not detect a block moved past others; it
   shows as a deletion and an addition. A block that keeps its place among
   the others but falls under another heading is moved.
-- Seal dates are not shown in the memex, and `check` does not check that
-  they are in order.
+- Seal dates are not shown in the memex. (`check` refuses a seal dated
+  before the seal before it.)
 - Integers larger than 2^53 − 1 are refused in the journal.
 - Only the Wikidata subset tool exists; the full subset is not built.
 - Scope affects only `delete`.

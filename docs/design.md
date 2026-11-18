@@ -239,7 +239,7 @@ The journal must outlive the memex, so its format is open, plain and documented,
 
 | Part | Specification |
 | --- | --- |
-| A seal record | `seq` and `entry_hash`, the sequence number and hash of the entry it seals (seal n seals entry n); `date` in ISO 8601 UTC to the second, as `2026-11-12T09:30:00Z`; `author`, the fingerprint of the author's key; `sig`, the author's Ed25519 signature (RFC 8032) over the 32 bytes of the entry's hash, in hexadecimal; `prev`, the hash of the previous seal record, null for the first; and its own `hash`. (Version 1 names the entry's hash `entry_hash`, since the record's own hash is `hash`.) |
+| A seal record | `seq` and `entry_hash`, the sequence number and hash of the entry it seals (seal n seals entry n); `date` in ISO 8601 UTC to the second, as `2026-11-12T09:30:00Z`; `author`, the fingerprint of the author's key; `sig`, the author's Ed25519 signature (RFC 8032) over the 32 bytes of the entry's hash, in hexadecimal; `prev`, the hash of the previous seal record, null for the first; and its own `hash`. (Version 1 names the entry's hash `entry_hash`, since the record's own hash is `hash`.) No seal is dated before the seal before it; seals in one second share a date (version 1 revised, by the author's decision of 18 November 2026: a clock that went back makes the record's dates untrustworthy, so a reader refuses the journal, naming the seal) |
 | A key record | `alg`, `"ed25519"`; `key`, the 32-byte public key in hexadecimal; `fingerprint`, the SHA-256 of those 32 bytes; and its own `hash` |
 
 ##### Kinds and bodies

@@ -179,7 +179,7 @@ Deliberate breaks, each made a test fail: signature check off; `entry_hash` comp
 Gaps, not done:
 
 * **Unicode NFC.** The format says strings are in NFC. Nothing checks or produces NFC yet. *Closed the same day*: the author chose that the writer normalises text (see below).
-* **Dates are not checked for order.** A seal's date comes from the system clock, which can go backwards; the checker does not compare dates.
+* **Dates are not checked for order.** A seal's date comes from the system clock, which can go backwards; the checker does not compare dates. *Closed on 18 November 2026* (see § Seal dates in order).
 
 Time: the plan estimated 1–2 weeks with Claude; this took one session. It is not comparable to the estimate's assumption of a person reviewing each step.
 
@@ -1002,6 +1002,23 @@ not cut to the buffer, a size taken for an end) each fail one, the last
 only after the test's region moved off column 0, where a size and an
 end are the same. The window test passed 3 runs; the click not waiting
 for the screen still fails its check.
+
+### Seal dates in order (18 November 2026)
+
+The checker now refuses a seal dated before the seal before it, naming
+its line of `seals.jsonl`; seals in one second may share a date. The
+author chose to fail, not warn. The rule joins format version 1 in
+docs/design.md § The journal format (version 1 revised): a clock that
+went back makes the record's dates untrustworthy. Dates have one width
+(`record::is_date` takes only `0000-00-00T00:00:00Z`), so comparing their
+text compares their times. The sealer still writes what its clock says;
+a journal whose clock went back now fails `check` until that is
+explained.
+
+Checked: a journal sealed by a clock giving 10, 10, then 9 seconds is
+refused at `seals.jsonl` line 4, its third seal. Breaks, each failing
+the test: no date check (the journal passes), equal dates refused (line 3
+named, not 4).
 
 ## 4. Where it stands
 

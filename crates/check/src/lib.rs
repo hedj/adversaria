@@ -96,6 +96,7 @@ impl<'a> Seals<'a> {
         let s = Seal::parse(line)?;
         self.check_place(&s)?;
         self.check_signature(&s)?;
+        self.check_date(&s)?;
         self.read.push(s);
         Ok(())
     }
@@ -121,6 +122,23 @@ impl<'a> Seals<'a> {
     fn check_prev(&self, s: &Seal) -> Result<(), String> {
         if s.prev.as_ref() != self.read.last().map(|p| &p.hash) {
             return Err("prev is not the hash of the seal before".into());
+        }
+        Ok(())
+    }
+
+    /// The seal is dated no earlier than the seal before it: the sealer's
+    /// clock may stay within a second for several entries, never go back.
+    /// Dates are all of one width (record::is_date), so their text sorts
+    /// as their times do.
+    fn check_date(&self, s: &Seal) -> Result<(), String> {
+        let Some(before) = self.read.last() else {
+            return Ok(());
+        };
+        if s.stamp.date < before.stamp.date {
+            let (date, earlier) = (&s.stamp.date, &before.stamp.date);
+            return Err(format!(
+                "date {date} is before the date of the seal before, {earlier}"
+            ));
         }
         Ok(())
     }
