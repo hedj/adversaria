@@ -22,6 +22,7 @@ pub mod reasoning;
 pub mod replay;
 pub mod results;
 pub mod session;
+mod spare;
 pub mod store;
 pub mod ui;
 pub mod view;

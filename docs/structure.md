@@ -172,6 +172,7 @@ workspace
 ├── memex
 │   ├── state: journal, notebook (the outline replayed), store, configuration
 │   ├── reasoner: client, engine, readings and solutions, what reasoning found,
+│   │             trials in the spare engine (spare),
 │   │             the parser's client and the notebook's lexicon (ace),
 │   │             the memory of confirmed pairs (pairs)
 │   ├── actions: dispatch, editing, knowledge, checks, worlds and history,
