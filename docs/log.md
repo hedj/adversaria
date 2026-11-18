@@ -885,10 +885,27 @@ the seat while its input is open, and reads `move X Y WIDTH HEIGHT` and
 Checked: the window test clicks the first item at a scale of 2 and types
 Z into it (now 24 checks); a screenshot with the cursor drawn (`grim -c`)
 showed the cursor's tip on the item. Keeping the pointer in pixels makes
-that check fail, and only that one. A button sent with the move did not
-reach the window (WAYLAND_DEBUG: the enter came, no button), so the test
-pauses half a second after each; the cause, in sway or in the virtual
-pointer, was not looked into.
+that check fail, and only that one.
+
+A click sent with the move was lost, and the first version of the test
+paused half a second after each. The cause, traced with WAYLAND_DEBUG on
+sway and on the memex: the pointer program made its virtual pointer only
+when it sent its first command, since wayland-client sends requests at
+the next round trip. Sway took the pointer, the move and the click
+together, and only then told the window that the seat had a pointer; the
+window then bound its own, and sway sent it the enter. The click had
+gone to no one: the window had no pointer to receive it. Neither sway
+nor the memex lost it. The pointer program now waits for the compositor
+when it makes the pointer, writes "ready" once the pointer is on the
+seat and "done" after each command, and the test waits for those, and
+for the window to be in sway's tree, instead of pausing. Without the
+wait for the compositor, the check fails (twice in two runs).
+
+wtype loses the first key after it makes its virtual keyboard, which the
+Wayland checks work round with a Shift typed first. It makes a keyboard
+for each run and types at once, so it is likely the same cause; that is
+not tested. The other Wayland checks still wait fixed times for the
+window.
 
 ## 4. Where it stands
 

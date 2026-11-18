@@ -5,11 +5,17 @@
 //! seat as soon as it acts, and the window drops its pointer before any
 //! motion or click reaches it.
 //!
+//! The pointer is on the seat before the first command is read; a window
+//! binds its own pointer only once the seat has one, and an event sent
+//! before then reaches no window. It writes "ready" when the pointer is on
+//! the seat, and "done" when the compositor has had a command's events, so
+//! whoever drives it knows when each has happened.
+//!
 //! Reads commands, one a line, from standard input:
 //!   move X Y WIDTH HEIGHT   to X, Y of a WIDTH by HEIGHT area, the
 //!                           output's size in its own (logical) units
 //!   click                   press and release the left button
-//! Each is sent before the next line is read. Unknown lines are refused.
+//! Unknown lines are refused.
 //!
 //! Usage: pointer < commands   (WAYLAND_DISPLAY names the compositor)
 
@@ -34,9 +40,11 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let (hand, mut queue) = connect()?;
+    println!("ready");
     for line in std::io::stdin().lock().lines() {
         hand.send(parse(&line.map_err(|e| e.to_string())?)?);
         settle(&mut queue)?;
+        println!("done");
     }
     hand.pointer.destroy();
     settle(&mut queue)
@@ -46,8 +54,9 @@ fn run() -> Result<(), String> {
 /// come by.
 fn connect() -> Result<(Hand, EventQueue<Quiet>), String> {
     let conn = Connection::connect_to_env().map_err(|e| format!("no compositor: {e}"))?;
-    let (globals, queue) = registry_queue_init::<Quiet>(&conn).map_err(|e| e.to_string())?;
+    let (globals, mut queue) = registry_queue_init::<Quiet>(&conn).map_err(|e| e.to_string())?;
     let pointer = virtual_pointer(&globals, &queue.handle())?;
+    settle(&mut queue)?;
     let started = Instant::now();
     Ok((Hand { pointer, started }, queue))
 }

@@ -307,6 +307,26 @@ def wayland_checks(binary, d, check):
         sway.kill()
 
 
+def wait_for_sway_window(env, process, timeout=30):
+    """Whether the memex's window is in sway's tree of windows, waited for
+    until it is, the program ends, or the time is up."""
+    end = time.time() + timeout
+    while time.time() < end and process.poll() is None:
+        tree = subprocess.run(["swaymsg", "-t", "get_tree"], env=env, capture_output=True, text=True).stdout
+        if '"name": "memex"' in tree:
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def told(hand, command):
+    """Give the pointer program a command, and its answer once the
+    compositor has had the command's events."""
+    hand.stdin.write(command + "\n")
+    hand.stdin.flush()
+    return hand.stdout.readline().strip()
+
+
 def wayland_click(binary, d, check):
     """A click at a scale of 2: the window is told of the pointer in
     pixels, twice the points the cells are measured in. The pointer program
@@ -316,19 +336,13 @@ def wayland_click(binary, d, check):
     pointer = os.path.join(os.path.dirname(binary), "pointer")
     try:
         j = os.path.join(d, "wayland-click")
-        hand = subprocess.Popen([pointer], env=env, stdin=subprocess.PIPE, text=True)
+        hand = subprocess.Popen([pointer], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        ready = hand.stdout.readline().strip()
         p = subprocess.Popen([binary, "--mouse", j], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        time.sleep(6)
+        mapped = wait_for_sway_window(env, p)
         subprocess.run(["wtype", "-d", "50", "-k", "Shift_L", "Hello", "-k", "Return", "World"], env=env)
-        time.sleep(0.5)
-        # The output is 800 by 500 in its own units at a scale of 2. A
-        # pause after each: a button sent with the move did not reach the
-        # window under sway (seen with WAYLAND_DEBUG: the enter came, no
-        # button); a person pauses anyway.
-        for line in [f"move {FIRST_ITEM[0]} {FIRST_ITEM[1]} 800 500", "click"]:
-            hand.stdin.write(line + "\n")
-            hand.stdin.flush()
-            time.sleep(0.5)
+        # The output is 800 by 500 in its own units at a scale of 2.
+        done = [told(hand, f"move {FIRST_ITEM[0]} {FIRST_ITEM[1]} 800 500"), told(hand, "click")]
         subprocess.run(["wtype", "-d", "50", "-k", "Shift_L", "Z", "-k", "F10"], env=env)
         status, err = ended(p)
         hand.stdin.close()
@@ -337,7 +351,8 @@ def wayland_click(binary, d, check):
         into = [(e["body"].get("item"), e["body"].get("add")) for e in es
                 if e["kind"] == "edit" and e["body"].get("op") == "text"]
         check("under Wayland at a scale of 2, a click on the first item puts the next key there",
-              status == 0 and hand.wait(timeout=10) == 0 and (first, "Z") in into, (status, first, into, err[-200:]))
+              ready == "ready" and mapped and done == ["done", "done"] and status == 0
+              and hand.wait(timeout=10) == 0 and (first, "Z") in into, (ready, mapped, done, status, first, into, err[-200:]))
     finally:
         sway.kill()
 
