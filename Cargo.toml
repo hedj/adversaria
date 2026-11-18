@@ -10,3 +10,15 @@ license = "GPL-3.0-only"
 # thousands of Ed25519 signatures. Our own crates stay unoptimised.
 [profile.dev.package."*"]
 opt-level = 2
+# Without the dependencies' debug information: with the window's (wgpu,
+# winit, egui), each memex test binary was some 344 MB, and the build
+# outgrew a disk of 17 GB.
+debug = false
+
+# winit (the memex's window) asks for ahash's default features, which seed
+# its hash tables from getrandom; the memex holds no randomness code
+# (tests/memex_holds_no_key.sh). This copy of ahash 0.8.12 differs from the
+# release only in leaving runtime-rng out of its defaults (vendor/ahash/
+# Cargo.toml); its tables then use fixed seeds.
+[patch.crates-io]
+ahash = { path = "vendor/ahash" }

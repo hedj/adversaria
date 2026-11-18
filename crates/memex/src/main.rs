@@ -1,4 +1,4 @@
-//! memex [--config FILE] <journal directory>: the memex in this terminal.
+//! memex [--config FILE] <journal directory>: the memex, in a window.
 //! memex --print-config: write the default configuration.
 //! --mouse and --no-mouse override the configuration's [mouse] enabled; one
 //! of them, once.
@@ -50,7 +50,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    match memex::term::run(&dir, config) {
+    match memex::gui::run(&dir, config) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("memex: {e}");

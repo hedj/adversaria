@@ -50,13 +50,34 @@ in {
       pkgs.rustfmt
       pkgs.swi-prolog   # 9 or later, with incremental tabling
       pkgs.nodejs_22    # only the tests' oracle for RFC 8785 numbers
-      pkgs.python3      # only tests/memex_in_a_pty.py, which plays a terminal
+      pkgs.python3      # tests/memex_in_a_window.py, which types into the window
       pkgs.pandoc       # 3
       pkgs.curl         # the source check (Crossref) and the wikidata tool
       pkgs.git
       pkgs.gnumake
+      # The window's test: an X server with no screen, a keyboard to type
+      # with, and a headless Wayland compositor with its own.
+      pkgs.xvfb
+      pkgs.xdotool
+      pkgs.sway
+      pkgs.wtype
+      pkgs.grim
     ];
     SCASP_HOME = scasp;
     APE_HOME = ape;
+    # The window (crates/memex/src/gui) loads these when it runs: the
+    # Vulkan and GL loaders, the keyboard map, Wayland and X11.
+    LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (with pkgs; [
+      vulkan-loader libglvnd libxkbcommon wayland
+      libx11 libxcursor libxi libxrandr
+    ]);
+    # Mesa's drivers, unless the user's own are set: a program built by Nix
+    # does not find a system's drivers. (NVIDIA's own driver, outside NixOS,
+    # needs nixGL.)
+    shellHook = ''
+      export __EGL_VENDOR_LIBRARY_DIRS=''${__EGL_VENDOR_LIBRARY_DIRS:-${pkgs.mesa}/share/glvnd/egl_vendor.d}
+      export LIBGL_DRIVERS_PATH=''${LIBGL_DRIVERS_PATH:-${pkgs.mesa}/lib/dri}
+      export VK_ADD_DRIVER_FILES=''${VK_ADD_DRIVER_FILES:-$(ls ${pkgs.mesa}/share/vulkan/icd.d/*.json | tr '\n' ':')}
+    '';
   };
 }

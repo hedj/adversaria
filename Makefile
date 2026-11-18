@@ -1,15 +1,16 @@
 # One command runs every test (docs/plan.md § Layout).
-.PHONY: test test-spikes test-prolog test-rust test-pty spike-scasp run measures interactivity
+.PHONY: test test-spikes test-prolog test-rust test-window spike-scasp run measures interactivity
 
-test: test-spikes test-prolog test-rust test-pty
+test: test-spikes test-prolog test-rust test-window
 
-# The memex program in a pseudo-terminal, with a script playing the terminal.
-test-pty:
+# The memex program in its window, under X11 (Xvfb) and Wayland (headless
+# sway), with a script typing into it. The Nix shell has what it needs.
+test-window:
 	cargo build -q -p memex
-	python3 tests/memex_in_a_pty.py target/debug/memex
+	python3 tests/memex_in_a_window.py target/debug/memex
 
 # One command starts the system: the sealer in the background (making a key
-# on first use), then the memex in this terminal. Stops the sealer on exit.
+# on first use), then the memex in its window. Stops the sealer on exit.
 JOURNAL ?= $(HOME)/adversaria-journal
 KEY ?= $(HOME)/.adversaria.key
 run:
