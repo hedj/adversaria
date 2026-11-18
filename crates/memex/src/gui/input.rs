@@ -292,10 +292,7 @@ mod tests {
     fn a_quasimode_moved_to_a_function_key_reports_its_release() {
         // Catches F12 not Leap's when the configuration moves Leap there.
         let f12 = released(&named_key(KeyCode::F12, NamedKey::F12));
-        let leap_up = Event {
-            key: Key::Quasi(Quasi::LeapForward),
-            press: Press::Up,
-        };
+        let leap_up = Event::up(Key::Quasi(Quasi::LeapForward));
         assert_eq!(map_key(&f12, false, &remapped()), Some(leap_up));
     }
 

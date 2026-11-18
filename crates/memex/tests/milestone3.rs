@@ -840,7 +840,7 @@ fn focus_lost_with_a_quasimode_key_alone_held_leaves_it_doing_nothing() {
     let dir = temp("focus-alone");
     let mut app = essay(&dir);
     let before = app.journal().entries().len();
-    app.handle(Event::down(Key::Quasi(Quasi::LeapBack)));
+    hold(&mut app, Quasi::LeapBack, "");
     app.focus_lost();
     assert_eq!(app.session.mode, Mode::Normal);
     assert_eq!(app.journal().entries().len(), before);
