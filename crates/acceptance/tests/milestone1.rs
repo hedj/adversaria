@@ -306,6 +306,29 @@ fn purged_entry_still_verifies() {
     cleanup(&dir, &key);
 }
 
+/// Seal the first entry not yet sealed with a date given, as the sealer
+/// would but for the date: signed by the key, following the last seal.
+fn append_seal_dated(dir: &Path, key: &ed25519_dalek::SigningKey, date: &str) {
+    use ed25519_dalek::Signer;
+    let entries = chain::check_journal(&fs::read_to_string(dir.join(JOURNAL)).unwrap()).unwrap();
+    let seals = fs::read_to_string(dir.join(SEALS)).unwrap();
+    let last = format::record::Seal::parse(seals.lines().last().unwrap()).unwrap();
+    let entry = &entries[last.entry.seq as usize];
+    let sig = key.sign(&format::record::from_hex(&entry.hash, 32).unwrap());
+    let author = &check::check_keys(&fs::read_to_string(dir.join(KEYS)).unwrap()).unwrap()[0];
+    let stamp = format::record::Stamp::new(
+        date,
+        &author.fingerprint,
+        &format::record::to_hex(&sig.to_bytes()),
+    );
+    let seal = format::record::Seal::new(entry.id(), stamp, Some(&last.hash)).unwrap();
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(dir.join(SEALS))
+        .unwrap();
+    std::io::Write::write_all(&mut file, (seal.to_line().unwrap() + "\n").as_bytes()).unwrap();
+}
+
 /// A clock that gives these seconds after an epoch, one per call.
 fn clock_of(seconds: &'static [u64]) -> impl Fn() -> SystemTime {
     let next = std::cell::Cell::new(0);
@@ -320,8 +343,46 @@ fn a_seal_dated_before_the_seal_before_fails_naming_its_line() {
     // Catches a clock that went back passing unchecked: seal 3 is dated a
     // second before seal 2. Seals 1 and 2 share a second, which is no
     // fault: a check that refused equal dates would name line 3, not 4
-    // (the header is line 1).
+    // (the header is line 1). The sealer refuses to write seal 3, so the
+    // test signs it by hand, rightly but for its date.
     let dir = temp_dir("dates");
+    let key = dir.with_extension("key");
+    let _ = fs::remove_file(&key);
+    sealer::init(&dir, &key).unwrap();
+    let k = sealer::load_key(&key).unwrap();
+    let mut j = Journal::open(&dir).unwrap();
+    for text in ["first", "second"] {
+        j.append("edit", json!({ "text": text })).unwrap();
+    }
+    assert_eq!(
+        sealer::seal_pending(&dir, &k, &clock_of(&[10, 10])).unwrap(),
+        2
+    );
+    j.append("edit", json!({ "text": "third" })).unwrap();
+    append_seal_dated(&dir, &k, "2026-11-06T21:20:09Z");
+    let e = check::check_dir(&dir).unwrap_err();
+    assert_eq!((e.file.as_str(), e.line), (SEALS, 4), "{e}");
+    assert!(
+        e.msg.contains("is before the date of the seal before"),
+        "{e}"
+    );
+    cleanup(&dir, &key);
+}
+
+/// How many seals a journal's seals file holds (its first line is the
+/// header).
+fn seal_count(dir: &Path) -> usize {
+    let text = fs::read_to_string(dir.join(SEALS)).unwrap();
+    text.lines().count().saturating_sub(1)
+}
+
+#[test]
+fn the_sealer_stops_rather_than_seal_before_the_last_seal() {
+    // Catches a seal written with a clock that went back, within one
+    // batch (10, 11, then 9: none of the three is written) or after the
+    // seals already in the file (10 sealed, then 9); and catches a clock
+    // that stays in one second taken for one going back.
+    let dir = temp_dir("clock-back");
     let key = dir.with_extension("key");
     let _ = fs::remove_file(&key);
     sealer::init(&dir, &key).unwrap();
@@ -330,15 +391,22 @@ fn a_seal_dated_before_the_seal_before_fails_naming_its_line() {
     for text in ["first", "second", "third"] {
         j.append("edit", json!({ "text": text })).unwrap();
     }
+    let refused = sealer::seal_pending(&dir, &k, &clock_of(&[10, 11, 9])).unwrap_err();
+    assert!(
+        refused.to_string().contains("the clock went back"),
+        "{refused}"
+    );
+    assert_eq!(seal_count(&dir), 0, "no seal of the batch is written");
     assert_eq!(
-        sealer::seal_pending(&dir, &k, &clock_of(&[10, 10, 9])).unwrap(),
+        sealer::seal_pending(&dir, &k, &clock_of(&[10, 10, 10])).unwrap(),
         3
     );
-    let e = check::check_dir(&dir).unwrap_err();
-    assert_eq!((e.file.as_str(), e.line), (SEALS, 4), "{e}");
+    j.append("edit", json!({ "text": "fourth" })).unwrap();
+    assert!(sealer::seal_pending(&dir, &k, &clock_of(&[9])).is_err());
+    assert_eq!(seal_count(&dir), 3);
     assert!(
-        e.msg.contains("is before the date of the seal before"),
-        "{e}"
+        check::check_dir(&dir).is_err(),
+        "the fourth entry is not sealed"
     );
     cleanup(&dir, &key);
 }

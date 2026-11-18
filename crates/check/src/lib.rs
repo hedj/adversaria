@@ -126,15 +126,13 @@ impl<'a> Seals<'a> {
         Ok(())
     }
 
-    /// The seal is dated no earlier than the seal before it: the sealer's
-    /// clock may stay within a second for several entries, never go back.
-    /// Dates are all of one width (record::is_date), so their text sorts
-    /// as their times do.
+    /// The seal is dated no earlier than the seal before it
+    /// (record::may_follow).
     fn check_date(&self, s: &Seal) -> Result<(), String> {
         let Some(before) = self.read.last() else {
             return Ok(());
         };
-        if s.stamp.date < before.stamp.date {
+        if !record::may_follow(&before.stamp.date, &s.stamp.date) {
             let (date, earlier) = (&s.stamp.date, &before.stamp.date);
             return Err(format!(
                 "date {date} is before the date of the seal before, {earlier}"

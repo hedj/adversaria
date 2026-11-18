@@ -1020,6 +1020,29 @@ refused at `seals.jsonl` line 4, its third seal. Breaks, each failing
 the test: no date check (the journal passes), equal dates refused (line 3
 named, not 4).
 
+### The sealer stops if the clock goes back (18 November 2026)
+
+At the author's request, the sealer now writes no seal dated before the
+last seal and stops instead: `sealer run` ends with status 1 and "the
+clock went back: it says …, before the last seal's date, …; no seal
+written". The batch it was sealing is written whole or not at all, so
+no seal of it is written. The rule is one function, `record::may_follow`,
+which `check` uses too. The entries wait, unsealed, until the sealer runs
+with a clock past the last seal's date.
+
+`check`'s test of an out-of-order seal had the sealer write it; the
+sealer now refuses, so the test signs that seal itself, correct but for
+its date (a dev-dependency on ed25519-dalek, already in Cargo.lock).
+
+Checked: a new acceptance test seals with a clock giving 10, 11, then 9
+(nothing written), then 10, 10, 10 (all three written), then 9 for a
+fourth entry (refused, three seals kept). Breaks, each failing it: no
+refusal; equal dates refused (which also fails `check`'s test); and the
+batch compared only with the file's last seal (which also breaks the
+chain, so eight other tests fail with it). A full disk during this work
+left four test directories of about 690 MB in /tmp, from tests that
+failed before their cleanup; they were removed.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

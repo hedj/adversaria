@@ -9,6 +9,9 @@ publish = false
 
 [dev-dependencies]
 check = { path = "../check" }
+# To sign a seal by hand, as a sealer whose clock went back would have:
+# the sealer itself now refuses to.
+ed25519-dalek = "3.0.0"
 format = { path = "../format" }
 memex = { path = "../memex" }
 protocol = { path = "../protocol" }

@@ -542,6 +542,13 @@ impl Seal {
     }
 }
 
+/// Whether a seal may be dated so after a seal with the earlier date: not
+/// before it; seals in one second share a date (§ The journal format).
+/// Dates have one width (is_date), so their text sorts as their times do.
+pub fn may_follow(earlier: &str, date: &str) -> bool {
+    date >= earlier
+}
+
 /// ISO 8601 UTC to the second, with a valid calendar date and time.
 pub fn is_date(s: &str) -> bool {
     let parts = s.strip_suffix('Z').and_then(|s| s.split_once('T'));

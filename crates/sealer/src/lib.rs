@@ -2,7 +2,9 @@
 //! and alone writes `seals.jsonl` (docs/design.md § The journal). For each
 //! new entry of `journal.jsonl` it appends a seal: the date from the system
 //! clock, the author's key fingerprint, and an Ed25519 signature over the
-//! entry's hash. It signs nothing until the journal and its seals check.
+//! entry's hash. It signs nothing until the journal and its seals check,
+//! and writes no seal dated before the last one: if the clock has gone
+//! back, it stops, as the reference checker would refuse such a seal.
 
 use ed25519_dalek::{Signer, SigningKey};
 use format::chain::{self, LineError};
@@ -240,16 +242,16 @@ impl Checked {
     /// The entries not yet sealed, after the last seal.
     fn unsealed(&self, dir: &Path) -> Result<Unsealed<'_>, Error> {
         let sealed = self.seals(dir)?;
-        let prev = sealed.last().map(|s| s.hash.clone());
+        let last = sealed.last().cloned();
         let entries = &self.entries[sealed.len()..];
-        Ok(Unsealed { prev, entries })
+        Ok(Unsealed { last, entries })
     }
 }
 
-/// The entries of a journal not yet sealed, and the hash of the last seal,
-/// which the first of their seals follows.
+/// The entries of a journal not yet sealed, and the last seal, which the
+/// first of their seals follows.
 struct Unsealed<'a> {
-    prev: Option<String>,
+    last: Option<Seal>,
     entries: &'a [Entry],
 }
 
@@ -282,21 +284,30 @@ impl<'a> Author<'a> {
     }
 
     /// A seal's line for each entry not yet sealed, each seal following
-    /// the one before it.
+    /// the one before it; none if the clock went back for any of them.
     fn seal_each(&self, unsealed: Unsealed) -> Result<Vec<String>, Error> {
-        let mut prev = unsealed.prev;
+        let mut last = unsealed.last;
         let mut lines = Vec::new();
         for e in unsealed.entries {
-            let seal = self.seal(e, prev.as_deref())?;
+            let seal = self.seal(e, last.as_ref())?;
             lines.push(seal.to_line()? + "\n");
-            prev = Some(seal.hash);
+            last = Some(seal);
         }
         Ok(lines)
     }
 
-    /// An entry's seal, following the seal with this hash.
-    fn seal(&self, e: &Entry, prev: Option<&str>) -> Result<Seal, Error> {
-        Ok(Seal::new(e.id(), self.stamp(&e.hash), prev)?)
+    /// An entry's seal, following the last seal; refused if the clock
+    /// says a date before the last seal's.
+    fn seal(&self, e: &Entry, last: Option<&Seal>) -> Result<Seal, Error> {
+        let stamp = self.stamp(&e.hash);
+        if let Some(before) = last.filter(|b| !record::may_follow(&b.stamp.date, &stamp.date)) {
+            let (now, then) = (&stamp.date, &before.stamp.date);
+            let why = format!(
+                "the clock went back: it says {now}, before the last seal's date, {then}; no seal written"
+            );
+            return Err(Error::Refused(why));
+        }
+        Ok(Seal::new(e.id(), stamp, last.map(|s| s.hash.as_str()))?)
     }
 
     /// The stamp for an entry's hash: this author's signature of it, and

@@ -810,6 +810,11 @@ The hints on screen (such as "F3 adopts") follow your bindings.
   run the memex through nixGL (recalled, not tested).
 - **A quasimode key does nothing:** your desktop may take it
   (Super often opens a launcher; Alt may open a menu). Rebind it (§ 4.3).
+- **"sealer: the clock went back: it says …, before the last seal's date,
+  …; no seal written"**: the system clock is set to a time before the last
+  seal, and the sealer stopped rather than write a seal that `check` would
+  refuse. Set the clock right, or wait until it passes that date, and start
+  the sealer again; the entries written meanwhile are sealed then.
 - **"memex: configuration: …"**: the file and the reason are named; fix the
   line it names. `memex --print-config` shows a file that works.
 - **"no command …"**: `?` in Command lists the commands; `help` lists them

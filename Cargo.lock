@@ -23,6 +23,7 @@ name = "acceptance"
 version = "0.1.0"
 dependencies = [
  "check",
+ "ed25519-dalek",
  "format",
  "memex",
  "protocol",
