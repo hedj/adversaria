@@ -6,6 +6,8 @@
 use memex::app::{App, Event, Key, Mode, Quasi};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
+use ratatui::buffer::Buffer;
+use ratatui::style::Color;
 use std::path::PathBuf;
 
 mod support;
@@ -55,24 +57,37 @@ impl T {
             self.app.session.message
         );
     }
+    /// Pause, as the user does: the memex writes what is pending and reads
+    /// what waits to be read, as the window does after a second.
+    fn pause(&mut self) {
+        self.app.idle();
+        self.app.evaluate().unwrap();
+    }
+    /// Leap to an item, put its text's end in place of its last `n`
+    /// characters, and pause.
+    fn retype_end(&mut self, leap: &str, n: usize, end: &str) {
+        self.hold(Quasi::LeapForward, leap);
+        self.tap(Key::End);
+        for _ in 0..n {
+            self.tap(Key::Backspace);
+        }
+        self.typ(end);
+        self.pause();
+    }
     fn key(&mut self, k: Key) {
         self.tap(k);
         self.app.evaluate().unwrap();
     }
-    fn screen(&self) -> Vec<String> {
-        let (w, h) = (200, 45);
-        let mut t = Terminal::new(TestBackend::new(w, h)).unwrap();
+    /// The screen drawn, 200 by 45.
+    fn buffer(&self) -> Buffer {
+        let mut t = Terminal::new(TestBackend::new(200, 45)).unwrap();
         t.draw(|f| memex::ui::draw(f, &self.app)).unwrap();
-        let buf = t.backend().buffer().clone();
-        (0..h)
-            .map(|y| {
-                (0..w)
-                    .map(|x| buf[(x, y)].symbol().to_string())
-                    .collect::<String>()
-                    .trim_end()
-                    .to_string()
-            })
-            .collect()
+        t.backend().buffer().clone()
+    }
+    fn screen(&self) -> Vec<String> {
+        let buf = self.buffer();
+        let row = |y| (0..200).map(|x| buf[(x, y)].symbol()).collect::<String>();
+        (0..45).map(|y| row(y).trim_end().to_string()).collect()
     }
     /// The screen shows this, and the tutorial says so.
     fn shows(&self, text: &str) {
@@ -83,6 +98,20 @@ impl T {
             "screen lacks {text:?}:\n{}",
             s.join("\n")
         );
+    }
+    /// The outline shows this text in the colour of text the memex has
+    /// read, and the tutorial says so.
+    fn read(&self, text: &str) {
+        in_tutorial(text);
+        let (x, y) = self.in_outline(text);
+        let fg = self.buffer()[(x, y)].style().fg;
+        assert_eq!(fg, Some(Color::Cyan), "{text:?} is not drawn as read");
+    }
+    /// Where the outline, the left half of the screen, first shows a
+    /// text: its column and row. The right pane may show it too.
+    fn in_outline(&self, text: &str) -> (u16, u16) {
+        let at = place_in_left(&self.screen(), text);
+        at.unwrap_or_else(|| panic!("the outline lacks {text:?}"))
     }
     fn lacks(&self, text: &str) {
         in_tutorial(text);
@@ -114,6 +143,24 @@ impl T {
             );
         }
     }
+}
+
+/// Where a text first begins in the left half of the screen's lines: its
+/// column and row.
+fn place_in_left(lines: &[String], text: &str) -> Option<(u16, u16)> {
+    for (y, line) in lines.iter().enumerate() {
+        if let Some(x) = left_column(line, text) {
+            return Some((x, y as u16));
+        }
+    }
+    None
+}
+
+/// The column at which a text begins in a screen line, if it begins in
+/// the left half, where the outline is.
+fn left_column(line: &str, text: &str) -> Option<u16> {
+    let column = line[..line.find(text)?].chars().count();
+    (column < 100).then_some(column as u16)
 }
 
 fn in_tutorial(s: &str) {
@@ -154,27 +201,31 @@ fn the_tutorial_works_as_written() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// Steps 2 to 8: an outline, beliefs, a derived sentence, a claim and a
-/// constraint, Leap, interrogation and adoption, and a supposition.
+/// Steps 2 to 8: an outline, facts read from what is written, a derived
+/// sentence, a claim and a constraint, Leap, interrogation and adoption,
+/// and a supposition.
 fn part_one(t: &mut T) {
     // Step 2: an outline.
     t.typ("The programme");
     t.tap(Key::Enter);
     t.typ("Buran flew once, unmanned, on 15 November 1988.");
     t.tap(Key::Tab);
-    t.app.flush();
+    t.pause();
     t.look("outline");
     t.shows("▼ 1. The programme");
     t.shows("  • Buran flew once, unmanned, on 15 November 1988.");
+    t.shows("prose: not ACE, it stops at Buran <> flew once, unmanned, on 15 November 1988.");
 
-    // Step 3: beliefs.
-    t.command("fact date(buran_flight, 1988)");
-    t.command("fact label(buran_flight, \"Buran's flight\")");
+    // Step 3: facts, written so that the memex reads them.
     t.tap(Key::Enter);
-    t.typ("Energia, its launcher, first flew in May 1987.");
-    t.command("fact date(energia_launch, 1987)");
-    t.command("fact label(energia_launch, \"Energia's first launch\")");
+    t.typ("The date of Buran-flight is 1988. The label of Buran-flight is \"Buran's flight\".");
+    t.tap(Key::Enter);
+    t.typ("The date of Energia-launch is 1987. The label of Energia-launch is \"Energia's first launch\".");
+    t.pause();
     t.look("facts");
+    t.read("The date of Buran-flight is 1988.");
+    t.read("The date of Energia-launch is 1987.");
+    t.lacks("prose: not ACE");
 
     // Step 4: a derived sentence.
     t.tap(Key::Enter);
@@ -185,20 +236,21 @@ fn part_one(t: &mut T) {
 
     // Step 5: a claim and a constraint.
     t.tap(Key::Enter);
-    t.typ("Talk notes: the 1989 flight was the only one.");
-    t.command("claim date(buran_flight, 1989) from my notes, conference talk");
-    t.command("constraint one date per event: false :- date(E, D1), date(E, D2), D1 \\= D2.");
+    t.typ("Talk-notes says that the date of Buran-flight is 1989.");
+    t.tap(Key::Enter);
+    t.typ("Nothing has more than 1 date.");
+    t.pause();
     t.look("constraint");
-    t.says("constraint one date per event kept: it fires on a planted violation");
+    t.says("constraint Nothing has more than 1 date kept: it fires on a planted violation");
     t.shows("1 disagreement between sources");
-    t.shows("⚑ one date per event, sources disagree: 1988 here, 1989 in 1.4");
+    t.shows("⚑ Nothing has more than 1 date, sources disagree: 1988 here, 1989 in 1.5");
     t.lacks("constraint violation");
 
     // Step 6: Leap, from the end of the outline, wrapping to the top.
-    t.hold(Quasi::LeapForward, "buran");
+    t.hold(Quasi::LeapForward, "date of buran");
     t.look("leap");
-    assert!(t.here().starts_with("Buran"));
-    t.shows("CONSTRAINT · ONE DATE PER EVENT");
+    assert!(t.here().starts_with("The date of Buran-flight"));
+    t.shows("CONSTRAINT · NOTHING HAS MORE THAN 1 DATE");
 
     // Step 7: interrogate, adopt, unadopt.
     t.hold(Quasi::LeapForward, "talk");
@@ -206,11 +258,11 @@ fn part_one(t: &mut T) {
     t.look("interrogate");
     t.shows("INTERROGATE · WHAT IS CLAIMED HERE");
     t.shows("who claims the contrary");
-    t.shows("adopting it would raise 1 violation of one date per event");
+    t.shows("adopting it would raise 1 violation of Nothing has more than 1 date");
     t.key(Key::F(3));
     t.look("adopt");
     t.shows("1 constraint violation");
-    t.shows("⚑ one date per event, violation: 1988 here, 1989 in 1.4");
+    t.shows("⚑ Nothing has more than 1 date, violation: 1988 here, 1989 in 1.5");
     t.key(Key::F(4));
     t.look("unadopt");
     t.says("retracted");
@@ -224,7 +276,7 @@ fn part_one(t: &mut T) {
     t.shows("Do you mean: Suppose that the date of Buran's flight is 1989.  ⏎ yes · Esc no");
     t.key(Key::Enter);
     t.look("supposed");
-    t.says("set aside in this world: 1.1");
+    t.says("set aside in this world: 1.2");
     t.shows("WORLD · SUPPOSE THE FLIGHT WAS IN 1989");
     t.shows("The flight came two years after Energia's first launch.");
     t.command("close");
@@ -236,49 +288,47 @@ fn part_one(t: &mut T) {
 
 fn part_two(t: &mut T) {
     // Step 9: boxes after the last item of part B, at the top level.
-    t.hold(Quasi::LeapForward, "talk");
+    t.hold(Quasi::LeapForward, "nothing has");
     t.tap(Key::Enter);
     t.tap(Key::BackTab);
     t.typ("Budget");
     t.tap(Key::Enter);
-    t.typ("income");
     t.tap(Key::Tab);
-    t.command("fact cell(income, 2000)");
-    t.command("derive Income: {V} where cell(income, V)");
-    t.look("income");
-    t.shows("Income: 2000 [derived]");
-
-    //         More boxes, and one computed from them.
+    t.typ("The income is 2000.");
     t.tap(Key::Enter);
-    t.typ("rent");
-    t.command("fact cell(rent, 1200)");
-    t.command("derive Rent: {V} where cell(rent, V)");
+    t.typ("The rent is 1200.");
     t.tap(Key::Enter);
-    t.typ("food");
-    t.command("fact cell(food, 400)");
-    t.command("derive Food: {V} where cell(food, V)");
+    t.typ("The food is 400.");
+    t.tap(Key::Enter);
+    t.typ("If the rent is X and the food is Y then the cost is X + Y.");
+    t.tap(Key::Enter);
+    t.typ("If the income is X and the cost is Y then the rest is X - Y.");
+    t.pause();
+    t.look("boxes");
+    t.says("rule rest/1 kept");
+    t.read("The food is 400.");
     t.tap(Key::Enter);
     t.typ("left");
-    t.command(
-        "derive Left over: {L} where cell(income, I), cell(rent, R), cell(food, F), L is I - R - F",
-    );
+    t.command("derive Left over: {L} where rest(L)");
     t.look("left over");
     t.shows("Left over: 400 [derived]");
 
-    // Step 10: rules.
-    t.command("constraint one value per cell: false :- cell(C, A), cell(C, B), A \\= B.");
-    t.command("constraint spending within income: false :- cell(income, I), cell(rent, R), cell(food, F), R + F > I.");
-    t.says("constraint spending within income kept: it fires on a planted violation");
+    // Step 10: constraints.
+    t.tap(Key::Enter);
+    t.typ("It is false that the cost is greater than the income.");
+    t.pause();
+    t.look("within income");
+    t.says("constraint It is false that the cost is greater than the income kept: it fires on a planted violation");
+    t.command("constraint one value per box: false :- cell(B, X), cell(B, Y), X \\= Y.");
+    t.says("constraint one value per box kept: it fires on a planted violation");
 
     // Step 11: change a value.
-    t.command("set cell(food, 900)");
-    t.look("set 900");
-    t.says("set; replaced the fact at 2.3; left for you: 1 violation of spending within income");
-    t.shows("Food: 900 [derived]");
+    t.retype_end("food is 4", 4, "900.");
+    t.look("food 900");
     t.shows("Left over: -100 [derived]");
     t.shows("1 constraint violation");
-    t.command("set cell(food, 500)");
-    t.look("set 500");
+    t.retype_end("food is 9", 4, "500.");
+    t.look("food 500");
     t.shows("Left over: 300 [derived]");
     t.lacks("constraint violation");
 
@@ -288,7 +338,7 @@ fn part_two(t: &mut T) {
     t.shows("Do you mean: Suppose that the cell of rent is 1600.  ⏎ yes · Esc no");
     t.key(Key::Enter);
     t.look("supposed rent");
-    t.says("set aside in this world: 2.2; left for you: 1 violation of spending within income");
+    t.says("set aside in this world: 2.2; left for you: 1 violation of It is false that the cost is greater than the income");
     t.shows("Left over: -100");
     t.command("close");
     t.shows("Left over: 300 [derived]");
@@ -322,12 +372,12 @@ fn a_chart_with_a_limit(t: &mut T) -> u64 {
 /// Step 13: food at 900 breaks "spending within income" with rent and
 /// income, so the three bars are loud; back at 500, none is.
 fn loud_while_over_income(t: &mut T, chart: u64) {
-    t.command("set cell(food, 900)");
+    t.retype_end("food is 5", 4, "900.");
     t.look("chart 900");
     let fig = view_of(t, chart);
     assert_eq!(loud_runs(&fig), 3, "income, rent and food bars bold");
     assert!(loud_cells(&fig) > 0);
-    t.command("set cell(food, 500)");
+    t.retype_end("food is 9", 4, "500.");
     assert_eq!(loud_cells(&view_of(t, chart)), 0);
 }
 

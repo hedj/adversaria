@@ -1047,8 +1047,7 @@ failed before their cleanup; they were removed.
 
 At the author's request, the memex reads each item whose text is ACE as
 the facts, claims, rules and constraints it states, and draws read text in
-cyan; prose keeps a dim hint at the cursor. The tutorial still types
-Prolog; rewriting it in ACE is the next change.
+cyan; prose keeps a dim hint at the cursor.
 
 Two faults found while building it:
 
@@ -1072,6 +1071,34 @@ keystroke that reads. Not checked: that read text whose text later
 changes without a new reading is drawn uncoloured; this happens only
 without APE, which the test environment always has. The window loop's
 pause is exercised only by the window test, which checks no reading.
+
+### The tutorial in controlled English (18 November 2026)
+
+At the author's request ("forces the user to type things in both english
+and then in prolog"), docs/tutorial.md now has the user write each
+statement once, in ACE, and the memex reads it. Counted in the tutorial's
+commands (backquoted, by first word):
+
+| | Before | After |
+| --- | --- | --- |
+| Statements typed in Prolog (`fact`, `claim`, `constraint`, `set`) | 15 | 1 |
+| Other commands (`derive`, `layer`) | 9 | 6 |
+
+The one statement left in Prolog is "one value per box", a constraint
+over every box at once, for which ACE has no sentence; the tutorial says
+so. `derive` and `layer` remain: a template and a view are not
+statements. Values change by changing their sentence, not by `set`. The
+step that shows prose was kept: the Buran sentence stays prose, with its
+hint.
+
+Faults found while rewriting it, each fixed in its own commit: a
+constraint read from ACE was kept in silence (1f80921), and editing the
+end of an item of two spans panicked a debug build (9099add).
+
+Checked: the tutorial test performs every step and passes; it now also
+checks that read text is drawn in cyan, in the outline. Breaks, each
+failing it: a sentence in docs/tutorial.md changed (the test finds it
+missing), reading turned off in `App::idle`, and the cyan left out.
 
 ## 4. Where it stands
 

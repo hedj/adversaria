@@ -3,13 +3,15 @@
 This tutorial takes about forty minutes (an estimate), in four parts of
 four steps each, in one session:
 
-- A. First notes: an outline, facts, and a sentence computed from them,
+- A. First notes: an outline, facts written in controlled English, and a
+  sentence computed from them,
   after the design's user story (docs/design.md, § A user story): notes
   on the Soviet Buran space shuttle.
 - B. Checking a claim: a claim from a source, a constraint that catches
   the conflict, and the claim questioned, adopted, taken back and tried
   in a supposed world.
-- C. Boxes that compute: a small budget, from boxes and rules.
+- C. Boxes that compute: a small budget, from boxes and rules, all in
+  sentences.
 - D. Views, and leaving: the budget as a chart and a table, part A's
   dates as a timeline, and how to leave.
 
@@ -50,10 +52,12 @@ right. The outline says:
 Type `The programme`, then press Enter for a new item, and type
 `Buran flew once, unmanned, on 15 November 1988.`
 
-Press Tab. The Buran item moves under the first, and the outline shows:
+Press Tab. The Buran item moves under the first. Stop typing for a
+second, and the outline shows:
 
     ▼ 1. The programme
       • Buran flew once, unmanned, on 15 November 1988.
+          prose: not ACE, it stops at Buran <> flew once, unmanned, on 15 November 1988.
 
 Only top-level items show their number. Items under them are addressed by
 path: the first item under 1 is 1.1, the second 1.2, and so on.
@@ -61,80 +65,99 @@ path: the first item under 1 is 1.1, the second 1.2, and so on.
 Everything you type is written to the journal, a second after you stop or
 when you do something else. There is no Save.
 
-### 3. State facts
+The dim line is the memex reading what you wrote. It reads Attempto
+Controlled English (ACE): English with one meaning per sentence, which its
+parser, APE, turns into logic. This sentence is not ACE (ACE has only the
+present tense), so it stays prose, a note for you; the line shows where
+APE stopped. It is shown only at the cursor, and nothing is wrong: most of
+an outline is prose.
 
-A fact is a Prolog term that the item states. Facts are what constraints and
-derived values read.
+### 3. Write facts
 
-Hold **Left Ctrl**. This is the Command quasimode: while you hold it, what
-you type is a command, shown at the foot of the screen. Type
-`fact date(buran_flight, 1988)` and release Left Ctrl. Releasing runs the
-command on the item under the cursor.
+A fact is a statement the memex can reason with. Facts are what
+constraints and derived values read. Write them in ACE, and the memex
+reads them; you never write them a second time in another language.
 
-Do the same with `fact label(buran_flight, "Buran's flight")`. A label lets
-the memex write the fact in words.
+Press Enter and type
 
-Press Enter, type `Energia, its launcher, first flew in May 1987.`, and give
-it two facts in the same way:
+`The date of Buran-flight is 1988. The label of Buran-flight is "Buran's flight".`
 
-- `fact date(energia_launch, 1987)`
-- `fact label(energia_launch, "Energia's first launch")`
+Press Enter, and type
+
+`The date of Energia-launch is 1987. The label of Energia-launch is "Energia's first launch".`
+
+Stop for a second. Both items turn cyan: the memex has read each as two
+facts. Cyan text has a formal meaning to the memex; text in the usual
+colour is prose. A name written with a capital and hyphens, such as
+`Buran-flight`, is one thing; "the date of Buran-flight is 1988" says
+that its date is 1988. A label lets the memex write facts about the thing
+in words.
+
+If you change a cyan sentence, what it said is taken back and the new
+text read. A text is read whole or not at all, so it never says less to
+the memex than to you.
+
+### 4. Derive a sentence
+
+Press Enter and type a placeholder, such as `gap`. Then give the memex a
+command. Hold **Left Ctrl**. This is the Command quasimode: while you hold
+it, what you type is a command, shown at the foot of the screen. Type this
+(all one line) and release Left Ctrl; releasing runs the command on the
+item under the cursor:
+
+`derive The flight came {N:years} after Energia's first launch. where date(buran_flight, B), date(energia_launch, E), N is B - E`
+
+The `where` part is a Prolog query, the memex's own language: it finds the
+two dates and their difference. The item now shows text computed from the
+facts:
+
+    The flight came a year after Energia's first launch. [derived]
+
+If a date changes, the sentence changes with it.
 
 While Left Ctrl is held: `?` lists the commands that match what you have
 typed; Esc completes the command name; Backspace erases. A tap of Left Ctrl
 (press and release with nothing typed) latches the quasimode, so you can
 type without holding it; Enter or a second tap runs the command.
 
-### 4. Derive a sentence
-
-Press Enter and type a placeholder, such as `gap`. Then run this command
-(all one line):
-
-`derive The flight came {N:years} after Energia's first launch. where date(buran_flight, B), date(energia_launch, E), N is B - E`
-
-The item now shows text computed from the facts:
-
-    The flight came a year after Energia's first launch. [derived]
-
-If a date changes, the sentence changes with it.
-
 ## B. Checking a claim
 
 ### 5. A claim, and a constraint
 
-Press Enter and type `Talk notes: the 1989 flight was the only one.` This is
-what a speaker said, and you have not checked it. Record it as a claim, with
-its source:
+Press Enter and type what a speaker said, which you have not checked:
 
-`claim date(buran_flight, 1989) from my notes, conference talk`
+`Talk-notes says that the date of Buran-flight is 1989.`
 
-A claim is not a belief. It is something a source says, kept apart from what
-you believe until you adopt it.
+The memex reads it as a claim, with its source, Talk-notes. A claim is not
+a belief. It is something a source says, kept apart from what you believe
+until you adopt it.
 
-Now say what must never happen: one event with two dates.
+Now say what must never happen: one thing with two dates. Press Enter and
+type
 
-`constraint one date per event: false :- date(E, D1), date(E, D2), D1 \= D2.`
+`Nothing has more than 1 date.`
 
-Before keeping a constraint, the memex plants a violation and checks that
-the constraint fires on it. It says:
+and stop for a second. The memex reads it as a constraint. Before keeping a
+constraint, the memex plants a violation and checks that the constraint
+fires on it. It says:
 
-    constraint one date per event kept: it fires on a planted violation
+    constraint Nothing has more than 1 date kept: it fires on a planted violation
 
 The top bar now says `1 disagreement between sources`, and under the Buran
 item is a mark:
 
-    ⚑ one date per event, sources disagree: 1988 here, 1989 in 1.4
+    ⚑ Nothing has more than 1 date, sources disagree: 1988 here, 1989 in 1.5
 
 It is a disagreement, not a violation, because the 1989 date is only a claim.
 
 ### 6. Leap
 
 Leap moves the cursor by searching, not by arrowing. Hold **Right Alt**
-(Leap forward), type `buran`, and release. The cursor goes to the next item
-holding that text. The right pane shows the constraint behind the item's
-mark:
+(Leap forward), type `date of buran`, and release. The cursor goes to the
+next item holding that text, past the end and round to the top. The right
+pane shows the constraint behind the item's mark:
 
-    CONSTRAINT · ONE DATE PER EVENT
+    CONSTRAINT · NOTHING HAS MORE THAN 1 DATE
 
 Left Alt leaps backward. Esc completes the pattern; `?` lists every match.
 Tapping the Leap key twice repeats the last Leap.
@@ -149,12 +172,12 @@ answers five questions:
 It shows who else claims it, `who claims the contrary`, its source, the
 source's record, and what adopting it would do:
 
-    adopting it would raise 1 violation of one date per event
+    adopting it would raise 1 violation of Nothing has more than 1 date
 
 Press **F3** to adopt the claim. It is now a belief, with its source kept.
 The top bar says `1 constraint violation`, and the mark is loud:
 
-    ⚑ one date per event, violation: 1988 here, 1989 in 1.4
+    ⚑ Nothing has more than 1 date, violation: 1988 here, 1989 in 1.5
 
 Press **F4** to take the adoption back. The memex says the adoption is
 retracted, and the violation is gone. The adoption and its retraction both
@@ -176,7 +199,7 @@ Press Enter. A second world opens beside the actual one, row for row:
 In the supposed world the derived sentence says
 `The flight came two years after Energia's first launch.` The 1988 fact is
 set aside there, so the constraint holds; the memex says
-`set aside in this world: 1.1`. The actual world is untouched.
+`set aside in this world: 1.2`. The actual world is untouched.
 
 Run the command `close` to return to the actual world. The supposition
 stays in the journal; the memex says so: `it stays in the journal`.
@@ -184,43 +207,36 @@ stays in the journal; the memex says so: `it stays in the journal`.
 
 ## C. Boxes that compute
 
-The memex has no spreadsheet. But items can hold values, derived text can
-compute from values, and constraints can relate them, and that is most of
+The memex has no spreadsheet. But items can state values, rules can
+compute from them, and constraints can relate them, and that is most of
 what a spreadsheet does. This part builds a small household budget that
-way. Nothing in it is special to budgets or spreadsheets: `cell` below is
-a name chosen here, not something the memex knows.
+way, in sentences.
 
 ### 9. Boxes that hold values
 
-Leap to `talk` (the last item of part B), press Enter for a new item and
-Shift-Tab to bring it to the top level, and type `Budget`. Press Enter,
-type `income`, and press Tab to put it under Budget.
+Leap to `nothing has` (the last item of part B), press Enter for a new
+item and Shift-Tab to bring it to the top level, and type `Budget`. Press
+Enter, then Tab to put the new item under Budget, and write one box per
+item, pressing Enter between them:
 
-Give the item a value, as a fact, and make it show that value:
+- `The income is 2000.`
+- `The rent is 1200.`
+- `The food is 400.`
 
-- `fact cell(income, 2000)`
-- `derive Income: {V} where cell(income, V)`
+"The income", with no owner, is a box: a value with a name. Now two rules,
+one per item:
 
-The item now reads:
+- `If the rent is X and the food is Y then the cost is X + Y.`
+- `If the income is X and the cost is Y then the rest is X - Y.`
 
-    Income: 2000 [derived]
+Stop for a second. Every one of these items turns cyan, and the memex says
+`rule rest/1 kept`. A rule's value is not a box you set: the cost is
+computed from the rent and the food, and the rest from the income and the
+cost.
 
-The text you typed (`income`) stays in the journal; the item shows the
-derived text instead, and will follow the value when it changes.
+To show the rest, press Enter, type `left`, and run the command:
 
-Make two more boxes the same way. Press Enter, type `rent`, then:
-
-- `fact cell(rent, 1200)`
-- `derive Rent: {V} where cell(rent, V)`
-
-Press Enter, type `food`, then:
-
-- `fact cell(food, 400)`
-- `derive Food: {V} where cell(food, V)`
-
-Now a box computed from the others. Press Enter, type `left`, then:
-
-`derive Left over: {L} where cell(income, I), cell(rent, R), cell(food, F), L is I - R - F`
+`derive Left over: {L} where rest(L)`
 
 It reads:
 
@@ -228,37 +244,35 @@ It reads:
 
 ### 10. Rules between the boxes
 
-Two constraints. The first says a box holds one value; the second, that
-spending must not exceed income:
+Spending must not exceed income. Press Enter and type
 
-`constraint one value per cell: false :- cell(C, A), cell(C, B), A \= B.`
+`It is false that the cost is greater than the income.`
 
-`constraint spending within income: false :- cell(income, I), cell(rent, R), cell(food, F), R + F > I.`
+Stop for a second. As in step 5, it is tried against a planted violation
+before it is kept:
 
-Each is tried against a planted violation before it is kept, as in step
-5:
+    constraint It is false that the cost is greater than the income kept: it fires on a planted violation
 
-    constraint spending within income kept: it fires on a planted violation
+One more constraint, which says that a box holds one value. It is about
+every box at once, and ACE has no sentence for that, so give it as a
+command, in Prolog:
+
+`constraint one value per box: false :- cell(B, X), cell(B, Y), X \= Y.`
+
+`cell(B, X)` is how the memex keeps "the B is X". It says:
+
+    constraint one value per box kept: it fires on a planted violation
 
 ### 11. Change a value
 
-`set` states a fact and takes back the facts it directly contradicts:
-here, because of the rule "one value per cell", the old food value. It
-does not matter where the cursor is; the new value goes on the Food box.
-
-`set cell(food, 900)`
-
-The memex says:
-
-    set; replaced the fact at 2.3; left for you: 1 violation of spending within income
-
-Every box that depends on food is recomputed at once: the screen shows
-`Food: 900 [derived]` and `Left over: -100 [derived]`, and the top bar
-says `1 constraint violation`, marked under the boxes involved. The memex
-does not choose how to repair it (lower the rent? the food?); that is left
-to you. Put food back within income:
-
-`set cell(food, 500)`
+To change a value, change its sentence. Leap to `food is 4`, press End,
+erase `400.` with Backspace, type `900.`, and stop for a second. The old
+food value is taken back and the new one read. Every box that depends on
+food is recomputed: the screen shows `Left over: -100 [derived]`, and the
+top bar says `1 constraint violation`, marked under the boxes involved.
+The memex does not choose how to repair it (lower the rent? the food?);
+that is left to you. Put food back within income: leap to `food is 9`,
+and in the same way make it `500.`
 
 Now `Left over: 300 [derived]`, and the violation is gone.
 
@@ -273,12 +287,12 @@ Press Enter. The two worlds are shown side by side, box for box: in the
 supposed one, the old rent is set aside and `Left over: -100`. The memex
 says:
 
-    supposed; set aside in this world: 2.2; left for you: 1 violation of spending within income
+    supposed; set aside in this world: 2.2; left for you: 1 violation of It is false that the cost is greater than the income
 
-Only the old rent is set aside. Income and food stay: with them, the new
-rent breaks "spending within income", but any of the three could be the
-one to change, so the memex leaves that violation for you rather than
-choosing.
+Only the old rent is set aside, by "one value per box". Income and food
+stay: with them, the new rent breaks the cost constraint, but any of the
+three could be the one to change, so the memex leaves that violation for
+you rather than choosing.
 
 Run `close` to go back; the actual budget still says
 `Left over: 300 [derived]`. (`commit` would have made the new rent real.)
@@ -303,10 +317,10 @@ value; the second, a line across the chart at the income. The chart is
 drawn under the item, and the right pane says `VIEW · 2 LAYERS`, with how
 many marks each layer draws.
 
-Run `set cell(food, 900)` again. The food bar rises, and all three bars
-are drawn bold: the violation of "spending within income" rests on the
-income, rent and food facts, and so does every bar. Run `set cell(food, 500)` to
-put it back. With the mouse on (docs/guide.md, § The mouse), a click on
+Leap to `food is 5` and make it `900.` again. The food bar rises, and
+all three bars are drawn bold: the violation of the cost constraint rests
+on the income, rent and food facts, and so does every bar. Leap to
+`food is 9` and make it `500.` to put it back. With the mouse on (docs/guide.md, § The mouse), a click on
 a bar goes to the box that holds its value.
 
 ### 14. The same boxes as a grid
@@ -368,6 +382,8 @@ Limits of this tutorial:
   desktop or keyboard.
 - In part C, the boxes are an outline, not a grid, and only whole numbers
   can be supposed.
+- The test pauses by calling what the window calls after a second without
+  keys; it does not wait a second.
 - Views are drawn in characters, on the window's grid; they are not yet
   images.
 - The `check` command above is not performed by the tutorial test; the
