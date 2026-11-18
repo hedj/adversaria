@@ -436,7 +436,7 @@ The reader (`prolog/ace_read.pl`) maps APE's logical form (its DRS) to the noteb
 | It is false that the rent is greater than the income. | the constraint `false :- cell(rent, A), cell(income, B), A > B` |
 | Nothing has more than 1 date. | the constraint `false :- date(A, B), date(A, C), B \== C` |
 
-A proper name is an entity: its letters in lower case and its hyphens made underscores (Buran-flight is `buran_flight`), as the notebook's names are; a name the notebook gives through APE's user lexicon (`lexicon_of`) comes back as the entity it names. Each statement goes to the memex as the text of the command that states it (`fact`, `claim`, `rule`, `constraint`), so a statement read is checked as one typed is: a constraint read is still tried against a planted violation.
+A proper name is an entity: its letters in lower case and its hyphens made underscores (Buran-flight is `buran_flight`), as the notebook's names are; a name the notebook gives through APE's user lexicon (`lexicon_of`) comes back as the entity it names. Each statement goes to the memex as the text of the command that states it (`fact`, `claim`, `rule`, `constraint`), so a statement read is checked as one typed is: a constraint read is still tried against a planted violation, and the memex says what the commands said (a constraint kept, a statement refused, and why).
 
 A rule's value has a name of its own. "If the income is X and the rent is Y then the rest is X - Y" defines `rest(A)`, not the box `cell(rest, A)`, because a rule may not read what it defines (a rule for `cell` that reads `cell` is recursive, and refused). So "the rest" is read as `rest(A)` wherever a rule of one argument named `rest` is in the world, or in the same text; elsewhere it is the box.
 

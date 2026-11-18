@@ -169,6 +169,11 @@ fn a_constraint_read_is_kept_by_its_text() {
         names,
         ["It is false that the rent is greater than the income"]
     );
+    let said = &r.app.session.message;
+    assert!(
+        said.ends_with("kept: it fires on a planted violation"),
+        "{said}"
+    );
 }
 
 #[test]

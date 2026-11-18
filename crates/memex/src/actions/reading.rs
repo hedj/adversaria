@@ -67,28 +67,32 @@ impl App {
     }
 
     /// State what an item's text was read as, in place of what it was read
-    /// as before; say what was refused, if anything was.
+    /// as before; say what the commands that state it said, as if typed
+    /// (a constraint kept, a statement refused, and why).
     fn state_reading(&mut self, item: u64, of: u64, text: &str, said: &[Said]) {
         self.session.set_prose(None);
         self.retract_reading(item);
-        let (edits, refused) = self.state_all(item, text, said);
+        let (edits, told) = self.state_all(item, text, said);
         self.record_reading(item, of, text, edits);
-        self.session.message = refused.join("; ");
+        self.session.message = told.join("; ");
     }
 
-    /// State each statement on the item: the edit entries written, and why
-    /// each statement refused was refused.
+    /// State each statement on the item: the edit entries written, and
+    /// what the commands said.
     fn state_all(&mut self, item: u64, text: &str, said: &[Said]) -> (Vec<u64>, Vec<String>) {
         let first = self.notebook.next_seq();
-        let refused = self.refusals(item, named(text, said));
-        (self.edits_since(first), refused)
+        let told = self.outcomes(item, named(text, said));
+        (self.edits_since(first), told)
     }
 
-    /// State each named statement on the item: why each refused was.
-    fn refusals(&mut self, item: u64, named: Vec<(Said, String)>) -> Vec<String> {
-        let refused = named.into_iter();
-        let refused = refused.filter_map(|(s, name)| self.state(item, &s, &name).err());
-        refused.collect()
+    /// State each named statement on the item: what each command said,
+    /// when it said anything.
+    fn outcomes(&mut self, item: u64, named: Vec<(Said, String)>) -> Vec<String> {
+        let told = named
+            .into_iter()
+            .map(|(s, name)| self.state(item, &s, &name));
+        let told = told.map(|r| r.unwrap_or_else(|why| why));
+        told.filter(|t| !t.is_empty()).collect()
     }
 
     /// The edit entries written from entry `first` on.
@@ -111,15 +115,14 @@ impl App {
     }
 
     /// One statement, through the command that states it, on the item.
-    fn state(&mut self, item: u64, said: &Said, name: &str) -> Result<(), String> {
+    fn state(&mut self, item: u64, said: &Said, name: &str) -> Result<String, String> {
         let t = said.text.as_str();
-        let stated = match &said.kind {
+        match &said.kind {
             Kind::Fact => self.cmd_fact(&[t], item),
             Kind::Claim(source) => self.cmd_claim(&[&format!("{t} from {source}")], item),
             Kind::Rule => self.cmd_rule(&[t], item),
             Kind::Constraint => self.cmd_constraint(&[&format!("{name}: {t}")], item),
-        };
-        stated.map(|_| ())
+        }
     }
 
     /// Take back the entries an item's text was last read as, those the
