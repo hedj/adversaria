@@ -907,6 +907,48 @@ for each run and types at once, so it is likely the same cause; that is
 not tested. The other Wayland checks still wait fixed times for the
 window.
 
+### A keyboard for the Wayland checks, and no fixed waits (18 November 2026)
+
+`keyboard` (crates/tools) keeps one virtual keyboard on the seat while
+its input is open, with a US keymap compiled by libxkbcommon, so keys go
+by their evdev codes as a real keyboard sends them. It keeps the keys'
+state with libxkbcommon and sends the modifiers when a key changes them:
+a virtual keyboard must, and without it Shift was lost ("Hello" arrived
+as "hello"). It reads `down`, `up`, `key` and `type`, and answers
+"ready" and "done" as `pointer` does; what the two share is
+`crate::seat`. It replaces wtype, whose first key was lost for the cause
+found for the pointer: a device made and used at once. With real key
+codes, a Leap held on Right Alt is now checked under Wayland too, and
+the focus check holds Right Alt rather than F12 (25 checks).
+
+The fixed waits went: Xvfb says when it is ready (`-displayfd`);
+xdotool waits for the window (`search --sync`) and for focus
+(`windowfocus --sync`); sway's window events, followed on its IPC socket
+from before the memex starts, say when the window has focus; the device
+programs say when each command is done; and the crash check kills the
+memex once its text is in the journal, within the 2 seconds it had
+before. Conditions without an event (sway's socket, the journal, the
+window on screen) are checked every tenth of a second to a deadline.
+
+Found on the way:
+
+* `swaymsg -t subscribe -m` writes no reply when it subscribes, so a
+  read of one waited for ever: the first version of the test hung. The
+  test now speaks sway's IPC itself and reads sway's reply.
+* sway reports a new window focused before it shows it. It shows it
+  once the window has drawn at the size sway gave it, some 20 ms later
+  here. A click before then lands on the empty workspace, which takes
+  the keyboard, so keys typed afterwards reach no window (seen with
+  WAYLAND_DEBUG: a keyboard leave, then the window's surface entering
+  the output). The click now waits until the screen (grim) shows
+  something other than the background where it will click. A person
+  cannot click so soon; it is the test's fault, not the memex's.
+
+Checked: the window test passed 5 runs. Breaks, each failing checks:
+the click not waiting for the screen (the click check), no modifiers
+sent (3 Wayland checks), "ready" before the device is on the seat (4
+Wayland checks).
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

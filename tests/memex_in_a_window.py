@@ -4,22 +4,30 @@
 Under X11 it starts an X server with no screen (Xvfb) and types with
 xdotool by key code, since xdotool's key names press Left Alt with Right
 Alt, and wraps later keys in Alt. Under Wayland it starts a headless sway
-and types with wtype, whose virtual keyboard makes up its own key codes, so
-only text and named keys are typed there, not quasimodes held on modifiers;
-it points and clicks with the pointer program (crates/tools), at a scale of
-2, so a click is found in points, not pixels.
+and types and clicks with the keyboard and pointer programs (crates/tools),
+which keep one device each on the seat and answer when each command is
+done; it clicks at a scale of 2, so a click is found in points, not pixels.
 Focus is taken from the window by focusing the root window (X11) or an
 empty workspace (Wayland). It checks what the program does: the journal
 entries the keys should make, and its exit status.
 
+It waits on events, not the clock: Xvfb says when it is ready, xdotool
+and sway say when the window is there and has focus, and the device
+programs say when each command is done. Where it waits on a condition (a
+socket, a line in the journal, the window on screen) it checks it every
+tenth of a second, up to a deadline.
+
 Usage: tests/memex_in_a_window.py <path to the memex binary>
-Needs: Xvfb, xdotool, sway, wtype and grim (the Nix shell has them), the
-window's libraries and drivers (the Nix shell sets them), and the pointer
-program built beside the memex (make test-window builds both).
+Needs: Xvfb, xdotool, sway and grim (the Nix shell has them), the window's
+libraries and drivers (the Nix shell sets them), and the keyboard and
+pointer programs built beside the memex (make test-window builds them).
 """
 import json
 import os
+import select
 import signal
+import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -48,27 +56,28 @@ def command(line):
     return held(LEFT_CTRL, line)
 
 
-def wait_for_window(env, timeout=30, process=None):
-    """The memex window's id, once it is mapped; none if it is not, or if
-    the program ends first."""
+def wait_for_window(env, process, timeout=30):
+    """The memex window's id, once it is mapped (xdotool waits for it);
+    none if the program ends first, or the time is up."""
+    search = subprocess.Popen(["xdotool", "search", "--sync", "--name", "^memex$"], env=env,
+                              stdout=subprocess.PIPE, text=True)
     end = time.time() + timeout
-    while time.time() < end and (process is None or process.poll() is None):
-        r = subprocess.run(["xdotool", "search", "--name", "^memex$"], env=env,
-                           capture_output=True, text=True)
-        if r.stdout.strip():
-            return r.stdout.split()[0]
-        time.sleep(0.3)
+    while process.poll() is None and time.time() < end:
+        if select.select([search.stdout], [], [], 1.0)[0]:
+            return (search.stdout.readline().split() or [None])[0]
+    search.kill()
     return None
 
 
-def run_x11(binary, display, journal, actions, args=(), kill_after=None, timeout=20):
+def run_x11(binary, display, journal, actions, args=(), kill_when=None, timeout=20):
     """Run the memex on a journal, type the actions into its window, and
-    return its exit status and what it wrote to stderr."""
+    return its exit status and what it wrote to stderr. With kill_when,
+    the memex is killed, as a crash would end it, once kill_when() holds."""
     env = dict(os.environ, DISPLAY=display)
     env.pop("WAYLAND_DISPLAY", None)
     p = subprocess.Popen([binary, *args, journal], env=env,
                          stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    w = wait_for_window(env, process=p)
+    w = wait_for_window(env, p)
     if w is None:
         if p.poll() is None:
             p.kill()
@@ -80,8 +89,8 @@ def run_x11(binary, display, journal, actions, args=(), kill_after=None, timeout
     places = {"%memex": w, "%root": root[0] if root else ""}
     for a in actions:
         subprocess.run(["xdotool", *[places.get(x, x) for x in a]], env=env)
-    if kill_after is not None:
-        time.sleep(kill_after)
+    if kill_when is not None:
+        until(kill_when, p, timeout=2)
         p.send_signal(signal.SIGKILL)
     try:
         _, err = p.communicate(timeout=timeout)
@@ -120,9 +129,13 @@ def flat(*parts):
 
 
 def x11_checks(binary, d, check):
-    xvfb = subprocess.Popen(["Xvfb", ":91", "-screen", "0", "1400x900x24"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(1.5)
+    # Xvfb writes its display's number to -displayfd once it takes clients.
+    ready, told_fd = os.pipe()
+    xvfb = subprocess.Popen(["Xvfb", ":91", "-screen", "0", "1400x900x24", "-displayfd", str(told_fd)],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, pass_fds=(told_fd,))
+    os.close(told_fd)
+    with os.fdopen(ready) as r:
+        r.readline()
     try:
         x11_typing(binary, d, check)
         x11_remapped(binary, d, check)
@@ -192,7 +205,7 @@ def x11_idle_and_reasoning(binary, d, check):
     # Text typed and left for a second is written, so a crash after it
     # loses nothing.
     j = os.path.join(d, "idle")
-    status, _ = run_x11(binary, ":91", j, [typed("Kept")], kill_after=2.0)
+    status, _ = run_x11(binary, ":91", j, [typed("Kept")], kill_when=lambda: "Kept" in texts(entries(j)))
     check("text left for a second is written before a crash", "Kept" in texts(entries(j)), texts(entries(j)))
     # The memex reasons after each change, unasked: two dates for one event
     # and a rule against it make a violation, which it observes. The
@@ -214,46 +227,17 @@ def x11_focus_lost(binary, d, check):
     # key is released, as Alt+Tab does: back in the window, Leap must not
     # still be held, so Z is text and F10 quits.
     j = os.path.join(d, "focus")
-    away = [["keydown", str(RIGHT_ALT)], ["sleep", "0.3"], ["windowfocus", "%root"], ["sleep", "0.5"],
-            ["keyup", str(RIGHT_ALT)], ["sleep", "0.3"], ["windowfocus", "--sync", "%memex"], ["sleep", "0.3"]]
+    away = [["keydown", str(RIGHT_ALT)], ["windowfocus", "--sync", "%root"],
+            ["keyup", str(RIGHT_ALT)], ["windowfocus", "--sync", "%memex"]]
     status, err = run_x11(binary, ":91", j, flat(typed("Hello"), away, typed("Z"), key(F10)))
     es = entries(j)
     check("after focus is lost with Right Alt held, keys are typed again and F10 quits",
           status == 0 and "Z" in texts(es) and not leaps(es), (status, texts(es), leaps(es), err[-200:]))
 
 
-def wayland_focus_lost(binary, d, env, check):
-    """F12, holding Leap by the configuration (wtype's key codes rule out
-    modifiers), held while sway moves to an empty workspace and released
-    there: back in the window, Z is text and F10 quits."""
-    conf = os.path.join(d, "wayland-focus.toml")
-    with open(conf, "w", encoding="utf-8") as f:
-        f.write('[quasimodes]\nleap_forward = "F12"\n')
-    j = os.path.join(d, "wayland-focus")
-    p = subprocess.Popen([binary, "--config", conf, j], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    time.sleep(6)
-    subprocess.run(["wtype", "-d", "50", "-k", "Shift_L", "Hello"], env=env)
-    hold = subprocess.Popen(["wtype", "-d", "50", "-k", "Shift_L", "-P", "F12", "-s", "3000", "-p", "F12"], env=env)
-    time.sleep(1)
-    subprocess.run(["swaymsg", "-q", "workspace", "2"], env=env)
-    hold.wait()
-    subprocess.run(["swaymsg", "-q", "workspace", "1"], env=env)
-    time.sleep(0.5)
-    subprocess.run(["wtype", "-d", "50", "-k", "Shift_L", "Z", "-k", "F10"], env=env)
-    try:
-        _, err = p.communicate(timeout=20)
-        status = p.returncode
-    except subprocess.TimeoutExpired:
-        p.kill()
-        status, err = None, b"timed out"
-    es = entries(j)
-    check("under Wayland, after focus is lost with F12 held, keys are typed again and F10 quits",
-          status == 0 and "Z" in texts(es) and not leaps(es), (status, texts(es), leaps(es)))
-
-
 def started_sway(d, scale):
     """A headless sway with one output at a scale; its process, and the
-    environment its clients need."""
+    environment its clients need, once its socket is there."""
     run_dir = tempfile.mkdtemp(dir=d)
     os.chmod(run_dir, 0o700)
     cfg = os.path.join(run_dir, "sway.cfg")
@@ -263,16 +247,104 @@ def started_sway(d, scale):
                WLR_LIBINPUT_NO_DEVICES="1", WLR_RENDERER="pixman")
     env.pop("DISPLAY", None)
     sway = subprocess.Popen(["sway", "-c", cfg], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    sockets = []
-    for _ in range(50):
-        sockets = [s for s in os.listdir(run_dir) if s.startswith("wayland-") and not s.endswith(".lock")]
-        if sockets:
-            break
-        time.sleep(0.2)
+    ipc = until(lambda: [s for s in os.listdir(run_dir) if s.startswith("sway-ipc.")], sway)
+    sockets = [s for s in os.listdir(run_dir) if s.startswith("wayland-") and not s.endswith(".lock")]
     env["WAYLAND_DISPLAY"] = sockets[0] if sockets else ""
-    ipc = [s for s in os.listdir(run_dir) if s.startswith("sway-ipc.")]
     env["SWAYSOCK"] = os.path.join(run_dir, ipc[0]) if ipc else ""
     return sway, env
+
+
+def until(found, process, timeout=30):
+    """What found() gives once it gives something, checked every tenth of a
+    second; none if the process ends or the time is up first."""
+    end = time.time() + timeout
+    while time.time() < end and process.poll() is None:
+        result = found()
+        if result:
+            return result
+        time.sleep(0.1)
+    return None
+
+
+def device(binary, name, env):
+    """A device program (crates/tools: keyboard, pointer), started beside
+    the memex's binary, and whether it said its device is on the seat."""
+    program = os.path.join(os.path.dirname(binary), name)
+    hand = subprocess.Popen([program], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    return hand, hand.stdout.readline().strip() == "ready"
+
+
+def told(hand, *commands):
+    """Give a device program commands, one by one, each once the last is
+    done; whether each was done."""
+    answers = []
+    for c in commands:
+        hand.stdin.write(c + "\n")
+        hand.stdin.flush()
+        answers.append(hand.stdout.readline().strip())
+    return answers == ["done"] * len(commands)
+
+
+def sway_ipc(path):
+    """A connection to sway's IPC socket, subscribed to window events once
+    sway has said it is: from then, no event is missed."""
+    ipc = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    ipc.connect(path)
+    body = b'["window"]'
+    ipc.sendall(b"i3-ipc" + struct.pack("=II", len(body), 2) + body)
+    reply = sway_message(ipc, time.time() + 10)
+    return ipc if reply and json.loads(reply).get("success") else None
+
+
+def sway_message(ipc, deadline):
+    """The body of sway's next message on an IPC connection; none if none
+    comes before the deadline."""
+    header = received(ipc, 14, deadline)
+    if header is None:
+        return None
+    length, _ = struct.unpack("=II", header[6:])
+    return received(ipc, length, deadline)
+
+
+def received(ipc, count, deadline):
+    """Exactly count bytes from a socket; none if they do not all come
+    before the deadline."""
+    data = b""
+    while len(data) < count:
+        ipc.settimeout(max(deadline - time.time(), 0.001))
+        try:
+            chunk = ipc.recv(count - len(data))
+        except socket.timeout:
+            return None
+        if not chunk:
+            return None
+        data += chunk
+    return data
+
+
+def launched_on_sway(binary, env, args, timeout=30):
+    """The memex started under sway, and whether its window took the
+    keyboard. Window events are followed from before it starts, so the
+    focus is not missed, until it comes or the time is up."""
+    ipc = sway_ipc(env["SWAYSOCK"])
+    p = subprocess.Popen([binary, *args], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    deadline = time.time() + timeout
+    focused = False
+    while ipc and not focused:
+        body = sway_message(ipc, deadline)
+        if body is None:
+            break
+        event = json.loads(body)
+        focused = event.get("change") == "focus" and event.get("container", {}).get("name") == "memex"
+    if ipc:
+        ipc.close()
+    return p, focused
+
+
+def pixel(env, at):
+    """The colour on screen at a point, in the output's own units (grim)."""
+    shot = subprocess.run(["grim", "-g", f"{at[0]},{at[1]} 1x1", "-t", "ppm", "-"], env=env, capture_output=True)
+    return shot.stdout[-3:] if shot.returncode == 0 else None
 
 
 def ended(p):
@@ -286,74 +358,82 @@ def ended(p):
         return None, "timed out"
 
 
+# Evdev key codes, as the keyboard program sends them.
+EV_RETURN, EV_F10, EV_F12, EV_RIGHT_ALT = 28, 68, 88, 100
+
+
 def wayland_checks(binary, d, check):
-    """Text and named keys under a headless Wayland compositor."""
+    """Keys under a headless Wayland compositor, from the keyboard
+    program, by their places on the keyboard as a real keyboard sends
+    them."""
     sway, env = started_sway(d, 1)
+    keys, ready = device(binary, "keyboard", env)
     try:
         j = os.path.join(d, "wayland")
-        p = subprocess.Popen([binary, j], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        time.sleep(6)
-        # One wtype run, its first key a Shift: each run makes a new virtual
-        # keyboard, and the first key after it is lost (seen under sway;
-        # a real keyboard's map is sent once, on focus, untested here).
-        keys = ["-d", "50", "-k", "Shift_L", "Hello", "-k", "Return", "World", "-k", "F10"]
-        subprocess.run(["wtype", *keys], env=env)
+        p, focused = launched_on_sway(binary, env, [j])
+        typed_in = told(keys, "type Hello", f"key {EV_RETURN}", "type World",
+                        f"down {EV_RIGHT_ALT}", "type hel", f"up {EV_RIGHT_ALT}", f"key {EV_F10}")
         status, err = ended(p)
-        check("under Wayland it opens a window and quits with F10", status == 0, f"status {status}: {err[-300:]}")
-        check("under Wayland typed text reached the journal",
-              "Hello" in texts(entries(j)) and "World" in texts(entries(j)), texts(entries(j)))
-        wayland_focus_lost(binary, d, env, check)
+        es = entries(j)
+        check("under Wayland it opens a window and quits with F10",
+              ready and focused and typed_in and status == 0, (ready, focused, typed_in, status, err[-300:]))
+        check("under Wayland typed text reached the journal", "Hello" in texts(es) and "World" in texts(es), texts(es))
+        ls = leaps(es)
+        check("under Wayland a held Right Alt made one Leap forward, ended by its release",
+              len(ls) == 1 and ls[0]["pattern"] == "hel" and ls[0]["forward"] is True, ls)
+        wayland_focus_lost(binary, d, env, keys, check)
     finally:
+        keys.stdin.close()
         sway.kill()
 
 
-def wait_for_sway_window(env, process, timeout=30):
-    """Whether the memex's window is in sway's tree of windows, waited for
-    until it is, the program ends, or the time is up."""
-    end = time.time() + timeout
-    while time.time() < end and process.poll() is None:
-        tree = subprocess.run(["swaymsg", "-t", "get_tree"], env=env, capture_output=True, text=True).stdout
-        if '"name": "memex"' in tree:
-            return True
-        time.sleep(0.2)
-    return False
-
-
-def told(hand, command):
-    """Give the pointer program a command, and its answer once the
-    compositor has had the command's events."""
-    hand.stdin.write(command + "\n")
-    hand.stdin.flush()
-    return hand.stdout.readline().strip()
+def wayland_focus_lost(binary, d, env, keys, check):
+    """Right Alt held while sway moves to an empty workspace, and released
+    there: back in the window, Leap must not still be held, so Z is text
+    and F10 quits. sway answers a command once it has acted on it."""
+    j = os.path.join(d, "wayland-focus")
+    p, focused = launched_on_sway(binary, env, [j])
+    sway = lambda *words: subprocess.run(["swaymsg", "-q", *words], env=env).returncode == 0
+    steps = [told(keys, "type Hello", f"down {EV_RIGHT_ALT}"), sway("workspace", "2"),
+             told(keys, f"up {EV_RIGHT_ALT}"), sway("workspace", "1"), told(keys, "type Z", f"key {EV_F10}")]
+    status, err = ended(p)
+    es = entries(j)
+    check("under Wayland, after focus is lost with Right Alt held, keys are typed again and F10 quits",
+          focused and all(steps) and status == 0 and "Z" in texts(es) and not leaps(es),
+          (focused, steps, status, texts(es), leaps(es), err[-200:]))
 
 
 def wayland_click(binary, d, check):
     """A click at a scale of 2: the window is told of the pointer in
-    pixels, twice the points the cells are measured in. The pointer program
-    keeps one virtual pointer on the seat; a pointer made for each action
-    leaves before the window can use it."""
+    pixels, twice the points the cells are measured in."""
     sway, env = started_sway(d, 2)
-    pointer = os.path.join(os.path.dirname(binary), "pointer")
+    keys, keyboard_ready = device(binary, "keyboard", env)
+    hand, pointer_ready = device(binary, "pointer", env)
     try:
         j = os.path.join(d, "wayland-click")
-        hand = subprocess.Popen([pointer], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-        ready = hand.stdout.readline().strip()
-        p = subprocess.Popen([binary, "--mouse", j], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        mapped = wait_for_sway_window(env, p)
-        subprocess.run(["wtype", "-d", "50", "-k", "Shift_L", "Hello", "-k", "Return", "World"], env=env)
+        # sway reports the window focused before it shows it: it shows it
+        # once the window has drawn at the size sway gave it. A click
+        # before then lands on the empty workspace, which takes the
+        # keyboard. So the click waits until the screen shows the window
+        # where the click will be.
+        background = pixel(env, FIRST_ITEM)
+        p, focused = launched_on_sway(binary, env, ["--mouse", j])
+        shown = until(lambda: pixel(env, FIRST_ITEM) not in (None, background), p)
         # The output is 800 by 500 in its own units at a scale of 2.
-        done = [told(hand, f"move {FIRST_ITEM[0]} {FIRST_ITEM[1]} 800 500"), told(hand, "click")]
-        subprocess.run(["wtype", "-d", "50", "-k", "Shift_L", "Z", "-k", "F10"], env=env)
+        steps = [told(keys, "type Hello", f"key {EV_RETURN}", "type World"),
+                 told(hand, f"move {FIRST_ITEM[0]} {FIRST_ITEM[1]} 800 500", "click"),
+                 told(keys, "type Z", f"key {EV_F10}")]
         status, err = ended(p)
-        hand.stdin.close()
         es = entries(j)
         first = items(es)[0] if items(es) else None
         into = [(e["body"].get("item"), e["body"].get("add")) for e in es
                 if e["kind"] == "edit" and e["body"].get("op") == "text"]
         check("under Wayland at a scale of 2, a click on the first item puts the next key there",
-              ready == "ready" and mapped and done == ["done", "done"] and status == 0
-              and hand.wait(timeout=10) == 0 and (first, "Z") in into, (ready, mapped, done, status, first, into, err[-200:]))
+              keyboard_ready and pointer_ready and focused and shown and all(steps) and status == 0
+              and (first, "Z") in into, (keyboard_ready, pointer_ready, focused, shown, steps, status, first, into, err[-200:]))
     finally:
+        keys.stdin.close()
+        hand.stdin.close()
         sway.kill()
 
 

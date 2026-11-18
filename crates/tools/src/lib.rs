@@ -14,6 +14,7 @@
 pub mod held;
 pub mod interactivity;
 pub mod measures;
+pub mod seat;
 
 use serde_json::Value;
 use std::process::Command;
