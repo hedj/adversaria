@@ -176,7 +176,7 @@ workspace
 │   │             the memory of confirmed pairs (pairs)
 │   ├── actions: dispatch, editing, knowledge, checks, worlds and history,
 │   │            English
-│   └── screen: session, terminal, panels, views
+│   └── screen: session, window (gui), panels, views
 └── tools: wikidata, measures, interactivity; acceptance tests
 ```
 

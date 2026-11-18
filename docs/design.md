@@ -10,7 +10,7 @@ The memex is a cognitive augment for its one user, in the sense of Bush's memex 
 
 This is a working document, kept alongside the design conversation. Figures are estimates unless marked as measured; history is recalled from memory unless a source is linked.
 
-The design does not depend on a platform. Its prototype runs on a PC: a terminal program written in Rust, SWI-Prolog as its reasoning engine in a child process, split at the query protocol, and a separate sealer process that dates and signs journal entries (see The PC prototype). Hardware that might run the memex is out of scope here.
+The design does not depend on a platform. Its prototype runs on a PC: a program written in Rust with a window of its own, SWI-Prolog as its reasoning engine in a child process, split at the query protocol, and a separate sealer process that dates and signs journal entries (see The PC prototype). Hardware that might run the memex is out of scope here.
 
 ### A user story
 
@@ -83,14 +83,14 @@ The core is a store of items with permanent addresses, typed links and named tra
 | Decision | Reason |
 | --- | --- |
 | License the project under GPL-3.0 | the author's decision (12 November 2026); Clex is GPL-3.0 and APE LGPL-3.0, so both can ship with it |
-| The prototype is a terminal program in Rust (ratatui on crossterm) with SWI-Prolog as a child process, joined by the query protocol over a pipe; no web interface | the author's decision (12 November 2026), replacing the browser client and the websocket chosen earlier that day; SWI-Prolog keeps the reasoning, since the milestone 0 spikes showed its incremental tabling does the dataflow engine's work |
+| The prototype is a program in Rust with SWI-Prolog as a child process, joined by the query protocol over a pipe; no web interface | the author's decision (12 November 2026), replacing the browser client and the websocket chosen earlier that day; SWI-Prolog keeps the reasoning, since the milestone 0 spikes showed its incremental tabling does the dataflow engine's work |
 | All of the project's own code outside Prolog is Rust, the reference checker included | the author's decision (12 November 2026); one language. The cost, noted when it was chosen: the checker no longer comes from an independent implementation of the format |
-| The memex requires a terminal with kitty's keyboard and graphics protocols | the author's decision (12 November 2026); key releases give true quasimodes, and the graphics protocol shows figures, charts and diagrams in place. It excludes terminals that lack either |
+| The memex runs in a window of its own (winit, egui, wgpu) on X11 and Wayland, not in a terminal | the author's decision (17 November 2026), reversing that of 12 November, which required a terminal with kitty's keyboard and graphics protocols; a standard UI library needs no particular terminal, and winit reports key releases, so quasimodes stay true. ratatui still lays the screen out, in cells held in memory, which egui paints |
 | Stage A starts from Wikidata subset D, the pocket base | the author's decision (12 November 2026); small enough to build and load quickly while the suggestions are tested |
 | Name the project Adversaria, with the prototype in a repository of its own | the author's decision; “memex” is taken |
 | Imported content is a claim, never a fact; adopting and interrogating a claim take one click or key. The PC prototype is the version for others; purges keep the chain checkable; mail, calendars and the web are imported; quasimodes can be latched and a command palette offers every command; trails and maps export as read-only HTML | the author's decisions, after an outside review of the design's fit for general knowledge workers |
 | Count the user's actions by kind from the journal; run constraints as dataflow nodes whose values are their violations | the author's decision, after Licklider's "Man-Computer Symbiosis" (1960): measure where the work goes, and let the machine expose flaws during formulation |
-| Build the memex as a PC prototype, split at the query protocol | the author's decision; the memex is in use early, and each half can be replaced on its own. Its form, first a browser client, is now a terminal program in Rust (above) |
+| Build the memex as a PC prototype, split at the query protocol | the author's decision; the memex is in use early, and each half can be replaced on its own. Its form, first a browser client, was then a terminal program in Rust, and is now a program in Rust with a window of its own (above) |
 | Adopt J5: workspaces as items in the journal | a layout is just another view of the store, so the journal keeps it with no Save |
 | What reasoning shows is journaled as `view` entries (`observed`, `offer`), so the measures report reads the journal alone | made when milestone 7 was built (12 November 2026), after § The journal, rule 6 |
 
@@ -161,16 +161,16 @@ The core is a store of items with permanent addresses, typed links and named tra
 | Adopt N1, N4 and N7 as the outline model, with onscreen aids to learning | NLS's structure gave experts speed; the aids address its known difficulty of learning |
 | Adopt views, references and anchors (merging N3, N5, N6, X1, X2, X5, J3); merge executable content (J1, J2, J6) into reactive documents; drop N9, N10, X6; J7 is implicit | each group did one job in several systems; the dropped ones concern practice, collaboration or licensing, not mechanism |
 | Keys are configured in a TOML file; a name given replaces its default, and a file the memex would have to guess at is refused | the author asked to adjust key bindings (12 November 2026); TOML is a standard format with a maintained Rust parser, and refusing a wrong file is safer than starting with keys the user did not choose |
-| The mouse is off by default, on by `[mouse] enabled = true` or `--mouse`; `--no-mouse` overrides the file | the author's decision (12 November 2026); while a terminal program has the mouse, the terminal's own text selection usually needs Shift held |
+| The mouse is off by default, on by `[mouse] enabled = true` or `--mouse`; `--no-mouse` overrides the file | the author's decision (12 November 2026); while a terminal program has the mouse, the terminal's own text selection usually needs Shift held. The window (17 November 2026) has no text selection; the default stands until the author changes it |
 | Views are layers of marks over goals, with no chart types; charts, grids, timelines and diagrams emerge from marks over the user's facts and rules | the author's decision (12 November 2026): spreadsheets and charts should emerge from boxes and rules the user makes; after the grammar of graphics, Vega-Lite and Observable Plot |
-| Views are drawn in terminal characters first | no new dependency; the kitty graphics protocol would need a rasteriser crate |
+| Views are drawn in characters first | no new dependency when made. In the window egui can draw shapes and images with no rasteriser crate, but views as images are not built |
 
 #### Open questions
 
 - [ ] How fast does the journal grow in real use, and how are span lists compacted?
 - [x] Does SWI-Prolog's incremental tabling work as recalled? Yes (milestone 0's spike; milestone 4's nodes), with shared tables. Open: how s(CASP)'s untabled queries join the dataflow graph.
 - [x] At what granularity are dependencies recorded? Per call variant, by SWI-Prolog (milestone 4). Open: what recording costs at scale.
-- [ ] Which keys of a standard keyboard fall under the thumbs for Leap, Scope, Command and Suppose, and which of them do the operating system and the terminal take?
+- [ ] Which keys of a standard keyboard fall under the thumbs for Leap, Scope, Command and Suppose, and which of them do the operating system and the desktop take?
 - [ ] How large a diagram must layout handle within 0.1 s?
 - [ ] Which timestamping service, and how often?
 
@@ -669,10 +669,10 @@ Raskin's further rules, adopted:
 Limits:
 
 - Holding Leap while typing "has been criticized as uncomfortable" (Wikipedia, Archy); the held keys should fall under the thumbs, as on the Canon Cat's two large Leap keys.
-- Quasimodes need key-down and key-up events. Most terminals send only key presses; the kitty keyboard protocol adds releases, so the memex requires a terminal that supports it, and refuses to start in one that does not. The operating system and the terminal still take some keys.
+- Quasimodes need key-down and key-up events. The memex reads them from the window system through winit, with each key's place on the keyboard, so Right Alt and Left Alt are told apart. The operating system and the desktop still take some keys.
 - The zooming interface of THE and Archy is not adopted; Archy's prototype "did not include code for zooming".
 
-As built (milestone 3, provisional): Leap forward is Right Alt and Leap back Left Alt, the keys nearest the thumbs on most keyboards; Command is Left Ctrl, Scope Right Ctrl, Suppose Super (which the operating system may take). A press and release with no other key between them latches the quasimode: it stays until Enter or a second tap, and a second tap of an empty latched Leap repeats the last Leap. Scope widens on Space. F1 opens the command palette; F6 switches panes; F10 quits. The keys are checked only through a script playing a kitty terminal, not on real keyboards. These are the defaults: a configuration file can move any quasimode or binding (docs/guide.md, § Configuration).
+As built (milestone 3, provisional): Leap forward is Right Alt and Leap back Left Alt, the keys nearest the thumbs on most keyboards; Command is Left Ctrl, Scope Right Ctrl, Suppose Super (which the operating system may take). A press and release with no other key between them latches the quasimode: it stays until Enter or a second tap, and a second tap of an empty latched Leap repeats the last Leap. Scope widens on Space. F1 opens the command palette; F6 switches panes; F10 quits. The keys are checked only through scripts that type into the window (xdotool under X11, wtype under Wayland), not on real keyboards. These are the defaults: a configuration file can move any quasimode or binding (docs/guide.md, § Configuration).
 
 Conventional shortcuts sit beside the quasimodes, for laptops without thumb keys and for accessibility: each quasimode can be latched by tapping its key instead of holding it, and a command palette offers every command by name with recognition. Holding remains the fast path; nothing needs it.
 
@@ -695,11 +695,11 @@ Sources, read for this: Wickham, *A Layered Grammar of Graphics* (2010); Satyana
 | The data join: declare the relationship between data and marks, with a key | Bostock | a layer declares it; a mark's provenance (the facts it rests on) is its key and leads back to the item |
 | Reactivity in topological order, only what is downstream of a change | Observable Framework ("runs like a spreadsheet") | each layer is a node in the existing dataflow graph |
 
-Drawing is in terminal characters. The marks choose a frame: any node or edge makes a graph, laid out in layers by a simplified Sugiyama method (cycles broken by depth-first search, layers by longest path, dummy nodes on long edges, barycentre sweeps against crossings, ports spread along each box, orthogonal edges, a cycle's closing edge looped round the right); cells alone make a grid; anything else, a plot. A mark resting on a fact in a violation is drawn loudly, so constraints show on views as they do beside items.
+Drawing is in characters, on the window's grid of cells. The marks choose a frame: any node or edge makes a graph, laid out in layers by a simplified Sugiyama method (cycles broken by depth-first search, layers by longest path, dummy nodes on long edges, barycentre sweeps against crossings, ports spread along each box, orthogonal edges, a cycle's closing edge looped round the right); cells alone make a grid; anything else, a plot. A mark resting on a fact in a violation is drawn loudly, so constraints show on views as they do beside items.
 
 Supporting elements built with it: `rule`, so a computation is written once and used in views, constraints and derived text; rules work under negation, disjunction, findall and forall; a violation found through a rule rests on the facts under it; the outline is offered to goals as `item_text/2` and `item_under/2`, so a view can draw the user's own notes; the planted check tries zero, negative and mixed values.
 
-Not built: interactive selections (Vega-Lite's), editing through a view (dragging a bar to `set` its fact), colour, images through the kitty graphics protocol, facets other than worlds, stats such as binning inside a view (a rule with findall does it), and recursive rules (so a view cannot follow paths of any length).
+Not built: interactive selections (Vega-Lite's), editing through a view (dragging a bar to `set` its fact), colour, images, facets other than worlds, stats such as binning inside a view (a rule with findall does it), and recursive rules (so a view cannot follow paths of any length).
 
 ### Diagrams
 
@@ -743,19 +743,19 @@ Sources: [Purchase 1997](https://link.springer.com/doi/10.1007/3-540-63938-1_67)
 
 ### The PC prototype
 
-The prototype is a terminal program in Rust and SWI-Prolog, split at one interface, the query protocol below, which is fixed first. Rust holds the interface, the store, the journal writer and the format's tools; SWI-Prolog, run as a child process, holds the facts, rules, constraints and the dataflow engine (incremental tabling), and runs s(CASP) and APE. There is no web interface. It puts the memex in use early: journal, outline, quasimodes, dataflow, s(CASP). Each side can be replaced on its own.
+The prototype is a program in Rust, with a window of its own, and SWI-Prolog, split at one interface, the query protocol below, which is fixed first. Rust holds the interface, the store, the journal writer and the format's tools; SWI-Prolog, run as a child process, holds the facts, rules, constraints and the dataflow engine (incremental tabling), and runs s(CASP) and APE. There is no web interface. It puts the memex in use early: journal, outline, quasimodes, dataflow, s(CASP). Each side can be replaced on its own.
 
-The interface is drawn with ratatui on crossterm. It needs a terminal that supports two of kitty's protocols: the keyboard protocol, for key releases (see Quasimodes, not modes), and the graphics protocol, to show images in place: figures and files from `blobs/`, charts and laid-out diagrams, drawn as images and placed in the cell grid. Which terminals support both is to be checked against their documentation, not assumed. The prototype is also the version for others: a PC is what other people and their organisations can run.
+The interface is laid out with ratatui in a grid of cells held in memory, and painted by egui through wgpu, in a window that winit opens under X11 or Wayland. winit gives key releases, for quasimodes (see Quasimodes, not modes), and each key's place on the keyboard. Images in place (figures and files from `blobs/`, charts and diagrams drawn as images) are not built; egui can draw them. Until 17 November 2026 the memex ran in a terminal with kitty's keyboard and graphics protocols. The prototype is also the version for others: a PC is what other people and their organisations can run.
 
 #### Estimate for the PC prototype
 
-These are estimates by judgement, not measurements. They were made for a browser client and are not yet revised for the terminal program in Rust; they assume a client talking to SWI-Prolog over the query protocol, APE and s(CASP) as they are, no trained model, and one experienced developer; the second column has Claude writing the code while the author directs and reviews.
+These are estimates by judgement, not measurements. They were made for a browser client and are not yet revised for the program in Rust; they assume a client talking to SWI-Prolog over the query protocol, APE and s(CASP) as they are, no trained model, and one experienced developer; the second column has Claude writing the code while the author directs and reviews.
 
 | Part | Weeks, by hand | Weeks, with Claude | Why |
 | --- | --- | --- | --- |
 | Query protocol, journal, panes, count of actions | 6–10 | 1–2 | well specified and routine |
 | Outline editor: items, transclusion, links | 3–5 | 1–2 | editing behaviour needs many rounds of trial |
-| Quasimodes: Leap, Command with noise words, recognition, ?, Scope, Suppose | 2–3 | 1–2 | their feel is judged by hand; the kitty keyboard protocol reports key releases, but the system takes some keys |
+| Quasimodes: Leap, Command with noise words, recognition, ?, Scope, Suppose | 2–3 | 1–2 | their feel is judged by hand; the window system reports key releases, but the system takes some keys |
 | Dataflow, constraints and worlds on SWI's incremental tabling | 4–8 | 2–4 | the most uncertain part: incremental tabling is unchecked, and s(CASP) is not tabled |
 | Diagrams: layered layout, DRAKON flowcharts, argument maps, matrices, charts, pins | 4–8 | 2–3 | layout code compresses; DRAKON's routing and the look need review |
 | “Do you mean?” through APE's restatement and Clex | 1–2 | 0.5–1 | APE already runs |

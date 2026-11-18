@@ -15,8 +15,8 @@ four steps each, in one session:
 
 A test performs every step below and checks every screen text quoted here
 (`crates/memex/tests/tutorial.rs`). If the memex changes and this tutorial
-does not, that test fails. The test drives the memex directly, not through a
-terminal; see the limits in the last step.
+does not, that test fails. The test drives the memex directly, not through
+its window; see the limits in the last step.
 
 The key names below are the defaults. If you have changed them (docs/guide.md,
 § Configuration), use yours.
@@ -25,9 +25,8 @@ The key names below are the defaults. If you have changed them (docs/guide.md,
 
 ### 1. Start
 
-You need a terminal with the kitty keyboard and graphics protocols: kitty,
-WezTerm or Ghostty. The memex refuses to start in any other, and says which
-protocol is missing. Then, from the repository:
+You need a desktop under X11 or Wayland; the memex opens a window of its
+own. Then, from the repository:
 
 ```bash
 ./dev-shell
@@ -363,13 +362,14 @@ tools around it, and how to change the keys.
 
 Limits of this tutorial:
 
-- The test performs these steps through the memex's own key events, not a
-  real terminal. A separate test (`tests/memex_in_a_pty.py`) drives the
-  program through a pseudo-terminal with kitty's key encoding. Neither is a
-  real kitty, WezTerm or Ghostty, and the memex has not yet been run in one.
+- The test performs these steps through the memex's own key events, not
+  its window. A separate test (`tests/memex_in_a_window.py`) types into the
+  window under Xvfb (X11) and a headless sway (Wayland). Neither is a real
+  desktop or keyboard.
 - In part C, the boxes are an outline, not a grid, and only whole numbers
   can be supposed.
-- Views are drawn in characters, in the terminal; they are not yet images.
+- Views are drawn in characters, on the window's grid; they are not yet
+  images.
 - The `check` command above is not performed by the tutorial test; the
   acceptance tests check journals made by the memex.
 - Holding Super may be taken by your desktop. If it is, give Suppose another

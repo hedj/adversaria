@@ -1,7 +1,7 @@
 # User guide
 
 This guide describes the Adversaria prototype as built: the memex, which is
-the notebook you use in a terminal, and the programs around it. For a first
+the notebook you use in a window, and the programs around it. For a first
 session, follow docs/tutorial.md. For why it is built this way, see
 docs/design.md; for what has been tested and what has not, docs/log.md.
 
@@ -65,15 +65,13 @@ the actual world.
 
 The memex needs:
 
-- a terminal with the kitty keyboard protocol (for key releases) and the
-  kitty graphics protocol: kitty, WezTerm or Ghostty. The memex asks the
-  terminal at start and refuses to start, naming what is missing, if either
-  protocol is absent;
+- a desktop under X11 or Wayland: the memex opens a window of its own and
+  draws through Vulkan or OpenGL;
 - SWI-Prolog (`swipl`) on the path, for reasoning;
 - Pandoc, for importing and exporting documents;
 - curl, for the source check.
 
-`./dev-shell` gives a shell with all of these (except the terminal), and
+`./dev-shell` gives a shell with all of these, Mesa's drivers included, and
 needs no experimental Nix features. It runs `nix-shell` with the pinned
 nixpkgs on the search path, because `nix-shell` looks for an interactive
 bash in `<nixpkgs>`; plain `nix-shell` works too, but without nixpkgs on
@@ -212,8 +210,9 @@ nothing on a mark line, a heading or empty space. Other buttons, dragging
 and the wheel do nothing. A click is recorded in the journal as the
 keyboard action it stands for.
 
-While the memex has the mouse, the terminal's own text selection usually
-needs Shift held (recalled, not tested). That is why it is off by default.
+The mouse is off by default. That was decided while the memex ran in a
+terminal, whose own text selection the mouse got in the way of; the window
+has no text selection, and the default stands until the author changes it.
 
 ### 2.4 Commands and addresses
 
@@ -798,12 +797,13 @@ The hints on screen (such as "F3 adopts") follow your bindings.
 
 #### Troubleshooting
 
-- **"this terminal lacks the kitty keyboard protocol …"**: use kitty,
-  WezTerm or Ghostty. Run it outside tmux or screen, which are not known
-  to pass key releases and graphics through (recalled, not tested).
-- **"the terminal did not answer a device attributes request within 2 s"**:
-  the memex is not attached to a terminal, or the terminal is very slow.
-- **A quasimode key does nothing:** your desktop or terminal may take it
+- **"memex: no window: …"**: the memex found no display. Run it in a
+  desktop session under X11 or Wayland (`DISPLAY` or `WAYLAND_DISPLAY`
+  set).
+- **"memex: cannot draw: …"**: no Vulkan or OpenGL driver was found. Inside
+  `./dev-shell` Mesa's are used. With NVIDIA's own driver outside NixOS,
+  run the memex through nixGL (recalled, not tested).
+- **A quasimode key does nothing:** your desktop may take it
   (Super often opens a launcher; Alt may open a menu). Rebind it (§ 4.3).
 - **"memex: configuration: …"**: the file and the reason are named; fix the
   line it names. `memex --print-config` shows a file that works.
@@ -836,12 +836,17 @@ The hints on screen (such as "F3 adopts") follow your bindings.
 
 This is a prototype, built for a one-month trial. Known limits:
 
-- It has not been run in a real kitty, WezTerm or Ghostty. Tests drive it
-  through its own key events and through a script that plays a kitty
-  terminal.
+- It has been run only under test: through its own key events, and by a
+  script that types into its window under Xvfb (X11) and a headless sway
+  (Wayland). Not on a real desktop or GPU, and not with a real keyboard
+  under Wayland.
+- If the window loses focus while a quasimode key is held, the quasimode
+  may stay held until that key is pressed again (not tested).
+- Box-drawing characters, such as the line between the panes, show gaps
+  between rows.
 - The quasimode keys are provisional; they have not been tried on real
   keyboards.
-- Images are not shown, though the graphics protocol is required.
+- Images are not shown: views are drawn in characters.
 - Re-importing a document does not detect a block moved past others; it
   shows as a deletion and an addition. A block that keeps its place among
   the others but falls under another heading is moved.

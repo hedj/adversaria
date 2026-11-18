@@ -750,6 +750,65 @@ pairs read again after reopening); 12 breaks, each made a test fail, two
 only after a test was added for them (the latest pair first; at most two
 words changed).
 
+### The memex in a window (17 and 18 November 2026)
+
+The author decided that a terminal with kitty's keyboard and graphics
+protocols was the wrong dependency, and asked for egui, working under
+Wayland too.
+
+Built (`crates/memex/src/gui`, 953 lines with 13 unit tests): winit opens
+the window and gives each key's place and the layout's character; ratatui
+lays the screen out as before (`crate::ui` is unchanged) into cells held in
+memory; egui paints the cells on a monospace grid through wgpu. eframe was
+not used: it hides winit's key events, egui-winit drops text while Ctrl is
+held, and egui's `Key` has no `(`, `)`, `_` or `<`. Cargo.lock went from
+221 packages to 465.
+
+Checked: `tests/memex_in_a_window.py` (in `make test`, in place of the
+pseudo-terminal script) runs the real program under Xvfb, typing raw X key
+codes with xdotool, and under a headless sway with wtype. 21 checks pass:
+typing, Leap held and released, Command with its parentheses, the mouse,
+a remapped configuration, the write after a second idle, a violation
+observed, and typing and F10 under Wayland. Eight breaks, each made a test
+fail (six in the unit tests; in the window test, every key-up read as
+key-down failed 11 checks, and a drawn frame asking for another failed the
+idle write).
+
+Faults found on the way:
+
+* xdotool's key names press both Alt keys for `Alt_R`, and add Alt to
+  `F10`. The test types raw key codes.
+* egui has fonts only within a frame; measuring a cell before the first
+  frame panicked. The cells are measured and laid out within the frame.
+* A drawn frame asked for another, so the loop never waited, and text left
+  for a second was never written. It no longer asks.
+* Without egui's `default_fonts` every glyph was a box.
+* The dependencies' debug information made each memex test binary some
+  344 MB, and the build filled the session's disk at 17 GB. Test builds
+  now leave it out (Cargo.toml); `target/` was 3.1 GB after building
+  memex's tests.
+* winit asks for ahash's default features, whose `runtime-rng` brings in
+  getrandom, which `tests/memex_holds_no_key.sh` forbids. By the author's
+  choice the test stands and ahash is patched: `vendor/ahash` is 0.8.12
+  with `runtime-rng` left out of its defaults, and nothing else changed.
+  Its hash tables then use fixed seeds. Cargo shows the vendored crate's
+  own lint warnings (unexpected cfgs `fuzzing` and pointer width 128,
+  unused methods); they are upstream's, not faults.
+
+Limits:
+
+* Under Wayland only typing and F10 are tested. wtype loses the first key
+  after it makes its virtual keyboard, and makes up its own key codes, so
+  the quasimodes, which go by a key's place, are untested there with a
+  real keyboard.
+* Not run on a real desktop or GPU: the tests draw with Mesa's software
+  drivers.
+* Focus lost while a quasimode key is held is not handled.
+* Box-drawing characters show gaps between rows.
+* `term.rs` and `tests/memex_in_a_pty.py`, the terminal's code and its
+  test, are still in the tree, unused, until the author agrees to their
+  removal.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

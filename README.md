@@ -1,6 +1,6 @@
 # Adversaria
 
-Adversaria is a notebook that runs in a terminal on your own computer.
+Adversaria is a notebook that runs in a window on your own computer.
 Notes are kept as an outline. Every change is written to an append-only
 journal, and a separate program signs and dates the journal's entries.
 Facts in the notes are Prolog terms. Material from outside (documents,
@@ -14,14 +14,15 @@ marks declared over Prolog queries; these update as the facts change.
 This repository holds a prototype, written in Rust with SWI-Prolog. It
 was built to test three questions over a month of use: whether
 constraints find errors in real notes, whether suggestions are adopted
-and kept, and whether clerical work decreases. It has not yet been run in
-a real terminal, only in tests that simulate one (see docs/log.md).
+and kept, and whether clerical work decreases. It has been run only in
+tests, which type into its window under X11 and Wayland servers with no
+screen (see docs/log.md).
 
 ## Requirements
 
-- A terminal that supports the kitty keyboard protocol and the kitty
-  graphics protocol, such as kitty, WezTerm or Ghostty. The memex checks
-  for both at start-up and exits with a message if either is missing.
+- A desktop under X11 or Wayland. The memex opens a window of its own and
+  draws through Vulkan or OpenGL; the Nix shell supplies Mesa's drivers.
+  NVIDIA's own driver outside NixOS needs nixGL (recalled, not tested).
 - Nix, which provides everything else. Without Nix you
   need Rust (cargo), SWI-Prolog (`swipl`), Pandoc and curl, and Python 3
   to run the tests.

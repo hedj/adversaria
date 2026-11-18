@@ -34,8 +34,8 @@ From `docs/design.md` § Decisions and the sections named:
 
 #### Platform
 
-* The PC prototype: a terminal program in Rust (ratatui on crossterm), with SWI-Prolog as a child process, split at the query protocol over a pipe; no web interface (§ The PC prototype, § Query protocol). The PC prototype is the version for others. (Changed by the author on 12 November 2026, from a browser client.)
-* All the project's own code outside Prolog is Rust, the reference checker included. The memex requires a terminal with kitty's keyboard protocol (key releases) and graphics protocol (images).
+* The PC prototype: a program in Rust with a window of its own (egui through wgpu; ratatui lays out its cells), with SWI-Prolog as a child process, split at the query protocol over a pipe; no web interface (§ The PC prototype, § Query protocol). The PC prototype is the version for others. (Changed by the author on 12 November 2026, from a browser client, and on 17 November 2026 from a terminal program to a window.)
+* All the project's own code outside Prolog is Rust, the reference checker included. The memex runs in a window under X11 or Wayland; until 17 November 2026 it required a terminal with kitty's keyboard protocol (key releases) and graphics protocol (images).
 
 #### The record
 
@@ -72,7 +72,7 @@ Ask; do not choose silently.
 ```
 Cargo.toml     the Rust workspace
 crates/format/ Rust library: canonical JSON, terms, journal records and hashes
-crates/memex/  Rust program: terminal interface, store, journal writer, Prolog child process
+crates/memex/  Rust program: window interface, store, journal writer, Prolog child process
 crates/sealer/ Rust program: the sealer (dates and signatures)
 crates/check/  Rust program: the reference checker
 crates/tools/  Rust programs: importers, measures report, Wikidata subset builder
@@ -154,7 +154,7 @@ Read: § A user story (scenes 1 and 4), § The outline model.
 Read: § Quasimodes, not modes.
 
 1. Leap (forward and back) with recognition on Escape and guide words; Command with noise words and `?` help; Scope; Suppose (milestone 4 gives it meaning). Each quasimode can be held or latched; a command palette offers every command by name.
-2. At start, ask the terminal whether it supports kitty's keyboard and graphics protocols; if not, refuse to start and name what is missing.
+2. At start, ask the terminal whether it supports kitty's keyboard and graphics protocols; if not, refuse to start and name what is missing. (Superseded on 17 November 2026: the memex runs in a window and needs no terminal.)
 
 ##### Undo and retraction
 
@@ -166,7 +166,7 @@ Read: § Views, references and anchors.
 
 * The user story's scene 1 works as written.
 * Keystroke to visible change within 0.1 s for an outline of 10,000 items, measured and logged (§ Response time).
-* In a terminal that lacks either protocol, the memex refuses to start and says which one is missing.
+* In a terminal that lacks either protocol, the memex refuses to start and says which one is missing. (Superseded on 17 November 2026, with the terminal.)
 * Every edit, undo and retraction is a journal entry, and replay reproduces the screen state.
 
 #### Milestone 4: claims, constraints and worlds (about 2–3 weeks)
