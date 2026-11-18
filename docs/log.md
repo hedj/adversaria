@@ -805,9 +805,12 @@ Limits:
   drivers.
 * Focus lost while a quasimode key is held is not handled.
 * Box-drawing characters show gaps between rows.
-* `term.rs` and `tests/memex_in_a_pty.py`, the terminal's code and its
-  test, are still in the tree, unused, until the author agrees to their
-  removal.
+
+Then, with the author's agreement, the terminal's code went: `term.rs`
+(492 lines), `tests/memex_in_a_pty.py` (267 lines), and ratatui's
+crossterm backend (ratatui now builds without its default features).
+crossterm stays listed in Cargo.lock, which records optional dependencies
+whatever features are on, but nothing builds it.
 
 ## 4. Where it stands
 

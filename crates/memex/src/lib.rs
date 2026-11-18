@@ -23,7 +23,6 @@ pub mod replay;
 pub mod results;
 pub mod session;
 pub mod store;
-pub mod term;
 pub mod ui;
 pub mod view;
 pub mod world;

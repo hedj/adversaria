@@ -1,6 +1,6 @@
 //! The mouse: where clicks land (ui::Hits), and what a click does
-//! (App::click). The terminal end, crossterm's mouse events, is checked by
-//! tests/memex_in_a_pty.py.
+//! (App::click). The window's end, a click turned into a cell, is checked
+//! by tests/memex_in_a_window.py.
 
 use memex::app::{App, Click, Event, Key, Mode, PaneKind, Quasi};
 use memex::ui::Hits;

@@ -691,8 +691,8 @@ fn replays_the_same(dir: &std::path::Path, app: &mut App, at: &str) {
 
 #[test]
 fn draws_at_any_size() {
-    // Catches a panic when the terminal is tiny (a pseudo-terminal starts at
-    // 0 x 0; found by tests/memex_in_a_pty.py).
+    // Catches a panic when the screen is tiny (a pseudo-terminal started at
+    // 0 x 0, found by the terminal's test; a window may be one cell).
     let dir = temp("sizes");
     let mut app = essay(&dir);
     hold(&mut app, Quasi::LeapForward, "dra");

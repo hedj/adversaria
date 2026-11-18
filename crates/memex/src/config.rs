@@ -59,7 +59,7 @@ enabled = false
 /// A key a quasimode may be held on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QuasiKey {
-    /// A modifier key, by crossterm's name for it.
+    /// A modifier key, by its name (crate::gui::input names each by its place).
     Modifier(&'static str),
     /// Any key a binding may also use.
     Key(Key),
