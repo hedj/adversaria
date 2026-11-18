@@ -2,7 +2,9 @@
 //! items by their text (docs/design.md § Quasimodes).
 
 use crate::actions::dispatch::{complete_command, in_quotes};
-use crate::app::{Active, App, Click, Event, Hold, Key, Mode, PaneKind, Press, Quasi, ScopeLevel};
+use crate::app::{
+    Active, App, Click, Event, Hold, Key, Kind, Mode, PaneKind, Press, Quasi, ScopeLevel,
+};
 use crate::outline::TOP;
 use crate::reason;
 use format::terms::Term;
@@ -77,9 +79,8 @@ impl App {
     /// Hold a quasimode's key: the Scope quasimode starts at a word.
     fn enter_quasi(&mut self, q: Quasi) -> Mode {
         self.flush();
-        let mut a = Active::held(q);
+        let a = Active::held(Kind::of(q, self.session.view.scope));
         if q == Quasi::Scope {
-            a.scope_before = Some(self.session.view.scope);
             self.session.view.scope = ScopeLevel::Word;
         }
         Mode::Quasi(a)
@@ -112,8 +113,8 @@ impl App {
 
     /// Leave a quasimode without acting; Scope puts back the scope it found.
     fn leave(&mut self, a: Active) -> Mode {
-        if let Some(scope) = a.scope_before {
-            self.session.view.scope = scope;
+        if let Kind::Scope { found } = a.kind {
+            self.session.view.scope = found;
         }
         Mode::Normal
     }
@@ -215,7 +216,7 @@ impl App {
 
     fn quasi(&mut self, mut a: Active, ev: Event) -> Mode {
         // The quasimode's own key: release ends a held quasimode; a tap latches.
-        if ev.key == Key::Quasi(a.q) {
+        if ev.key == Key::Quasi(a.q()) {
             match ev.press {
                 Press::Up if a.hold == Hold::Down => {
                     a.hold = Hold::Latched;
@@ -238,13 +239,13 @@ impl App {
         }
         match ev.key {
             Key::Char('?') if asks_help(&a) => a.listing = !a.listing,
-            Key::Char(' ') if a.q == Quasi::Scope => {
+            Key::Char(' ') if a.q() == Quasi::Scope => {
                 self.session.view.scope = match self.session.view.scope {
                     ScopeLevel::Word => ScopeLevel::Statement,
                     _ => ScopeLevel::Branch,
                 };
             }
-            Key::Char(c) if a.q != Quasi::Scope => a.input.push(c),
+            Key::Char(c) if a.q() != Quasi::Scope => a.input.push(c),
             Key::Backspace => {
                 // Erase a character; with none left, Backspace leaves a
                 // latched quasimode without acting.
@@ -254,9 +255,9 @@ impl App {
                     return self.leave(a);
                 }
             }
-            Key::Escape => match a.q {
+            Key::Escape => match a.q() {
                 Quasi::LeapForward | Quasi::LeapBack => {
-                    a.input = self.leap_complete(&a.input, a.q == Quasi::LeapForward)
+                    a.input = self.leap_complete(&a.input, a.q() == Quasi::LeapForward)
                 }
                 Quasi::Command => a.input = complete_command(&a.input),
                 _ => a.apply_repair(),
@@ -290,9 +291,9 @@ impl App {
 
     /// End a quasimode: do what it was for.
     fn finish(&mut self, a: Active) -> Mode {
-        match a.q {
+        match a.q() {
             Quasi::LeapForward | Quasi::LeapBack => {
-                let forward = a.q == Quasi::LeapForward;
+                let forward = a.q() == Quasi::LeapForward;
                 let pattern = if a.input.is_empty() {
                     match &self.session.last_leap {
                         Some((p, _)) => p.clone(),
@@ -472,7 +473,7 @@ fn continuation(text: &str, p: &str) -> String {
 /// quotes; in Suppose, only at the start or after a space, since typed
 /// after a word it ends a question of ACE.
 fn asks_help(a: &Active) -> bool {
-    match a.q {
+    match a.q() {
         Quasi::Command => !in_quotes(&a.input),
         Quasi::Suppose => a.input.is_empty() || a.input.ends_with(' '),
         _ => true,

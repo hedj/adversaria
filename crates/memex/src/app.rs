@@ -351,17 +351,37 @@ pub(crate) struct Spot {
 /// A quasimode in progress, held or latched.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Active {
-    pub q: Quasi,
+    pub kind: Kind,
     pub input: String,
     /// How its key is held.
     pub hold: Hold,
     /// `?` was pressed: list everything that may come next.
     pub listing: bool,
-    /// In Suppose, the one quasimode whose text is English: what APE
-    /// makes of it, and the free English it began as.
-    pub english: Option<English>,
-    /// In Scope, the scope it found, put back if it is left without acting.
-    pub scope_before: Option<ScopeLevel>,
+}
+
+/// Which quasimode, with what only it keeps: Scope, the scope it found,
+/// put back if it is left without acting; Suppose, the one quasimode
+/// whose text is English, what APE makes of it and the free English it
+/// began as.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Kind {
+    Leap { forward: bool },
+    Command,
+    Scope { found: ScopeLevel },
+    Suppose(English),
+}
+
+impl Kind {
+    /// The kind of a quasimode entered while the scope is as given.
+    pub(crate) fn of(q: Quasi, scope: ScopeLevel) -> Kind {
+        match q {
+            Quasi::LeapForward => Kind::Leap { forward: true },
+            Quasi::LeapBack => Kind::Leap { forward: false },
+            Quasi::Command => Kind::Command,
+            Quasi::Scope => Kind::Scope { found: scope },
+            Quasi::Suppose => Kind::Suppose(English::default()),
+        }
+    }
 }
 
 /// The English typed in Suppose: what APE makes of it, and the fullest
@@ -395,9 +415,23 @@ pub enum Hold {
 }
 
 impl Active {
+    /// Which quasimode it is.
+    pub fn q(&self) -> Quasi {
+        match self.kind {
+            Kind::Leap { forward: true } => Quasi::LeapForward,
+            Kind::Leap { forward: false } => Quasi::LeapBack,
+            Kind::Command => Quasi::Command,
+            Kind::Scope { .. } => Quasi::Scope,
+            Kind::Suppose(_) => Quasi::Suppose,
+        }
+    }
+
     /// In Suppose, what APE makes of what is typed.
     pub fn hint(&self) -> Option<&Hint> {
-        self.english.as_ref()?.hint.as_ref()
+        match &self.kind {
+            Kind::Suppose(english) => english.hint.as_ref(),
+            _ => None,
+        }
     }
 
     /// Whether it was tapped rather than held, and stays.
@@ -408,24 +442,18 @@ impl Active {
     /// Whether it lists over the outline: a Leap or Command, listing
     /// everything or with something typed.
     pub(crate) fn lists(&self) -> bool {
-        let lister = matches!(
-            self.q,
-            Quasi::LeapForward | Quasi::LeapBack | Quasi::Command
-        );
-        let suppose = self.q == Quasi::Suppose && self.listing;
+        let lister = matches!(self.kind, Kind::Leap { .. } | Kind::Command);
+        let suppose = matches!(self.kind, Kind::Suppose(_)) && self.listing;
         suppose || lister && (self.listing || !self.input.is_empty())
     }
 
     /// A quasimode whose key is held, nothing typed yet.
-    pub(crate) fn held(q: Quasi) -> Active {
-        let input = String::new();
+    pub(crate) fn held(kind: Kind) -> Active {
         Active {
-            q,
-            input,
+            kind,
+            input: String::new(),
             hold: Hold::Down,
             listing: false,
-            english: None,
-            scope_before: None,
         }
     }
 
@@ -441,7 +469,7 @@ impl Active {
     /// The command palette: the Command quasimode, latched, listing what
     /// may come next.
     pub(crate) fn palette() -> Active {
-        let held = Active::held(Quasi::Command);
+        let held = Active::held(Kind::Command);
         Active {
             hold: Hold::Latched,
             listing: true,

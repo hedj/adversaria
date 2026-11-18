@@ -1015,7 +1015,7 @@ fn foot_box(area: Rect, lines: usize) -> Rect {
 /// What a quasimode lists: the commands a Command may be, or a Leap's
 /// matches.
 fn list_lines(app: &App, a: &Active) -> Vec<Line<'static>> {
-    match a.q {
+    match a.q() {
         Quasi::Command => command_help(&a.input).into_iter().map(Line::raw).collect(),
         Quasi::Suppose => suppose_lines(a),
         q => leap_lines(app, a, q == Quasi::LeapForward),
@@ -1138,7 +1138,7 @@ fn foot(app: &App) -> (Line<'static>, String) {
 
 /// A held quasimode's name, reversed, and what is typed in it.
 fn quasi_line(app: &App, a: &Active) -> Line<'static> {
-    let shown = if a.q == Quasi::Command {
+    let shown = if a.q() == Quasi::Command {
         app.guided(&a.input)
     } else {
         a.input.clone()
@@ -1149,13 +1149,13 @@ fn quasi_line(app: &App, a: &Active) -> Line<'static> {
 /// A quasimode's name, and whether it is latched, reversed.
 fn quasi_name(a: &Active) -> Span<'static> {
     let latched = if a.latched() { " (latched)" } else { "" };
-    Span::styled(format!(" {}{latched} ", a.q.label()), reversed())
+    Span::styled(format!(" {}{latched} ", a.q().label()), reversed())
 }
 
 /// What a held quasimode does, and how it ends.
 fn quasi_guide(a: &Active) -> String {
     let end = release_text(a);
-    match a.q {
+    match a.q() {
         Quasi::LeapForward | Quasi::LeapBack => format!(
             "{end} to go to the first match · Esc completes · ? lists every match · Leap again repeats"
         ),
@@ -1180,7 +1180,7 @@ fn release_text(a: &Active) -> String {
     if a.latched() {
         return "Enter, or tap again,".into();
     }
-    let name = match a.q {
+    let name = match a.q() {
         Quasi::Command => "Command",
         Quasi::Scope => "Scope",
         Quasi::Suppose => "Suppose",

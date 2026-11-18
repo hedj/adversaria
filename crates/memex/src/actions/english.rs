@@ -2,7 +2,7 @@
 //! current world gives (docs/translator.md).
 
 use crate::ace::{Check, Next, Parse, hint, lexicon_of, listing, said};
-use crate::app::{Active, App, English, Hint, Quasi};
+use crate::app::{Active, App, Hint, Kind};
 use crate::engine::told;
 use crate::pairs::{pairs_of, proposal};
 
@@ -19,11 +19,10 @@ impl App {
     /// Check again what is typed in Suppose, the one quasimode whose text
     /// is English, and list what may come next while `?` lists.
     pub(crate) fn recheck(&mut self, a: &mut Active) {
-        if a.q != Quasi::Suppose {
+        let Kind::Suppose(english) = &mut a.kind else {
             return;
-        }
+        };
         let typed = !a.input.trim().is_empty();
-        let english = a.english.get_or_insert_with(English::default);
         let mut hint = typed.then(|| self.hint_for(&a.input, &mut english.free));
         if a.listing {
             let listed = self.ace_listing(&a.input);
@@ -61,7 +60,10 @@ impl App {
     /// is a sentence of ACE: the pair it confirms. (The free English was
     /// not ACE, so it is not the text.)
     pub(crate) fn confirmed_english(&mut self, a: &Active, text: &str) -> Option<String> {
-        let english = a.english.as_ref()?.free.clone()?;
+        let Kind::Suppose(english) = &a.kind else {
+            return None;
+        };
+        let english = english.free.clone()?;
         let ace = matches!(self.ace_check(text), Ok(Check::Ace(_)));
         ace.then_some(english)
     }
