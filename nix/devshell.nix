@@ -56,13 +56,11 @@ in {
       pkgs.git
       pkgs.gnumake
       # The window's test: an X server with no screen, a keyboard to type
-      # with, and a headless Wayland compositor (its keyboard and pointer
-      # are the tools crate's keyboard and pointer programs), and grim, to
-      # see when the window is on its screen.
+      # with, and a headless Wayland compositor (its keyboard, pointer and
+      # a watch on its screen are the tools crate's programs).
       pkgs.xvfb
       pkgs.xdotool
       pkgs.sway
-      pkgs.grim
     ];
     SCASP_HOME = scasp;
     APE_HOME = ape;

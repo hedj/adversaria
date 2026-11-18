@@ -949,6 +949,45 @@ the click not waiting for the screen (the click check), no modifiers
 sent (3 Wayland checks), "ready" before the device is on the seat (4
 Wayland checks).
 
+### The window test waits on events only (18 November 2026)
+
+The three conditions the test still checked every tenth of a second now
+each come as an event:
+
+* sway's readiness: its config's `exec` runs a script once sway takes
+  clients, and the script writes `WAYLAND_DISPLAY` and `SWAYSOCK` to a
+  FIFO the test reads;
+* the crash check's journal: Linux reports each change to the journal's
+  directory (inotify, through libc), and the check asks again at each;
+* the window on screen: `screen` (crates/tools) copies a region of the
+  output with wlr-screencopy and, while it does not show a colour, copies
+  it again with damage, which the compositor answers only once the
+  screen changes.
+
+Each wait also watches its process's pidfd, so a program that ends ends
+the wait: the X11 window search and sway's IPC no longer check the
+process once a second. Each wait keeps a deadline, so a fault fails a
+check: with sway's readiness never written, the five Wayland checks fail
+in 72 s rather than hang. On the way, a device program that had ended
+raised a broken pipe instead of failing its check; it now fails it.
+
+Found on the way: the first `screen` reported any change at the click's
+point, and the click still missed. The keys and the click came within
+0.15 ms of each other, before the window's next frame, and the memex
+rightly acts on a click against what it shows, which was the empty
+outline (seen with WAYLAND_DEBUG). So the click now waits for what a
+person waits for: the first item's row shown in the memex's ink. The
+hint of an empty outline is dimmed, never ink; the screen showed no ink
+there before the typing and showed it 15 ms after.
+
+Checked: the window test passed 6 runs (3 since the last change). Breaks,
+each failing checks: the click not waiting for the screen (the click
+check, 2 runs of 2), the crash check not waiting for the journal (its
+check), sway's readiness never written (5 Wayland checks), and, in
+`screen`'s unit tests, red and blue swapped and a row's padding read as
+a pixel. `Tools::capture` holds 7 referents: the eight arguments of the
+protocol's capture, which no split lowers but by moving them.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

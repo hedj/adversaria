@@ -19,7 +19,7 @@ use std::ffi::CStr;
 use std::io::Write;
 use std::os::fd::AsFd;
 use std::time::Instant;
-use tools::seat::{Compositor, run_as};
+use tools::seat::{Compositor, run_as, unlinked_file};
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1 as Manager;
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1 as Keyboard;
 use xkbcommon_dl::{
@@ -174,24 +174,10 @@ impl Drop for Xkb {
 /// A file holding a keymap, ended by a zero byte as the protocol asks:
 /// the compositor maps it by its descriptor.
 fn keymap_file(text: &str) -> Result<std::fs::File, String> {
-    let mut file = unlinked_file()?;
+    let mut file = unlinked_file("keyboard")?;
     file.write_all(text.as_bytes())
         .and_then(|_| file.write_all(&[0]))
         .map_err(|e| e.to_string())?;
-    Ok(file)
-}
-
-/// A new file, open to read and write, its name already removed, so it
-/// goes when it is closed.
-fn unlinked_file() -> Result<std::fs::File, String> {
-    let path = std::env::temp_dir().join(format!("keyboard-{}.xkb", std::process::id()));
-    let opened = std::fs::File::options()
-        .read(true)
-        .write(true)
-        .create_new(true)
-        .open(&path);
-    let file = opened.map_err(|e| format!("{}: {e}", path.display()))?;
-    std::fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(file)
 }
 
