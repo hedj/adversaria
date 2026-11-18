@@ -30,18 +30,43 @@ pub fn run(dir: &Path, config: Config) -> Result<(), String> {
     let mut memex = Memex::new(app, config);
     event_loop.run_app(&mut memex).map_err(|e| e.to_string())?;
     memex.app.flush();
-    memex.failed.map_or(Ok(()), Err)
+    match memex.window {
+        WindowState::Failed(why) => Err(why),
+        _ => Ok(()),
+    }
 }
 
-/// The memex at work in its window: the app, its keys, what is drawn and
-/// where it can be clicked, what draws it, and why it stopped if it failed.
+/// The memex at work in its window: the app, what keys and clicks mean,
+/// what is drawn and where it can be clicked, and the window.
 struct Memex {
     app: App,
-    config: Config,
+    input: Input,
     screen: Screen,
-    held: Held,
-    gfx: Option<Gfx>,
-    failed: Option<String>,
+    window: WindowState,
+}
+
+/// The window: not yet opened, open with what draws on it, or failed to
+/// open, and why.
+enum WindowState {
+    Unopened,
+    Open(Box<Gfx>),
+    Failed(String),
+}
+
+impl WindowState {
+    fn gfx(&self) -> Option<&Gfx> {
+        match self {
+            WindowState::Open(g) => Some(g),
+            _ => None,
+        }
+    }
+
+    fn gfx_mut(&mut self) -> Option<&mut Gfx> {
+        match self {
+            WindowState::Open(g) => Some(g),
+            _ => None,
+        }
+    }
 }
 
 /// The screen as laid out: its cells, where clicks land, and where the
@@ -54,11 +79,12 @@ struct Screen {
     cell_size: Vec2,
 }
 
-/// Whether Shift is held, and where the pointer is, in pixels.
-#[derive(Default)]
-struct Held {
+/// What keys and clicks mean: the configuration, whether Shift is held,
+/// and where the pointer is, in points.
+struct Input {
+    config: Config,
     shift: bool,
-    pointer: Option<(f64, f64)>,
+    pointer: Option<Vec2>,
 }
 
 impl Screen {
@@ -78,6 +104,12 @@ impl Screen {
         self.cell_size = cell_size(ui.ctx());
         self.lay_out(app, ui.max_rect().size());
         paint(ui.painter(), self.cells.backend(), self.cell_size);
+    }
+
+    /// The cell at a point, by column and row.
+    fn cell_at(&self, at: Vec2) -> (u16, u16) {
+        let cell = at / self.cell_size;
+        (cell.x as u16, cell.y as u16)
     }
 
     /// Lay the app out in as many cells as fit in a window of this size
@@ -103,19 +135,22 @@ struct Gfx {
 
 impl Memex {
     fn new(app: App, config: Config) -> Memex {
+        let input = Input {
+            config,
+            shift: false,
+            pointer: None,
+        };
         Memex {
             app,
-            config,
+            input,
             screen: Screen::new(),
-            held: Held::default(),
-            gfx: None,
-            failed: None,
+            window: WindowState::Unopened,
         }
     }
 
     /// Stop, saying why.
     fn fail(&mut self, el: &ActiveEventLoop, why: String) {
-        self.failed = Some(why);
+        self.window = WindowState::Failed(why);
         el.exit();
     }
 
@@ -144,33 +179,42 @@ impl Memex {
 
     /// The memex's event for a key, if it has one.
     fn event_of(&self, event: &winit::event::KeyEvent) -> Option<Event> {
-        map_key(&KeyPress::from(event), self.held.shift, &self.config)
+        map_key(&KeyPress::from(event), self.input.shift, &self.input.config)
     }
 
     /// A left click, if the configuration takes the mouse: on what was
     /// drawn to be clicked there.
     fn click(&mut self) {
-        let (Some((x, y)), Some(g)) = (self.held.pointer, &self.gfx) else {
-            return;
-        };
-        if !self.config.mouse {
+        if !self.input.config.mouse {
             return;
         }
-        let size = self.screen.cell_size * g.window.scale_factor() as f32;
-        let cell = (
-            (x / f64::from(size.x)) as u16,
-            (y / f64::from(size.y)) as u16,
-        );
-        if let Some(c) = clicked(&self.screen.hits, cell) {
+        let target = self
+            .pointed()
+            .and_then(|cell| clicked(&self.screen.hits, cell));
+        if let Some(c) = target {
             self.app.click(&c);
         }
+    }
+
+    /// The cell under the pointer, by column and row.
+    fn pointed(&self) -> Option<(u16, u16)> {
+        self.input.pointer.map(|at| self.screen.cell_at(at))
+    }
+
+    /// The pointer moved: noted in points, as the cells are measured.
+    fn pointer_moved(&mut self, at: winit::dpi::PhysicalPosition<f64>) {
+        let scale = self.window.gfx().map_or(1.0, |g| g.window.scale_factor());
+        let at = at.to_logical::<f32>(scale);
+        self.input.pointer = Some(Vec2::new(at.x, at.y));
     }
 
     /// Lay the screen out in cells as many as the window holds, and paint
     /// them.
     fn draw(&mut self) {
         self.reason_if_moved();
-        let Some(g) = &mut self.gfx else { return };
+        let Some(g) = self.window.gfx_mut() else {
+            return;
+        };
         let out = frame(g, &mut self.screen, &self.app);
         g.present(out);
     }
@@ -238,11 +282,11 @@ fn open_window(el: &ActiveEventLoop) -> Result<Gfx, String> {
 
 impl ApplicationHandler for Memex {
     fn resumed(&mut self, el: &ActiveEventLoop) {
-        if self.gfx.is_some() {
+        if !matches!(self.window, WindowState::Unopened) {
             return;
         }
         match open_window(el) {
-            Ok(g) => self.gfx = Some(g),
+            Ok(g) => self.window = WindowState::Open(Box::new(g)),
             Err(why) => self.fail(el, why),
         }
     }
@@ -262,7 +306,7 @@ impl ApplicationHandler for Memex {
     }
 
     fn window_event(&mut self, el: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
-        if let Some(g) = &mut self.gfx {
+        if let Some(g) = self.window.gfx_mut() {
             let _ = g.state.on_window_event(&g.window, &event);
         }
         match event {
@@ -275,14 +319,12 @@ impl ApplicationHandler for Memex {
                 is_synthetic: false,
                 ..
             } => self.key(el, &event),
-            WindowEvent::ModifiersChanged(m) => self.held.shift = m.state().shift_key(),
+            WindowEvent::ModifiersChanged(m) => self.input.shift = m.state().shift_key(),
             // Keys released while another window has the keyboard are not
             // reported here (on X11, winit reports them as synthetic). Shift
             // needs nothing: winit reports the modifiers cleared.
             WindowEvent::Focused(false) => self.app.focus_lost(),
-            WindowEvent::CursorMoved { position, .. } => {
-                self.held.pointer = Some((position.x, position.y))
-            }
+            WindowEvent::CursorMoved { position, .. } => self.pointer_moved(position),
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: MouseButton::Left,
@@ -291,7 +333,7 @@ impl ApplicationHandler for Memex {
             WindowEvent::Resized(s) => self.resized(s),
             _ => return,
         }
-        if let Some(g) = &self.gfx {
+        if let Some(g) = self.window.gfx() {
             g.window.request_redraw();
         }
     }
@@ -301,7 +343,7 @@ impl Memex {
     /// The painter told the window's new size.
     fn resized(&mut self, s: winit::dpi::PhysicalSize<u32>) {
         let (Some(g), Some(w), Some(h)) = (
-            &mut self.gfx,
+            self.window.gfx_mut(),
             NonZeroU32::new(s.width),
             NonZeroU32::new(s.height),
         ) else {
