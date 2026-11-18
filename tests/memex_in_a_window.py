@@ -460,8 +460,9 @@ INK = "dcdcdc"
 
 
 def on_screen(binary, env, process, region, colour, timeout=30):
-    """Whether the screen shows a colour in a region before the process
-    ends or the time is up: the screen program waits on the compositor."""
+    """Whether the screen shows a colour in a region, in the output's
+    pixels, before the process ends or the time is up: the screen program
+    waits on the compositor."""
     program = os.path.join(os.path.dirname(binary), "screen")
     eye = subprocess.Popen([program, *map(str, region), colour], env=env, stdout=subprocess.PIPE, bufsize=0)
     shown = readable(eye.stdout, process, time.time() + timeout) and eye.stdout.readline() == b"shown\n"
@@ -484,8 +485,9 @@ def wayland_click(binary, d, check):
         # reports it focused, and the keys and a click can all come before
         # its next frame. So the click waits, as a person would, until the
         # screen shows the first item's row in the memex's ink (its text,
-        # not the dimmed hint of an empty outline).
-        shown = on_screen(binary, env, p, FIRST_ITEM_ROW, INK)
+        # not the dimmed hint of an empty outline). The screen program
+        # counts in pixels, two to a unit at this scale.
+        shown = on_screen(binary, env, p, [n * 2 for n in FIRST_ITEM_ROW], INK)
         # The output is 800 by 500 in its own units at a scale of 2.
         steps = [typed_in, shown, told(hand, f"move {FIRST_ITEM[0]} {FIRST_ITEM[1]} 800 500", "click"),
                  told(keys, "type Z", f"key {EV_F10}")]

@@ -985,8 +985,28 @@ each failing checks: the click not waiting for the screen (the click
 check, 2 runs of 2), the crash check not waiting for the journal (its
 check), sway's readiness never written (5 Wayland checks), and, in
 `screen`'s unit tests, red and blue swapped and a row's padding read as
-a pixel. `Tools::capture` holds 7 referents: the eight arguments of the
-protocol's capture, which no split lowers but by moving them.
+a pixel. `Tools::capture` held 7 referents, the eight arguments of the
+protocol's region capture; the next commit changes the design so that it
+does not.
+
+### The screen program copies the whole output (18 November 2026)
+
+`screen` now copies the whole output (`capture_output`, three arguments)
+and reads the region out of the copy itself, where it had asked the
+compositor for the region (`capture_output_region`, eight). The region
+is two spans, of columns and rows, in the output's pixels, which are
+what is compared; the test gives the first item's row at twice its
+logical place, the scale. The cost: each copy is the whole output, some
+6.4 MB here, and a change anywhere wakes the watch, which then looks in
+the region again; it still waits on the compositor only. With it,
+`Tools::capture` holds 3 referents, and no unit of the code holds more
+than 6.
+
+Checked: screen's 3 unit tests; breaks of the region (columns ignored,
+not cut to the buffer, a size taken for an end) each fail one, the last
+only after the test's region moved off column 0, where a size and an
+end are the same. The window test passed 3 runs; the click not waiting
+for the screen still fails its check.
 
 ## 4. Where it stands
 

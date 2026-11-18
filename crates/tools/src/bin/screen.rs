@@ -1,16 +1,17 @@
 //! A watch on the screen for the window test under Wayland
 //! (tests/memex_in_a_window.py): word once a region of the output shows a
-//! colour, as when a window draws text there. It copies the region with
-//! wlr-screencopy, then, while the colour is not there, copies it again
-//! with damage: the compositor answers such a copy only once the screen
-//! has changed, so the watch waits on the compositor, not on the clock.
-//! What is asked is what is shown, so it does not matter whether the
-//! colour came before the watch began.
+//! colour, as when a window draws text there. It copies the output with
+//! wlr-screencopy and looks in the region; while the colour is not there,
+//! it copies the output again with damage: the compositor answers such a
+//! copy only once the screen has changed, so the watch waits on the
+//! compositor, not on the clock. What is asked is what is shown, so it
+//! does not matter whether the colour came before the watch began.
 //!
-//! Usage: screen X Y WIDTH HEIGHT RRGGBB   (the region in the output's own
-//! logical units; the colour exact, in hexadecimal)
+//! Usage: screen X Y WIDTH HEIGHT RRGGBB   (the region in the output's
+//! pixels, as the copy has them; the colour exact, in hexadecimal)
 //! Writes "shown" once the region shows the colour, and ends.
 
+use std::ops::Range;
 use std::os::fd::AsFd;
 use std::os::unix::fs::FileExt;
 use tools::seat::{Compositor, Quiet, run_as, unlinked_file};
@@ -30,9 +31,9 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let (region, colour) = asked(&std::env::args().skip(1).collect::<Vec<_>>())?;
-    let mut eye = Eye::open(Compositor::connect()?, region)?;
+    let mut eye = Eye::open(Compositor::connect()?)?;
     let mut seen = eye.look(false)?;
-    while !seen.shows(colour) {
+    while !seen.shows(colour, &region) {
         seen = eye.look(true)?;
     }
     println!("shown");
@@ -40,7 +41,7 @@ fn run() -> Result<(), String> {
 }
 
 /// The region and the colour asked for on the command line.
-fn asked(args: &[String]) -> Result<([i32; 4], [u8; 3]), String> {
+fn asked(args: &[String]) -> Result<(Region, [u8; 3]), String> {
     let usage = || format!("usage: screen X Y WIDTH HEIGHT RRGGBB, not {args:?}");
     let (numbers, colour) = args.split_at_checked(4).ok_or_else(usage)?;
     let region = region_of(numbers).ok_or_else(usage)?;
@@ -48,10 +49,22 @@ fn asked(args: &[String]) -> Result<([i32; 4], [u8; 3]), String> {
     Ok((region, colour))
 }
 
-/// Four whole numbers.
-fn region_of(words: &[String]) -> Option<[i32; 4]> {
-    let numbers: Option<Vec<i32>> = words.iter().map(|w| w.parse().ok()).collect();
-    numbers?.try_into().ok()
+/// A region of the output, in its pixels: the columns and the rows it
+/// spans.
+#[derive(Debug, PartialEq)]
+struct Region {
+    columns: Range<usize>,
+    rows: Range<usize>,
+}
+
+/// A region from its place and size, four whole numbers, none negative.
+fn region_of(words: &[String]) -> Option<Region> {
+    let numbers: Option<Vec<usize>> = words.iter().map(|w| w.parse().ok()).collect();
+    let [x, y, width, height] = numbers?.try_into().ok()?;
+    Some(Region {
+        columns: x..x + width,
+        rows: y..y + height,
+    })
 }
 
 /// A colour in six hexadecimal digits, alone.
@@ -66,12 +79,10 @@ fn colour_of(words: &[String]) -> Option<[u8; 3]> {
 }
 
 /// What looks at the screen: the compositor, its means of copying the
-/// screen, the region of the output, and the queue the copies' events
-/// come by.
+/// screen, and the queue the copies' events come by.
 struct Eye {
     compositor: Compositor,
     tools: Tools,
-    region: [i32; 4],
     frames: EventQueue<Seen>,
 }
 
@@ -84,15 +95,14 @@ struct Tools {
 }
 
 impl Tools {
-    /// A copy of a region of the output, its events by a queue.
-    fn capture(&self, [x, y, w, h]: [i32; 4], qh: &QueueHandle<Seen>) -> Frame {
-        self.manager
-            .capture_output_region(0, &self.output, x, y, w, h, qh, ())
+    /// A copy of the output, its events by a queue.
+    fn capture(&self, qh: &QueueHandle<Seen>) -> Frame {
+        self.manager.capture_output(0, &self.output, qh, ())
     }
 }
 
 impl Eye {
-    fn open(compositor: Compositor, region: [i32; 4]) -> Result<Eye, String> {
+    fn open(compositor: Compositor) -> Result<Eye, String> {
         let tools = Tools {
             manager: compositor.bind(2..=2, "screencopy with damage")?,
             shm: compositor.bind(1..=1, "shared memory")?,
@@ -102,15 +112,14 @@ impl Eye {
         Ok(Eye {
             compositor,
             tools,
-            region,
             frames,
         })
     }
 
-    /// The region, as the compositor copies it: at once, or once the
+    /// The output, as the compositor copies it: at once, or once the
     /// screen has changed since the last copy.
     fn look(&mut self, after_damage: bool) -> Result<Pixels, String> {
-        let frame = self.tools.capture(self.region, &self.frames.handle());
+        let frame = self.tools.capture(&self.frames.handle());
         let mut seen = Seen::default();
         self.wait(&mut seen, |s| s.shape.is_some())?;
         let shape = seen.shape.expect("waited for");
@@ -199,7 +208,7 @@ impl Shape {
     }
 }
 
-/// A copy of the region: its bytes, in the buffer's shape.
+/// A copy of the output: its bytes, in the buffer's shape.
 struct Pixels {
     bytes: Vec<u8>,
     shape: Shape,
@@ -213,19 +222,39 @@ impl Pixels {
         Ok(Pixels { bytes, shape })
     }
 
-    /// Whether any pixel is the colour, read by the buffer's format (four
-    /// bytes a pixel, little-endian: blue first for XRGB and ARGB, red
-    /// first for XBGR and ABGR).
-    fn shows(&self, [r, g, b]: [u8; 3]) -> bool {
-        let wanted = match self.shape.format {
-            Format::Xrgb8888 | Format::Argb8888 => [b, g, r],
-            Format::Xbgr8888 | Format::Abgr8888 => [r, g, b],
-            _ => return false,
+    /// Whether any pixel of the region is the colour.
+    fn shows(&self, colour: [u8; 3], region: &Region) -> bool {
+        let Some(wanted) = self.stored(colour) else {
+            return false;
         };
-        let row = (self.shape.width * 4) as usize;
-        let rows = self.bytes.chunks(self.shape.stride as usize);
-        rows.flat_map(|line| line[..row].chunks(4))
-            .any(|pixel| pixel[..3] == wanted)
+        let mut pixels = region
+            .rows
+            .clone()
+            .flat_map(|row| self.row(row, &region.columns));
+        pixels.any(|pixel| pixel[..3] == wanted)
+    }
+
+    /// A colour's bytes as the buffer's format stores them (four bytes a
+    /// pixel, little-endian: blue first for XRGB and ARGB, red first for
+    /// XBGR and ABGR); none for another format.
+    fn stored(&self, [r, g, b]: [u8; 3]) -> Option<[u8; 3]> {
+        match self.shape.format {
+            Format::Xrgb8888 | Format::Argb8888 => Some([b, g, r]),
+            Format::Xbgr8888 | Format::Abgr8888 => Some([r, g, b]),
+            _ => None,
+        }
+    }
+
+    /// The pixels of one row in some columns, four bytes each, cut to the
+    /// buffer: a row's padding is not a pixel.
+    fn row(&self, row: usize, columns: &Range<usize>) -> std::slice::Chunks<'_, u8> {
+        let (stride, width) = (self.shape.stride as usize, self.shape.width as usize);
+        let line = self
+            .bytes
+            .get(row * stride..(row + 1) * stride)
+            .unwrap_or(&[]);
+        let (start, end) = (columns.start.min(width), columns.end.min(width));
+        line.get(start * 4..end * 4).unwrap_or(&[]).chunks(4)
     }
 }
 
@@ -268,7 +297,7 @@ impl Dispatch<Frame, ()> for Seen {
 mod tests {
     use super::*;
 
-    /// Two pixels in a row, stride padded to 12 bytes, in a format.
+    /// Two pixels in a row, the stride padded to 12 bytes, in a format.
     fn pixels(format: Format, bytes: [u8; 12]) -> Pixels {
         let shape = Shape {
             format,
@@ -282,47 +311,53 @@ mod tests {
         }
     }
 
+    /// A region of columns and rows.
+    fn region(columns: Range<usize>, rows: Range<usize>) -> Region {
+        Region { columns, rows }
+    }
+
     #[test]
     fn a_colour_is_read_in_the_buffers_byte_order() {
         // Catches red and blue swapped: the colour #102030 is stored blue
         // first in XRGB (little-endian) and red first in XBGR.
+        let all = region(0..2, 0..1);
         let xrgb = pixels(
             Format::Xrgb8888,
             [0, 0, 0, 0, 0x30, 0x20, 0x10, 0, 9, 9, 9, 9],
         );
-        assert!(xrgb.shows([0x10, 0x20, 0x30]));
-        assert!(!xrgb.shows([0x30, 0x20, 0x10]));
+        assert!(xrgb.shows([0x10, 0x20, 0x30], &all));
+        assert!(!xrgb.shows([0x30, 0x20, 0x10], &all));
         let xbgr = pixels(
             Format::Xbgr8888,
             [0, 0, 0, 0, 0x10, 0x20, 0x30, 0, 9, 9, 9, 9],
         );
-        assert!(xbgr.shows([0x10, 0x20, 0x30]));
+        assert!(xbgr.shows([0x10, 0x20, 0x30], &all));
     }
 
     #[test]
-    fn the_padding_after_a_row_is_not_a_pixel() {
-        // Catches the stride's padding read as a pixel of the row.
-        let padded = pixels(
-            Format::Xrgb8888,
-            [0; 8]
-                .into_iter()
-                .chain([9, 9, 9, 0])
-                .collect::<Vec<_>>()
-                .try_into()
-                .unwrap(),
-        );
-        assert!(!padded.shows([9, 9, 9]));
+    fn only_the_regions_pixels_are_looked_at() {
+        // Catches the region's columns ignored, or the row's padding (the
+        // stride past the width) read as a pixel when a region runs past
+        // the buffer's edge.
+        let second = pixels(Format::Xrgb8888, [0, 0, 0, 0, 7, 7, 7, 0, 9, 9, 9, 0]);
+        assert!(!second.shows([7, 7, 7], &region(0..1, 0..1)));
+        assert!(second.shows([7, 7, 7], &region(1..2, 0..1)));
+        assert!(!second.shows([9, 9, 9], &region(0..3, 0..1)));
+        assert!(!second.shows([7, 7, 7], &region(0..2, 1..2)));
     }
 
     #[test]
     fn the_command_line_names_a_region_and_a_colour() {
-        // Catches the colour's bytes misread, or a short line taken.
+        // Catches the colour's bytes misread, a region's size taken for its
+        // end, or a short or negative line taken.
         let args = |s: &str| s.split(' ').map(String::from).collect::<Vec<_>>();
+        let asked_for = asked(&args("5 108 600 28 dcdc10"));
         assert_eq!(
-            asked(&args("0 54 300 14 dcdc10")),
-            Ok(([0, 54, 300, 14], [0xdc, 0xdc, 0x10]))
+            asked_for,
+            Ok((region(5..605, 108..136), [0xdc, 0xdc, 0x10]))
         );
-        assert!(asked(&args("0 54 300 dcdcdc")).is_err());
-        assert!(asked(&args("0 54 300 14 grey")).is_err());
+        assert!(asked(&args("0 108 600 dcdcdc")).is_err());
+        assert!(asked(&args("0 108 600 28 grey")).is_err());
+        assert!(asked(&args("-1 108 600 28 dcdcdc")).is_err());
     }
 }
