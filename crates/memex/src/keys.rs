@@ -251,7 +251,7 @@ impl App {
                 let erased = a.input.pop().is_some();
                 if !erased && a.latched() {
                     self.session.message.clear();
-                    return Mode::Normal;
+                    return self.leave(a);
                 }
             }
             Key::Escape => match a.q {

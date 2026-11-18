@@ -878,3 +878,17 @@ fn focus_lost_after_typing_in_a_quasimode_keeps_it_open_until_enter() {
     assert_eq!(app.notebook.outline.text(app.cursor()), "DRAKON");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn backspace_leaving_a_latched_scope_puts_back_the_scope() {
+    // Catches word scope left on after Scope was left without acting, so
+    // the next command acts on a word.
+    let dir = temp("scope-backspace");
+    let mut app = essay(&dir);
+    tap(&mut app, Key::Quasi(Quasi::Scope));
+    assert_eq!(app.session.view.scope, ScopeLevel::Word);
+    tap(&mut app, Key::Backspace);
+    assert_eq!(app.session.mode, Mode::Normal);
+    assert_eq!(app.session.view.scope, ScopeLevel::Statement);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
