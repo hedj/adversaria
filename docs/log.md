@@ -803,7 +803,6 @@ Limits:
   real keyboard.
 * Not run on a real desktop or GPU: the tests draw with Mesa's software
   drivers.
-* Box-drawing characters show gaps between rows.
 
 Then, with the author's agreement, the terminal's code went: `term.rs`
 (492 lines), `tests/memex_in_a_pty.py` (267 lines), and ratatui's
@@ -841,6 +840,33 @@ in a row.
 Found on the way: Backspace on an empty latched Scope leaves it without
 putting the scope back, so the next command acts at word scope (read
 in the code; the next commit tests and fixes it). wtype loses a key held with `-P` unless keys are 50 ms apart.
+
+### Box-drawing characters without seams (18 November 2026)
+
+The fault, measured: screenshots under headless sway, typing with wtype,
+at scales 1, 1.25, 1.5 and 2. Down the line between the panes, at 1.25,
+19 rows of pixels were dim, one every 22 rows or so: where one row of
+cells meets the next. A cell is then a fractional number of pixels high,
+and the font's glyph for a line stops short of the cell's height. At 1,
+1.5 and 2 the line was whole.
+
+The fix, as terminals do it: each cell's edges are put on whole pixels,
+the same for neighbouring cells (`Grid::rect`), and box-drawing and block
+characters are drawn as shapes that fill the cell (`crate::gui::boxes`):
+the light and heavy lines, corners, tees and crosses, the rounded corners,
+the diagonals, and the full, half and eighth blocks. Lines are a whole
+number of pixels wide, about a point. Dashed and double lines and shades
+are still the font's; the screen draws none of them.
+
+Checked: at 1.25 the line has no dim row; at the other scales it is still
+whole; the Leap box's corners join (seen in a screenshot). 7 unit tests
+for the new code, the gui's 20 in all; seven breaks, each made a test
+fail. The first test of the seam passed with snapping removed: its cell
+(17.6 points at a pixel of 0.8) was a whole 22 pixels high, so it was
+changed to 17.5. A rounded corner's straight part first stopped half way
+to the cell's edge, found by its test. Rounded corners and diagonals are
+tested, not yet seen on screen. `Screen.cell` became `Screen.cell_size`,
+since `cell` also names a cell's rectangle.
 
 ## 4. Where it stands
 

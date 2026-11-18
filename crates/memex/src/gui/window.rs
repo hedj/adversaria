@@ -51,7 +51,7 @@ struct Screen {
     hits: Hits,
     reasoned_at: Option<(u64, usize)>,
     /// A cell's size in points, as last measured.
-    cell: Vec2,
+    cell_size: Vec2,
 }
 
 /// Whether Shift is held, and where the pointer is, in pixels.
@@ -68,23 +68,23 @@ impl Screen {
             cells: Terminal::new(Cells::new(80, 24)).expect("cells in memory"),
             hits: Hits::default(),
             reasoned_at: None,
-            cell: Vec2::new(9.0, 18.0),
+            cell_size: Vec2::new(9.0, 18.0),
         }
     }
 
     /// Measure a cell, lay the app out in as many cells as fit in the
     /// window, and paint them.
     fn show(&mut self, ui: &egui::Ui, app: &App) {
-        self.cell = cell_size(ui.ctx());
+        self.cell_size = cell_size(ui.ctx());
         self.lay_out(app, ui.max_rect().size());
-        paint(ui.painter(), self.cells.backend(), self.cell);
+        paint(ui.painter(), self.cells.backend(), self.cell_size);
     }
 
     /// Lay the app out in as many cells as fit in a window of this size
     /// (in points), noting where clicks land.
     fn lay_out(&mut self, app: &App, fits: Vec2) {
-        let columns = ((fits.x / self.cell.x) as u16).max(1);
-        let rows = ((fits.y / self.cell.y) as u16).max(1);
+        let columns = ((fits.x / self.cell_size.x) as u16).max(1);
+        let rows = ((fits.y / self.cell_size.y) as u16).max(1);
         if self.cells.backend().buffer.area.as_size() != (columns, rows).into() {
             self.cells = Terminal::new(Cells::new(columns, rows)).expect("cells in memory");
         }
@@ -156,7 +156,7 @@ impl Memex {
         if !self.config.mouse {
             return;
         }
-        let size = self.screen.cell * g.window.scale_factor() as f32;
+        let size = self.screen.cell_size * g.window.scale_factor() as f32;
         let cell = (
             (x / f64::from(size.x)) as u16,
             (y / f64::from(size.y)) as u16,

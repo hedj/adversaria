@@ -845,8 +845,6 @@ This is a prototype, built for a one-month trial. Known limits:
   script that types into its window under Xvfb (X11) and a headless sway
   (Wayland). Not on a real desktop or GPU, and not with a real keyboard
   under Wayland.
-- Box-drawing characters, such as the line between the panes, show gaps
-  between rows.
 - The quasimode keys are provisional; they have not been tried on real
   keyboards.
 - Images are not shown: views are drawn in characters.

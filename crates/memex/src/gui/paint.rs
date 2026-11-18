@@ -5,9 +5,10 @@
 //! underlined) are drawn as egui can: bold as the text drawn twice, a
 //! pixel apart, since egui's default fonts have no bold face.
 
+use super::boxes::{self, Brush, Grid};
 use super::cells::Cells;
 use egui::text::{LayoutJob, TextFormat};
-use egui::{Color32, FontId, Painter, Pos2, Rect, Stroke, Vec2};
+use egui::{Color32, FontId, Painter, Rect, Shape, Stroke, Vec2};
 use ratatui::buffer::Cell;
 use ratatui::layout::Position;
 use ratatui::style::{Color, Modifier};
@@ -30,16 +31,30 @@ pub fn cell_size(ctx: &egui::Context) -> Vec2 {
 /// Paint every cell, then the text cursor, if it is shown.
 pub fn paint(p: &Painter, cells: &Cells, size: Vec2) {
     p.rect_filled(p.clip_rect(), 0.0, PAPER);
-    paint_cells(p, cells, size);
+    let grid = Grid {
+        size,
+        pixel: 1.0 / p.pixels_per_point(),
+    };
+    paint_cells(p, cells, grid);
     if let Some(at) = cells.cursor {
-        paint_cursor(p, cell_rect(size, at));
+        paint_cursor(p, grid.rect(at));
     }
 }
 
 /// Each cell in its place on the grid.
-fn paint_cells(p: &Painter, cells: &Cells, size: Vec2) {
+fn paint_cells(p: &Painter, cells: &Cells, grid: Grid) {
     for at in cells.buffer.area.positions() {
-        paint_cell(p, &cells.buffer[at], cell_rect(size, at));
+        paint_cell(p, &cells.buffer[at], brush(grid, at));
+    }
+}
+
+/// What draws in a cell: its place on the grid, in ink.
+fn brush(grid: Grid, at: Position) -> Brush {
+    let cell = grid.rect(at);
+    Brush {
+        cell,
+        ink: INK,
+        grid,
     }
 }
 
@@ -49,32 +64,45 @@ fn paint_cursor(p: &Painter, cell: Rect) {
     p.rect_filled(bar, 0.0, INK);
 }
 
-/// Where a cell is, by its column and row.
-fn cell_rect(size: Vec2, cell: Position) -> Rect {
-    let at = Pos2::new(f32::from(cell.x) * size.x, f32::from(cell.y) * size.y);
-    Rect::from_min_size(at, size)
-}
-
 /// One cell: its background if it has one, then its text.
-fn paint_cell(p: &Painter, cell: &Cell, rect: Rect) {
+fn paint_cell(p: &Painter, cell: &Cell, mut brush: Brush) {
     let (fg, bg) = colours(cell);
     if bg != PAPER {
-        p.rect_filled(rect, 0.0, bg);
+        p.rect_filled(brush.cell, 0.0, bg);
     }
-    if !cell.symbol().trim().is_empty() {
-        paint_text(p, cell, rect.min, fg);
-    }
+    brush.ink = fg;
+    paint_text(p, cell, &brush);
 }
 
-/// A cell's text in its colour; bold as the text drawn twice, a pixel
-/// apart.
-fn paint_text(p: &Painter, cell: &Cell, at: Pos2, fg: Color32) {
-    let job = LayoutJob::single_section(cell.symbol().to_string(), format(cell, fg));
+/// A cell's text: a box-drawing or block character as shapes that fill
+/// the cell (crate::gui::boxes), anything else in the font; bold as the
+/// text drawn twice, a pixel apart.
+fn paint_text(p: &Painter, cell: &Cell, brush: &Brush) {
+    if let Some(shapes) = drawn(cell.symbol(), brush) {
+        return p.extend(shapes);
+    }
+    let job = LayoutJob::single_section(cell.symbol().to_string(), format(cell, brush.ink));
     let galley = p.layout_job(job);
     if cell.modifier.contains(Modifier::BOLD) {
-        p.galley(at + Vec2::new(1.0, 0.0), galley.clone(), fg);
+        p.galley(
+            brush.cell.min + Vec2::new(1.0, 0.0),
+            galley.clone(),
+            brush.ink,
+        );
     }
-    p.galley(at, galley, fg);
+    p.galley(brush.cell.min, galley, brush.ink);
+}
+
+/// A cell's symbol as shapes: no shapes for a blank, the shapes of a
+/// box-drawing or block character; none if the font draws it.
+fn drawn(symbol: &str, brush: &Brush) -> Option<Vec<Shape>> {
+    let mut chars = symbol.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) if c.is_whitespace() => Some(Vec::new()),
+        (Some(c), None) => boxes::shapes(c, brush),
+        (None, _) => Some(Vec::new()),
+        _ => None,
+    }
 }
 
 /// How a cell's text is drawn: its colour, italics, underline.
@@ -197,10 +225,15 @@ mod tests {
     }
 
     #[test]
-    fn a_cell_is_placed_by_its_column_and_row() {
-        // Catches the grid's columns or rows swapped or not scaled.
-        let at = cell_rect(Vec2::new(9.0, 18.0), Position::new(3, 2));
-        assert_eq!(at.min, Pos2::new(27.0, 36.0));
-        assert_eq!(at.size(), Vec2::new(9.0, 18.0));
+    fn a_line_character_is_drawn_as_shapes_and_a_letter_by_the_font() {
+        // Catches the divider left to the font's glyph, which stops short.
+        let grid = Grid {
+            size: Vec2::new(9.0, 18.0),
+            pixel: 1.0,
+        };
+        let brush = brush(grid, Position::new(0, 0));
+        assert!(drawn("│", &brush).is_some_and(|s| !s.is_empty()));
+        assert!(drawn("a", &brush).is_none());
+        assert!(drawn(" ", &brush).is_some_and(|s| s.is_empty()));
     }
 }
