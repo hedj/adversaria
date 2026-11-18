@@ -14,7 +14,7 @@ word, or the sentence with <> where parsing failed); Repair is APE's
 advice.
 */
 
-:- module(ace, [ace_lexicon/2, ace_parse/2, ace_check/2, ace_next/2]).
+:- module(ace, [ace_lexicon/2, ace_parse/2, ace_drs/4, ace_check/2, ace_next/2]).
 
 %   APE's files declare no encoding, and one holds UTF-8 in a comment.
 :- set_prolog_flag(encoding, utf8).
@@ -83,19 +83,31 @@ content_entry(Entry) :-
 %   query did not have. A parse that takes more than 5 seconds throws
 %   time_limit_exceeded.
 ace_parse(Text, Result) :-
+    ace_drs(Text, Paraphrase, Drs, Messages),
+    (   var(Paraphrase)
+    ->  Result = not_ace(Messages)
+    ;   copy_term(Drs, Numbered),
+        numbervars(Numbered, 0, _),
+        Result = parsed(Paraphrase, Numbered, Messages)
+    ).
+
+%!  ace_drs(+Text:string, -Paraphrase, -Drs, -Messages) is det.
+%   APE's parse of a text: its paraphrase and DRS, the discourse
+%   referents left as variables, and APE's messages. When the text is not
+%   ACE, Paraphrase and Drs are left unbound. A parse that takes more than
+%   5 seconds throws time_limit_exceeded.
+ace_drs(Text, Paraphrase, Drs, Messages) :-
     must_be(string, Text),
     % APE keeps its messages in a global variable, and the server runs
     % each query in an engine of its own, whose global variables start
     % unset: this sets it.
     clear_messages,
-    call_with_time_limit(5, acetext_to_drs(Text, _, _, Drs, Found)),
+    call_with_time_limit(5, acetext_to_drs(Text, _, _, Parsed, Found)),
     maplist(message, Found, Messages),
     (   memberchk(message(error, _, _, _, _, _), Messages)
-    ->  Result = not_ace(Messages)
-    ;   paraphrase(Drs, Paraphrase),
-        copy_term(Drs, Numbered),
-        numbervars(Numbered, 0, _),
-        Result = parsed(Paraphrase, Numbered, Messages)
+    ->  true
+    ;   paraphrase(Parsed, Paraphrase),
+        Drs = Parsed
     ).
 
 %!  ace_check(+Text:string, -Check) is det.

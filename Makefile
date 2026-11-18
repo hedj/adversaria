@@ -36,6 +36,7 @@ test-spikes:
 test-prolog:
 	swipl -g run_tests -t halt prolog/tests/test_protocol.pl
 	swipl -g run_tests -t halt prolog/tests/test_ace.pl
+	swipl -g run_tests -t halt prolog/tests/test_ace_read.pl
 
 # Optional: s(CASP) is not needed before stage B. Pass the path to a
 # checkout of github.com/SWI-Prolog/sCASP at tag V1.1.4; the Nix dev shell

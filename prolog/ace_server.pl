@@ -10,4 +10,5 @@ reasoning engines need not pay.
 %   Loaded before the server, so the server counts its predicates as its
 %   own (server.pl, server_predicate/1).
 :- use_module(ace).
+:- use_module(ace_read).
 :- consult(server).

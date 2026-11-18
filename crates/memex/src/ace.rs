@@ -27,6 +27,36 @@ pub struct Parse {
     pub messages: Vec<Message>,
 }
 
+/// What the notebook reads in a text (prolog/ace_read.pl): the statements
+/// a text of ACE makes, or why it makes none.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Reading {
+    /// ACE, read whole: its paraphrase, and its statements.
+    Read(String, Vec<Said>),
+    /// ACE, but not all of it something the notebook states: its
+    /// paraphrase.
+    Unread(String),
+    /// Not ACE: APE's messages.
+    NotAce(Vec<Message>),
+}
+
+/// A statement read: its kind, and the text of the command that states it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Said {
+    pub kind: Kind,
+    pub text: String,
+}
+
+/// What a statement is: a fact, a claim and its source, a rule ("Head :-
+/// Body") or a constraint ("false :- Body").
+#[derive(Debug, Clone, PartialEq)]
+pub enum Kind {
+    Fact,
+    Claim(String),
+    Rule,
+    Constraint,
+}
+
 /// A message of APE's: an error or a warning, its kind (word, sentence,
 /// anaphor, lexicon, ...), and its note.
 #[derive(Debug, Clone, PartialEq)]
@@ -166,6 +196,14 @@ impl Ace {
             .collect()
     }
 
+    /// What the notebook reads in a text, with this user lexicon
+    /// (ace_read_text/2).
+    pub fn read_with(&mut self, lexicon: Vec<Term>, text: &str) -> Result<Reading, Error> {
+        self.set_lexicon(lexicon)?;
+        let goal = call("ace_read_text", vec![Term::Str(text.into()), Term::Var(0)]);
+        reading_of(&self.only_answer(&goal)?)
+    }
+
     /// What APE makes of a text.
     pub fn parse(&mut self, text: &str) -> Result<Parse, Error> {
         let goal = call("ace_parse", vec![Term::Str(text.into()), Term::Var(0)]);
@@ -204,6 +242,40 @@ fn parse_of(t: &Term) -> Result<Parse, Error> {
         ace: None,
         messages,
     })
+}
+
+/// A reading, from read(Paraphrase, Statements, Messages),
+/// unread(Paraphrase, Messages) or not_ace(Messages).
+fn reading_of(t: &Term) -> Result<Reading, Error> {
+    if let Some(a) = parts(t, "read", 3) {
+        let said = list(&a[1]).iter().map(said_of).collect::<Result<_, _>>()?;
+        return Ok(Reading::Read(text(&a[0])?, said));
+    }
+    if let Some(a) = parts(t, "unread", 2) {
+        return Ok(Reading::Unread(text(&a[0])?));
+    }
+    let a = parts(t, "not_ace", 1).ok_or_else(|| bad("reading", t))?;
+    Ok(Reading::NotAce(messages(&a[0])?))
+}
+
+/// A statement, from said(Kind, Text).
+fn said_of(t: &Term) -> Result<Said, Error> {
+    let a = parts(t, "said", 2).ok_or_else(|| bad("statement", t))?;
+    let (kind, text) = (kind_of(&a[0])?, text(&a[1])?);
+    Ok(Said { kind, text })
+}
+
+/// A statement's kind: fact, claim(Source), rule or constraint.
+fn kind_of(t: &Term) -> Result<Kind, Error> {
+    if let Some(a) = parts(t, "claim", 1) {
+        return Ok(Kind::Claim(text(&a[0])?));
+    }
+    match t {
+        Term::Atom(k) if k == "fact" => Ok(Kind::Fact),
+        Term::Atom(k) if k == "rule" => Ok(Kind::Rule),
+        Term::Atom(k) if k == "constraint" => Ok(Kind::Constraint),
+        _ => Err(bad("kind of statement", t)),
+    }
 }
 
 /// A parse of ACE, from the arguments of parsed/3.
@@ -520,6 +592,53 @@ fn is_word(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// said(Kind, Text), as ace_read_text/2 gives a statement.
+    fn said_term(kind: Term, text: &str) -> Term {
+        c("said", vec![kind, Term::Str(text.into())])
+    }
+
+    /// A reading of these statements.
+    fn read_term(statements: Vec<Term>) -> Term {
+        c(
+            "read",
+            vec![Term::Str("p".into()), make_list(statements), atom("[]")],
+        )
+    }
+
+    #[test]
+    fn each_kind_of_statement_is_read_as_its_kind_with_its_text() {
+        // Catches a claim's source lost, one kind of statement taken for
+        // another, or a statement's text lost.
+        let source = c("claim", vec![Term::Str("Talk-notes".into())]);
+        let kinds = [atom("fact"), source, atom("rule"), atom("constraint")];
+        let read = read_term(kinds.into_iter().map(|k| said_term(k, "t")).collect());
+        let Ok(Reading::Read(_, said)) = reading_of(&read) else {
+            panic!("not read: {read:?}");
+        };
+        let claim = Kind::Claim("Talk-notes".into());
+        let made = |kind| Said {
+            kind,
+            text: "t".into(),
+        };
+        let expected = [Kind::Fact, claim, Kind::Rule, Kind::Constraint].map(made);
+        assert_eq!(said, expected);
+    }
+
+    #[test]
+    fn a_text_left_unread_and_a_statement_of_no_kind_are_told_apart() {
+        // Catches an unread text taken for one read, or a statement of an
+        // unknown kind let through.
+        let unread = c(
+            "unread",
+            vec![Term::Str("There is a flight.".into()), atom("[]")],
+        );
+        assert_eq!(
+            reading_of(&unread).unwrap(),
+            Reading::Unread("There is a flight.".into())
+        );
+        assert!(reading_of(&read_term(vec![said_term(atom("odd"), "x")])).is_err());
+    }
 
     fn c(f: &str, args: Vec<Term>) -> Term {
         call(f, args)

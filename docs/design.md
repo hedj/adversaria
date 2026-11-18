@@ -419,6 +419,27 @@ Nothing that comes from outside is trusted as a fact. An imported document, a we
 * **Worlds**: a supposition shows the actual world and the supposed one side by side, row for row; `close` returns to the actual world by a `view` entry whose parent is the actual head, keeping the branch; `commit` makes the supposed world actual.
 * **The fading hint** to try Suppose on a marked item stops once Suppose has been used four times.
 
+#### Reading controlled English
+
+The author's decision (18 November 2026): the memex reads what the user writes, so that no statement is written twice, once in English and again in Prolog. An item whose text is ACE is read as the statements it makes, as written, with no step to confirm; its text is drawn so that the user sees which text has a formal meaning to the memex. An item whose text is not ACE stays prose, with a quiet hint, at the cursor, of where APE stopped. Facts, claims, rules and constraints are all read.
+
+The reader (`prolog/ace_read.pl`) maps APE's logical form (its DRS) to the notebook's statements. A discourse referent stands for its value: a noun phrase is a goal on it ("the date of X" is `date(X, R)`; "the income", with no owner, is the box `cell(income, R)`), and "is" makes two values one, or computes one ("R is A + B"). So a fact, a rule's body and a constraint's body come from one mapping. A text is read whole or not at all: every condition of the DRS must be one the mapping knows, so a reading never states less than the text says.
+
+| ACE | Read as |
+| --- | --- |
+| The date of Buran-flight is 1988. (Buran-flight's date is 1988.) | the fact `date(buran_flight, 1988)` |
+| The income is 2000. | the fact `cell(income, 2000)`, a box |
+| Buran is a:reusable. · Buran-flight follows Energia-launch. | the facts `reusable(buran)` · `follow(buran_flight, energia_launch)` |
+| Talk-notes says that the date of Buran-flight is 1989. (claims, states, believes, reports) | the claim `claims("Talk-notes", date(buran_flight, 1989))` |
+| If the income is X and the rent is Y then the rest is X - Y. | the rule `cell(rest, A) :- cell(income, B), cell(rent, C), A is B-C` |
+| If the rent is X and the food is Y and the income is Z then X + Y =< Z. | the constraint `false :- cell(rent, A), cell(food, B), cell(income, C), \+ A+B =< C` |
+| It is false that the rent is greater than the income. | the constraint `false :- cell(rent, A), cell(income, B), A > B` |
+| Nothing has more than 1 date. | the constraint `false :- date(A, B), date(A, C), B \== C` |
+
+A proper name is an entity: its letters in lower case and its hyphens made underscores (Buran-flight is `buran_flight`), as the notebook's names are; a name the notebook gives through APE's user lexicon (`lexicon_of`) comes back as the entity it names. Each statement goes to the memex as the text of the command that states it (`fact`, `claim`, `rule`, `constraint`), so a statement read is checked as one typed is: a constraint read is still tried against a planted violation.
+
+As built (18 November 2026): the reader, its tests (`prolog/tests/test_ace_read.pl`), and `Ace::read_with`. The memex does not yet read items: that is the next step.
+
 #### Testing claims
 
 A claim is tested by the cheapest check that could refute it. These checks come from the author's “Popper” project, which routes each claim of a physics paper to such a judge; it has 105 passing tests but no measured rate of catching errors yet. The mechanisms below are proposed.
