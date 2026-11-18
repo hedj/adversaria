@@ -360,6 +360,8 @@ pub struct Active {
     /// In Suppose, the one quasimode whose text is English: what APE
     /// makes of it, and the free English it began as.
     pub english: Option<English>,
+    /// In Scope, the scope it found, put back if it is left without acting.
+    pub scope_before: Option<ScopeLevel>,
 }
 
 /// The English typed in Suppose: what APE makes of it, and the fullest
@@ -423,6 +425,7 @@ impl Active {
             hold: Hold::Down,
             listing: false,
             english: None,
+            scope_before: None,
         }
     }
 

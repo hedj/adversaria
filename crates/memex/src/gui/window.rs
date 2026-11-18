@@ -276,6 +276,10 @@ impl ApplicationHandler for Memex {
                 ..
             } => self.key(el, &event),
             WindowEvent::ModifiersChanged(m) => self.held.shift = m.state().shift_key(),
+            // Keys released while another window has the keyboard are not
+            // reported here (on X11, winit reports them as synthetic). Shift
+            // needs nothing: winit reports the modifiers cleared.
+            WindowEvent::Focused(false) => self.app.focus_lost(),
             WindowEvent::CursorMoved { position, .. } => {
                 self.held.pointer = Some((position.x, position.y))
             }

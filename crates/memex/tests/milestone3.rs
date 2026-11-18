@@ -1,7 +1,7 @@
 //! Milestone 3's acceptance checks (docs/plan.md, Milestone 3): the outline
 //! and the quasimodes, driven by key events and drawn into a test terminal.
 
-use memex::app::{App, Event, Key, Mode, Quasi};
+use memex::app::{App, Event, Key, Mode, Quasi, ScopeLevel};
 use memex::journal::Journal;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -830,5 +830,51 @@ fn leaping_again_after_reopening_repeats_the_last_pattern() {
     tap(&mut app, Key::Quasi(Quasi::LeapForward));
     tap(&mut app, Key::Quasi(Quasi::LeapForward));
     assert!(app.text_of(app.cursor()).starts_with(&['E', 'n', 'e']));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn focus_lost_with_a_quasimode_key_alone_held_leaves_it_doing_nothing() {
+    // Catches Alt+Tab leaving Leap back held (its release goes to another
+    // window), or taken for a tap that latches it, or writing anything.
+    let dir = temp("focus-alone");
+    let mut app = essay(&dir);
+    let before = app.journal().entries().len();
+    app.handle(Event::down(Key::Quasi(Quasi::LeapBack)));
+    app.focus_lost();
+    assert_eq!(app.session.mode, Mode::Normal);
+    assert_eq!(app.journal().entries().len(), before);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn focus_lost_while_scope_is_held_puts_back_the_scope() {
+    // Catches word scope left on after Scope was abandoned, so a command
+    // then acts on a word.
+    let dir = temp("focus-scope");
+    let mut app = essay(&dir);
+    app.handle(Event::down(Key::Quasi(Quasi::Scope)));
+    assert_eq!(app.session.view.scope, ScopeLevel::Word);
+    app.focus_lost();
+    assert_eq!(app.session.view.scope, ScopeLevel::Statement);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn focus_lost_after_typing_in_a_quasimode_keeps_it_open_until_enter() {
+    // Catches what was typed lost, or the Leap made though its key was
+    // never released here.
+    let dir = temp("focus-typed");
+    let mut app = essay(&dir);
+    hold(&mut app, Quasi::LeapForward, "dra");
+    app.focus_lost();
+    assert!(matches!(&app.session.mode, Mode::Quasi(a) if a.latched() && a.input == "dra"));
+    release(&mut app, Quasi::LeapForward);
+    assert!(
+        matches!(&app.session.mode, Mode::Quasi(_)),
+        "a late release does not end it"
+    );
+    tap(&mut app, Key::Enter);
+    assert_eq!(app.notebook.outline.text(app.cursor()), "DRAKON");
     std::fs::remove_dir_all(&dir).unwrap();
 }

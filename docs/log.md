@@ -803,7 +803,6 @@ Limits:
   real keyboard.
 * Not run on a real desktop or GPU: the tests draw with Mesa's software
   drivers.
-* Focus lost while a quasimode key is held is not handled.
 * Box-drawing characters show gaps between rows.
 
 Then, with the author's agreement, the terminal's code went: `term.rs`
@@ -811,6 +810,37 @@ Then, with the author's agreement, the terminal's code went: `term.rs`
 crossterm backend (ratatui now builds without its default features).
 crossterm stays listed in Cargo.lock, which records optional dependencies
 whatever features are on, but nothing builds it.
+
+### Focus lost while a quasimode key is held (18 November 2026)
+
+The fault: a quasimode ends when its key is released, but a key released
+while another window has the keyboard is not reported to the memex. On
+X11 winit reports such releases as synthetic events, which the window
+ignores, as it ignores the presses winit makes up on focus; on Wayland
+none is sent. Alt+Tab, with Left Alt as Leap back, left Leap held: what
+was typed after it went into the Leap's pattern, and F10 did not quit.
+The window test reproduced this under X11 and under Wayland before the
+fix.
+
+The fix: when the window loses focus (`Focused(false)`, sent on both), a
+quasimode held with nothing else pressed is left without acting, and
+Scope puts back the scope it found (`Active::scope_before`); one held
+after keys were pressed stays open, latched, with what was typed, and
+the message line says so (docs/design.md § Quasimodes, not modes).
+Shift needs nothing: winit reports the modifiers cleared on both.
+
+Checked: 3 tests through the memex (alone held, left, nothing written;
+Scope's scope put back; typed, kept open, a late release ignored, Enter
+leaps) and 2 window checks (Right Alt held while the root window takes
+focus under X11; F12, moved to Leap, held while sway moves to an empty
+workspace). Five breaks, each made a test fail: focus loss ignored by the
+app, by the window (both window checks fail), a lone hold latched, the
+scope not put back, a typed one finished. The window test passed 3 runs
+in a row.
+
+Found on the way: Backspace on an empty latched Scope leaves it without
+putting the scope back, so the next command acts at word scope (read
+in the code; the next commit tests and fixes it). wtype loses a key held with `-P` unless keys are 50 ms apart.
 
 ## 4. Where it stands
 

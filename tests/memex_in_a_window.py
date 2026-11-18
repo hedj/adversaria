@@ -6,8 +6,9 @@ xdotool by key code, since xdotool's key names press Left Alt with Right
 Alt, and wraps later keys in Alt. Under Wayland it starts a headless sway
 and types with wtype, whose virtual keyboard makes up its own key codes, so
 only text and named keys are typed there, not quasimodes held on modifiers.
-It checks what the program does: the journal entries the keys should make,
-and its exit status.
+Focus is taken from the window by focusing the root window (X11) or an
+empty workspace (Wayland). It checks what the program does: the journal
+entries the keys should make, and its exit status.
 
 Usage: tests/memex_in_a_window.py <path to the memex binary>
 Needs: Xvfb, xdotool, sway and wtype (the Nix shell has them), and the
@@ -72,8 +73,11 @@ def run_x11(binary, display, journal, actions, args=(), kill_after=None, timeout
         _, err = p.communicate()
         return (p.returncode if p.returncode >= 0 else None), err.decode("utf-8", "replace")
     subprocess.run(["xdotool", "windowfocus", "--sync", w], env=env)
+    root = subprocess.run(["xdotool", "search", "--maxdepth", "0", "--name", ""], env=env,
+                          capture_output=True, text=True).stdout.split()[:1]
+    places = {"%memex": w, "%root": root[0] if root else ""}
     for a in actions:
-        subprocess.run(["xdotool", *a], env=env)
+        subprocess.run(["xdotool", *[places.get(x, x) for x in a]], env=env)
     if kill_after is not None:
         time.sleep(kill_after)
         p.send_signal(signal.SIGKILL)
@@ -122,6 +126,7 @@ def x11_checks(binary, d, check):
         x11_remapped(binary, d, check)
         x11_mouse(binary, d, check)
         x11_idle_and_reasoning(binary, d, check)
+        x11_focus_lost(binary, d, check)
     finally:
         xvfb.kill()
 
@@ -202,6 +207,48 @@ def x11_idle_and_reasoning(binary, d, check):
           status == 0 and any(seen), (status, seen))
 
 
+def x11_focus_lost(binary, d, check):
+    # Right Alt held, then the keyboard taken by another window, where the
+    # key is released, as Alt+Tab does: back in the window, Leap must not
+    # still be held, so Z is text and F10 quits.
+    j = os.path.join(d, "focus")
+    away = [["keydown", str(RIGHT_ALT)], ["sleep", "0.3"], ["windowfocus", "%root"], ["sleep", "0.5"],
+            ["keyup", str(RIGHT_ALT)], ["sleep", "0.3"], ["windowfocus", "--sync", "%memex"], ["sleep", "0.3"]]
+    status, err = run_x11(binary, ":91", j, flat(typed("Hello"), away, typed("Z"), key(F10)))
+    es = entries(j)
+    check("after focus is lost with Right Alt held, keys are typed again and F10 quits",
+          status == 0 and "Z" in texts(es) and not leaps(es), (status, texts(es), leaps(es), err[-200:]))
+
+
+def wayland_focus_lost(binary, d, env, check):
+    """F12, holding Leap by the configuration (wtype's key codes rule out
+    modifiers), held while sway moves to an empty workspace and released
+    there: back in the window, Z is text and F10 quits."""
+    conf = os.path.join(d, "wayland-focus.toml")
+    with open(conf, "w", encoding="utf-8") as f:
+        f.write('[quasimodes]\nleap_forward = "F12"\n')
+    j = os.path.join(d, "wayland-focus")
+    p = subprocess.Popen([binary, "--config", conf, j], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    time.sleep(6)
+    subprocess.run(["wtype", "-d", "50", "-k", "Shift_L", "Hello"], env=env)
+    hold = subprocess.Popen(["wtype", "-d", "50", "-k", "Shift_L", "-P", "F12", "-s", "3000", "-p", "F12"], env=env)
+    time.sleep(1)
+    subprocess.run(["swaymsg", "-q", "workspace", "2"], env=env)
+    hold.wait()
+    subprocess.run(["swaymsg", "-q", "workspace", "1"], env=env)
+    time.sleep(0.5)
+    subprocess.run(["wtype", "-d", "50", "-k", "Shift_L", "Z", "-k", "F10"], env=env)
+    try:
+        _, err = p.communicate(timeout=20)
+        status = p.returncode
+    except subprocess.TimeoutExpired:
+        p.kill()
+        status, err = None, b"timed out"
+    es = entries(j)
+    check("under Wayland, after focus is lost with F12 held, keys are typed again and F10 quits",
+          status == 0 and "Z" in texts(es) and not leaps(es), (status, texts(es), leaps(es)))
+
+
 def wayland_checks(binary, d, check):
     """Text and named keys under a headless Wayland compositor."""
     run_dir = tempfile.mkdtemp(dir=d)
@@ -221,6 +268,8 @@ def wayland_checks(binary, d, check):
                 break
             time.sleep(0.2)
         env["WAYLAND_DISPLAY"] = sockets[0] if sockets else ""
+        ipc = [s for s in os.listdir(run_dir) if s.startswith("sway-ipc.")]
+        env["SWAYSOCK"] = os.path.join(run_dir, ipc[0]) if ipc else ""
         j = os.path.join(d, "wayland")
         p = subprocess.Popen([binary, j], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         time.sleep(6)
@@ -239,6 +288,7 @@ def wayland_checks(binary, d, check):
               f"status {status}: {err.decode('utf-8', 'replace')[-300:]}")
         check("under Wayland typed text reached the journal",
               "Hello" in texts(entries(j)) and "World" in texts(entries(j)), texts(entries(j)))
+        wayland_focus_lost(binary, d, env, check)
     finally:
         sway.kill()
         shutil.rmtree(run_dir, ignore_errors=True)

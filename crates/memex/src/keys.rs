@@ -77,10 +77,45 @@ impl App {
     /// Hold a quasimode's key: the Scope quasimode starts at a word.
     fn enter_quasi(&mut self, q: Quasi) -> Mode {
         self.flush();
+        let mut a = Active::held(q);
         if q == Quasi::Scope {
+            a.scope_before = Some(self.session.view.scope);
             self.session.view.scope = ScopeLevel::Word;
         }
-        Mode::Quasi(Active::held(q))
+        Mode::Quasi(a)
+    }
+
+    /// The window lost the keyboard, so the release of a quasimode's key
+    /// goes elsewhere. A quasimode held with nothing else pressed (as Alt
+    /// is, for Alt+Tab) is left without acting. One held while keys were
+    /// pressed stays open, latched, so nothing typed is lost and nothing
+    /// acts until Enter (docs/design.md § Quasimodes, not modes).
+    pub fn focus_lost(&mut self) {
+        let mode = std::mem::replace(&mut self.session.mode, Mode::Normal);
+        self.session.mode = match mode {
+            Mode::Quasi(a) => self.unheld(a),
+            other => other,
+        };
+    }
+
+    fn unheld(&mut self, mut a: Active) -> Mode {
+        match a.hold {
+            Hold::Down => self.leave(a),
+            Hold::Used => {
+                a.hold = Hold::Latched;
+                self.session.message = "the window lost focus: this stays open until Enter".into();
+                Mode::Quasi(a)
+            }
+            Hold::Latched => Mode::Quasi(a),
+        }
+    }
+
+    /// Leave a quasimode without acting; Scope puts back the scope it found.
+    fn leave(&mut self, a: Active) -> Mode {
+        if let Some(scope) = a.scope_before {
+            self.session.view.scope = scope;
+        }
+        Mode::Normal
     }
 
     /// Run the command line a key is bound to, keeping what it asks for,

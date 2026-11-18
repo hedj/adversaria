@@ -166,6 +166,11 @@ Within a quasimode:
   `?` again hides the list; what you typed stays.
 - **Repeat a Leap:** a second tap of a latched, empty Leap repeats the last
   pattern.
+- **Focus lost while a key is held** (as by Alt+Tab): the release goes to
+  another window, so the memex does not wait for it. A quasimode held with
+  nothing typed is left without acting; Scope puts back the target it
+  found. One held after you typed stays open, latched, with what you
+  typed, and says so: Enter ends it, or leave it as any latched one.
 
 Leap matches anywhere in an item's text, ignoring case, and wraps round
 at either end of the outline.
@@ -840,8 +845,6 @@ This is a prototype, built for a one-month trial. Known limits:
   script that types into its window under Xvfb (X11) and a headless sway
   (Wayland). Not on a real desktop or GPU, and not with a real keyboard
   under Wayland.
-- If the window loses focus while a quasimode key is held, the quasimode
-  may stay held until that key is pressed again (not tested).
 - Box-drawing characters, such as the line between the panes, show gaps
   between rows.
 - The quasimode keys are provisional; they have not been tried on real
