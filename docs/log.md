@@ -868,6 +868,28 @@ to the cell's edge, found by its test. Rounded corners and diagonals are
 tested, not yet seen on screen. `Screen.cell` became `Screen.cell_size`,
 since `cell` also names a cell's rectangle.
 
+### A click at a scale of 2 under Wayland (18 November 2026)
+
+The window is told of the pointer in pixels; the cells are measured in
+points. At a scale of 1 the two agree, so the clicks tested under Xvfb
+could not catch a click put in the wrong cell at another scale.
+
+Under headless sway no pointer had reached the window: sway has no input
+devices there, and wlrctl makes a virtual pointer for each action and
+removes it as it exits, so the window dropped its pointer before any
+motion or click came (seen with WAYLAND_DEBUG: the seat's pointer came
+and went at once). `pointer` (crates/tools) keeps one virtual pointer on
+the seat while its input is open, and reads `move X Y WIDTH HEIGHT` and
+`click`. Its crates were already in Cargo.lock, through winit.
+
+Checked: the window test clicks the first item at a scale of 2 and types
+Z into it (now 24 checks); a screenshot with the cursor drawn (`grim -c`)
+showed the cursor's tip on the item. Keeping the pointer in pixels makes
+that check fail, and only that one. A button sent with the move did not
+reach the window (WAYLAND_DEBUG: the enter came, no button), so the test
+pauses half a second after each; the cause, in sway or in the virtual
+pointer, was not looked into.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

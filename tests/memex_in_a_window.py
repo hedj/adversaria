@@ -5,18 +5,20 @@ Under X11 it starts an X server with no screen (Xvfb) and types with
 xdotool by key code, since xdotool's key names press Left Alt with Right
 Alt, and wraps later keys in Alt. Under Wayland it starts a headless sway
 and types with wtype, whose virtual keyboard makes up its own key codes, so
-only text and named keys are typed there, not quasimodes held on modifiers.
+only text and named keys are typed there, not quasimodes held on modifiers;
+it points and clicks with the pointer program (crates/tools), at a scale of
+2, so a click is found in points, not pixels.
 Focus is taken from the window by focusing the root window (X11) or an
 empty workspace (Wayland). It checks what the program does: the journal
 entries the keys should make, and its exit status.
 
 Usage: tests/memex_in_a_window.py <path to the memex binary>
-Needs: Xvfb, xdotool, sway and wtype (the Nix shell has them), and the
-window's libraries and drivers (the Nix shell sets them).
+Needs: Xvfb, xdotool, sway, wtype and grim (the Nix shell has them), the
+window's libraries and drivers (the Nix shell sets them), and the pointer
+program built beside the memex (make test-window builds both).
 """
 import json
 import os
-import shutil
 import signal
 import subprocess
 import sys
@@ -249,27 +251,45 @@ def wayland_focus_lost(binary, d, env, check):
           status == 0 and "Z" in texts(es) and not leaps(es), (status, texts(es), leaps(es)))
 
 
-def wayland_checks(binary, d, check):
-    """Text and named keys under a headless Wayland compositor."""
+def started_sway(d, scale):
+    """A headless sway with one output at a scale; its process, and the
+    environment its clients need."""
     run_dir = tempfile.mkdtemp(dir=d)
     os.chmod(run_dir, 0o700)
     cfg = os.path.join(run_dir, "sway.cfg")
     with open(cfg, "w", encoding="utf-8") as f:
-        f.write("output HEADLESS-1 resolution 1280x800\nxwayland disable\n")
+        f.write(f"output HEADLESS-1 resolution 1600x1000 scale {scale}\nxwayland disable\ndefault_border none\n")
     env = dict(os.environ, XDG_RUNTIME_DIR=run_dir, WLR_BACKENDS="headless",
                WLR_LIBINPUT_NO_DEVICES="1", WLR_RENDERER="pixman")
     env.pop("DISPLAY", None)
     sway = subprocess.Popen(["sway", "-c", cfg], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    sockets = []
+    for _ in range(50):
+        sockets = [s for s in os.listdir(run_dir) if s.startswith("wayland-") and not s.endswith(".lock")]
+        if sockets:
+            break
+        time.sleep(0.2)
+    env["WAYLAND_DISPLAY"] = sockets[0] if sockets else ""
+    ipc = [s for s in os.listdir(run_dir) if s.startswith("sway-ipc.")]
+    env["SWAYSOCK"] = os.path.join(run_dir, ipc[0]) if ipc else ""
+    return sway, env
+
+
+def ended(p):
+    """A program's exit status and what it wrote to stderr, killed if it
+    has not ended in 20 seconds."""
     try:
-        sockets = []
-        for _ in range(50):
-            sockets = [s for s in os.listdir(run_dir) if s.startswith("wayland-") and not s.endswith(".lock")]
-            if sockets:
-                break
-            time.sleep(0.2)
-        env["WAYLAND_DISPLAY"] = sockets[0] if sockets else ""
-        ipc = [s for s in os.listdir(run_dir) if s.startswith("sway-ipc.")]
-        env["SWAYSOCK"] = os.path.join(run_dir, ipc[0]) if ipc else ""
+        _, err = p.communicate(timeout=20)
+        return p.returncode, err.decode("utf-8", "replace")
+    except subprocess.TimeoutExpired:
+        p.kill()
+        return None, "timed out"
+
+
+def wayland_checks(binary, d, check):
+    """Text and named keys under a headless Wayland compositor."""
+    sway, env = started_sway(d, 1)
+    try:
         j = os.path.join(d, "wayland")
         p = subprocess.Popen([binary, j], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         time.sleep(6)
@@ -278,20 +298,48 @@ def wayland_checks(binary, d, check):
         # a real keyboard's map is sent once, on focus, untested here).
         keys = ["-d", "50", "-k", "Shift_L", "Hello", "-k", "Return", "World", "-k", "F10"]
         subprocess.run(["wtype", *keys], env=env)
-        try:
-            _, err = p.communicate(timeout=20)
-            status = p.returncode
-        except subprocess.TimeoutExpired:
-            p.kill()
-            status, err = None, b"timed out"
-        check("under Wayland it opens a window and quits with F10", status == 0,
-              f"status {status}: {err.decode('utf-8', 'replace')[-300:]}")
+        status, err = ended(p)
+        check("under Wayland it opens a window and quits with F10", status == 0, f"status {status}: {err[-300:]}")
         check("under Wayland typed text reached the journal",
               "Hello" in texts(entries(j)) and "World" in texts(entries(j)), texts(entries(j)))
         wayland_focus_lost(binary, d, env, check)
     finally:
         sway.kill()
-        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+def wayland_click(binary, d, check):
+    """A click at a scale of 2: the window is told of the pointer in
+    pixels, twice the points the cells are measured in. The pointer program
+    keeps one virtual pointer on the seat; a pointer made for each action
+    leaves before the window can use it."""
+    sway, env = started_sway(d, 2)
+    pointer = os.path.join(os.path.dirname(binary), "pointer")
+    try:
+        j = os.path.join(d, "wayland-click")
+        hand = subprocess.Popen([pointer], env=env, stdin=subprocess.PIPE, text=True)
+        p = subprocess.Popen([binary, "--mouse", j], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        time.sleep(6)
+        subprocess.run(["wtype", "-d", "50", "-k", "Shift_L", "Hello", "-k", "Return", "World"], env=env)
+        time.sleep(0.5)
+        # The output is 800 by 500 in its own units at a scale of 2. A
+        # pause after each: a button sent with the move did not reach the
+        # window under sway (seen with WAYLAND_DEBUG: the enter came, no
+        # button); a person pauses anyway.
+        for line in [f"move {FIRST_ITEM[0]} {FIRST_ITEM[1]} 800 500", "click"]:
+            hand.stdin.write(line + "\n")
+            hand.stdin.flush()
+            time.sleep(0.5)
+        subprocess.run(["wtype", "-d", "50", "-k", "Shift_L", "Z", "-k", "F10"], env=env)
+        status, err = ended(p)
+        hand.stdin.close()
+        es = entries(j)
+        first = items(es)[0] if items(es) else None
+        into = [(e["body"].get("item"), e["body"].get("add")) for e in es
+                if e["kind"] == "edit" and e["body"].get("op") == "text"]
+        check("under Wayland at a scale of 2, a click on the first item puts the next key there",
+              status == 0 and hand.wait(timeout=10) == 0 and (first, "Z") in into, (status, first, into, err[-200:]))
+    finally:
+        sway.kill()
 
 
 def main():
@@ -319,6 +367,7 @@ def main():
         check("nothing is written when the configuration is refused", not os.path.exists(j))
         x11_checks(binary, d, check)
         wayland_checks(binary, d, check)
+        wayland_click(binary, d, check)
 
     print(f"{failures} failed")
     sys.exit(1 if failures else 0)

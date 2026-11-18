@@ -7,6 +7,7 @@ test: test-spikes test-prolog test-rust test-window
 # sway), with a script typing into it. The Nix shell has what it needs.
 test-window:
 	cargo build -q -p memex
+	cargo build -q -p tools --bin pointer
 	python3 tests/memex_in_a_window.py target/debug/memex
 
 # One command starts the system: the sealer in the background (making a key

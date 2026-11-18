@@ -3527,6 +3527,8 @@ dependencies = [
  "format",
  "serde_json",
  "syn 3.0.10",
+ "wayland-client",
+ "wayland-protocols-wlr",
 ]
 
 [[package]]
