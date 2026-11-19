@@ -9,6 +9,7 @@
 //! (App::idle), as APE is slower than a keystroke. Only text typed is read: an imported document is a
 //! source's claims, not the user's beliefs.
 
+use super::inline::unbracketed;
 use crate::ace::{Kind, Reading, Said, Unread, words_of};
 use crate::app::App;
 use crate::engine::told;
@@ -38,16 +39,30 @@ impl App {
         if read.is_some_and(|r| r.text == text) {
             return;
         }
+        let linked = self.link_inline(item);
+        let w = Written {
+            item,
+            of,
+            text: &text,
+            linked,
+        };
         if text.trim().is_empty() {
-            return self.unread(item, of, &text, None);
+            self.session.set_prose(None);
+            return self.unread(&w);
         }
-        let Ok(reading) = self.ace_read(&text) else {
+        let Ok(reading) = self.ace_read(&unbracketed(&text)) else {
             return;
         };
         match reading {
-            Reading::Read(_, said) => self.state_reading(item, of, &text, &said),
-            not_read => self.unread(item, of, &text, Some(hint_of(&not_read))),
+            Reading::Read(_, said) => self.state_reading(&w, &said),
+            not_read => self.unread_saying_why(&w, &not_read),
         }
+    }
+
+    /// A text not read, and the hint of why at the cursor.
+    fn unread_saying_why(&mut self, w: &Written, reading: &Reading) {
+        self.session.set_prose(Some((w.item, hint_of(reading))));
+        self.unread(w);
     }
 
     /// Let each item whose text is not what was last read for it wait to
@@ -69,11 +84,11 @@ impl App {
     /// State what an item's text was read as, in place of what it was read
     /// as before; say what the commands that state it said, as if typed
     /// (a constraint kept, a statement refused, and why).
-    fn state_reading(&mut self, item: u64, of: u64, text: &str, said: &[Said]) {
+    fn state_reading(&mut self, w: &Written, said: &[Said]) {
         self.session.set_prose(None);
-        self.retract_reading(item);
-        let (edits, told) = self.state_all(item, text, said);
-        self.record_reading(item, of, text, edits);
+        self.retract_reading(w.item);
+        let (edits, told) = self.state_all(w.item, w.text, said);
+        self.record_reading(w, edits);
         self.session.message = told.join("; ");
     }
 
@@ -103,15 +118,24 @@ impl App {
         edits.map(|e| e.seq).collect()
     }
 
-    /// An item's text not read: what it was read as before is taken back,
-    /// and the hint, if any, says why.
-    fn unread(&mut self, item: u64, of: u64, text: &str, hint: Option<String>) {
-        self.session.set_prose(hint.map(|h| (item, h)));
-        let read = self.notebook.outline.readings.get(&item);
-        if read.is_some_and(|r| !r.entries.is_empty()) {
-            self.retract_reading(item);
-            self.record_reading(item, of, text, vec![]);
+    /// An item's text not read: what it was read as before is taken back.
+    /// A reading of nothing is recorded if anything was taken back or its
+    /// links changed, so that undo takes the text and all that followed
+    /// from it back together.
+    fn unread(&mut self, w: &Written) {
+        let had = self.stated_by_reading(w.item);
+        if had {
+            self.retract_reading(w.item);
         }
+        if had || w.linked {
+            self.record_reading(w, vec![]);
+        }
+    }
+
+    /// Whether an item's last reading stated anything.
+    fn stated_by_reading(&self, item: u64) -> bool {
+        let read = self.notebook.outline.readings.get(&item);
+        read.is_some_and(|r| !r.entries.is_empty())
     }
 
     /// One statement, through the command that states it, on the item.
@@ -145,7 +169,8 @@ impl App {
         }
     }
 
-    fn record_reading(&mut self, item: u64, of: u64, text: &str, entries: Vec<u64>) {
+    fn record_reading(&mut self, w: &Written, entries: Vec<u64>) {
+        let (item, of, text) = (w.item, w.of, w.text);
         let body = json!({"op": "read", "item": item, "of": of, "text": text, "entries": entries});
         let written = self.write_here("edit", body);
         self.session.report(written);
@@ -162,6 +187,15 @@ impl App {
     }
 }
 
+/// An item's text as written: the item, the entry that wrote the text,
+/// the text, and whether reading its [[links]] wrote anything.
+struct Written<'a> {
+    item: u64,
+    of: u64,
+    text: &'a str,
+    linked: bool,
+}
+
 /// Each statement with the name a constraint takes (other statements take
 /// none).
 fn named(text: &str, said: &[Said]) -> Vec<(Said, String)> {
@@ -176,7 +210,8 @@ fn named(text: &str, said: &[Said]) -> Vec<(Said, String)> {
 /// The names of a text's constraints: the text, and each one's place among
 /// them when there are more than one.
 fn constraint_names(text: &str, said: &[Said]) -> Vec<String> {
-    let base = text.trim().trim_end_matches('.');
+    let read = unbracketed(text);
+    let base = read.trim().trim_end_matches('.');
     match said.iter().filter(|s| s.kind == Kind::Constraint).count() {
         1 => vec![base.to_string()],
         n => (1..=n).map(|k| format!("{base} ({k})")).collect(),

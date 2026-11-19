@@ -1206,6 +1206,24 @@ match makes nothing, as before. Checked: four tests in tests/keys.rs;
 breaks, each failing a test: Enter ending Leap as before, the new item
 not read, the cursor left behind.
 
+### Links typed in text (19 November 2026)
+
+From the author's choice of the suggestions drawn from personal
+knowledge management tools (Obsidian's and nvALT's wikilinks): `[[X]]`
+in an item's text is read, at the pause, as a link to the item named X,
+else to the first whose text is X, else to a new item holding X. Link
+entries made so carry `"inline": true` (format version 1 revised), and
+the text keeps them: removed brackets take their link back; added ones
+add theirs; nothing is rewritten when the links are unchanged. A prose
+item whose links change records a reading of nothing after them, so
+undo takes the text and its links back together. The reader reads the
+text without the brackets.
+
+Checked: six tests in tests/inline_links.rs and two unit tests.
+Breaks, each failing a test: no retraction; prose recording no reading
+(undo then took back only the link); the brackets handed to the reader;
+no new item for a missing target; a text matched before a name.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

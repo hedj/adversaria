@@ -3,6 +3,7 @@
 pub mod dispatch;
 mod editing;
 mod english;
+mod inline;
 mod knowledge;
 mod reading;
 mod worlds;

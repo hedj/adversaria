@@ -168,6 +168,14 @@ impl App {
         }
     }
 
+    /// A link for a [[link]] in an item's text: kept by the text, so taken
+    /// back when the text no longer has it.
+    pub(crate) fn write_inline_link(&mut self, from: u64, to: u64) -> Result<(), String> {
+        let fact = link_fact("link", from, to)?;
+        let body = json!({"from": from, "to": to, "type": "link", "facts": [fact], "inline": true});
+        self.write_here("link", body).map(|_| ())
+    }
+
     fn write_link(&mut self, from: u64, to: u64, kind: &str) -> Result<String, String> {
         let fact = link_fact(kind, from, to)?;
         self.write_here(

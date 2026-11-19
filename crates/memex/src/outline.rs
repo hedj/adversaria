@@ -146,6 +146,8 @@ pub struct Reading {
 pub struct Outline {
     /// The item each fact-bearing entry belongs to, by the entry's seq.
     pub fact_item: BTreeMap<u64, u64>,
+    /// The link entries that a [[link]] in their item's text keeps.
+    pub inline_links: BTreeSet<u64>,
     /// The source an item's claims came from.
     pub source: HashMap<u64, String>,
     pub derived: HashMap<u64, Derive>,
@@ -641,17 +643,14 @@ impl Outline {
     }
 
     fn link(&mut self, seq: u64, b: &Body) -> Option<()> {
-        let (from, to) = (b.num("from")?, b.num("to")?);
-        if !self.items.contains_key(&from) || !self.items.contains_key(&to) {
+        let link = link_of(seq, b)?;
+        if !self.items.contains_key(&link.from) || !self.items.contains_key(&link.to) {
             return None;
         }
-        let kind = b.opt("type").unwrap_or("link").to_string();
-        self.links.push(Link {
-            seq,
-            from,
-            to,
-            kind,
-        });
+        if b.0.get("inline") == Some(&Value::Bool(true)) {
+            self.inline_links.insert(link.seq);
+        }
+        self.links.push(link);
         Some(())
     }
 
@@ -665,6 +664,14 @@ impl Outline {
     /// Links that leave or reach an item and its target or source still
     /// exist, each grouped by kind in the order the kinds first appear:
     /// the order the links pane lists them and `follow` numbers them.
+    /// An item's links that a [[link]] in its text keeps.
+    pub fn inline_links_of(&self, id: u64) -> Vec<&Link> {
+        let (out, _) = self.links_of(id);
+        out.into_iter()
+            .filter(|l| self.inline_links.contains(&l.seq))
+            .collect()
+    }
+
     pub fn links_of(&self, id: u64) -> (Vec<&Link>, Vec<&Link>) {
         let live = |l: &&Link| self.items.contains_key(&l.from) && self.items.contains_key(&l.to);
         let out = self
@@ -1021,6 +1028,18 @@ fn by_kind(mut links: Vec<&Link>) -> Vec<&Link> {
 pub fn reads_as_number(a: &str) -> bool {
     let digits = |p: &str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
     a.split('.').all(digits)
+}
+
+/// A link entry's link: its ends, and its type (link, if none).
+fn link_of(seq: u64, b: &Body) -> Option<Link> {
+    let (from, to) = (b.num("from")?, b.num("to")?);
+    let kind = b.opt("type").unwrap_or("link").to_string();
+    Some(Link {
+        seq,
+        from,
+        to,
+        kind,
+    })
 }
 
 #[cfg(test)]

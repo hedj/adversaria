@@ -261,6 +261,13 @@ Where a command takes an ADDRESS, any of these name an item:
 | `help` | `help` | lists every command on the message line |
 | `quit` | `quit` | writes what is pending and leaves |
 
+**Links typed in text.** Write `[[Buran flight]]` in an item's text and,
+at the pause, the item links to the item named so, else to the first
+whose text it is (ignoring case), else to a new item holding it, at the
+foot of the top level. Take the brackets out, and the link goes. The
+reader reads the text without its brackets, so `The date of
+[[Buran-flight]] is 1988.` is still a fact.
+
 #### Facts and definitions
 
 | Command | Form | Does |
