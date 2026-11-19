@@ -9,7 +9,7 @@
 //! (App::idle), as APE is slower than a keystroke. Only text typed is read: an imported document is a
 //! source's claims, not the user's beliefs.
 
-use crate::ace::{Kind, Reading, Said, words_of};
+use crate::ace::{Kind, Reading, Said, Unread, words_of};
 use crate::app::App;
 use crate::engine::told;
 use serde_json::json;
@@ -185,9 +185,12 @@ fn constraint_names(text: &str, said: &[Said]) -> Vec<String> {
 /// Why a text was not read, in words.
 fn hint_of(reading: &Reading) -> String {
     match reading {
-        Reading::Unread(paraphrase) => {
-            format!("not read: ACE ({paraphrase}), but not all of it something the notebook states")
-        }
+        Reading::Unread(paraphrase, Unread::Unnamed) => format!(
+            "not read: ACE takes this as \"{paraphrase}\", which is about something with no name; write \"every\" to mean all of them, or give it a name"
+        ),
+        Reading::Unread(paraphrase, Unread::Unstated) => format!(
+            "not read: ACE takes this as \"{paraphrase}\", but the notebook has no statement for all of it"
+        ),
         Reading::NotAce(messages) => {
             let stopped = messages.iter().find(|m| m.kind == "sentence");
             match stopped {

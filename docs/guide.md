@@ -324,7 +324,9 @@ constraint. Change the text, and what it said is taken back and the new
 text read; undo takes back a sentence and what it said together. Text
 that is not ACE stays prose: at the cursor, a dim line says where APE
 stopped (`prose: not ACE, it stops at …`). A text is read whole or not at
-all. The table in docs/design.md (§ Reading controlled English) lists what
+all: ACE the notebook cannot state says `not read:` and why. "A fish is an
+animal." is ACE for one fish with no name; write `Every fish is an
+animal.` for all fish, or name one: `Nemo is a fish.` The table in docs/design.md (§ Reading controlled English) lists what
 each kind of sentence is read as.
 
 The commands below state the same things in Prolog.

@@ -1100,6 +1100,27 @@ checks that read text is drawn in cyan, in the outline. Breaks, each
 failing it: a sentence in docs/tutorial.md changed (the test finds it
 missing), reading turned off in `App::idle`, and the cyan left out.
 
+### Kinds of thing, and why a text is not read (19 November 2026)
+
+The author typed "a fish is an animal." and got "not read: ACE (There is
+a fish X1. The fish X1 is an animal.), but not all of it something the
+notebook states". The reading was right, the hint was not: ACE reads
+the sentence as one fish with no name, and the notebook states facts
+only of named things. The hint now says so: "…, which is about
+something with no name; write "every" to mean all of them, or give it
+a name". A text with a part the notebook cannot state says "…, but the
+notebook has no statement for all of it".
+
+The probe of the sentences that do say it found the reader wrong
+(fixed in 3b098e6): "Nemo is a fish." read as the box
+`cell(fish, named('Nemo'))`, now `fish(nemo)`; "Every fish is an animal."
+as `animal(A) :- cell(fish, A)`, now `animal(A) :- fish(A)`; "Every fish
+has a fin." as a rule that anything a fish has is a fin, now not read.
+
+Checked: the reader's 14 tests and the memex's 14 reading tests pass.
+Breaks, each failing a test: every reason unstated (two reader tests);
+the two hints swapped (two memex tests).
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

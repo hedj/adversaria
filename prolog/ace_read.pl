@@ -47,8 +47,10 @@ a name the notebook gives (ace.rs, lexicon_of) comes back as it is.
 
 %!  ace_read(+Text:string, -Result) is det.
 %   Result is read(Paraphrase, Statements, Messages) when Text is ACE
-%   and reads whole as statements; unread(Paraphrase, Messages) when it
-%   is ACE but some of it is not something the notebook states; and
+%   and reads whole as statements; unread(Paraphrase, Why, Messages) when
+%   it is ACE but is not read, Why being unnamed (it states something of
+%   a thing with no name: "A fish is an animal" is one fish, unnamed) or
+%   unstated (some of it is nothing the notebook states); and
 %   not_ace(Messages) when it is not ACE. Statements are fact(F),
 %   claim(Source, F), rule(Head, Body) and constraint(Body), their
 %   variables numbered ('$VAR'(0), ...): the query protocol sends no
@@ -68,7 +70,8 @@ ace_read(Text, Rules, Result) :-
     ->  ruled(Rules, Read, Statements),
         numbervars(Statements, 0, _),
         Result = read(Paraphrase, Statements, Messages)
-    ;   Result = unread(Paraphrase, Messages)
+    ;   why_unread(Drs, Why),
+        Result = unread(Paraphrase, Why, Messages)
     ).
 
 %!  ace_read_text(+Text:string, +Rules:list(atom), -Result) is det.
@@ -123,6 +126,18 @@ ruled_goals(G, Names, RG) :-
     ;   G = cell(N, R), atom(N), memberchk(N, Names)
     ->  RG =.. [N, R]
     ;   RG = G
+    ).
+
+%   Why a text of ACE is not read: its top level's goals are all known but
+%   speak of a thing with no name, or some of it is nothing the notebook
+%   states.
+why_unread(Drs, Why) :-
+    plain(Drs, drs(_, Conds)),
+    (   \+ ( member(C, Conds), complex(C) ),
+        goals(Conds, Goals),
+        \+ ground(Goals)
+    ->  Why = unnamed
+    ;   Why = unstated
     ).
 
 %   A DRS without APE's places (Condition-Sentence/Token) and with its

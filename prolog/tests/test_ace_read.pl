@@ -42,14 +42,15 @@ test(a_rule_concludes_one_thing_of_what_it_names) :-
     % fin" (a conclusion of more than one goal), or a rest of Y that the
     % condition does not name (a head variable the body does not bind).
     ace_lexicon([], _),
-    ace_read("Every fish has a fin.", unread(_, _)),
-    ace_read("If the income is X then the rest is Y.", unread(_, _)).
+    ace_read("Every fish has a fin.", unread(_, unstated, _)),
+    ace_read("If the income is X then the rest is Y.", unread(_, unstated, _)).
 
 test(something_with_no_name_is_not_a_fact) :-
     % Catches "A fish is an animal", which ACE reads as one fish with no
-    % name, stated as a fact with a variable in it.
+    % name, stated as a fact with a variable in it, or not told apart
+    % from a text with a part the notebook cannot state.
     ace_lexicon([], _),
-    ace_read("A fish is an animal.", unread(_, _)).
+    ace_read("A fish is an animal.", unread(_, unnamed, _)).
 
 test(an_adjective_and_a_verb_are_facts_of_their_entities) :-
     % Catches a proper name kept with its capitals or hyphens, or a verb's
@@ -98,8 +99,8 @@ test(ace_that_states_nothing_is_unread_and_prose_is_not_ace) :-
     % Catches a reading of part of a text, which would state less than
     % it says, or prose taken for ACE.
     ace_lexicon([], _),
-    ace_read("There is a flight.", unread(_, _)),
-    ace_read("Buran-flight quickly follows Energia-launch.", unread(_, _)),
+    ace_read("There is a flight.", unread(_, unnamed, _)),
+    ace_read("Buran-flight quickly follows Energia-launch.", unread(_, unstated, _)),
     ace_read("Buran flew once, unmanned, on 15 November 1988.", not_ace(_)).
 
 test(each_statement_is_written_as_the_command_text_for_it) :-

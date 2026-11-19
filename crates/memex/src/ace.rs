@@ -33,11 +33,20 @@ pub struct Parse {
 pub enum Reading {
     /// ACE, read whole: its paraphrase, and its statements.
     Read(String, Vec<Said>),
-    /// ACE, but not all of it something the notebook states: its
-    /// paraphrase.
-    Unread(String),
+    /// ACE, but not read: its paraphrase, and why.
+    Unread(String, Unread),
     /// Not ACE: APE's messages.
     NotAce(Vec<Message>),
+}
+
+/// Why a text of ACE is not read.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Unread {
+    /// It states something of a thing with no name ("A fish is an
+    /// animal": one fish, unnamed).
+    Unnamed,
+    /// Some of it is nothing the notebook states.
+    Unstated,
 }
 
 /// A statement read: its kind, and the text of the command that states it.
@@ -249,17 +258,26 @@ fn parse_of(t: &Term) -> Result<Parse, Error> {
 }
 
 /// A reading, from read(Paraphrase, Statements, Messages),
-/// unread(Paraphrase, Messages) or not_ace(Messages).
+/// unread(Paraphrase, Why, Messages) or not_ace(Messages).
 fn reading_of(t: &Term) -> Result<Reading, Error> {
     if let Some(a) = parts(t, "read", 3) {
         let said = list(&a[1]).iter().map(said_of).collect::<Result<_, _>>()?;
         return Ok(Reading::Read(text(&a[0])?, said));
     }
-    if let Some(a) = parts(t, "unread", 2) {
-        return Ok(Reading::Unread(text(&a[0])?));
+    if let Some(a) = parts(t, "unread", 3) {
+        return Ok(Reading::Unread(text(&a[0])?, why_of(&a[1])?));
     }
     let a = parts(t, "not_ace", 1).ok_or_else(|| bad("reading", t))?;
     Ok(Reading::NotAce(messages(&a[0])?))
+}
+
+/// Why a text is not read: unnamed or unstated.
+fn why_of(t: &Term) -> Result<Unread, Error> {
+    match t {
+        Term::Atom(w) if w == "unnamed" => Ok(Unread::Unnamed),
+        Term::Atom(w) if w == "unstated" => Ok(Unread::Unstated),
+        _ => Err(bad("reason", t)),
+    }
 }
 
 /// A statement, from said(Kind, Text).
@@ -661,14 +679,20 @@ mod tests {
     fn a_text_left_unread_and_a_statement_of_no_kind_are_told_apart() {
         // Catches an unread text taken for one read, or a statement of an
         // unknown kind let through.
-        let unread = c(
-            "unread",
-            vec![Term::Str("There is a flight.".into()), atom("[]")],
+        let unread = |why| {
+            let paraphrase = Term::Str("There is a flight.".into());
+            c("unread", vec![paraphrase, atom(why), atom("[]")])
+        };
+        let flight = |why| Reading::Unread("There is a flight.".into(), why);
+        assert_eq!(
+            reading_of(&unread("unnamed")).unwrap(),
+            flight(Unread::Unnamed)
         );
         assert_eq!(
-            reading_of(&unread).unwrap(),
-            Reading::Unread("There is a flight.".into())
+            reading_of(&unread("unstated")).unwrap(),
+            flight(Unread::Unstated)
         );
+        assert!(reading_of(&unread("odd")).is_err());
         assert!(reading_of(&read_term(vec![said_term(atom("odd"), "x")])).is_err());
     }
 

@@ -64,6 +64,42 @@ fn a_sentence_waits_to_be_read_until_the_user_pauses() {
 }
 
 #[test]
+fn a_thing_with_no_name_is_not_read_and_says_why() {
+    // Catches the hint for a sentence about one unnamed thing ("a fish"),
+    // which ACE reads as "there is a fish", not saying so.
+    let mut r = Room::new("read-unnamed");
+    r.items(&["A fish is an animal."]);
+    r.app.idle();
+    let item = r.app.cursor();
+    let hint = r
+        .app
+        .session
+        .prose_hint(item)
+        .unwrap_or_default()
+        .to_string();
+    let expected = "not read: ACE takes this as \"There is a fish X1. The fish X1 is an animal.\", which is about something with no name; write \"every\" to mean all of them, or give it a name";
+    assert_eq!(hint, expected);
+}
+
+#[test]
+fn a_text_with_a_part_the_notebook_cannot_state_says_so() {
+    // Catches the hint for a sentence the notebook has no statement for
+    // ("some fin of each fish") told as one about an unnamed thing.
+    let mut r = Room::new("read-unstated");
+    r.items(&["Every fish has a fin."]);
+    r.app.idle();
+    let item = r.app.cursor();
+    let hint = r
+        .app
+        .session
+        .prose_hint(item)
+        .unwrap_or_default()
+        .to_string();
+    let expected = "not read: ACE takes this as \"Every fish has a fin.\", but the notebook has no statement for all of it";
+    assert_eq!(hint, expected);
+}
+
+#[test]
 fn a_kind_and_a_rule_on_it_are_read_and_kept() {
     // Catches "Nemo is a fish" read as a box, or a rule over a kind that
     // the memex's own checks refuse.
