@@ -104,9 +104,10 @@ Without the sealer, entries are written but not sealed until a sealer runs.
 ### 2.2 The screen
 
 - **Top bar:** the journal directory's name (`room`), the world (`world
-  actual`, or `worlds actual | suppose: …`), the number of journal entries,
-  and a count of violations and disagreements. On the right, which pane has
-  focus.
+  actual`, or `worlds actual | suppose: …`) and the number of journal
+  entries (`journal`). On the right, a count of violations and
+  disagreements; when there are none, which pane has focus (`pane 1 of
+  2`). In a narrow window the right side takes a row of its own.
 - **Left pane:** the outline. `▼` marks an item with items under it, `▶` a
   folded one (followed by how many items it hides), `•` an item with none.
   Top-level items show their number. Under an item, `⚑` lines are its
@@ -114,11 +115,16 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   violation is shown bold; a disagreement dim. An item that shows
   derived text ends in `[derived]`; one that states a claim ends in its
   source, in brackets. A result whose input files have changed says `input
-  changed since:` and the files.
+  changed since:` and the files. Text the memex has read is cyan; under a
+  question, `→` gives its answer. Under the item at the cursor, a dim line
+  says why its text was not read, or which of its `[[links]]` name no item
+  yet (§ 2.4, § 3.1).
 - **Right pane:** what the selected item needs. By default its links; on an
   item with marks, the constraint, its rule, its solutions and what depends
-  on them; after `interrogate`, the interrogation. `pane` sets it to the
-  outline, links or suggestions.
+  on them; on a view, its layers. Under the links or the constraint,
+  `READ AS` shows what the item's text was read as, in Prolog, and its tags
+  (§ 3.1). After `interrogate`, the pane shows the interrogation. `pane`
+  sets it to the outline, links or suggestions.
 - **Foot:** the message line, and, while a quasimode is held, what you have
   typed and what releasing will do.
 
@@ -281,10 +287,9 @@ links it; one `undo` takes that back. If you make such an item yourself
 (by typing it, or with Leap and Enter), the link is made at the pause;
 if you give an item the name with `name`, at once. A name moved to
 another item takes its links with it; one `undo` takes a name and its
-links back.
-Take the brackets out, and the link goes. The
-reader reads the text without its brackets, so `The date of
-[[Buran-flight]] is 1988.` is still a fact.
+links back. Take the brackets out, and the link goes. The reader reads
+the text without its brackets, so `The date of [[Buran-flight]] is
+1988.` is still a fact.
 
 #### Facts and definitions
 
@@ -352,27 +357,29 @@ It is false that the rest is smaller than 0.
 ```
 
 These are a fact, a claim from a source, two boxes, a rule and a
-constraint. With an item selected, the right pane shows, under READ AS,
+constraint. With an item selected, the right pane shows, under `READ AS`,
 each statement its text was read as, in Prolog, as the memex runs it
 (`fact  date(buran_flight, 1988)`, `rule  rest(A):-cell(income, B), …`),
-and its tags (`tag  item_tag(12, money)`). Change the text, and what it said is taken back and the new
-text read; undo takes back a sentence and what it said together. Text
-that is not ACE stays prose: at the cursor, a dim line says where APE
-stopped (`prose: not ACE, it stops at …`). A text is read whole or not at
-all: ACE the notebook cannot state says `not read:` and why.
+and its tags (`tag  item_tag(12, money)`). A text read before the memex
+kept these forms shows none until its text changes. Change the text, and
+what it said is taken back and the new text read; undo takes back a
+sentence and what it said together. Text that is not ACE stays prose:
+at the cursor, a dim line says where APE stopped (`prose: not ACE, it
+stops at …`). A text is read whole or not at all: ACE the notebook cannot
+state says `not read:` and why.
 
 Ask in English, too: `What is an animal?`, `Who swims?`, `What is the
 income?`, `Is Nemo an animal?`. After the pause, the answer is drawn
 under the question (`→ dory, nemo`, `→ yes`, or `→ none`) and changes
 as the facts do. `Which things are animals?` works too: ACE has no
 plural after "are", so the memex asks it as `Which things are an
-animal?`, which means the same; it does so for questions only. A thing with a label is answered by it: with `The label
-of Nemo is "Nemo the clownfish".`, the answer is `→ Nemo the
-clownfish, dory`. A thing, as in "which things", is
-anything at all. "A fish is an
-animal." is ACE for one fish with no name; write `Every fish is an
-animal.` for all fish, or name one: `Nemo is a fish.` The table in docs/design.md (§ Reading controlled English) lists what
-each kind of sentence is read as.
+animal?`, which means the same; it does so for questions only. A thing
+with a label is answered by it: with `The label of Nemo is "Nemo the
+clownfish".`, the answer is `→ Nemo the clownfish, dory`. A thing, as in
+"which things", is anything at all. "A fish is an animal." is ACE for
+one fish with no name; write `Every fish is an animal.` for all fish, or
+name one: `Nemo is a fish.` The table in docs/design.md (§ Reading
+controlled English) lists what each kind of sentence is read as.
 
 The commands below state the same things in Prolog.
 
