@@ -1346,6 +1346,34 @@ Checked: three tests in tests/read_as.rs. Breaks, each failing a test:
 statements not recorded; a stale reading shown; tags left out; `said`
 not read back; the old variable numbering.
 
+### The guide checked against the code (19 November 2026)
+
+Every claim of docs/guide.md and docs/tutorial.md was read against the
+code. Most held. Three were faults of the code, now fixed, each with a
+test that failed before the fix:
+
+- `sealer run` stopped ("No such file or directory") when `journal.jsonl`
+  did not exist yet. `make run` starts it beside the memex, which makes
+  that file only when it opens, so a first session could go unsealed.
+- A constraint that put `\+`, `findall` or `forall` around a fact was
+  refused with an existence error: the planted check called the
+  construct directly, and facts are not predicates.
+- The window passed on only F1 to F12, though the configuration takes
+  F1 to F35.
+
+The guide's wrong or incomplete claims were corrected (the commit
+lists each); among them, that any guide word may be typed (only `to`,
+`from` and `after` may), that `unadopt` undoes a whole adoption (one
+claim's), that the configuration falls through to the next file when
+one is absent (it does not), that any format Pandoc reads can be
+imported (six extensions), that purge leaves a hash (it leaves null, and
+the blob stays), and the tutorial's silence on READ AS, `query` and
+questions.
+
+Not checked: whether the suggestions pane takes keys while it has focus
+(the guide says it never does); the claims of what has been tested on
+real desktops.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

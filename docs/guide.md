@@ -20,11 +20,12 @@ Contents, four parts of four:
 
 ### 1.1 The record
 
-**Journal.** Everything you do is an entry in an append-only journal: a
-file of JSON lines, each joined to the one before by a hash. Nothing is
-ever overwritten or erased, except by `purge` (§ 4.2). There is no Save:
-what you type is written a second after you stop, or when you do anything
-else. Undo is an entry too.
+**Journal.** Everything you do is an entry in an append-only journal: a file
+of JSON lines, each joined by a hash to its parent, the entry it follows on
+its branch (after an undo or in a supposed world, not always the line before
+it). Nothing is ever overwritten or erased, except by `purge` (§ 4.2). There
+is no Save: what you type is written a second after you stop, or when you do
+anything else. Undo is an entry too.
 
 **Seal.** A separate program, the sealer, holds a signing key and signs
 the journal's entries, dated. The memex itself never sees the key. A sealed
@@ -68,16 +69,19 @@ The memex needs:
 - a desktop under X11 or Wayland: the memex opens a window of its own and
   draws through Vulkan or OpenGL;
 - SWI-Prolog (`swipl`) on the path, for reasoning;
+- APE, the parser of controlled English, found through `APE_HOME`, for
+  reading text, Suppose and `ace`; without it they say "APE is not
+  installed";
 - Pandoc, for importing and exporting documents;
 - curl, for the source check.
 
-`./dev-shell` gives a shell with all of these, Mesa's drivers included, and
-needs no experimental Nix features. It runs `nix-shell` with the pinned
-nixpkgs on the search path, because `nix-shell` looks for an interactive
-bash in `<nixpkgs>`; plain `nix-shell` works too, but without nixpkgs on
-your `NIX_PATH` it prints an error and uses your system's bash. With
-flakes enabled, `nix develop` gives the same shell. All use the versions
-pinned in `flake.lock`; the shell is defined in `nix/devshell.nix`.
+`./dev-shell` gives a shell with all of these, Mesa's drivers included, with
+`APE_HOME` set, and needs no experimental Nix features. It runs `nix-shell`
+with the pinned nixpkgs on the search path, because `nix-shell` looks for an
+interactive bash in `<nixpkgs>`; plain `nix-shell` works too, but without
+nixpkgs on your `NIX_PATH` it prints an error and uses your system's bash.
+With flakes enabled, `nix develop` gives the same shell. All use the
+versions pinned in `flake.lock`; the shell is defined in `nix/devshell.nix`.
 
 To start the sealer and the memex together:
 
@@ -93,7 +97,8 @@ This uses the journal directory `~/adversaria-journal` and the key file
 make run JOURNAL=$HOME/notes KEY=$HOME/.notes.key
 ```
 
-Or run the memex alone, on a journal directory, which it makes if needed:
+`make run` passes the memex no flags; for `--mouse` or `--config`, run it
+alone, on a journal directory, which it makes if needed:
 
 ```bash
 cargo run -q --release -p memex -- [--config FILE] [--mouse | --no-mouse] <journal directory>
@@ -141,7 +146,7 @@ The defaults are below. All of them can be changed (§ 4.3).
 | --- | --- |
 | a printable character | types into the item under the cursor |
 | Enter | makes a new item after the cursor's item |
-| Tab | makes the item a child of the one above it (`indent`) |
+| Tab | makes the item the last child of the item before it at its level (`indent`) |
 | Shift-Tab | makes the item a sibling of its parent (`outdent`) |
 | Backspace, Delete | erase a character before or after the cursor |
 | Up, Down | move to the item above or below |
@@ -165,13 +170,15 @@ Within a quasimode:
 - **Esc completes:** a command name in Command, a pattern in Leap. In
   Suppose it completes the word being typed when one word alone fits, or
   mends: it puts the repair the line below offers first in place.
-- **`?` lists** the commands that match (Command), every match (Leap), or
+- **`?` lists** the commands that match (Command; once a command's name
+  and a space are typed, its form and help instead), every match (Leap), or
   everything that may come next, each kind of word with a line of help
   (Suppose). In Suppose, `?` lists only at the start or after a space:
   typed straight after a word it ends a question ("Does John wait?").
-  `?` again hides the list; what you typed stays.
-- **Repeat a Leap:** a second tap of a latched, empty Leap repeats the last
-  pattern.
+  `?` again hides the list; what you typed stays. In Command, `?` inside
+  quotes is typed; in Leap, `?` always lists, so Leap cannot search for it.
+- **Repeat a Leap:** a second tap of a latched, empty Leap, or Enter on
+  it, repeats the last pattern.
 - **Leap or make:** in Leap, Enter goes to the match, as release does; if
   no item holds the pattern, Enter makes a new item holding it, after the
   cursor's item, and puts the cursor at its end. Searching for a note and
@@ -185,12 +192,12 @@ Within a quasimode:
   typed, and says so: Enter ends it, or leave it as any latched one.
 
 Leap matches anywhere in an item's text, ignoring case, and wraps round
-at either end of the outline.
+at either end of the outline. It unfolds a folded branch to reach a match.
 
 Scope matters only to `delete` in this prototype: with the target at word,
 `delete` removes the word at the cursor; at statement or branch, it deletes
 the item and its branch. The target returns to statement after each
-command.
+command that runs; a refused command leaves it as it was.
 
 #### Function keys and confirmations
 
@@ -220,7 +227,11 @@ With it on, a left click:
   to that pane), as the arrow keys would;
 - on `F3 adopts` or `F4 retracts an adoption` under an interrogation runs
   `adopt` or `unadopt` (the hint names whichever keys you have bound);
-- on a suggestion, anywhere in its lines, runs `accept` for it.
+- on a suggestion, anywhere in its lines, runs `accept` for it;
+- on a mark of a view, goes to the item that states its fact (§ 3.3).
+
+While a pane that shows links has focus, keys that are not bound to a
+command do nothing there but say `this pane shows links; F6 to edit`.
 
 A click does nothing while a quasimode or a confirmation is open, and
 nothing on a mark line, a heading or empty space. Other buttons, dragging
@@ -235,9 +246,13 @@ has no text selection, and the default stands until the author changes it.
 
 Type a command in the Command quasimode, or bind it to a key (§ 4.3). A
 unique prefix is enough: `interr` runs `interrogate`. Words in parentheses
-in the help, such as `(after)`, are guide words: you may type them or leave
-them out. Unless the table says otherwise, a command acts on the **target**,
-the item under the cursor.
+in the help, such as `(after)`, are guide words, which say what each part
+is. Only `to`, `from` and `after`, before an address, may be typed or
+left out (`move after 2` or `move 2`), and `link` needs `as` before a
+type. Any other guide word you type is read as part of what follows it,
+so leave those out. Unless the table
+says otherwise, a command acts on the **target**, the item under the
+cursor.
 
 Where a command takes an ADDRESS, any of these name an item:
 
@@ -252,7 +267,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | --- | --- | --- |
 | `new` | `new` | makes a new item after the target |
 | `delete` | `delete` | deletes the target: a word, or an item and its branch (see Scope) |
-| `indent` | `indent` | makes the target a child of the item above it |
+| `indent` | `indent` | makes the target the last child of the item before it at its own level |
 | `outdent` | `outdent` | makes the target a sibling of its parent |
 | `make` | `make` | makes an item for each of the target's `[[links]]` that names no item, at the foot of the top level, and links it; one `undo` takes it all back |
 | `move` | `move after ADDRESS` | moves the target's branch to follow ADDRESS |
@@ -310,7 +325,7 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 | Command | Form | Does |
 | --- | --- | --- |
 | `adopt` | `adopt` | makes the target's claims beliefs, keeping their source |
-| `unadopt` | `unadopt` | retracts the target's last adoption |
+| `unadopt` | `unadopt` | retracts the target's last adoption. `adopt` writes one adoption for each claim, so an item with two claims needs two |
 | `interrogate` | `interrogate` | asks of the target's claim: who else claims it, who claims the contrary, its source, the source's record, and what adopting it would do |
 | `accept` | `accept N` | adopts the Nth suggestion shown, with its evidence |
 | `dismiss` | `dismiss N` | dismisses the Nth suggestion shown; it returns only if its evidence changes |
@@ -327,7 +342,7 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 | `undo` | `undo` | undoes the last change on this branch |
 | `query` | `query GOAL` | runs a Prolog goal over this world's beliefs, through rules, as derived text does: `query animal(X)` says `2 answers: X = nemo · X = dory`; a goal without variables is answered `yes` or `no`. At most 20 answers are shown. The goal may only read facts, compare and compute, as a definition may; a query writes nothing to the journal |
 | `redo` | `redo` | redoes what undo undid, along the current branch |
-| `retract` | `retract ENTRY` | reverses one earlier entry, by its number, keeping later work; lists what depends on it first |
+| `retract` | `retract ENTRY` | reverses one earlier entry, by its number (`12` or `#12`), keeping later work; lists what depends on it first |
 
 **Undo and retract.** `undo` and `redo` move along the current branch of
 the journal, as in any editor; undoing and then editing starts a new
@@ -393,7 +408,8 @@ claim date(buran_flight, 1989) from my notes, conference talk
 ```
 
 A `label(Entity, "words")` fact lets the memex write facts about Entity in
-words, in marks, interrogation and Suppose's readings.
+words, in interrogation, Suppose's readings, timelines and answers to
+questions. Marks, and the marks of views, show terms as they are.
 
 **Constraints** are denials. The name comes before the colon:
 
@@ -402,20 +418,25 @@ constraint one date per event: false :- date(E, D1), date(E, D2), D1 \= D2.
 ```
 
 Before keeping it, the memex plants facts that should break it and checks
-that it fires. A constraint that cannot fire is refused, with the reason.
+that it fires. A constraint that cannot fire is refused, with the reason;
+so is one with more than seven variables, which the check cannot try.
 Constraints are recomputed whenever the journal moves; only the parts that
 depend on what changed are recomputed.
 
 **Derived text.** `derive` makes the target show text computed from the
 facts. In the template, `{Var}` is a variable of the goal, and `{N:years}`
-writes a number of years in words ("a year", "two years"):
+writes a number of years in words ("a year", "two years"). The text is
+filled from the goal's first solution only:
 
 ```
 derive The flight came {N:years} after Energia's first launch. where date(buran_flight, B), date(energia_launch, E), N is B - E
 ```
 
 `derive timeline where date(E, Y)` draws a timeline of the solutions, using
-labels where there are any.
+labels where there are any: one line, such as `1987 Energia's first launch
+── 1988 Buran's flight`. Each solution must give exactly two values, an
+entity and then a whole-number year, in the order the goal first names
+them; any other is left out, so `date(E, Y), label(E, L)` draws nothing.
 
 A goal with no solution shows the template and `(no answer)`. A goal that
 raises an error shows the template and what went wrong, such as `(cannot
@@ -439,7 +460,10 @@ would change.
 
 **What a definition may call.** A constraint, a derived goal and an
 adopted rule may only read facts, compare and compute. Besides your facts,
-they may use:
+they may use the list below. A fact whose name and number of arguments
+are those of a predicate of the reasoner or of a Prolog library, such as
+`member/2`, `reverse/2`, `node/2` or `count/1`, can be stated but not
+used in a definition: the definition is refused, naming it.
 
 - comparison and unification: `=`, `\=`, `==`, `\==`, `@<`, `@>`, `@=<`,
   `@>=`, `compare/3`, `=@=`, `\=@=`;
@@ -470,7 +494,11 @@ definitions are stored in.
 Hold Suppose and type a statement in your own words, such as `the flight
 was in 1989`. The memex reads it against the facts it knows and offers each
 reading: `Do you mean: Suppose that the date of Buran's flight is 1989.`
-Enter accepts; Tab shows the next reading; Esc cancels.
+Enter accepts; Tab shows the next reading; Esc cancels. A reading is a
+fact of the world with one whole number changed to a number you typed,
+ranked by how many of your words name its other parts; so a statement
+with no number, or about something with no fact yet, has no reading
+unless you type it as Prolog.
 
 While you type, the line below checks the statement as controlled English
 (ACE), with the words of your notebook, as if it ended with a full stop:
@@ -479,8 +507,8 @@ While you type, the line below checks the statement as controlled English
 - `next:` and what may come next, when it is not yet one but can go on:
   your notebook's words first, then kinds of word (`a noun`, `a name`,
   `a verb`, ...), then words such as `the`, `of` and `is`. While you type
-  a word, only those it begins are shown, and when one alone fits, Esc
-  completes it (`Esc: buran_flight`);
+  a word, only the words it begins are shown (with the kinds of word), and
+  when one alone fits, Esc completes it (`Esc: buran_flight`);
 - `not ACE:` when it cannot go on: the sentence with `<>` where parsing
   stopped, and up to three edits of one word that make it ACE or let it
   go on, your notebook's words first, such as `Esc: was → is` (ACE has
@@ -488,11 +516,12 @@ While you type, the line below checks the statement as controlled English
   edit, it names the words ACE does not know.
 
 When you mend free English into ACE and suppose it, the memex keeps the
-pair: what you first typed, and the ACE. Later, when you type something
-that matches an earlier free English but for a name or a number or two
-(and the earlier ACE holds those words), the line below offers the
-earlier ACE with your new words in place, `as before: … · Esc`, and Esc
-puts it in place. The pairs are in the journal, with the suppositions.
+pair: what you first typed, and the ACE. Later, when you type something that
+matches an earlier free English word for word but for one or two words,
+fewer than half of them (and the earlier ACE holds those words), the line
+below offers the earlier ACE with your new words in place, `as before: … ·
+Esc`, and Esc puts it in place. The pairs are in the journal, with the
+suppositions.
 
 A word is judged only once it ends, with a space or an end mark. To see
 everything that may come next, not only the first twelve, type `?` (at
@@ -657,7 +686,8 @@ To tie your facts to Wikidata, two kinds of belief are needed:
 `same_as(Entity, Q)` says your entity is Wikidata's item Q, and
 `wd_property(Predicate, P)` says your predicate is Wikidata's property P.
 Then Wikidata's statements become claims about your entities, and
-constraints check them like any other.
+constraints check them like any other. A world reads one subset: the last
+import of one that is not retracted replaces those before it.
 
 The memex suggests these and more, without any language model:
 
@@ -682,8 +712,9 @@ changes. While the pane has focus, suggestions keep their places.
 
 ### 4.1 Documents and results
 
-**Import a document** (anything Pandoc reads: Markdown, Word, OpenDocument,
-LaTeX, HTML):
+**Import a document** in Markdown, Word, OpenDocument, LaTeX or HTML, by
+its extension (`.md` or `.markdown`, `.docx`, `.odt`, `.tex`, `.html` or
+`.htm`; any other is refused):
 
 ```
 import document draft.docx
@@ -715,20 +746,24 @@ The document's metadata lists the hashes of the journal entries its text
 came from.
 
 An export holds words, structure, mathematics, citations and links, and
-nothing that acts. Text that reads as an image (`![…](…)`), as raw HTML
-or LaTeX (`<script>`, `\input{…}`), is left out, and a link whose target
-is not `http`, `https`, `mailto` or `doi` keeps its text but loses its
-target. Imports are read by Pandoc with `--sandbox`, so a document cannot
-pull in another file (LaTeX `\input`, `\include`).
+nothing that acts. Text that reads as an image (`![…](…)`), as raw HTML or
+LaTeX (`<script>`, `\input{…}`), is left out, and a link whose target has a
+scheme other than `http`, `https`, `mailto` or `doi` keeps its text but
+loses its target; a relative link, such as `#methods` or `notes.html`, keeps
+it. An export replaces a file of the same name without asking. Imports are
+read by Pandoc with `--sandbox`, so a document cannot pull in another file
+(LaTeX `\input`, `\include`).
 
 **Check a quote:** `check quote` on an imported item says whether its text
-still appears in the document it came from, ignoring spaces, hyphens and
-case.
+still appears in the document it came from, as it was imported (the copy
+in `blobs/`, not the file as it is now), ignoring spaces, hyphens and
+case: `quoted` or `misquoted`.
 
 **Check a source:** `check source` on an item with a `doi(Entity,
-"10.…")` fact asks Crossref for that DOI and rules: found, misattributed
-(the title differs from the one claimed), not found, unavailable, or
-retracted.
+"10.…")` fact asks Crossref for that DOI, through `curl`, and rules:
+`found`, `misattributed` (the title differs from the item's
+`title(Entity, "…")` fact; with no such fact, a DOI that resolves is
+found), `not_found`, `unavailable`, or `retracted`.
 
 **Import results** from an analysis. In Python, at the end of the
 analysis:
@@ -740,13 +775,16 @@ write_results("results.json",
               inputs=["data.csv"])
 ```
 
-(`helpers/python/memex_results.py`). Then `import results results.json`.
-Each value arrives as a claim whose source is the analysis, with its
-standard uncertainty, unit and provenance: the script, its commit, the
-command, and a hash of each input file. If an input file changes later,
-the result is marked `input changed since:`. Only regular files are
-read for this; anything else, such as a pipe or a device, counts as
-changed.
+(`helpers/python/memex_results.py`). The script's name is taken from the
+command line unless you give `script="…"`; a relative input path is read
+from the results file's directory. Then `import results results.json`. The
+values go under a new last heading, `Results of SCRIPT@COMMIT`
+(`@uncommitted` outside git), one item each, written `mean_delay = 1.52 ±
+0.07 s`. Each value arrives as a claim whose source is the analysis, with
+its standard uncertainty, unit and provenance: the script, its commit, the
+command, and a hash of each input file. If an input file changes later, the
+result is marked `input changed since:`. Only regular files are read for
+this; anything else, such as a pipe or a device, counts as changed.
 
 ### 4.2 Files and tools
 
@@ -764,7 +802,8 @@ A journal directory holds:
 The format is version 1, described in docs/design.md, § The journal
 format. Text is stored in Unicode NFC.
 
-The signing key is a separate file, readable only by you (mode 600). Keep
+The signing key is a separate file, readable only by you (mode 600; the
+sealer refuses a key that gives the group or others any permission). Keep
 it out of the journal directory. If it is lost, the journal and its old
 seals still check, because `keys.jsonl` holds the public half; `sealer init`
 with a new key file adds a new key for new seals. (Read from the code; this
@@ -773,21 +812,25 @@ recovery has not been tested.)
 ##### Purging
 
 Purge is the one way to remove content: it replaces an entry's body with
-its hash, so the chain still checks but the content is gone. It is a
-library call in this prototype (`Journal::purge`), with no command.
+null and keeps the entry's hashes, so the chain still checks but the
+content is gone from the journal. A file the entry imported stays in
+`blobs/`. It is a library call in this prototype (`Journal::purge`), with
+no command.
 
 #### Tools
 
-All run from the repository with `cargo run -q -p <crate> --`, or from
-`target/release/` after `cargo build --release`.
+All run from the repository with `cargo run -q -p <crate> --`, where the
+crate is `sealer`, `check` or `memex`; `wikidata` and `measures` are
+programs of the `tools` crate: `cargo run -q -p tools --bin wikidata --`.
+Or run them from `target/release/` after `cargo build --release`.
 
 | Program | Usage | Does |
 | --- | --- | --- |
 | `sealer` | `sealer init DIR KEYFILE` | makes a signing key and records its public half in DIR |
-| | `sealer run DIR KEYFILE [--once] [--interval-ms N]` | seals new entries, every 200 ms by default; `--once` seals and exits |
-| `check` | `check DIR` | checks a journal: the chain, every seal's signature, and the blobs. Prints `ok:` and counts, or the first fault; exits 1 on a fault |
+| | `sealer run DIR KEYFILE [--once] [--interval-ms N]` | seals new entries, every 200 ms by default, and waits for a journal not yet made; `--once` seals and exits |
+| `check` | `check DIR` | checks a journal: the chain, every seal's signature, that every entry is sealed, and the blobs. Prints `ok:` and counts, or the first fault; exits 1 on a fault, so a journal written while no sealer ran fails until one has |
 | `wikidata` | `wikidata --items Q2548,Q15180 --out FILE` | writes those items of Wikidata as Prolog facts |
-| | `wikidata --min-sitelinks K --limit N --out FILE` | the same for up to N items with at least K site links |
+| | `wikidata --min-sitelinks K [--limit N] --out FILE` | the same for up to N items (100 000 if not given) with at least K site links |
 | `measures` | `measures DIR` | the measures report for the experiment, from the journal alone |
 | `memex` | `memex [--config FILE] [--mouse \| --no-mouse] DIR` | the notebook; the flags override the configuration's `[mouse]` |
 | | `memex --print-config` | writes the default configuration |
@@ -797,15 +840,17 @@ All run from the repository with `cargo run -q -p <crate> --`, or from
 
 ### 4.3 Configuration
 
-The memex reads a TOML file, the first of:
+The memex reads one TOML file, named by the first of these that is given:
 
-1. the file given by `--config FILE`;
-2. the file named by `$ADVERSARIA_CONFIG`;
-3. `$XDG_CONFIG_HOME/adversaria/config.toml`;
+1. `--config FILE`;
+2. `$ADVERSARIA_CONFIG`;
+3. `$XDG_CONFIG_HOME/adversaria/config.toml`, when `XDG_CONFIG_HOME` is
+   set;
 4. `~/.config/adversaria/config.toml`.
 
-If the file is absent, the defaults apply. (A file given by `--config` must
-exist.) To start, write out the defaults and edit them:
+If the file named is absent, the defaults apply; the memex does not look
+further, even if a later one exists. (A file given by
+`--config` must exist.) To start, write out the defaults and edit them:
 
 ```bash
 mkdir -p ~/.config/adversaria
