@@ -719,7 +719,7 @@ impl<'a> OutlinePane<'a> {
         let indent = "  ".repeat(depth + 1);
         let line = |(loud, m)| {
             let style = if loud { bold() } else { dim() };
-            Line::styled(format!("{indent}  ⚑ {m}"), style)
+            Line::styled(format!("{indent}  ‼ {m}"), style)
         };
         self.marks_of(id).into_iter().map(line).collect()
     }
@@ -1676,7 +1676,7 @@ fn suppose_guide(app: &App, readings: &[Term], at: usize) -> String {
     } else {
         ""
     };
-    format!("Do you mean: Suppose that {r}.  ⏎ yes · Esc no{more}")
+    format!("Do you mean: Suppose that {r}.  Enter: yes · Esc: no{more}")
 }
 
 /// The foot in normal mode: a hint, while there is no message; else the

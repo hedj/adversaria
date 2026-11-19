@@ -237,3 +237,65 @@ mod tests {
         assert!(drawn(" ", &brush).is_some_and(|s| s.is_empty()));
     }
 }
+
+#[cfg(test)]
+mod glyph_tests {
+    use super::boxes::{Brush, Grid, shapes};
+    use super::*;
+
+    /// The characters beyond ASCII that the screen's code writes: those on
+    /// its lines that are not comments.
+    fn written() -> Vec<char> {
+        let code = [
+            include_str!("../ui.rs"),
+            include_str!("../ui/wrap.rs"),
+            include_str!("../view.rs"),
+        ];
+        let before_tests =
+            |c: &&'static str| -> &'static str { c.split("#[cfg(test)]").next().unwrap_or("") };
+        let lines = code.iter().map(before_tests).flat_map(|c| c.lines());
+        let mut found: Vec<char> = lines
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .flat_map(|l| l.chars().filter(|c| !c.is_ascii()).collect::<Vec<_>>())
+            .collect();
+        found.sort();
+        found.dedup();
+        found
+    }
+
+    /// A context with its fonts loaded, as after a frame.
+    fn loaded() -> egui::Context {
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(Default::default(), |_| {});
+        out.textures_delta.clear();
+        ctx
+    }
+
+    /// A brush for one cell of the usual size.
+    fn brush() -> Brush {
+        let size = Vec2::new(9.0, 18.0);
+        Brush {
+            cell: Rect::from_min_size(egui::Pos2::ZERO, size),
+            ink: Color32::WHITE,
+            grid: Grid { size, pixel: 1.0 },
+        }
+    }
+
+    /// Whether a character is drawn: as shapes, or by a glyph of the font.
+    fn drawn(ctx: &egui::Context, c: char) -> bool {
+        shapes(c, &brush()).is_some() || ctx.fonts_mut(|f| f.has_glyph(&font(), c))
+    }
+
+    #[test]
+    fn every_symbol_the_screen_writes_is_in_the_font() {
+        // Catches a symbol drawn as a font's empty box, as the conflict
+        // flag U+2691 was: neither drawn as shapes nor in egui's fonts.
+        let ctx = loaded();
+        let missing: Vec<String> = written()
+            .into_iter()
+            .filter(|c| !drawn(&ctx, *c))
+            .map(|c| format!("{c} U+{:04X}", c as u32))
+            .collect();
+        assert!(missing.is_empty(), "not in the font: {missing:?}");
+    }
+}

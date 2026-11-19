@@ -118,7 +118,7 @@ it is kept.
 The top bar now says `1 disagreement between sources`, and under your
 fact is a mark:
 
-    ⚑ Nothing has more than 1 date, sources disagree: 1988 here, 1989 in 1.3
+    ‼ Nothing has more than 1 date, sources disagree: 1988 here, 1989 in 1.3
 
 Items are addressed by number: 1.3 is the third item under item 1, the
 claim. It is a disagreement, not an error, because 1989 is only a claim.
@@ -143,7 +143,7 @@ source's record, and what adopting it would do:
 Press **F3** to adopt the claim. It is now a belief, with its source kept.
 The top bar says `1 constraint violation`, and the mark is loud:
 
-    ⚑ Nothing has more than 1 date, violation: 1988 here, 1989 in 1.3
+    ‼ Nothing has more than 1 date, violation: 1988 here, 1989 in 1.3
 
 Two beliefs now conflict. Press **F4** to take the adoption back. The
 notebook says the adoption is retracted, and the violation is gone.
@@ -161,7 +161,7 @@ Hold **Super** (the Windows or Command key) and type
 notebook takes a command of one kind: here, a supposition. Release it.
 The notebook reads your sentence against the facts and asks:
 
-    Do you mean: Suppose that the date of Buran's flight is 1989.  ⏎ yes · Esc no
+    Do you mean: Suppose that the date of Buran's flight is 1989.  Enter: yes · Esc: no
 
 Press Enter. A second world opens beside the actual one, row for row:
 
@@ -318,7 +318,7 @@ same way make it `500.` Now `→ 300`, and the violation is gone.
 
 Hold Super, type `rent is 1600`, and release. The notebook asks:
 
-    Do you mean: Suppose that the cell of rent is 1600.  ⏎ yes · Esc no
+    Do you mean: Suppose that the cell of rent is 1600.  Enter: yes · Esc: no
 
 (`cell` is how the notebook keeps a box.) Press Enter. The two worlds are
 shown side by side, box for box; in the supposed one the answer is

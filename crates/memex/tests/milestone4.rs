@@ -155,10 +155,10 @@ fn scene_two_as_written() {
         !s.has("constraint violation"),
         "a claim is not a belief: no violation"
     );
-    s.assert("⚑ one date per event, sources disagree: 1988 here, 1989 in 2.1");
-    s.assert("⚑ one date per event, sources disagree: 1989 here, 1988 in 1.1");
+    s.assert("‼ one date per event, sources disagree: 1988 here, 1989 in 2.1");
+    s.assert("‼ one date per event, sources disagree: 1989 here, 1988 in 1.1");
     assert!(
-        s.style_of("⚑ one date per event, sources disagree: 1988")
+        s.style_of("‼ one date per event, sources disagree: 1988")
             .contains(Modifier::DIM),
         "shown less loudly"
     );
@@ -198,7 +198,7 @@ fn adopting_turns_a_disagreement_into_a_violation_and_back() {
     let s = screen(&app);
     s.assert("1 constraint violation");
     assert!(
-        s.style_of("⚑ one date per event, violation: 1988 here")
+        s.style_of("‼ one date per event, violation: 1988 here")
             .contains(Modifier::BOLD),
         "a violation is shown loudly"
     );
@@ -346,7 +346,7 @@ fn suppose_offers_its_reading(app: &mut App) {
     assert!(matches!(app.session.mode, Mode::ConfirmSuppose { .. }));
     let s = screen(app);
     s.assert("SUPPOSE  the flight was in 1989");
-    s.assert("Do you mean: Suppose that the date of Buran's flight is 1989.  ⏎ yes · Esc no");
+    s.assert("Do you mean: Suppose that the date of Buran's flight is 1989.  Enter: yes · Esc: no");
 }
 
 /// Scene 3, the reading taken: the source's date set aside, and the two

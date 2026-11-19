@@ -240,7 +240,7 @@ fn a_claim_and_a_rule(t: &mut T) {
     t.pause();
     t.says("constraint Nothing has more than 1 date kept: it fires on a planted violation");
     t.shows("1 disagreement between sources");
-    t.shows("⚑ Nothing has more than 1 date, sources disagree: 1988 here, 1989 in 1.3");
+    t.shows("‼ Nothing has more than 1 date, sources disagree: 1988 here, 1989 in 1.3");
     t.lacks("constraint violation");
 }
 
@@ -254,7 +254,7 @@ fn the_claim_questioned(t: &mut T) {
     t.shows("adopting it would raise 1 violation of Nothing has more than 1 date");
     t.key(Key::F(3));
     t.shows("1 constraint violation");
-    t.shows("⚑ Nothing has more than 1 date, violation: 1988 here, 1989 in 1.3");
+    t.shows("‼ Nothing has more than 1 date, violation: 1988 here, 1989 in 1.3");
     t.key(Key::F(4));
     t.says("retracted");
     t.lacks("constraint violation");
@@ -264,7 +264,7 @@ fn the_claim_questioned(t: &mut T) {
 fn the_claim_supposed(t: &mut T) {
     t.hold(Quasi::Suppose, "the flight was in 1989");
     assert!(matches!(t.app.session.mode, Mode::ConfirmSuppose { .. }));
-    t.shows("Do you mean: Suppose that the date of Buran's flight is 1989.  ⏎ yes · Esc no");
+    t.shows("Do you mean: Suppose that the date of Buran's flight is 1989.  Enter: yes · Esc: no");
     t.key(Key::Enter);
     t.says("set aside in this world: 1.1");
     t.shows("WORLD · SUPPOSE THE FLIGHT WAS IN 1989");
@@ -389,7 +389,7 @@ fn a_value_changed(t: &mut T) {
 fn a_what_if(t: &mut T) {
     t.hold(Quasi::Suppose, "rent is 1600");
     t.look("suppose rent?");
-    t.shows("Do you mean: Suppose that the cell of rent is 1600.  ⏎ yes · Esc no");
+    t.shows("Do you mean: Suppose that the cell of rent is 1600.  Enter: yes · Esc: no");
     t.key(Key::Enter);
     t.look("supposed rent");
     t.says("set aside in this world: 2.2; left for you: 1 violation of It is false that the cost is greater than the income");

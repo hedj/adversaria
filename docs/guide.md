@@ -127,7 +127,7 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   2`). In a narrow window the right side takes a row of its own.
 - **Left pane:** the outline. `▼` marks an item with items under it, `▶` a
   folded one (followed by how many items it hides), `•` an item with none.
-  Top-level items show their number. Under an item, `⚑` lines are its
+  Top-level items show their number. Under an item, `‼` lines are its
   marks: each constraint solution that rests on one of its facts. A
   violation is shown bold; a disagreement dim. An item that shows
   derived text ends in `[derived]`; one that states a claim ends in its

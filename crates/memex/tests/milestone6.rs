@@ -438,14 +438,14 @@ fn the_result_is_read(app: &App, result: u64) {
 /// The mark of a changed input is drawn on the line under its result.
 fn the_mark_is_under_its_result(app: &App) {
     let shown = screen_text(app, 140, 30);
-    assert!(shown.contains("⚑ input changed since: data.csv"), "{shown}");
+    assert!(shown.contains("‼ input changed since: data.csv"), "{shown}");
     let lines: Vec<&str> = shown.lines().collect();
     let at = lines
         .iter()
         .position(|l| l.contains("• mean_delay = 1.55"))
         .unwrap();
     assert!(
-        lines[at + 1].contains("⚑ input changed since"),
+        lines[at + 1].contains("‼ input changed since"),
         "under its result"
     );
 }

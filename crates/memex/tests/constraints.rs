@@ -178,10 +178,10 @@ fn a_finding_on_one_fact_is_marked_under_its_item() {
     let marks = r
         .lines_at(160, 40)
         .iter()
-        .filter(|l| l.contains('⚑'))
+        .filter(|l| l.contains('‼'))
         .count();
     assert_eq!(marks, 1);
-    assert!(r.shows("⚑ limit, violation: cell(rent, 1200) here"));
+    assert!(r.shows("‼ limit, violation: cell(rent, 1200) here"));
     assert!(r.shows("CONSTRAINT · LIMIT"));
 }
 
@@ -200,7 +200,7 @@ fn a_finding_on_no_fact_is_marked_under_no_item() {
     r.app.flush();
     r.app.evaluate().unwrap();
     assert!(r.shows("1 constraint violation"));
-    assert!(!r.shows("⚑"));
+    assert!(!r.shows("‼"));
 }
 
 #[test]

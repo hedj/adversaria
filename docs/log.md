@@ -1444,6 +1444,20 @@ moved (found while reading the code, then tested).
 Not checked: right-click under Wayland (its pointer program has the left
 button only); a real desktop and mouse.
 
+### The UI/UX audit, fixed one finding at a time (19 November 2026)
+
+An audit of the window's screens (driven under Xvfb, screenshots read)
+found fourteen faults. Each is fixed in its own commit, reviewed once by
+a UI/UX subagent on before and after screenshots, and changed again
+where the review held.
+
+1. The conflict mark U+2691 and the Suppose prompt's U+23CE are not in
+   egui's fonts, and showed as empty boxes. A test now requires every
+   symbol the screen's code writes (outside its tests) to be in the font
+   or drawn as shapes. The review rejected the first replacement, ▲, as
+   one of the outline's fold triangles (▼ ▶) and as "rising" beside a
+   number; the mark is ‼, and the prompt "Enter: yes · Esc: no".
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
