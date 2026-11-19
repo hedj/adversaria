@@ -303,6 +303,14 @@ pub const COMMANDS: &[Command] = &[
         brief: "move to the other pane",
     },
     Command {
+        name: "split",
+        run: App::cmd_split,
+        target: true,
+        slots: &[],
+        help: "split the target's text at each sentence end: it keeps the first sentence; each other becomes a new item after it, linked back as split_from, its characters keeping their history",
+        brief: "split an item into its sentences",
+    },
+    Command {
         name: "transclude",
         run: App::cmd_transclude,
         target: true,

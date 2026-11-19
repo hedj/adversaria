@@ -1265,6 +1265,23 @@ and undo needs nothing. Checked: a unit test of what is a tag; a
 constraint over tags fires and clears as the text changes; derived text
 counts tagged items. With no tag facts, both memex tests fail.
 
+### Split an item (19 November 2026)
+
+From the same choice (Zettelkasten's atomic notes): `split` breaks an
+item at each sentence end; the item keeps its first sentence and links;
+each other sentence becomes a new item after it, made of the item's own
+spans (its characters keep their addresses), linked back as split_from,
+and read at the pause. A closing record, edit op split, names the
+split's first entry, and the parts' readings name it too, so one undo
+takes the whole split back, before or after the pause (format version 1
+revised). A decimal point is no sentence end; an abbreviation such as
+"e.g. " is, wrongly: not handled.
+
+Checked: a unit test of sentences; four tests in tests/split.rs.
+Breaks, each failing a test: no closing record; the parts read as their
+own (undo after the pause then took back one part); undo ignoring split
+records; parts without the item's text; no link back.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

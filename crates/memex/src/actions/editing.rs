@@ -176,6 +176,12 @@ impl App {
         self.write_here("link", body).map(|_| ())
     }
 
+    /// A link from a part of a split item back to the item it was split
+    /// from.
+    pub(crate) fn write_split_link(&mut self, part: u64, item: u64) -> Result<(), String> {
+        self.write_link(part, item, "split_from").map(|_| ())
+    }
+
     /// A link a suggestion proposed, recording the suggestion it adopts.
     pub(crate) fn write_suggested_link(
         &mut self,

@@ -250,6 +250,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | `outdent` | `outdent` | makes the target a sibling of its parent |
 | `move` | `move after ADDRESS` | moves the target's branch to follow ADDRESS |
 | `copy` | `copy after ADDRESS` | copies the target's text to a new item after ADDRESS |
+| `split` | `split` | splits the target's text at each sentence end (`.`, `?` or `!` and a space): the target keeps the first sentence, with its links; each other becomes a new item after it, linked back as `split_from`, its characters kept from the target's text, so their history stays. Each part is read at the pause. One `undo` takes the whole split back |
 | `transclude` | `transclude from ADDRESS` | makes a new item after the target that shows ADDRESS's text in place |
 | `link` | `link [FROM] to TO [as TYPE]` | links two items; FROM defaults to the target, TYPE to `link`. `cites`, `supports` and `opposes` read well in the links pane |
 | `name` | `name WORD` | names the target, so WORD addresses it; the name `title` also heads the outline |

@@ -176,13 +176,13 @@ impl App {
         self.session.report(written);
     }
 
-    /// The text edit a reading entry reads, if the entry is one: undo takes
-    /// the edit and its reading back together.
+    /// The first entry of what a record closes, if the entry is one: the
+    /// text edit a reading reads, or the first entry of a split. Undo takes
+    /// all from there back together.
     pub(crate) fn read_from(&self, seq: u64) -> Option<u64> {
         let e = self.notebook.entry(seq)?;
-        let b = e
-            .body()
-            .filter(|b| e.kind() == "edit" && b["op"] == "read")?;
+        let closes = |b: &&serde_json::Value| b["op"] == "read" || b["op"] == "split";
+        let b = e.body().filter(|_| e.kind() == "edit").filter(closes)?;
         b["of"].as_u64()
     }
 }

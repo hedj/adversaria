@@ -6,6 +6,7 @@ mod english;
 mod inline;
 mod knowledge;
 mod reading;
+mod split;
 mod worlds;
 
 pub use dispatch::{COMMANDS, Command, command_help};

@@ -496,6 +496,7 @@ impl Outline {
             "layer" => self.add_layer(seq, b),
             "derive" => self.set_derived(b),
             "read" => self.record_reading(b),
+            "split" => Some(()),
             _ => None,
         }
     }
