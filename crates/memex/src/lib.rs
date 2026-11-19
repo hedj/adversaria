@@ -16,6 +16,7 @@ pub mod keys;
 pub mod notebook;
 pub mod outline;
 pub mod pairs;
+pub mod plumb;
 pub mod prolog;
 pub mod reason;
 pub mod reasoning;

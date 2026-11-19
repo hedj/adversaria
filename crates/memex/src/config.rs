@@ -10,6 +10,7 @@
 
 use crate::actions::COMMANDS;
 use crate::app::{Key, Quasi, Special};
+use crate::plumb::{Rule, Test};
 use crate::session::Keys;
 use std::path::{Path, PathBuf};
 
@@ -54,6 +55,19 @@ F10 = "quit"
 # `memex --no-mouse` overrides this for one run.
 [mouse]
 enabled = false
+
+# Plumbing: a right-click offers the commands whose rules match the text
+# selected (or, with none, the word under the pointer). Your rules come
+# before the built-in ones (docs/guide.md § 2.3). Each has a name, the
+# menu's words; a pattern, a regular expression the whole text must match;
+# a command line, as typed in Command, with $0 for the text and $1 to $9
+# for the pattern's groups; and, if it needs one, a test: "file" (a file
+# that exists) or "item" (the text names an item). For example:
+#
+# [[plumb]]
+# name = "show Wikidata's statements about $0"
+# match = 'Q\d+'
+# run = "query wd('$0', P, V)"
 "#;
 
 /// A key a quasimode may be held on.
@@ -71,6 +85,8 @@ pub struct Config {
     pub bindings: Vec<(Key, String)>,
     /// Whether the memex takes the mouse ([mouse] enabled).
     pub mouse: bool,
+    /// The user's plumbing rules ([[plumb]]), in order.
+    pub plumb: Vec<Rule>,
 }
 
 impl Default for Config {
@@ -186,14 +202,65 @@ fn key_text(v: &toml::Value) -> Result<&str, String> {
 
 /// A bound command line must start with a command the memex has, or be
 /// "palette".
-fn check_command(name: &str, cmd: &str) -> Result<(), String> {
+fn check_command(place: &str, cmd: &str) -> Result<(), String> {
     let first = cmd.split_whitespace().next().unwrap_or("");
     if first != "palette" && !COMMANDS.iter().any(|c| c.name == first) {
         return Err(format!(
-            "[keys] {name}: no command “{first}”; the commands are listed in docs/guide.md"
+            "{place}: no command “{first}”; the commands are listed in docs/guide.md"
         ));
     }
     Ok(())
+}
+
+/// The plumbing rules of a text of [[plumb]] tables alone, as the
+/// defaults are written (crate::plumb).
+pub(crate) fn rules_of(text: &str) -> Result<Vec<Rule>, String> {
+    let table: toml::Table = toml::from_str(text).map_err(|e| e.to_string())?;
+    table.get("plumb").map_or(Ok(vec![]), plumb_rules)
+}
+
+/// The rules of a [[plumb]] list, in order, or what is wrong with one.
+fn plumb_rules(value: &toml::Value) -> Result<Vec<Rule>, String> {
+    let rules = value
+        .as_array()
+        .ok_or("plumb must be a list of tables, each as [[plumb]]")?;
+    let rule = |(n, r): (usize, &toml::Value)| {
+        let t = r.as_table().ok_or("each rule is a table")?;
+        plumb_rule(t).map_err(|e| format!("[[plumb]] rule {}: {e}", n + 1))
+    };
+    rules.iter().enumerate().map(rule).collect()
+}
+
+/// A plumbing rule, from its table: name, match and run, and if, if
+/// given; nothing else.
+fn plumb_rule(t: &toml::Table) -> Result<Rule, String> {
+    if let Some(k) = t
+        .keys()
+        .find(|k| !["name", "match", "run", "if"].contains(&k.as_str()))
+    {
+        return Err(format!("no setting {k}: only name, match, run and if"));
+    }
+    let text = |k: &str| match t.get(k) {
+        Some(toml::Value::String(s)) if !s.is_empty() => Ok(s.clone()),
+        _ => Err(format!("{k}: text, in quotes")),
+    };
+    let test = match t.get("if") {
+        None => None,
+        Some(v) => Some(
+            v.as_str()
+                .and_then(Test::named)
+                .ok_or("if: \"file\" or \"item\"")?,
+        ),
+    };
+    let rule = Rule {
+        name: text("name")?,
+        pattern: text("match")?,
+        test,
+        run: text("run")?,
+    };
+    crate::plumb::whole(&rule.pattern).map_err(|e| format!("match: {e}"))?;
+    check_command("run", &rule.run)?;
+    Ok(rule)
 }
 
 fn quasi_named(name: &str) -> Option<Quasi> {
@@ -237,10 +304,14 @@ impl Config {
             quasimodes: vec![],
             bindings,
             mouse: false,
+            plumb: vec![],
         }
     }
 
     fn read_section(&mut self, section: &str, value: &toml::Value) -> Result<(), String> {
+        if section == "plumb" {
+            return self.read_plumb(value);
+        }
         let t = value
             .as_table()
             .ok_or_else(|| format!("{section} must be a table, as [{section}]"))?;
@@ -249,7 +320,7 @@ impl Config {
             "keys" => self.read_keys(t),
             "mouse" => self.read_mouse(t),
             other => Err(format!(
-                "no section [{other}]: the sections are [quasimodes], [keys] and [mouse]"
+                "no section [{other}]: the sections are [quasimodes], [keys], [mouse] and [[plumb]]"
             )),
         }
     }
@@ -276,7 +347,7 @@ impl Config {
                 .ok_or_else(|| format!("[keys] {name}: a command line, in quotes"))?;
             self.bindings.retain(|(b, _)| *b != k);
             if !cmd.is_empty() {
-                check_command(name, cmd)?;
+                check_command(&format!("[keys] {name}"), cmd)?;
                 self.bindings.push((k, cmd.to_string()));
             }
         }
@@ -292,6 +363,12 @@ impl Config {
                 _ => return Err(format!("[mouse] has no {name}: only enabled")),
             }
         }
+        Ok(())
+    }
+
+    /// [[plumb]]: rules, each a table, in order.
+    fn read_plumb(&mut self, value: &toml::Value) -> Result<(), String> {
+        self.plumb.extend(plumb_rules(value)?);
         Ok(())
     }
 
@@ -468,6 +545,45 @@ mod tests {
         assert_eq!(quasi(&c, "F1"), Some(Quasi::Scope));
         let c = Config::parse("[keys]\nF10 = \"export out.md\"\n").unwrap();
         assert_eq!(bound(&c, "F10"), Some("export out.md"), "replaced");
+    }
+
+    #[test]
+    fn plumbing_rules_are_read_in_order() {
+        // Catches the example in the defaults' comments not a rule that
+        // parses, the order lost, or "if" not read.
+        let example: String = DEFAULT_TOML
+            .lines()
+            .skip_while(|l| !l.starts_with("# [[plumb]]"))
+            .map(|l| l.trim_start_matches("# "))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let two = format!(
+            "{example}\n[[plumb]]\nname = \"open $0\"\nmatch = '\\S+\\.md'\nrun = \"import document $0\"\nif = \"file\"\n"
+        );
+        let c = Config::parse(&two).unwrap();
+        let names: Vec<&str> = c.plumb.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, ["show Wikidata's statements about $0", "open $0"]);
+        assert_eq!(c.plumb[1].test, Some(Test::File));
+        assert!(Config::default().plumb.is_empty());
+    }
+
+    #[test]
+    fn a_plumbing_rule_it_would_guess_at_is_refused() {
+        // Catches a pattern that is no regular expression, a command that
+        // does not exist, an unknown test or setting, or a missing part,
+        // taken without a word.
+        let rule = |body: &str| Config::parse(&format!("[[plumb]]\n{body}\n")).unwrap_err();
+        let ok = "name = \"n\"\nmatch = 'x'\nrun = \"go $0\"";
+        assert!(rule(&ok.replace("'x'", "'('")).contains("match"));
+        assert!(rule(&ok.replace("go $0", "fly $0")).contains("no command “fly”"));
+        assert!(rule(&format!("{ok}\nif = \"dir\"")).contains("if"));
+        assert!(rule(&format!("{ok}\nwhen = 1")).contains("no setting when"));
+        assert!(rule("name = \"n\"\nmatch = 'x'").contains("run"));
+        assert!(
+            Config::parse("plumb = 1")
+                .unwrap_err()
+                .contains("list of tables")
+        );
     }
 
     #[test]

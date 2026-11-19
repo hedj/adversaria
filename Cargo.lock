@@ -1644,6 +1644,7 @@ dependencies = [
  "pollster",
  "protocol",
  "ratatui",
+ "regex",
  "serde_json",
  "toml",
  "unicode-width",

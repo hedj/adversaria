@@ -12,6 +12,10 @@ protocol = { version = "0.1.0", path = "../protocol" }
 ratatui = { version = "0.30", default-features = false, features = ["std", "layout-cache", "underline-color", "unstable-rendered-line-info"] }
 serde_json = "1.0.154"
 toml = "1.2.1"
+# Plumbing rules (crate::plumb) are regular expressions, as Plan 9's are;
+# regex is the standard crate for them. A new dependency of the build,
+# though Cargo.lock listed it already (fancy-regex, not built here, uses it).
+regex = "1.13.1"
 # The window (crate::gui): winit for the window and the keyboard on X11 and
 # Wayland, egui to paint, wgpu to draw it, pollster to wait for wgpu's setup.
 egui = { version = "0.37.0", features = ["default_fonts"] }
