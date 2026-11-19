@@ -140,6 +140,9 @@ pub struct Constraint {
 pub struct Reading {
     pub text: String,
     pub entries: Vec<u64>,
+    /// Each statement as the reader wrote it in Prolog, with its kind in
+    /// words ("fact", "claim of Talk-notes", "rule", ...).
+    pub said: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -504,10 +507,7 @@ impl Outline {
     /// Record what an item's text was read as.
     fn record_reading(&mut self, b: &Body) -> Option<()> {
         let item = self.item_in(b)?;
-        let entries = b.0.get("entries")?.as_array()?;
-        let entries = entries.iter().filter_map(Value::as_u64).collect();
-        let text = b.text("text").to_string();
-        self.readings.insert(item, Reading { text, entries });
+        self.readings.insert(item, reading_of(b)?);
         Some(())
     }
 
@@ -1065,6 +1065,61 @@ pub fn reads_as_number(a: &str) -> bool {
     a.split('.').all(digits)
 }
 
+/// A text's #tags, each once, in order: a # at the start or after a space,
+/// then a letter, then letters, digits, hyphens and underscores; in lower
+/// case, hyphens made underscores, as the reader writes names. Not C#,
+/// #1, a heading's "# ", or a web address's /#anchor.
+pub fn tags(text: &str) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        let tag = word.strip_prefix('#').and_then(tag_of);
+        if let Some(t) = tag.filter(|t| !found.contains(t)) {
+            found.push(t);
+        }
+    }
+    found
+}
+
+/// The tag a word after its # starts with, if it starts with a letter.
+fn tag_of(rest: &str) -> Option<String> {
+    let tag: String = rest
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    let starts = tag.chars().next().is_some_and(char::is_alphabetic);
+    starts.then(|| tag.to_lowercase().replace('-', "_"))
+}
+
+/// A read record's reading: the text, its entries and its statements.
+fn reading_of(b: &Body) -> Option<Reading> {
+    let entries = entries_of(b.0.get("entries")?)?;
+    let text = b.text("text").to_string();
+    let said = said_of(b.0.get("said"));
+    Some(Reading {
+        text,
+        entries,
+        said,
+    })
+}
+
+/// A list of entries' numbers.
+fn entries_of(v: &Value) -> Option<Vec<u64>> {
+    Some(v.as_array()?.iter().filter_map(Value::as_u64).collect())
+}
+
+/// A reading's statements, each [kind, text]; none for a record written
+/// before readings kept them.
+fn said_of(v: Option<&Value>) -> Vec<(String, String)> {
+    let pairs = v.and_then(Value::as_array).into_iter().flatten();
+    let pair = |p: &Value| {
+        Some((
+            p.get(0)?.as_str()?.to_string(),
+            p.get(1)?.as_str()?.to_string(),
+        ))
+    };
+    pairs.filter_map(pair).collect()
+}
+
 /// A link entry's link: its ends, and its type (link, if none).
 fn link_of(seq: u64, b: &Body) -> Option<Link> {
     let (from, to) = (b.num("from")?, b.num("to")?);
@@ -1080,6 +1135,16 @@ fn link_of(seq: u64, b: &Body) -> Option<Link> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tags_are_words_after_a_hash() {
+        // Catches a tag missed, kept with its punctuation or case, kept
+        // twice, or found where # is not a tag: C#, #1, "# heading",
+        // example.com/#anchor.
+        let text = "Buran #reusable, #Soviet-space! #reusable C# #1 # heading example.com/#anchor";
+        assert_eq!(tags(text), ["reusable", "soviet_space"]);
+        assert!(tags("").is_empty());
+    }
 
     fn create(o: &mut Outline, seq: u64, under: u64, after: Option<u64>, text: &str) {
         let n = text.chars().count();

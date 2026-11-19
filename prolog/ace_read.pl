@@ -159,7 +159,16 @@ answering(A, G, Goal) :-
     Named = (label(A, L0) -> N = L0 ; atomic(A) -> atom_string(A, N) ; N = A),
     Goal = (findall(N, (G, Named), L), sort(L, S), (S == [] -> Answer = none ; atomic_list_concat(S, ', ', Answer))),
     Answer = '$VAR'('Answer'),
-    numbervars(L0-N-L-S, 1000, _).
+    next_var(G, Next),
+    numbervars(L0-N-L-S, Next, _).
+
+%   The number after the highest of a term's numbered variables, so new
+%   ones are named after them (A, B, ... then the next letter).
+next_var(T, Next) :-
+    findall(K, sub_term('$VAR'(K), T), Ks),
+    include(integer, Ks, Ns),
+    max_list([-1|Ns], Max),
+    Next is Max + 1.
 
 written(Term, Text) :-
     format(string(Text), "~W", [Term, [quoted(true), numbervars(true), spacing(next_argument)]]).

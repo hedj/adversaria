@@ -1047,13 +1047,50 @@ fn right_panel(app: &App, id: u64) -> Paragraph<'static> {
     if let Some(layers) = app.notebook.outline.views.get(&id) {
         return wrapped(view_panel(app, id, layers));
     }
-    match app.reason.eval[0].as_ref() {
+    let mut lines = match app.reason.eval[0].as_ref() {
         Some(e) if !item_marks(e, &app.notebook.outline, id).is_empty() => {
             let outline = &app.notebook.outline;
-            wrapped(ConstraintPane { outline, e }.of(id))
+            ConstraintPane { outline, e }.of(id)
         }
-        _ => wrapped(links_lines(&app.notebook.outline, id)),
+        _ => links_lines(&app.notebook.outline, id),
+    };
+    lines.extend(read_as_lines(&app.notebook.outline, id));
+    wrapped(lines)
+}
+
+/// What an item's text, as it is now, was read as, in Prolog: each
+/// statement by its kind, as the reader wrote it, and its #tags.
+fn read_as_lines(outline: &Outline, id: u64) -> Vec<Line<'static>> {
+    let all = read_as(outline, id);
+    if all.is_empty() {
+        return vec![];
     }
+    let heading = [Line::raw(""), Line::styled("READ AS", dim())];
+    heading
+        .into_iter()
+        .chain(all.into_iter().map(read_as_line))
+        .collect()
+}
+
+/// An item's statements, by kind, as its last reading of its text as it
+/// is now wrote them, then its tags.
+fn read_as(outline: &Outline, id: u64) -> Vec<(String, String)> {
+    let text = outline.text(id);
+    let read = outline.readings.get(&id).filter(|r| r.text == text);
+    let said = read.map_or(&[][..], |r| r.said.as_slice());
+    let tag = |t: String| ("tag".to_string(), format!("item_tag({id}, {t})"));
+    said.iter()
+        .cloned()
+        .chain(crate::outline::tags(&text).into_iter().map(tag))
+        .collect()
+}
+
+/// A statement's line: its kind, dim, then its Prolog.
+fn read_as_line((kind, prolog): (String, String)) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(format!("{kind}  "), dim()),
+        Span::raw(prolog),
+    ])
 }
 
 /// Lines wrapped to the width they are drawn in.

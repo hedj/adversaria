@@ -352,7 +352,10 @@ It is false that the rest is smaller than 0.
 ```
 
 These are a fact, a claim from a source, two boxes, a rule and a
-constraint. Change the text, and what it said is taken back and the new
+constraint. With an item selected, the right pane shows, under READ AS,
+each statement its text was read as, in Prolog, as the memex runs it
+(`fact  date(buran_flight, 1988)`, `rule  rest(A):-cell(income, B), …`),
+and its tags (`tag  item_tag(12, money)`). Change the text, and what it said is taken back and the new
 text read; undo takes back a sentence and what it said together. Text
 that is not ACE stays prose: at the cursor, a dim line says where APE
 stopped (`prose: not ACE, it stops at …`). A text is read whole or not at

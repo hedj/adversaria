@@ -1333,6 +1333,19 @@ failing; a smaller limit than 1000 is not told apart from 21, as both
 show 20. A `?` after a space cannot be typed in Command (it lists), so
 `?- goal` cannot be typed; write the goal alone.
 
+### The Prolog form of what was read (19 November 2026)
+
+At the author's request, the right pane shows, under READ AS, each
+statement an item's text was read as, in the Prolog the reader wrote
+and the memex runs, by kind, and the item's tags. The read record keeps
+those texts (`said`, format version 1 revised); a text changed and not
+read again shows none. A question's goal now names its new variables
+after the question's own (C, D, E), not from 1000 (M38, N38).
+
+Checked: three tests in tests/read_as.rs. Breaks, each failing a test:
+statements not recorded; a stale reading shown; tags left out; `said`
+not read back; the old variable numbering.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

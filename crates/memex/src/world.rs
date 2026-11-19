@@ -170,7 +170,11 @@ fn item_link(from: u64, to: u64, kind: &str) -> Term {
 fn item_facts(o: &Outline, id: u64) -> Vec<(u64, Term)> {
     let mut out = vec![(id, item_text(o, id))];
     out.extend(item_under(o, id).map(|t| (id, t)));
-    out.extend(tags(&o.text(id)).into_iter().map(|t| (id, item_tag(id, t))));
+    out.extend(
+        crate::outline::tags(&o.text(id))
+            .into_iter()
+            .map(|t| (id, item_tag(id, t))),
+    );
     out
 }
 
@@ -179,31 +183,6 @@ fn item_tag(id: u64, tag: String) -> Term {
         "item_tag".into(),
         vec![Term::Int(id as i64), Term::Atom(tag)],
     )
-}
-
-/// A text's #tags, each once, in order: a # at the start or after a space,
-/// then a letter, then letters, digits, hyphens and underscores; in lower
-/// case, hyphens made underscores, as the reader writes names. Not C#,
-/// #1, a heading's "# ", or a web address's /#anchor.
-pub fn tags(text: &str) -> Vec<String> {
-    let mut found: Vec<String> = Vec::new();
-    for word in text.split_whitespace() {
-        let tag = word.strip_prefix('#').and_then(tag_of);
-        if let Some(t) = tag.filter(|t| !found.contains(t)) {
-            found.push(t);
-        }
-    }
-    found
-}
-
-/// The tag a word after its # starts with, if it starts with a letter.
-fn tag_of(rest: &str) -> Option<String> {
-    let tag: String = rest
-        .chars()
-        .take_while(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
-        .collect();
-    let starts = tag.chars().next().is_some_and(char::is_alphabetic);
-    starts.then(|| tag.to_lowercase().replace('-', "_"))
 }
 
 fn item_text(o: &Outline, id: u64) -> Term {
@@ -219,19 +198,4 @@ fn item_under(o: &Outline, id: u64) -> Option<Term> {
         "item_under".into(),
         vec![Term::Int(id as i64), Term::Int(p as i64)],
     ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tags_are_words_after_a_hash() {
-        // Catches a tag missed, kept with its punctuation or case, kept
-        // twice, or found where # is not a tag: C#, #1, "# heading",
-        // example.com/#anchor.
-        let text = "Buran #reusable, #Soviet-space! #reusable C# #1 # heading example.com/#anchor";
-        assert_eq!(tags(text), ["reusable", "soviet_space"]);
-        assert!(tags("").is_empty());
-    }
 }

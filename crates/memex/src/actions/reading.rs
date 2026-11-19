@@ -88,7 +88,7 @@ impl App {
         self.session.set_prose(None);
         self.retract_reading(w.item);
         let (edits, told) = self.state_all(w.item, w.text, said);
-        self.record_reading(w, edits);
+        self.record_reading(w, edits, said);
         self.session.message = told.join("; ");
     }
 
@@ -128,7 +128,7 @@ impl App {
             self.retract_reading(w.item);
         }
         if had || w.linked {
-            self.record_reading(w, vec![]);
+            self.record_reading(w, vec![], &[]);
         }
     }
 
@@ -169,9 +169,10 @@ impl App {
         }
     }
 
-    fn record_reading(&mut self, w: &Written, entries: Vec<u64>) {
-        let (item, of, text) = (w.item, w.of, w.text);
-        let body = json!({"op": "read", "item": item, "of": of, "text": text, "entries": entries});
+    /// Record a reading: the text read, the entries its statements are in,
+    /// and each statement as the reader wrote it in Prolog, by its kind.
+    fn record_reading(&mut self, w: &Written, entries: Vec<u64>, said: &[Said]) {
+        let body = w.record(entries, said_json(said));
         let written = self.write_here("edit", body);
         self.session.report(written);
     }
@@ -186,6 +187,31 @@ impl App {
         };
         let b = e.body().filter(|_| e.kind() == "edit").filter(closes)?;
         b["of"].as_u64()
+    }
+}
+
+impl Written<'_> {
+    /// The body of the record of this text's reading.
+    fn record(&self, entries: Vec<u64>, said: Vec<[String; 2]>) -> serde_json::Value {
+        json!({"op": "read", "item": self.item, "of": self.of, "text": self.text, "entries": entries, "said": said})
+    }
+}
+
+/// Statements as a reading records them: each [kind, Prolog].
+fn said_json(said: &[Said]) -> Vec<[String; 2]> {
+    said.iter()
+        .map(|s| [kind_word(&s.kind), s.text.clone()])
+        .collect()
+}
+
+/// A statement's kind in words, as the right pane names it.
+fn kind_word(kind: &Kind) -> String {
+    match kind {
+        Kind::Fact => "fact".into(),
+        Kind::Claim(source) => format!("claim of {source}"),
+        Kind::Rule => "rule".into(),
+        Kind::Constraint => "constraint".into(),
+        Kind::Question => "question".into(),
     }
 }
 
