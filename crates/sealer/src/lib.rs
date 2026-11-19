@@ -216,9 +216,12 @@ struct Checked {
 }
 
 impl Checked {
-    /// None if the journal has no complete line yet.
+    /// None if the journal is not there yet, or has no complete line yet.
     fn read(dir: &Path) -> Result<Option<Checked>, Error> {
-        let text = fs::read_to_string(dir.join(JOURNAL))?;
+        let text = match fs::read_to_string(dir.join(JOURNAL)) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+            other => other?,
+        };
         let complete = complete_lines(&text);
         if complete.is_empty() {
             return Ok(None);

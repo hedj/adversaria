@@ -84,6 +84,24 @@ fn seals_entries_as_they_are_written() {
     remove(&dir, &key);
 }
 
+#[test]
+fn waits_for_a_journal_not_yet_made() {
+    // Catches a sealer that stops when it starts before the memex has
+    // made the journal, as `make run` starts them, the first time.
+    let (dir, key) = initialised("early");
+    let mut child = sealer("run", &dir, &key, &["--interval-ms", "5"])
+        .spawn()
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    let mut j = Journal::open(&dir).unwrap();
+    write_entries(&mut j);
+    let sealed = seals_once_there_are(200, &dir);
+    child.kill().unwrap();
+    child.wait().unwrap();
+    assert_eq!(sealed, 200);
+    remove(&dir, &key);
+}
+
 // The next three catch the program exiting 0 on bad arguments or an exposed
 // key.
 
