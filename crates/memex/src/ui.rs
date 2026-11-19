@@ -60,29 +60,82 @@ pub fn draw(f: &mut Frame, app: &App) {
 
 /// Draw the screen, and say where clicks would land.
 pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
-    let [top, body] = draw_foot(f, app);
-    draw_top(f, app, top);
+    let body = draw_edges(f, app);
     draw_body(f, app, body)
 }
 
-/// Draw the foot, as many rows as its lines take wrapped; the rows above
-/// it: the top bar's and the body's.
-fn draw_foot(f: &mut Frame, app: &App) -> [Rect; 2] {
-    let lines = foot_lines(app);
-    let [top, body, foot @ ..] = screen_areas(f.area(), &lines);
-    draw_prompt(f, lines, foot);
-    [top, body]
+/// Draw the top bar and the foot, each as many rows as its lines take
+/// wrapped; the rows between them: the body's.
+fn draw_edges(f: &mut Frame, app: &App) -> Rect {
+    let edges = Edges::of(app, f.area().width);
+    let [top, body, foot @ ..] = screen_areas(f.area(), &edges);
+    edges.draw(f, top, foot);
+    body
 }
 
-/// The screen's rows: the top bar, the body, and the foot's two lines,
-/// each as many rows as it takes wrapped, up to three.
-fn screen_areas(area: Rect, foot: &[Line<'static>; 2]) -> [Rect; 4] {
-    let rows = |l: &Line<'static>| wrapped_height(std::slice::from_ref(l), area.width).min(3);
-    let [prompt, said] = foot.each_ref().map(rows);
+/// The top bar: its left (with the right beside it, when it fits), and
+/// the right on a row of its own, when it does not.
+struct Top {
+    left: Line<'static>,
+    right: Option<Line<'static>>,
+}
+
+impl Top {
+    /// Its left, wrapped; under it, the right, if it has a row of its own.
+    fn draw(self, f: &mut Frame, area: Rect) {
+        let [left, right] = self.rows(area);
+        f.render_widget(wrapped(vec![self.left]), left);
+        f.render_widget(Paragraph::new(self.right.unwrap_or_default()), right);
+    }
+
+    /// The rows of an area for its left, and for its right: the last row,
+    /// if the right has a row of its own.
+    fn rows(&self, area: Rect) -> [Rect; 2] {
+        let below = u16::from(self.right.is_some());
+        Layout::vertical([Constraint::Min(1), Constraint::Length(below)]).areas(area)
+    }
+}
+
+/// The lines at the screen's edges: the top bar's, and the foot's two.
+struct Edges {
+    top: Top,
+    foot: [Line<'static>; 2],
+}
+
+impl Edges {
+    fn of(app: &App, width: u16) -> Edges {
+        let top = top_lines(app, width);
+        Edges {
+            top,
+            foot: foot_lines(app),
+        }
+    }
+
+    /// Draw the top bar and the foot in their rows.
+    fn draw(self, f: &mut Frame, top: Rect, foot: [Rect; 2]) {
+        self.top.draw(f, top);
+        draw_prompt(f, self.foot, foot);
+    }
+
+    /// How many rows each takes wrapped to a width: the top bar (its left
+    /// up to two, and a row for its right if that has its own), what is
+    /// typed, and what the memex says (up to three each).
+    fn rows(&self, width: u16) -> [u16; 3] {
+        let rows =
+            |l: &Line<'static>, most| wrapped_height(std::slice::from_ref(l), width).clamp(1, most);
+        let top = rows(&self.top.left, 2) + u16::from(self.top.right.is_some());
+        let [typed, said] = self.foot.each_ref().map(|l| rows(l, 3));
+        [top, typed, said]
+    }
+}
+
+/// The screen's rows: the top bar, the body, and the foot's two lines.
+fn screen_areas(area: Rect, edges: &Edges) -> [Rect; 4] {
+    let [top, typed, said] = edges.rows(area.width);
     let rows = [
-        Constraint::Length(1),
+        Constraint::Length(top),
         Constraint::Min(3),
-        Constraint::Length(prompt),
+        Constraint::Length(typed),
         Constraint::Length(said),
     ];
     Layout::vertical(rows).areas(area)
@@ -130,11 +183,29 @@ fn cover(f: &mut Frame, app: &App, a: &Active, area: Rect, hits: Hits) -> Hits {
     hits.outside(area)
 }
 
-fn draw_top(f: &mut Frame, app: &App, area: Rect) {
-    f.render_widget(Paragraph::new(top_left(app)), area);
-    if let Some(right) = top_right(app, area.width) {
-        f.render_widget(Paragraph::new(right), area);
+/// The top bar: on the left the room, its world and the journal; on the
+/// right what reasoning found, or the pane in focus. When the right does
+/// not fit beside the left, it takes a row of its own.
+fn top_lines(app: &App, width: u16) -> Top {
+    let left = top_left(app);
+    let right = top_right(app);
+    let gap = (width as usize).checked_sub(left.width() + right.width() + 1);
+    match gap {
+        Some(gap) => Top {
+            left: beside(left, gap + 1, right),
+            right: None,
+        },
+        None => Top {
+            left,
+            right: Some(Line::from(right).right_aligned()),
+        },
     }
+}
+
+/// A line, then a gap, then a span.
+fn beside(line: Line<'static>, gap: usize, right: Span<'static>) -> Line<'static> {
+    let gap = Span::raw(" ".repeat(gap));
+    Line::from_iter(line.spans.into_iter().chain([gap, right]))
 }
 
 /// The top bar's left: the room, its world or worlds, and how many
@@ -172,15 +243,14 @@ fn world_spans(app: &App) -> Vec<Span<'static>> {
 }
 
 /// The top bar's right: the world's status, else the pane with focus,
-/// at the right, dim, if it fits in the room the left leaves.
-fn top_right(app: &App, width: u16) -> Option<Line<'static>> {
+/// The top bar's right, dim: what reasoning found, or else the pane in
+/// focus.
+fn top_right(app: &App) -> Span<'static> {
     let text = match app.reason.eval[0].as_ref().map(status) {
         Some(s) if !s.is_empty() => s,
         _ => format!("pane {} of 2", app.session.view.focus + 1),
     };
-    let room = (width as usize).saturating_sub(top_left(app).width() + 1);
-    let fits = text.chars().count() <= room;
-    fits.then(|| Line::styled(text, dim()).right_aligned())
+    Span::styled(text, dim())
 }
 
 /// The right pane for a view: its layers, each with its goal and how many
@@ -941,7 +1011,7 @@ fn right_panel(app: &App, id: u64) -> Paragraph<'static> {
             let outline = &app.notebook.outline;
             wrapped(ConstraintPane { outline, e }.of(id))
         }
-        _ => Paragraph::new(links_lines(&app.notebook.outline, id)),
+        _ => wrapped(links_lines(&app.notebook.outline, id)),
     }
 }
 
@@ -994,7 +1064,7 @@ fn joined(parts: &[(String, Click)]) -> String {
 
 /// A text drawn dim.
 fn dim_text(text: String) -> Paragraph<'static> {
-    Paragraph::new(Line::styled(text, dim()))
+    wrapped(vec![Line::styled(text, dim())])
 }
 
 /// A row of a pane, part by part, each part's text a click: where the
@@ -2082,6 +2152,61 @@ fn draw_sides(f: &mut Frame, app: &App, area: Rect) {
     }
 }
 
+/// A world's column, by its place, in its half.
+fn draw_column(f: &mut Frame, k: usize, area: Rect, rows: Vec<Line<'static>>) {
+    f.render_widget(Paragraph::new(rows).block(ruled(k)), area);
+}
+
+/// The first world is ruled off from the second.
+fn ruled(k: usize) -> Block<'static> {
+    let border = if k == 0 {
+        Borders::RIGHT
+    } else {
+        Borders::NONE
+    };
+    Block::default().borders(border)
+}
+
+/// The widths inside the two halves: the first less its rule.
+fn column_widths(halves: [Rect; 2]) -> [u16; 2] {
+    [halves[0].width.saturating_sub(1), halves[1].width]
+}
+
+/// Two columns of lines wrapped to their widths, each later row of a line
+/// set in by two, and kept row for row: each pair of lines takes as many
+/// rows as the taller of the two.
+fn side_by_side(columns: [Vec<Line<'static>>; 2], widths: [u16; 2]) -> [Vec<Line<'static>>; 2] {
+    let pairs: Vec<_> = line_pairs(&columns)
+        .map(|l| padded_pair(l, widths))
+        .collect();
+    [0, 1].map(|k| pairs.iter().flat_map(|p| p[k].clone()).collect())
+}
+
+/// The columns' lines, pair by pair: the ith of each, or none where a
+/// column is shorter.
+fn line_pairs<'a>(
+    columns: &'a [Vec<Line<'static>>; 2],
+) -> impl Iterator<Item = [Option<&'a Line<'static>>; 2]> {
+    let n = columns[0].len().max(columns[1].len());
+    (0..n).map(move |i| columns.each_ref().map(|c| c.get(i)))
+}
+
+/// A pair of lines, one from each column, wrapped, the shorter padded to
+/// the taller's rows.
+fn padded_pair(lines: [Option<&Line<'static>>; 2], widths: [u16; 2]) -> [Vec<Line<'static>>; 2] {
+    let mut pair = [0, 1].map(|k| wrapped_rows(lines[k], widths[k]));
+    let height = pair.iter().map(Vec::len).max().unwrap_or(0);
+    pair.iter_mut()
+        .for_each(|rows| rows.resize(height, Line::raw("")));
+    pair
+}
+
+/// A line's rows wrapped to a width, later rows set in by two; none for
+/// no line.
+fn wrapped_rows(line: Option<&Line<'static>>, width: u16) -> Vec<Line<'static>> {
+    line.map_or_else(Vec::new, |l| wrap(l, width as usize, 2).rows)
+}
+
 /// One world of a supposition: its outline, what reasoning found in it,
 /// and its title.
 struct Side<'a> {
@@ -2196,24 +2321,20 @@ impl<'a> Sides<'a> {
         }
     }
 
-    /// The two columns, each half the area.
+    /// The two columns, each half the area, wrapped and kept row for row:
+    /// each pair of lines takes as many rows as the taller of the two.
     fn draw(&self, f: &mut Frame, area: Rect) {
         let halves = Layout::horizontal([Constraint::Percentage(50); 2]).areas::<2>(area);
-        for (k, half) in halves.into_iter().enumerate() {
-            self.draw_column(f, k, half);
+        let widths = column_widths(halves);
+        let rows = side_by_side(self.columns(widths), widths);
+        for (k, rows) in rows.into_iter().enumerate() {
+            draw_column(f, k, halves[k], rows);
         }
     }
 
-    /// A world's column, by its place; the first is ruled off from the
-    /// second.
-    fn draw_column(&self, f: &mut Frame, k: usize, area: Rect) {
-        let border = if k == 0 {
-            Borders::RIGHT
-        } else {
-            Borders::NONE
-        };
-        let column = Paragraph::new(self.column(k, area.width));
-        f.render_widget(column.block(Block::default().borders(border)), area);
+    /// The two worlds' columns, for their widths.
+    fn columns(&self, widths: [u16; 2]) -> [Vec<Line<'static>>; 2] {
+        [0, 1].map(|k| self.column(k, widths[k]))
     }
 
     /// A world's column: its title, its rows, its constraints, and its

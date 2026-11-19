@@ -351,3 +351,111 @@ fn a_long_message_wraps_to_three_rows_at_most() {
     assert!(!foot.contains("w90"), "a fourth row is not: {foot}");
     assert!(rows.iter().any(|r| r.contains("• 1. The programme")));
 }
+
+/// The words in a column of rows: those left of the first `│` (the left
+/// pane or world), or right of it.
+fn column_words(rows: &[String], right: bool) -> String {
+    let side = |r: &String| {
+        let mut parts = r.splitn(2, '│');
+        let left = parts.next().unwrap_or("").to_string();
+        if right {
+            parts.next().unwrap_or("").to_string()
+        } else {
+            left
+        }
+    };
+    let words = rows.iter().map(side).collect::<Vec<_>>().join(" ");
+    words.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+const LONG: &str = "It is false that the rest is smaller than 0, whatever the rent and the food come to this year.";
+
+#[test]
+fn the_right_panes_text_and_title_wrap_whole() {
+    // Catches the selected item's text, or the pane's title, cut at the
+    // screen's edge.
+    let mut room = Room::new("screen-right-wrap");
+    room.items(&[LONG]);
+    let rows = room.lines_at(60, 24);
+    let right = column_words(&rows, true);
+    assert!(right.contains("LINKS OF THE SELECTED ITEM"), "{rows:#?}");
+    assert!(right.contains(LONG), "{rows:#?}");
+}
+
+#[test]
+fn the_worlds_wrap_and_stay_row_for_row() {
+    // Catches a world's rows cut at its column's edge, or one column's
+    // wrapped rows pushing its later rows below the other's. A world shows
+    // the items that state facts, so these state some.
+    let long = "The date of Buran-flight is 1988. The label of Buran-flight is \"Buran's flight\".";
+    let mut room = Room::new("screen-worlds-wrap");
+    room.items(&[long, "The income is 2000."]);
+    room.app.idle();
+    room.command("suppose that w");
+    room.app.evaluate().unwrap(); // as the window does
+    let rows = room.lines_at(80, 24);
+    assert!(column_words(&rows, false).contains(long), "{rows:#?}");
+    assert!(column_words(&rows, true).contains(long), "{rows:#?}");
+    let below = rows.iter().find(|r| r.starts_with("The income"));
+    let right = below.expect("The income").split('│').nth(1).unwrap();
+    assert!(right.starts_with("The income"), "{rows:#?}");
+}
+
+#[test]
+fn the_top_bars_status_has_a_row_of_its_own_beside_a_long_room_name() {
+    // Catches the status dropped when the room's name leaves no room for
+    // it, as it was at 80 columns: the top bar's right is what says a
+    // constraint is violated.
+    let room = Room::new("screen-a-room-with-a-name-long-enough-to-fill-the-top-bar");
+    let rows = room.lines_at(80, 24);
+    assert!(
+        rows[..3].iter().any(|r| r.trim() == "pane 1 of 2"),
+        "{rows:#?}"
+    );
+}
+
+#[test]
+fn an_outlines_long_title_wraps_onto_its_second_row() {
+    // Catches the outline pane's title, which holds the text of the item
+    // named title, cut at the pane's edge.
+    let mut room = Room::new("screen-title-wrap");
+    room.items(&["Notes on the Soviet shuttle programme"]);
+    room.command("name title");
+    let rows = room.lines_at(60, 24);
+    let at = rows
+        .iter()
+        .position(|r| r.starts_with("OUTLINE"))
+        .expect("a title");
+    let title = column_words(&rows[at..at + 2], false);
+    assert_eq!(
+        title, "OUTLINE · NOTES ON THE SOVIET SHUTTLE PROGRAMME",
+        "{rows:#?}"
+    );
+}
+
+#[test]
+fn a_row_one_world_wraps_further_keeps_the_next_rows_together() {
+    // Catches the two worlds' rows drifting apart when one side of a pair
+    // wraps to more rows: here the supposed side adds "(fact retracted
+    // here)" to the row whose fact it sets aside.
+    let long = "The date of Buran-flight is 1988. The label of Buran-flight is \"Buran's flight\".";
+    let mut room = Room::new("screen-worlds-pad");
+    room.items(&[long, "Nothing has more than 1 date.", "The income is 2000."]);
+    room.app.idle();
+    room.app.evaluate().unwrap();
+    room.hold(Quasi::Suppose, "the flight was in 1989");
+    room.release(Quasi::Suppose);
+    room.tap(&[Key::Enter]);
+    room.app.evaluate().unwrap(); // as the window does
+    // At 52 columns "(fact retracted here)" takes a row of its own on
+    // the supposed side, so that side's pair is a row taller.
+    let rows = room.lines_at(52, 30);
+    let right = |r: &String| r.split('│').nth(1).unwrap_or("").trim_start().to_string();
+    let own_row = rows
+        .iter()
+        .any(|r| right(r).starts_with("(fact retracted here)"));
+    assert!(own_row, "the supposed side is a row taller: {rows:#?}");
+    let below = rows.iter().find(|r| r.starts_with("The income"));
+    let below = right(below.expect("The income"));
+    assert!(below.starts_with("The income"), "{rows:#?}");
+}

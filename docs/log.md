@@ -1147,6 +1147,29 @@ in an unwrapped box; the foot line is cut at the screen's edge.
 The referent count does not see a child module, so `ui.rs` reads as
 holding 6 modules; a reader holds 7 (its child `wrap` too).
 
+### The top bar, the right pane and the worlds at narrow widths (19 November 2026)
+
+At the author's request, checked at 80 and 60 columns (rendered and
+read): the top bar dropped its right side whenever it did not fit
+beside the room's name, so at 80 columns "1 disagreement between
+sources" was not shown at all; the right pane cut the selected item's
+text; the worlds view cut every row and both titles. Fixed:
+
+- The top bar's right side takes a row of its own when it does not fit
+  beside the left; the left wraps to at most two rows.
+- The right pane's links and the outline pane's title wrap.
+- The worlds view wraps each world's rows, later rows set in by two,
+  and keeps the worlds row for row: each pair of rows takes as many
+  rows as the taller.
+
+A test written for the old top bar (the right side not drawn when it
+does not fit) now asserts the new behaviour, keeping its point: the
+right side is never drawn over the left.
+
+Not done: the left of the top bar is cut after two rows (a long
+supposition's name loses its end, and "journal N" with it, at 60
+columns); the worlds view does not scroll, as before.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

@@ -90,7 +90,19 @@ fn the_top_bar_names_the_room_its_world_its_entries_and_the_pane() {
 }
 
 #[test]
-fn the_top_bar_draws_no_right_side_that_does_not_fit() {
+fn the_top_bar_puts_a_right_side_that_does_not_fit_on_a_row_of_its_own() {
+    // Catches the right side drawn over the left, or dropped, as it was
+    // until 19 November 2026: the status it shows (a violation, say) was
+    // then not shown at all at 80 columns.
     let r = Room::new("top-narrow");
-    assert_eq!(r.lines_at(11, 4).remove(0), "room advers");
+    let rows = r.lines_at(11, 12);
+    assert_eq!(
+        rows[0].trim_end(),
+        "room",
+        "the left is not drawn over: {rows:#?}"
+    );
+    assert_eq!(
+        rows[2], "pane 1 of 2",
+        "the right has its own row: {rows:#?}"
+    );
 }
