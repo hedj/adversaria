@@ -199,6 +199,14 @@ pub const COMMANDS: &[Command] = &[
         brief: "link one item to another",
     },
     Command {
+        name: "make",
+        run: App::cmd_make,
+        target: true,
+        slots: &[],
+        help: "make an item for each of the target's [[links]] that names no item, at the foot of the top level, and link it",
+        brief: "make items for its [[links]]",
+    },
+    Command {
         name: "move",
         run: App::cmd_move,
         target: true,

@@ -496,7 +496,7 @@ impl Outline {
             "layer" => self.add_layer(seq, b),
             "derive" => self.set_derived(b),
             "read" => self.record_reading(b),
-            "split" => Some(()),
+            "split" | "make" => Some(()),
             _ => None,
         }
     }
@@ -665,6 +665,33 @@ impl Outline {
     /// Links that leave or reach an item and its target or source still
     /// exist, each grouped by kind in the order the kinds first appear:
     /// the order the links pane lists them and `follow` numbers them.
+    /// The item a [[link]] of this name goes to: the one named so, else
+    /// the first whose text it is, ignoring case.
+    pub fn resolve(&self, name: &str) -> Option<u64> {
+        let named = self.names.get(name).copied();
+        named.or_else(|| self.titled(name))
+    }
+
+    /// The first item whose text is this, ignoring case.
+    fn titled(&self, name: &str) -> Option<u64> {
+        let mut order = self.in_order().into_iter();
+        order.find(|i| self.text(*i).trim().eq_ignore_ascii_case(name))
+    }
+
+    /// Whether an item's [[links]] name another item it does not link yet.
+    pub fn unresolved_to(&self, id: u64, to: u64) -> bool {
+        let names = crate::actions::bracketed(&self.text(id));
+        let names_it = names.iter().any(|n| self.resolve(n) == Some(to));
+        names_it && !self.inline_links_of(id).iter().any(|l| l.to == to)
+    }
+
+    /// An item's [[links]] that name no item (but itself), in order.
+    pub fn unresolved(&self, id: u64) -> Vec<String> {
+        let names = crate::actions::bracketed(&self.text(id));
+        let unmatched = |n: &String| self.resolve(n).is_none_or(|t| t == id);
+        names.into_iter().filter(unmatched).collect()
+    }
+
     /// An item's links that a [[link]] in its text keeps.
     pub fn inline_links_of(&self, id: u64) -> Vec<&Link> {
         let (out, _) = self.links_of(id);

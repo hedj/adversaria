@@ -1285,6 +1285,25 @@ Breaks, each failing a test: no closing record; the parts read as their
 own (undo after the pause then took back one part); undo ignoring split
 records; parts without the item's text; no link back.
 
+### Links to no item wait to be asked for (19 November 2026)
+
+At the author's request ("Fix the gaps"), a [[link]] that names no item
+makes nothing. The cursor's line says "not yet items: … · make makes
+them"; `make` makes them at the foot of the top level and links them,
+closed by an edit op make record so one undo takes it back (format
+version 1 revised). An item made by hand later is linked at the pause:
+when an item is read, items whose [[links]] name it and do not link it
+are linked. This also closes the gap that undoing a text took back an
+item its [[link]] had made: only make makes such items now.
+
+Measured on 10,000 items (release): a pause that reads one new item
+took 14.3 ms, 9.8 ms without the linking of waiting items.
+
+Checked: five new tests in tests/inline_links.rs (ten in all). Breaks,
+each failing a test: no linking at the pause; make without its record;
+no hint; the hint shown with nothing to make; undo ignoring make
+records; make that links nothing.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

@@ -248,6 +248,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | `delete` | `delete` | deletes the target: a word, or an item and its branch (see Scope) |
 | `indent` | `indent` | makes the target a child of the item above it |
 | `outdent` | `outdent` | makes the target a sibling of its parent |
+| `make` | `make` | makes an item for each of the target's `[[links]]` that names no item, at the foot of the top level, and links it; one `undo` takes it all back |
 | `move` | `move after ADDRESS` | moves the target's branch to follow ADDRESS |
 | `copy` | `copy after ADDRESS` | copies the target's text to a new item after ADDRESS |
 | `split` | `split` | splits the target's text at each sentence end (`.`, `?` or `!`, a space, then a capital, a digit, a quote or a bracket; not after an abbreviation such as `e.g.` or `Dr.`, or an initial such as `J.`): the target keeps the first sentence, with its links; each other becomes a new item after it, linked back as `split_from`, its characters kept from the target's text, so their history stays. Each part is read at the pause. One `undo` takes the whole split back |
@@ -273,8 +274,12 @@ address's `/#anchor` are not tags.
 
 **Links typed in text.** Write `[[Buran flight]]` in an item's text and,
 at the pause, the item links to the item named so, else to the first
-whose text it is (ignoring case), else to a new item holding it, at the
-foot of the top level. Take the brackets out, and the link goes. The
+whose text it is (ignoring case). A link that names no item makes
+nothing: at the cursor a dim line says `not yet items: Buran flight ·
+make makes them`, and `make` makes each at the foot of the top level and
+links it; one `undo` takes that back. If you make such an item yourself
+(by typing it, or with Leap and Enter), the link is made at the pause.
+Take the brackets out, and the link goes. The
 reader reads the text without its brackets, so `The date of
 [[Buran-flight]] is 1988.` is still a fact.
 

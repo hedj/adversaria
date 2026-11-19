@@ -1,8 +1,9 @@
 //! Links typed in an item's text, as `[[Buran flight]]`: each is a link
-//! to the item named so, else to the item whose text it is, else to a new
-//! item holding it. The text keeps its links: when it changes, the links
-//! it no longer has are taken back and those it gains are written, at the
-//! pause, when the text is read.
+//! to the item named so, else to the item whose text it is. A link to no
+//! item waits: the cursor's line says so, and `make` makes the item, or
+//! the link is made when an item of that name or text is read. The text
+//! keeps its links: when it changes, the links it no longer has are taken
+//! back and those it gains are written, at the pause, when it is read.
 
 use crate::app::App;
 use crate::outline::TOP;
@@ -47,38 +48,60 @@ impl App {
         }
     }
 
-    /// The item a [[link]] goes to: the one named so, else the first whose
-    /// text it is (ignoring case), else a new item holding it, at the foot
-    /// of the top level, whose text waits to be read. Never the linking
-    /// item itself.
-    fn inline_target(&mut self, from: u64, name: &str) -> Option<u64> {
-        let found = self.named_or_titled(name).filter(|t| *t != from);
-        found.or_else(|| self.new_target(name))
+    /// The item a [[link]] goes to, if one is named so or holds its text;
+    /// never the linking item itself. A link to no item is left for the
+    /// user: `make` makes it.
+    fn inline_target(&self, from: u64, name: &str) -> Option<u64> {
+        self.notebook.outline.resolve(name).filter(|t| *t != from)
     }
 
-    /// The item named so, else the first whose text it is.
-    fn named_or_titled(&self, name: &str) -> Option<u64> {
-        let named = self.notebook.outline.names.get(name).copied();
-        named.or_else(|| self.titled(name))
-    }
-
-    /// The first item whose text is this, ignoring case.
-    fn titled(&self, name: &str) -> Option<u64> {
+    /// Link the items whose [[links]] name an item and do not link it yet:
+    /// it was just made, or its text just came to match. Whether any entry
+    /// was written.
+    pub(crate) fn link_to(&mut self, item: u64) -> bool {
         let outline = &self.notebook.outline;
-        let mut order = outline.in_order().into_iter();
-        order.find(|i| outline.text(*i).trim().eq_ignore_ascii_case(name))
+        let waiting = |o: &u64| *o != item && outline.unresolved_to(*o, item);
+        let others: Vec<u64> = outline.in_order().into_iter().filter(waiting).collect();
+        let mut linked = false;
+        for other in others {
+            linked |= self.link_inline(other);
+        }
+        linked
     }
 
-    /// A new item holding a [[link]]'s text, at the foot of the top level.
-    fn new_target(&mut self, name: &str) -> Option<u64> {
-        let last = self.last_top_item();
+    /// Make an item for each of the target's [[links]] that names no item,
+    /// at the foot of the top level, and link them; one undo takes it all
+    /// back.
+    pub(crate) fn cmd_make(&mut self, _: &[&str], target: u64) -> Result<String, String> {
+        self.flush_text();
+        let names = self.notebook.outline.unresolved(target);
+        if names.is_empty() {
+            return Err("nothing to make: each of the target's [[links]] names an item".into());
+        }
+        let first = self.notebook.next_seq();
+        let made = self.make_items(&names, first)?;
+        self.link_inline(target);
+        let body = json!({"op": "make", "item": target, "of": first, "made": made});
+        self.write_here("edit", body)?;
+        Ok(format!("made {}: {}", made.len(), names.join(", ")))
+    }
+
+    /// An item for each name, at the foot of the top level, each waiting
+    /// to be read as part of what starts at the entry `first`.
+    fn make_items(&mut self, names: &[String], first: u64) -> Result<Vec<u64>, String> {
+        names
+            .iter()
+            .map(|name| self.make_item(name, first))
+            .collect()
+    }
+
+    /// An item holding a name, at the foot of the top level, waiting to be
+    /// read as part of what starts at the entry `first`.
+    fn make_item(&mut self, name: &str, first: u64) -> Result<u64, String> {
         let spans = json!([[0, 0, name.chars().count()]]);
-        let made = self.create_after(last, name, spans);
-        let item = made
-            .inspect_err(|why| self.session.message = why.clone())
-            .ok()?;
-        self.will_read(item, item);
-        Some(item)
+        let item = self.create_after(self.last_top_item(), name, spans)?;
+        self.will_read(item, first);
+        Ok(item)
     }
 
     /// The last item at the top level, or none (TOP) in an empty outline.

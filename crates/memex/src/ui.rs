@@ -493,6 +493,7 @@ impl<'a> OutlinePane<'a> {
         let set_in = 2 * depth + 4;
         drawn.push_lines(self.answer_line(id, depth), set_in + 2);
         drawn.push_lines(self.prose_line(id, depth), set_in);
+        drawn.push_lines(self.unmade_line(id, depth), set_in);
         drawn.push_lines(self.mark_lines(id, depth), set_in + 2);
         if self.outline().views.contains_key(&id) {
             self.view_lines(drawn, id, 2 * depth + 2);
@@ -580,6 +581,27 @@ impl<'a> OutlinePane<'a> {
         let hint = self.hint_here(id)?;
         let indent = "  ".repeat(depth + 1);
         Some(Line::styled(format!("{indent}  {hint}"), dim()))
+    }
+
+    /// Under the item at the cursor, its [[links]] that name no item yet,
+    /// and how to make them.
+    fn unmade_line(&self, id: u64, depth: usize) -> Option<Line<'static>> {
+        let names = self.unmade_here(id)?;
+        let indent = "  ".repeat(depth + 1);
+        let hint = format!(
+            "{indent}  not yet items: {} · make makes them",
+            names.join(", ")
+        );
+        Some(Line::styled(hint, dim()))
+    }
+
+    /// The [[links]] of the item at the cursor that name no item, if it is
+    /// this item and has any.
+    fn unmade_here(&self, id: u64) -> Option<Vec<String>> {
+        let names = Some(id)
+            .filter(|i| *i == self.cursor())
+            .map(|i| self.outline().unresolved(i))?;
+        (!names.is_empty()).then_some(names)
     }
 
     /// The hint of an item, if it is the item at the cursor.

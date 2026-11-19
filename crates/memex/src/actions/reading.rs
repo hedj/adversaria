@@ -39,7 +39,7 @@ impl App {
         if read.is_some_and(|r| r.text == text) {
             return;
         }
-        let linked = self.link_inline(item);
+        let linked = self.link_inline(item) | self.link_to(item);
         let w = Written {
             item,
             of,
@@ -181,7 +181,9 @@ impl App {
     /// all from there back together.
     pub(crate) fn read_from(&self, seq: u64) -> Option<u64> {
         let e = self.notebook.entry(seq)?;
-        let closes = |b: &&serde_json::Value| b["op"] == "read" || b["op"] == "split";
+        let closes = |b: &&serde_json::Value| {
+            ["read", "split", "make"].contains(&b["op"].as_str().unwrap_or(""))
+        };
         let b = e.body().filter(|_| e.kind() == "edit").filter(closes)?;
         b["of"].as_u64()
     }

@@ -10,3 +10,4 @@ mod split;
 mod worlds;
 
 pub use dispatch::{COMMANDS, Command, command_help};
+pub(crate) use inline::bracketed;

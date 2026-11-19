@@ -49,17 +49,81 @@ fn a_link_goes_to_the_item_named_so_first() {
 }
 
 #[test]
-fn a_link_to_nothing_makes_the_item_it_names() {
-    // Catches a [[link]] to a missing item dropped, or the new item put
-    // anywhere but the foot of the top level.
-    let mut r = Room::new("inline-new");
+fn a_link_to_nothing_makes_nothing_and_says_so() {
+    // Catches an item made without asking, or a link to nothing dropped
+    // without a word.
+    let mut r = Room::new("inline-unmade");
     r.items(&["Notes", "See [[Energia]]."]);
     r.app.idle();
-    let order = r.outline().in_order();
-    let last = *order.last().unwrap();
+    assert_eq!(r.outline().in_order().len(), 2, "no item made");
+    assert!(
+        r.shows("not yet items: Energia · make makes them"),
+        "{:#?}",
+        r.lines()
+    );
+}
+
+#[test]
+fn make_makes_the_items_a_text_links_and_links_them() {
+    // Catches make not making the item, putting it anywhere but the foot
+    // of the top level, or not linking it.
+    let mut r = Room::new("inline-make");
+    r.items(&["Notes", "See [[Energia]]."]);
+    r.app.idle();
+    r.command("make");
+    let last = *r.outline().in_order().last().unwrap();
     assert_eq!(r.text(last), "Energia");
     assert_eq!(r.outline().parent_or_top(last), memex::outline::TOP);
     assert_eq!(inline_to(&r, titled(&r, "See [[Energia]].")), [last]);
+    assert!(!r.shows("not yet items"), "{:#?}", r.lines());
+}
+
+#[test]
+fn one_undo_takes_make_back_and_keeps_the_text() {
+    let mut r = Room::new("inline-make-undo");
+    r.items(&["See [[Energia]]."]);
+    r.app.idle();
+    r.command("make");
+    r.app.idle();
+    r.command("undo");
+    r.app.idle();
+    let order = r.outline().in_order();
+    let texts: Vec<String> = order.iter().map(|i| r.text(*i)).collect();
+    assert_eq!(texts, ["See [[Energia]]."]);
+    assert!(inline_to(&r, order[0]).is_empty());
+}
+
+#[test]
+fn an_item_made_later_is_linked_at_the_pause() {
+    // Catches a [[link]] left unresolved after an item of its name is
+    // made by hand: only make would then link it.
+    let mut r = Room::new("inline-later");
+    r.items(&["See [[Energia]]."]);
+    r.app.idle();
+    r.tap(&[Key::Enter]);
+    r.typ("Energia");
+    r.app.idle();
+    let from = titled(&r, "See [[Energia]].");
+    assert_eq!(inline_to(&r, from), [titled(&r, "Energia")]);
+}
+
+#[test]
+fn undoing_a_later_edit_keeps_an_item_make_made() {
+    // Catches the gap this replaces: a [[link]] made its item as part of
+    // the text's reading, so undoing the text took the item back too.
+    let mut r = Room::new("inline-keep");
+    r.items(&["See [[Energia]]."]);
+    r.app.idle();
+    r.command("make");
+    let from = titled(&r, "See [[Energia]].");
+    r.put_cursor(from);
+    r.tap(&[Key::End]);
+    r.typ(" Soon.");
+    r.app.idle();
+    r.command("undo");
+    r.app.idle();
+    let texts: Vec<String> = r.outline().in_order().iter().map(|i| r.text(*i)).collect();
+    assert_eq!(texts, ["See [[Energia]].", "Energia"]);
 }
 
 #[test]
