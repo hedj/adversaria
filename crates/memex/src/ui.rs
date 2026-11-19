@@ -1960,7 +1960,7 @@ fn suppose_guide(app: &App, readings: &[Term], at: usize) -> String {
 /// message.
 fn normal_foot(app: &App) -> (Line<'static>, String) {
     match hint(app) {
-        Some((p, g)) if app.session.message.is_empty() => (Line::raw(p), g),
+        Some((p, g)) if app.session.message.is_empty() => (Line::styled(p, dim()), g),
         _ => (Line::raw(""), app.session.message.clone()),
     }
 }
@@ -2708,7 +2708,8 @@ fn adoption_lines(app: &App) -> [Line<'static>; 3] {
 }
 
 /// Fading hint: while the cursor is on an item with marks, how to try the
-/// other reading; it stops once Suppose has been used four times.
+/// other reading, on one line, with no count of its showings; it stops
+/// once Suppose has been used four times (docs/design.md).
 fn hint(app: &App) -> Option<(String, String)> {
     let e = app.reason.eval[0].as_ref()?;
     if item_marks(e, &app.notebook.outline, app.cursor()).is_empty() {
@@ -2720,11 +2721,11 @@ fn hint(app: &App) -> Option<(String, String)> {
         .iter()
         .filter(|x| x.kind() == "suppose")
         .count();
-    let left = 4usize.checked_sub(used).filter(|n| *n > 0)?;
-    Some((
-        "Hold SUPPOSE and type a statement to try it in a new world. Nothing in this world changes.".into(),
-        format!("fading hint · shown until Suppose has been used {left} more time{}", if left == 1 { "" } else { "s" }),
-    ))
+    if used >= 4 {
+        return None;
+    }
+    let try_it = "Try a what-if: hold Super to suppose a statement, then release. The actual world stays as it is.";
+    Some((try_it.into(), String::new()))
 }
 
 /// A supposition: the actual world and the supposed one side by side, row

@@ -1502,6 +1502,14 @@ where the review held.
    outline" named a pane not on screen in a supposed world, and that the
    marks' "rule 2.7" clashed with the program's own word for a
    constraint (a rule is a definition here): both changed.
+9. The Suppose hint took both foot rows, the second a line about the
+   hint itself ("shown until Suppose has been used 4 more times"). It
+   is now one dim line: "Try a what-if: hold Super to suppose a
+   statement, then release. The actual world stays as it is." The
+   review asked for dim (it read as a message), for what the key does
+   rather than "Super (Suppose)", and for "the actual world": taken.
+   Not taken: an example built from the item's own conflict, which
+   needs facts said back in controlled English.
 
 ## 4. Where it stands
 

@@ -155,7 +155,8 @@ Without the sealer, entries are written but not sealed until a sealer runs.
 - **Foot:** the message line, and, while a quasimode is held, what you have
   typed and what releasing will do.
 
-A fading hint appears under an item with marks until you have used Suppose
+With the cursor on an item with marks, the foot suggests a what-if
+(`Try a what-if: hold Super to suppose a statement, …`), dim, until you have used Suppose
 four times.
 
 ### 2.3 Keys and quasimodes

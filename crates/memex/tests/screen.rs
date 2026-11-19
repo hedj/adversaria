@@ -113,9 +113,13 @@ fn a_message_takes_the_place_of_the_fading_hint() {
     room.app.evaluate().unwrap();
     room.app.session.message.clear();
     assert!(
-        foot(&room)[1].starts_with("fading hint"),
+        foot(&room)[0].starts_with("Try a what-if: hold Super to suppose"),
         "{:?}",
         foot(&room)
+    );
+    assert!(
+        !foot(&room)[1].contains("more time"),
+        "no count of its showings"
     );
     room.command("outdent");
     assert_eq!(foot(&room)[1], "a top-level item cannot be outdented");
