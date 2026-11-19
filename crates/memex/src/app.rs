@@ -143,6 +143,15 @@ impl PaneKind {
             _ => None,
         }
     }
+
+    /// The word for the kind, as the pane command takes it.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Outline => "outline",
+            Self::Links => "links",
+            Self::Suggestions => "suggestions",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -281,11 +290,6 @@ impl View {
     }
 
     pub(crate) fn to_json(&self, op: &str, extra: Value) -> Value {
-        let kind = |k: PaneKind| match k {
-            PaneKind::Outline => "outline",
-            PaneKind::Links => "links",
-            PaneKind::Suggestions => "suggestions",
-        };
         let scope = match self.scope {
             ScopeLevel::Word => "word",
             ScopeLevel::Statement => "statement",
@@ -293,7 +297,7 @@ impl View {
         };
         let mut v = json!({
             "op": op,
-            "panes": self.panes.iter().map(|p| json!({"kind": kind(p.kind), "cursor": p.cursor})).collect::<Vec<_>>(),
+            "panes": self.panes.iter().map(|p| json!({"kind": p.kind.name(), "cursor": p.cursor})).collect::<Vec<_>>(),
             "focus": self.focus, "pos": self.pos, "folded": self.folded.iter().collect::<Vec<_>>(), "scope": scope, "interrogate": self.interrogate,
         });
         if let (Value::Object(m), Value::Object(x)) = (&mut v, extra) {

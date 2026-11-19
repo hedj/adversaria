@@ -569,7 +569,7 @@ This makes questions about sources ordinary queries: which claims rest on a sing
   * rules mined from the beliefs, `Q(X, Y) :- P(X, Y)`, with support of at least 2 and confidence of at least 0.8, shown with their exceptions; an adopted rule is a `rule_def` fact the reasoner uses;
   * references, chosen only among works in the store (entities linked to a scholarly article), by main subject (P921) and citations (P2860) among stored works.
 * **The pane's rules**:
-  * it never takes the keyboard: `accept N` and `dismiss N`;
+  * it never takes the keyboard: `accept N` and `dismiss N`; while it has focus, an unbound key does nothing but say so, as in a links pane, so no key edits the outline unseen;
   * it shows at most five, ranked by score;
   * while it has focus, suggestions that remain keep their order and new ones go last;
   * a dismissal is a journal entry, and the suggestion returns only if its evidence changes.

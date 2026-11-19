@@ -66,9 +66,10 @@ impl App {
         if let Some(line) = self.session.keys.command_for(ev.key) {
             return self.run_bound(&line);
         }
-        if self.session.view.focused().kind == PaneKind::Links {
+        let kind = self.session.view.focused().kind;
+        if kind != PaneKind::Outline {
             let switch = self.session.keys.key_for("switch");
-            self.session.message = format!("this pane shows links; {switch} to edit");
+            self.session.message = format!("this pane shows {}; {switch} to edit", kind.name());
             return Mode::Normal;
         }
         self.session.message.clear();

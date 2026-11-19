@@ -165,3 +165,49 @@ fn an_item_made_from_leap_is_read_like_typed_text() {
         r.facts()
     );
 }
+
+#[test]
+fn a_pane_that_shows_links_or_suggestions_refuses_keys() {
+    // Catches keys pressed in such a pane editing the outline, where no
+    // text cursor is drawn, so a note changed unseen.
+    for kind in ["links", "suggestions"] {
+        let mut r = focused_on(kind);
+        let cursor = r.app.cursor();
+        r.tap(&[
+            Key::Char('x'),
+            Key::Backspace,
+            Key::Up,
+            Key::Enter,
+            Key::Delete,
+        ]);
+        r.app.flush();
+        nothing_changed(&r, cursor, kind);
+        let said = format!("this pane shows {kind}; F6 to edit");
+        assert_eq!(r.app.session.message, said);
+        the_outline_takes_keys_again(r, cursor);
+    }
+}
+
+/// Two items, and the other pane, showing this kind, in focus.
+fn focused_on(kind: &str) -> Room {
+    let mut r = Room::new(&format!("refuses-{kind}"));
+    r.items(&["first", "second"]);
+    r.command(&format!("pane {kind}"));
+    r.command("switch");
+    r
+}
+
+/// The text and the cursor as they were, and no item made.
+fn nothing_changed(r: &Room, cursor: u64, kind: &str) {
+    assert_eq!(r.text(cursor), "second", "{kind}");
+    assert_eq!(r.app.cursor(), cursor, "{kind}");
+    assert_eq!(r.outline().items.len(), 2, "{kind}");
+}
+
+/// Once the focus is back on the outline, a key types into it.
+fn the_outline_takes_keys_again(mut r: Room, cursor: u64) {
+    r.command("switch");
+    r.tap(&[Key::Char('x')]);
+    r.app.flush();
+    assert_eq!(r.text(cursor), "secondx");
+}

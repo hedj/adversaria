@@ -1380,6 +1380,13 @@ line stays reversed, but the text cursor is drawn only in the focused
 pane (`shows_text_cursor`), so a key's place in the line is not shown.
 The links pane, by contrast, refuses unbound keys.
 
+The suggestions pane now refuses them too, as the links pane does
+("this pane shows suggestions; F6 to edit"). Checked: the new test
+a_pane_that_shows_links_or_suggestions_refuses_keys (a character,
+Backspace, Up, Enter and Delete change nothing in either pane, and the
+outline takes keys again after `switch`) failed for suggestions before
+the change and passes after.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

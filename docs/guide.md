@@ -230,8 +230,9 @@ With it on, a left click:
 - on a suggestion, anywhere in its lines, runs `accept` for it;
 - on a mark of a view, goes to the item that states its fact (§ 3.3).
 
-While a pane that shows links has focus, keys that are not bound to a
-command do nothing there but say `this pane shows links; F6 to edit`.
+While a pane that shows links or suggestions has focus, keys that are not
+bound to a command do nothing there but say `this pane shows links; F6 to
+edit` (or `suggestions`). Quasimodes and bound keys work as anywhere.
 
 A click does nothing while a quasimode or a confirmation is open, and
 nothing on a mark line, a heading or empty space. Other buttons, dragging
@@ -706,10 +707,9 @@ The memex suggests these and more, without any language model:
 `pane suggestions` shows them, at most five, ranked by evidence, each with
 why it was offered. The pane never takes the keyboard: `accept N` adopts
 the Nth, with its evidence; `dismiss N` hides it until its evidence
-changes. While the pane has focus, suggestions keep their places, and
-keys still edit the outline at its cursor, the reversed line in the
-outline pane; the text cursor is drawn only in the pane with focus, so
-where in the line a key acts is not shown.
+changes. While the pane has focus, suggestions keep their places, and a
+key that is not bound to a command does nothing but say so (§ 2.3), so
+nothing is typed where no text cursor is drawn.
 
 ## 4. Around the memex
 
