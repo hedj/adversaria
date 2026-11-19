@@ -1309,6 +1309,16 @@ each failing a test: no linking at the pause; make without its record;
 no hint; the hint shown with nothing to make; undo ignoring make
 records; make that links nothing.
 
+### A name links the links that use it (19 November 2026)
+
+At the author's request ("Fix these limits too"): `name` now links again
+each item whose [[links]] use the name, so a link waiting for that name
+is made at once, and a name moved to another item moves its links. When
+any link changed, an edit op relink record names the name's entry, so
+one undo takes the name and its links back (format version 1 revised).
+Checked: two tests in tests/inline_links.rs; breaks, each failing one:
+no relinking, no closing record, undo ignoring it.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

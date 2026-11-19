@@ -69,6 +69,30 @@ impl App {
         linked
     }
 
+    /// Link again each item whose [[links]] use a name, after the name is
+    /// given (or moves to another item). If any link changed, a closing
+    /// record names the name's entry, `first`, so one undo takes the name
+    /// and its links back together.
+    pub(crate) fn relink_name(&mut self, name: &str, first: u64) -> Result<(), String> {
+        let items = self.using_name(name);
+        let mut changed = false;
+        for item in &items {
+            changed |= self.link_inline(*item);
+        }
+        if changed {
+            let body = json!({"op": "relink", "name": name, "of": first, "items": items});
+            self.write_here("edit", body)?;
+        }
+        Ok(())
+    }
+
+    /// The items whose [[links]] use a name, in order.
+    fn using_name(&self, name: &str) -> Vec<u64> {
+        let outline = &self.notebook.outline;
+        let order = outline.in_order().into_iter();
+        order.filter(|i| outline.links_by_name(*i, name)).collect()
+    }
+
     /// Make an item for each of the target's [[links]] that names no item,
     /// at the foot of the top level, and link them; one undo takes it all
     /// back.

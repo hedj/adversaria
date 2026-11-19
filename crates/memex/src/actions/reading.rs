@@ -182,7 +182,7 @@ impl App {
     pub(crate) fn read_from(&self, seq: u64) -> Option<u64> {
         let e = self.notebook.entry(seq)?;
         let closes = |b: &&serde_json::Value| {
-            ["read", "split", "make"].contains(&b["op"].as_str().unwrap_or(""))
+            ["read", "split", "make", "relink"].contains(&b["op"].as_str().unwrap_or(""))
         };
         let b = e.body().filter(|_| e.kind() == "edit").filter(closes)?;
         b["of"].as_u64()

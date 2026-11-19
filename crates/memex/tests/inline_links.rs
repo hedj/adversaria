@@ -173,3 +173,41 @@ fn undo_takes_back_a_text_and_its_link_together() {
         "no link into Energia is left"
     );
 }
+
+#[test]
+fn a_name_given_later_links_the_links_that_use_it() {
+    // Catches a [[link]] left unresolved after an item is named so, or a
+    // link left on the item that had the name before, once it moves.
+    let mut r = Room::new("inline-name-later");
+    r.items(&["See [[buran]].", "The shuttle", "Another"]);
+    r.app.idle();
+    let from = titled(&r, "See [[buran]].");
+    let shuttle = titled(&r, "The shuttle");
+    r.put_cursor(shuttle);
+    r.command("name buran");
+    assert_eq!(inline_to(&r, from), [shuttle]);
+    let another = titled(&r, "Another");
+    r.put_cursor(another);
+    r.command("name buran");
+    assert_eq!(
+        inline_to(&r, from),
+        [another],
+        "the link moves with the name"
+    );
+}
+
+#[test]
+fn one_undo_takes_a_name_and_its_links_back() {
+    let mut r = Room::new("inline-name-undo");
+    r.items(&["See [[buran]].", "The shuttle"]);
+    r.app.idle();
+    let from = titled(&r, "See [[buran]].");
+    r.put_cursor(titled(&r, "The shuttle"));
+    r.command("name buran");
+    r.command("undo");
+    assert!(inline_to(&r, from).is_empty());
+    assert!(
+        !r.outline().names.contains_key("buran"),
+        "the name is taken back too"
+    );
+}

@@ -496,7 +496,7 @@ impl Outline {
             "layer" => self.add_layer(seq, b),
             "derive" => self.set_derived(b),
             "read" => self.record_reading(b),
-            "split" | "make" => Some(()),
+            "split" | "make" | "relink" => Some(()),
             _ => None,
         }
     }
@@ -676,6 +676,13 @@ impl Outline {
     fn titled(&self, name: &str) -> Option<u64> {
         let mut order = self.in_order().into_iter();
         order.find(|i| self.text(*i).trim().eq_ignore_ascii_case(name))
+    }
+
+    /// Whether one of an item's [[links]] uses this name.
+    pub fn links_by_name(&self, id: u64, name: &str) -> bool {
+        crate::actions::bracketed(&self.text(id))
+            .iter()
+            .any(|n| n == name)
     }
 
     /// Whether an item's [[links]] name another item it does not link yet.

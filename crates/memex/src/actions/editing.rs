@@ -22,7 +22,8 @@ impl App {
                 "name not kept: “{n}” reads as an item's or an entry's number, so it would address no item"
             ));
         }
-        self.write_here("name", json!({"name": n, "item": target}))?;
+        let named = self.write_here("name", json!({"name": n, "item": target}))?;
+        self.relink_name(&n, named.seq)?;
         Ok(String::new())
     }
 
