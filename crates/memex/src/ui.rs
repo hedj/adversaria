@@ -23,6 +23,12 @@ use wrap::{Wrapped, wrap};
 fn dim() -> Style {
     Style::default().add_modifier(Modifier::DIM)
 }
+/// The ground of the cursor's line: a tint that every text colour reads
+/// on, so the line keeps what its colours say.
+pub fn cursor() -> Style {
+    Style::default().bg(Color::Rgb(0x2c, 0x3c, 0x52))
+}
+
 /// A violation: beliefs that break a rule. Red, as an error is.
 pub fn violation() -> Style {
     Style::default().fg(Color::Rgb(0xf0, 0x50, 0x50))
@@ -628,7 +634,7 @@ impl<'a> OutlinePane<'a> {
     }
 
     /// An item's line: its place in the tree, its text, how many items a
-    /// fold hides; reversed at the cursor.
+    /// fold hides; on the cursor's ground at the cursor.
     fn item_line(&self, id: u64, depth: usize) -> Line<'static> {
         let at_cursor = id == self.cursor();
         let mut spans = self.item_head(id, depth);
@@ -701,14 +707,14 @@ impl<'a> OutlinePane<'a> {
         folded.then(|| Span::styled(count(), dim()))
     }
 
-    /// The cursor's line reversed; bold too in branch scope, with focus.
+    /// The cursor's line on a tinted ground, its text in its own colours
+    /// (read, prose, a source dim); bold too in branch scope, with focus.
     fn cursor_style(&self) -> Style {
-        let reversed = Style::default().add_modifier(Modifier::REVERSED);
         let branch = self.view().scope == ScopeLevel::Branch;
         if branch && self.focused() {
-            reversed.add_modifier(Modifier::BOLD)
+            cursor().add_modifier(Modifier::BOLD)
         } else {
-            reversed
+            cursor()
         }
     }
 
@@ -906,6 +912,12 @@ impl Laid {
         rows.map(|(k, x, w)| (below + k, x, w)).collect()
     }
 
+    /// The rows a line takes, wrapped.
+    fn rows_of(&self, line: usize) -> std::ops::Range<usize> {
+        let first = self.first[line];
+        first..first + self.wrapped[line].rows.len()
+    }
+
     /// All the rows, in order.
     fn rows(self) -> Vec<Line<'static>> {
         self.wrapped.into_iter().flat_map(|w| w.rows).collect()
@@ -989,6 +1001,15 @@ impl Window {
         Rect::new(self.area.x + x as u16, self.area.y + y, w as u16, 1)
     }
 
+    /// Lay the cursor's ground under rows in the window, across its whole
+    /// width, so the cursor's line is found at a glance however short.
+    fn ground(&self, f: &mut Frame, rows: std::ops::Range<usize>) {
+        let width = self.area.width as usize;
+        for y in rows.filter_map(|r| self.row(r)) {
+            f.buffer_mut().set_style(self.at(0, y, width), cursor());
+        }
+    }
+
     /// Draw the rows in the window.
     fn draw(&self, f: &mut Frame, rows: Vec<Line<'static>>) {
         let height = self.area.height as usize;
@@ -1017,8 +1038,17 @@ impl Drawn {
         let window = Window::over(outline.rows, cursor);
         outline.put_text_cursor(f, window.place(cursor));
         let hits = self.hits(&laid, window);
+        window.ground(f, self.cursor_rows(&laid));
         window.draw(f, laid.rows());
         hits
+    }
+
+    /// The rows the cursor's item takes, wrapped: from its first, how many.
+    fn cursor_rows(&self, laid: &Laid) -> std::ops::Range<usize> {
+        let Some((line, _)) = self.cursor else {
+            return 0..0;
+        };
+        laid.rows_of(line)
     }
 
     /// Where the text cursor is drawn among the rows: its row and column.

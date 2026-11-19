@@ -1469,6 +1469,12 @@ where the review held.
    turn red. The review measured the first amber and red as alike to
    red-green colour-blind eyes, so they now differ in lightness and in
    sign; and found all-red bars alarmed without saying where.
+4. The cursor's line was reversed: read text became a cyan block, prose
+   a white one, a source's dim name grey on light grey. It is now a
+   tint (#2c3c52) that keeps each colour; on review (the tint is 1.5:1
+   on the ground, and a short line's patch was easy to miss) the tint
+   runs across the pane, on every wrapped row. The review's left accent
+   bar is left to finding 14, which gives the outline a gutter.
 
 ## 4. Where it stands
 

@@ -94,7 +94,35 @@ fn the_cursors_line_is_bold_too_in_branch_scope() {
     r.items(&["Alpha"]);
     assert!(!drawn(&r, "1. Alpha", Modifier::BOLD));
     r.app.session.view.scope = memex::app::ScopeLevel::Branch;
-    assert!(drawn(&r, "1. Alpha", Modifier::BOLD | Modifier::REVERSED));
+    assert!(drawn(&r, "1. Alpha", Modifier::BOLD));
+}
+
+#[test]
+fn the_cursors_line_keeps_its_colours_on_a_tinted_ground() {
+    // Catches the cursor's line reversed, which drew read text as a cyan
+    // block, prose as a white one, and a source's dim name on light grey.
+    let mut r = Room::new("cursor-ground");
+    r.items(&["Alpha", "Beta"]);
+    let at = r.style_of("2. Beta");
+    assert_eq!(at.bg, memex::ui::cursor().bg, "the cursor's line is tinted");
+    assert!(!at.add_modifier.contains(Modifier::REVERSED));
+    assert_eq!(
+        at.fg,
+        r.style_of("1. Alpha").fg,
+        "its text keeps its colour"
+    );
+    assert_ne!(
+        r.style_of("1. Alpha").bg,
+        at.bg,
+        "other lines are not tinted"
+    );
+    let (x, y) = r.find("2. Beta");
+    let far = r.screen(160, 40)[(x + 40, y)].style();
+    assert_eq!(
+        far.bg,
+        memex::ui::cursor().bg,
+        "the tint runs past the text"
+    );
 }
 
 #[test]
