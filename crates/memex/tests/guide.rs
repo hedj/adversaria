@@ -98,13 +98,16 @@ fn every_key_name_is_listed() {
 fn the_guides_examples_are_accepted() {
     // Catches an example that would stop the memex from starting.
     let blocks = toml_blocks();
-    assert_eq!(blocks.len(), 2, "{blocks:?}");
-    assert_eq!(
-        Config::parse(&blocks[0]).unwrap(),
-        Config::default(),
-        "the first block is the defaults"
-    );
-    Config::parse(&blocks[1]).unwrap();
+    assert_eq!(blocks.len(), 3, "{blocks:?}");
+    for b in &blocks {
+        Config::parse(b).unwrap_or_else(|e| panic!("{e}: {b}"));
+    }
+    let defaults = blocks
+        .iter()
+        .filter(|b| b.contains("[quasimodes]\nleap_forward"));
+    let defaults: Vec<_> = defaults.collect();
+    assert_eq!(defaults.len(), 1, "one block shows the defaults");
+    assert_eq!(Config::parse(defaults[0]).unwrap(), Config::default());
 }
 
 #[test]

@@ -5,9 +5,9 @@
 //! finds the session.
 
 use super::cells::Cells;
-use super::input::{KeyPress, clicked, map_key};
+use super::input::{Drag, KeyPress, clicked, map_key};
 use super::paint::{cell_size, paint};
-use crate::app::{App, Event};
+use crate::app::{App, Click, Event, Mode};
 use crate::config::Config;
 use crate::ui::{self, Hits};
 use egui::{Vec2, ViewportId};
@@ -74,7 +74,7 @@ impl WindowState {
 /// journal was when the memex last reasoned.
 struct Screen {
     cells: Terminal<Cells>,
-    hits: Hits,
+    mouse: Mouse,
     reasoned_at: Option<(u64, usize)>,
     /// A cell's size in points, as last measured.
     cell_size: Vec2,
@@ -88,12 +88,20 @@ struct Input {
     pointer: Option<Vec2>,
 }
 
+/// What the mouse acts on: where clicks land in the frame drawn, and the
+/// text selected (crate::gui::input).
+#[derive(Default)]
+struct Mouse {
+    hits: Hits,
+    drag: Drag,
+}
+
 impl Screen {
     /// A screen of 80 by 24 cells, until the window's size is known.
     fn new() -> Screen {
         Screen {
             cells: Terminal::new(Cells::new(80, 24)).expect("cells in memory"),
-            hits: Hits::default(),
+            mouse: Mouse::default(),
             reasoned_at: None,
             cell_size: Vec2::new(9.0, 18.0),
         }
@@ -114,16 +122,32 @@ impl Screen {
     }
 
     /// Lay the app out in as many cells as fit in a window of this size
-    /// (in points), noting where clicks land.
+    /// (in points), noting where clicks land; the selection is drawn in
+    /// the frame, so that the cells it leaves are drawn again unmarked.
     fn lay_out(&mut self, app: &App, fits: Vec2) {
         let columns = ((fits.x / self.cell_size.x) as u16).max(1);
         let rows = ((fits.y / self.cell_size.y) as u16).max(1);
         if self.cells.backend().buffer.area.as_size() != (columns, rows).into() {
             self.cells = Terminal::new(Cells::new(columns, rows)).expect("cells in memory");
         }
+        let selection = self.mouse.drag.selection;
         let mut hits = Hits::default();
-        let _ = self.cells.draw(|f| hits = ui::draw_hits(f, app));
-        self.hits = hits;
+        let _ = self.cells.draw(|f| {
+            hits = ui::draw_hits(f, app);
+            selection.inspect(|s| s.mark(f.buffer_mut()));
+        });
+        self.mouse.hits = hits;
+    }
+
+    /// What a click at a cell acts on, if anything.
+    fn clicked(&self, cell: (u16, u16)) -> Option<Click> {
+        clicked(&self.mouse.hits, cell)
+    }
+
+    /// The text a right-click at a cell plumbs: the text selected, or the
+    /// word under the cell.
+    fn plumbed(&self, cell: (u16, u16)) -> String {
+        self.mouse.drag.text_at(&self.cells.backend().buffer, cell)
     }
 }
 
@@ -189,10 +213,37 @@ impl Memex {
         if !self.input.config.mouse {
             return;
         }
-        let target = self
-            .pointed()
-            .and_then(|cell| clicked(&self.screen.hits, cell));
+        let target = self.pointed().and_then(|cell| self.screen.clicked(cell));
         if let Some(c) = target {
+            self.app.click(&c);
+        }
+    }
+
+    /// The left button down: a click, and, unless a menu was open, the
+    /// start of a selection.
+    fn press(&mut self) {
+        let menu = matches!(self.app.session.mode, Mode::Menu(_));
+        self.click();
+        let start = self.pointed().filter(|_| self.input.config.mouse && !menu);
+        self.screen.mouse.drag.press(start);
+    }
+
+    /// A right-click: plumb the text selected, or else the word under the
+    /// pointer, after a click on the item there (crate::plumb).
+    fn plumb(&mut self) {
+        let Some(cell) = self.pointed().filter(|_| self.input.config.mouse) else {
+            return;
+        };
+        let text = self.screen.plumbed(cell);
+        if self.screen.mouse.drag.selection.is_none() {
+            self.click_item(cell);
+        }
+        self.app.plumb(&text, cell);
+    }
+
+    /// A click on the item drawn at a cell, if one is.
+    fn click_item(&mut self, cell: (u16, u16)) {
+        if let Some(c @ Click::Item { .. }) = self.screen.clicked(cell) {
             self.app.click(&c);
         }
     }
@@ -207,6 +258,9 @@ impl Memex {
         let scale = self.window.gfx().map_or(1.0, |g| g.window.scale_factor());
         let at = at.to_logical::<f32>(scale);
         self.input.pointer = Some(Vec2::new(at.x, at.y));
+        if let Some(to) = self.pointed() {
+            self.screen.mouse.drag.moved(to);
+        }
     }
 
     /// Lay the screen out in cells as many as the window holds, and paint
@@ -333,7 +387,17 @@ impl ApplicationHandler for Memex {
                 state: ElementState::Pressed,
                 button: MouseButton::Left,
                 ..
-            } => self.click(),
+            } => self.press(),
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: MouseButton::Left,
+                ..
+            } => self.screen.mouse.drag.release(),
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Right,
+                ..
+            } => self.plumb(),
             WindowEvent::Resized(s) => self.resized(s),
             _ => return,
         }
@@ -354,5 +418,44 @@ impl Memex {
             return;
         };
         g.painter.on_window_resized(ViewportId::ROOT, w, h);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::style::Modifier;
+
+    /// An app on a journal of its own, and its directory.
+    fn opened(name: &str) -> (std::path::PathBuf, App) {
+        let dir = std::env::temp_dir().join(format!("adversaria-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let app = App::open(&dir).unwrap();
+        (dir, app)
+    }
+
+    /// Lay the screen out, and say which of the top row's first four
+    /// cells are drawn reversed.
+    fn laid(screen: &mut Screen, app: &App) -> Vec<bool> {
+        screen.lay_out(app, Vec2::new(90.0 * 9.0, 20.0 * 18.0));
+        let cells = &screen.cells.backend().buffer;
+        let reversed = |x: u16| cells[(x, 0)].modifier.contains(Modifier::REVERSED);
+        (0..4).map(reversed).collect()
+    }
+
+    #[test]
+    fn a_selection_cleared_leaves_no_mark() {
+        // Catches the selection marked on the cells after they are drawn:
+        // ratatui sends only cells that changed from the frame before, so
+        // a mark on a cell it does not send again stays after the
+        // selection is gone.
+        let (dir, app) = opened("window-mark");
+        let mut screen = Screen::new();
+        screen.mouse.drag.press(Some((0, 0)));
+        screen.mouse.drag.moved((3, 0));
+        assert_eq!(laid(&mut screen, &app), [true; 4]);
+        screen.mouse.drag.press(None);
+        assert_eq!(laid(&mut screen, &app), [false; 4], "the mark is gone");
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

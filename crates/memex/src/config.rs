@@ -48,13 +48,13 @@ F4 = "unadopt"
 F6 = "switch"
 F10 = "quit"
 
-# The mouse. When enabled, a click on an item moves the cursor there, a click
-# on a hint such as "F3 adopts" runs its command, and a click on a suggestion
-# accepts it. Off by default: while the memex has the mouse, the terminal's
-# own text selection usually needs Shift held. `memex --mouse` or
-# `memex --no-mouse` overrides this for one run.
+# The mouse. A click on an item moves the cursor there, a click on a hint
+# such as "F3 adopts" runs its command, and a click on a suggestion accepts
+# it; a drag selects text, and a right-click offers the commands that can
+# act on it (plumbing, below). `memex --no-mouse` or `memex --mouse`
+# overrides this for one run.
 [mouse]
-enabled = false
+enabled = true
 
 # Plumbing: a right-click offers the commands whose rules match the text
 # selected (or, with none, the word under the pointer). Your rules come
@@ -91,7 +91,8 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config::read(DEFAULT_TOML, vec![]).expect("the default configuration parses")
+        let nothing = Config::under(vec![], false);
+        Config::read(DEFAULT_TOML, nothing).expect("the default configuration parses")
     }
 }
 
@@ -289,14 +290,15 @@ impl Config {
     /// replaces its default, and the rest keep theirs. Every error names what
     /// is wrong.
     pub fn parse(text: &str) -> Result<Config, String> {
-        Config::read(text, Config::default().bindings)
+        let d = Config::default();
+        Config::read(text, Config::under(d.bindings, d.mouse))
     }
 
-    /// Read a file's text over the given bindings: each section, then
-    /// what every configuration must have.
-    fn read(text: &str, bindings: Vec<(Key, String)>) -> Result<Config, String> {
+    /// Read a file's text over a configuration's bindings and mouse:
+    /// each section, then what every configuration must have.
+    fn read(text: &str, under: Config) -> Result<Config, String> {
         let table: toml::Table = toml::from_str(text).map_err(|e| e.to_string())?;
-        let mut config = Config::empty(bindings);
+        let mut config = under;
         for (section, value) in &table {
             config.read_section(section, value)?;
         }
@@ -304,11 +306,13 @@ impl Config {
         Ok(config)
     }
 
-    fn empty(bindings: Vec<(Key, String)>) -> Config {
+    /// What a file is read over: these bindings and mouse, and no
+    /// quasimodes or rules yet.
+    fn under(bindings: Vec<(Key, String)>, mouse: bool) -> Config {
         Config {
             quasimodes: vec![],
             bindings,
-            mouse: false,
+            mouse,
             plumb: vec![],
         }
     }
@@ -598,10 +602,12 @@ mod tests {
     }
 
     #[test]
-    fn the_mouse_is_off_unless_asked_for() {
-        // Catches the mouse on by default, or not turned on by the file.
-        assert!(!Config::default().mouse);
-        assert!(Config::parse("[mouse]\nenabled = true\n").unwrap().mouse);
+    fn the_mouse_is_on_unless_turned_off() {
+        // Catches the mouse off by default, off for a file that does not
+        // name it, or not turned off by the file.
+        assert!(Config::default().mouse);
+        assert!(Config::parse("[keys]\nF1 = \"help\"\n").unwrap().mouse);
+        assert!(!Config::parse("[mouse]\nenabled = false\n").unwrap().mouse);
     }
 
     #[test]

@@ -183,6 +183,7 @@ def x11_checks(binary, d, check):
         x11_typing(binary, d, check)
         x11_remapped(binary, d, check)
         x11_mouse(binary, d, check)
+        x11_plumbing(binary, d, check)
         x11_idle_and_reasoning(binary, d, check)
         x11_focus_lost(binary, d, check)
     finally:
@@ -225,12 +226,12 @@ def x11_remapped(binary, d, check):
 def x11_mouse(binary, d, check):
     conf = os.path.join(d, "mouse.toml")
     with open(conf, "w", encoding="utf-8") as f:
-        f.write("[mouse]\nenabled = true\n")
+        f.write("[mouse]\nenabled = false\n")
     click = [["mousemove", str(FIRST_ITEM[0]), str(FIRST_ITEM[1])], ["click", "1"]]
     actions = flat(typed("Hello"), key(RETURN), typed("World"), click, typed("Z"), key(F10))
-    for name, args, takes in [("by default", [], False), ("with [mouse] enabled", ["--config", conf], True),
-                              ("with --no-mouse over [mouse] enabled", ["--config", conf, "--no-mouse"], False),
-                              ("with --mouse", ["--mouse"], True)]:
+    for name, args, takes in [("by default", [], True), ("with [mouse] disabled", ["--config", conf], False),
+                              ("with --mouse over [mouse] disabled", ["--config", conf, "--mouse"], True),
+                              ("with --no-mouse", ["--no-mouse"], False)]:
         j = os.path.join(d, "mouse-" + str(abs(hash(name))))
         status, err = run_x11(binary, ":91", j, actions, args=args)
         es = entries(j)
@@ -242,6 +243,41 @@ def x11_mouse(binary, d, check):
               status == 0 and moved == takes, (status, first, into, err[-200:]))
     status, _ = run_x11(binary, ":91", os.path.join(d, "both"), [], args=["--mouse", "--no-mouse"])
     check("--mouse with --no-mouse is a usage error", status == 2, f"status {status}")
+
+
+# Two plumbing rules of the user's: one for a selection with a space in it,
+# one for the word Hello alone. Each states a fact, so the journal shows
+# which ran.
+PLUMB_RULES = """[[plumb]]
+name = "dragged"
+match = '.+ Hello'
+run = "fact dragged(yes)"
+
+[[plumb]]
+name = "said"
+match = 'Hello'
+run = "fact said(hello)"
+"""
+
+
+def x11_plumbing(binary, d, check):
+    conf = os.path.join(d, "plumb.toml")
+    with open(conf, "w", encoding="utf-8") as f:
+        f.write(PLUMB_RULES)
+    # The first item's text starts at the sixth cell, after "• 1. ".
+    _, y = FIRST_ITEM
+    right_click = [["mousemove", "60", str(y)], ["click", "3"], key(RETURN)]
+    drag = [["mousemove", "10", str(y)], ["mousedown", "1"], ["mousemove", "300", str(y)],
+            ["mouseup", "1"], ["click", "3"], key(RETURN)]
+    for name, gesture, fact in [("a right-click on a word", right_click, "said"),
+                                ("a drag, then a right-click", drag, "dragged")]:
+        j = os.path.join(d, "plumb-" + fact)
+        actions = flat(typed("Hello"), key(RETURN), typed("World"), gesture, key(F10))
+        status, err = run_x11(binary, ":91", j, actions, args=["--config", conf])
+        facts = [e["body"].get("facts") for e in entries(j)
+                 if e["kind"] == "edit" and e["body"].get("op") == "facts"]
+        check(f"{name} offers the user's rule first, and Enter runs it",
+              status == 0 and any(x.get("f") == fact for f in facts for x in f), (status, facts, err[-300:]))
 
 
 def x11_idle_and_reasoning(binary, d, check):

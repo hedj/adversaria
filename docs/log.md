@@ -1417,6 +1417,33 @@ Checked: the tutorial test performs every new step and checks every
 quoted screen text. Broken once (a change's entry number altered in the
 tutorial): it fails.
 
+### Selecting, and right-click plumbing (19 November 2026)
+
+The mouse is on by default. A drag selects text, within a pane, drawn
+reversed; a right-click offers, in a menu, the commands whose plumbing
+rules match the selection, or the word under the pointer (crate::plumb,
+after Plan 9's plumber; guide § 2.3). Ten built-in rules; the user's
+`[[plumb]]` rules come first. A `go` command was added for rules that
+follow an address or find a text.
+
+Checked: unit tests of the rules (plumb.rs), the configuration
+(config.rs), the selection and the word under a cell (gui/input.rs),
+a selection cleared leaving no mark (gui/window.rs);
+tests/plumbing.rs drives the menu by keys and clicks; tests/go.rs;
+tests/memex_in_a_window.py under Xvfb right-clicks a word and drags a
+selection, each running a rule of the user's by Enter. Each was broken
+once on purpose and failed. Faults found on the way: a click took the
+mode to look for a menu and closed a held quasimode (the mouse tests);
+an empty configuration would have turned the mouse off, as reading
+started from "off" (the configuration tests); the guide's copy of the
+defaults still said off (the guide test); and the selection was first
+marked on the cells after they were drawn, where ratatui, sending only
+cells that change, would have left a mark behind once the selection
+moved (found while reading the code, then tested).
+
+Not checked: right-click under Wayland (its pointer program has the left
+button only); a real desktop and mouse.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

@@ -233,12 +233,11 @@ screen:
 
 #### The mouse
 
-The mouse is off unless you turn it on, with `enabled = true` in the
-configuration (§ 4.3), or with `--mouse` for one run.
-`--no-mouse` turns it off for one run whatever the file says. Giving both
-flags is an error.
+The mouse is on unless you turn it off, with `enabled = false` in the
+configuration (§ 4.3), or with `--no-mouse` for one run; `--mouse` turns
+it on for one run whatever the file says. Giving both flags is an error.
 
-With it on, a left click:
+A left click:
 
 - on an item's line in an outline pane moves the cursor there (and focus
   to that pane), as the arrow keys would;
@@ -247,18 +246,65 @@ With it on, a left click:
 - on a suggestion, anywhere in its lines, runs `accept` for it;
 - on a mark of a view, goes to the item that states its fact (§ 3.3).
 
+**Selecting.** Drag with the left button to select text: it is drawn
+reversed, from where the button went down to where it is, in reading
+order, within the pane where the drag began. A click without a drag
+clears it.
+
+**Right-click: what can act on this?** A right-click offers the commands
+that can act on the text selected or, with none selected, on the word
+under the pointer (without the punctuation around it). With nothing
+selected, it first puts the cursor on the item there, so the commands
+act on that item. The offers appear in a menu, `act on`, at the pointer:
+Up and Down choose, Enter or a number runs one, Esc closes it; a click on
+an offer runs it, and a click anywhere else closes the menu. If nothing
+can act on the text, the foot says so.
+
+This is plumbing, after Plan 9's plumber (Rob Pike, "Plumbing and Other
+Utilities"). Rules say what can act on a text: each has a regular
+expression that the whole text must match, and a command line to offer.
+Plan 9 runs the first rule that matches; here every rule that matches is
+offered, in order, each command once. The built-in rules, most specific
+first:
+
+| The text | Offered |
+| --- | --- |
+| an address that names an item: `1.3`, `#28` | `go` to it |
+| `#` and a number | `retract` that entry |
+| the path of a file that exists, ending in `.md`, `.docx`, `.odt`, `.tex`, `.html` (and others Pandoc reads), `.json` or `.pl` | `import document`, `import results` or `import wikidata` |
+| a Prolog goal, such as `date(E, Y)` | `query` it, or state it as a `fact` here |
+| a sentence starting with a capital and ending in `.`, `?` or `!` | read it with `ace` |
+| up to 60 characters that name an item | `link to` it from here |
+| up to 60 characters | `go` to the next item holding them (find) |
+
+Add your own with `[[plumb]]` in the configuration (§ 4.3); yours are
+offered before the built-in ones. Each has a `name` (the menu's words), a
+`match` (the regular expression, in Rust's syntax), a `run` (a command
+line, as typed in Command), and, if it needs one, an `if`: `"file"` (the
+text is a file that exists, from where the memex started) or `"item"`
+(the text names an item). In `name` and `run`, `$0` is the whole text and
+`$1` to `$9` (or `${1}`) the expression's groups:
+
+```toml
+[[plumb]]
+name = "show Wikidata's statements about $0"
+match = 'Q\d+'
+run = "query wd('$0', P, V)"
+```
+
+A rule with a pattern that is not a regular expression, a command that
+does not exist, or an unknown setting is refused when the memex starts,
+as any configuration it would have to guess at is.
+
 While a pane that shows links or suggestions has focus, keys that are not
 bound to a command do nothing there but say `this pane shows links; F6 to
 edit` (or `suggestions`). Quasimodes and bound keys work as anywhere.
 
 A click does nothing while a quasimode or a confirmation is open, and
-nothing on a mark line, a heading or empty space. Other buttons, dragging
-and the wheel do nothing. A click is recorded in the journal as the
-keyboard action it stands for.
-
-The mouse is off by default. That was decided while the memex ran in a
-terminal, whose own text selection the mouse got in the way of; the window
-has no text selection, and the default stands until the author changes it.
+nothing on a mark line, a heading or empty space. The middle button and
+the wheel do nothing. A click is recorded in the journal as the keyboard
+action it stands for; a selection and an open menu are not recorded, but
+the command an offer runs is.
 
 ### 2.4 Commands and addresses
 
@@ -902,7 +948,8 @@ cargo run -q -p memex -- --print-config > ~/.config/adversaria/config.toml
 
 The same file is in the repository as docs/config.example.toml.
 
-It has three sections. Anything you leave out keeps its default.
+It has four sections. Anything you leave out keeps its default. The
+defaults are below; `[[plumb]]`, which has no defaults here, is in § 2.3.
 
 ```toml
 [quasimodes]
@@ -921,7 +968,7 @@ F6 = "switch"
 F10 = "quit"
 
 [mouse]
-enabled = false
+enabled = true
 ```
 
 **`[quasimodes]`** gives each quasimode a list of keys (or one key, as a
@@ -932,8 +979,11 @@ one.
 Command, such as `"pane suggestions"` or `"export draft.md"`; or to
 `"palette"`. A key named here replaces its default; `""` unbinds it.
 
-**`[mouse]`** has one setting, `enabled`: `true` or `false` (the default).
+**`[mouse]`** has one setting, `enabled`: `true` (the default) or `false`.
 See § 2.3, The mouse.
+
+**`[[plumb]]`** adds a plumbing rule, offered on a right-click before the
+built-in ones; there may be any number, in order. See § 2.3, The mouse.
 
 **Key names:**
 

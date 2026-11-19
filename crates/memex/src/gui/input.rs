@@ -9,6 +9,8 @@
 use crate::app::{Click, Event, Key, Press, Quasi, Special};
 use crate::config::{Config, QuasiKey};
 use crate::ui::Hits;
+use ratatui::buffer::Buffer;
+use ratatui::style::Modifier;
 use winit::keyboard::{Key as Logical, KeyCode, NamedKey, PhysicalKey};
 
 /// A key as winit gives it: its place, what the layout makes of it, its
@@ -195,6 +197,180 @@ pub fn clicked(hits: &Hits, (column, row): (u16, u16)) -> Option<Click> {
     hits.at(column, row).cloned()
 }
 
+// Text selected with the mouse, as the window shows it: the cells from
+// where the left button went down to where it is, in reading order,
+// within the pane where it began (the columns between the `│` that part
+// the panes). A right-click plumbs the text selected, or, with none, the
+// word under the pointer (crate::plumb).
+
+/// The mouse's selection: the text selected, if any, and whether the
+/// left button is down, selecting.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Drag {
+    pub selection: Option<Selection>,
+    pub dragging: bool,
+}
+
+impl Drag {
+    /// The left button down at a cell: a selection starts there; with no
+    /// cell (the mouse off, or a menu open), none does.
+    pub fn press(&mut self, at: Option<(u16, u16)>) {
+        self.selection = at.map(|cell| Selection {
+            from: cell,
+            to: cell,
+        });
+        self.dragging = at.is_some();
+    }
+
+    /// The pointer moved to a cell: a selection being made ends there.
+    pub fn moved(&mut self, to: (u16, u16)) {
+        if let Some(s) = self.selection.as_mut().filter(|_| self.dragging) {
+            s.to = to;
+        }
+    }
+
+    /// The text a right-click at a cell plumbs: the text selected, or,
+    /// with none, the word under the cell.
+    pub fn text_at(&self, buf: &Buffer, cell: (u16, u16)) -> String {
+        match self.selection {
+            Some(s) => s.text(buf),
+            None => word_at(buf, cell),
+        }
+    }
+
+    /// The left button up: a selection of one cell was a click alone.
+    pub fn release(&mut self) {
+        self.dragging = false;
+        if self.selection.is_some_and(|s| s.is_click()) {
+            self.selection = None;
+        }
+    }
+}
+
+/// A selection, by the cell where it began and the cell where it ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Selection {
+    pub from: (u16, u16),
+    pub to: (u16, u16),
+}
+
+/// The pane a selection lies in: its first column and the one after its
+/// last.
+type Columns = (u16, u16);
+
+impl Selection {
+    /// Whether it holds only the cell it began at: a click, not a drag.
+    pub fn is_click(&self) -> bool {
+        self.from == self.to
+    }
+
+    /// Its cells, row by row: each row and the columns it takes.
+    fn rows(&self, buf: &Buffer) -> Vec<(u16, Columns)> {
+        let pane = pane_of(buf, self.from);
+        let ends = ordered(self.from, self.to);
+        let rows = ends.0.1..=ends.1.1;
+        rows.map(|y| (y, columns(y, ends, pane))).collect()
+    }
+
+    /// The text it holds: each row's characters, trimmed, joined by a
+    /// space, as a wrapped line reads.
+    pub fn text(&self, buf: &Buffer) -> String {
+        let row = |(y, cols): (u16, Columns)| symbols(buf, y, cols).trim().to_string();
+        let rows: Vec<String> = self.rows(buf).into_iter().map(row).collect();
+        rows.into_iter()
+            .filter(|r| !r.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Draw it reversed, as the outline draws its cursor.
+    pub fn mark(&self, buf: &mut Buffer) {
+        for (y, (first, last)) in self.rows(buf) {
+            for x in first..last {
+                let cell = &mut buf[(x, y)];
+                cell.modifier.toggle(Modifier::REVERSED);
+            }
+        }
+    }
+}
+
+/// The columns a selection takes in a row: from its start on its first
+/// row, else from the pane's edge; to its end on its last row, else to
+/// the pane's other edge.
+fn columns(y: u16, (start, end): ((u16, u16), (u16, u16)), pane: Columns) -> Columns {
+    let first = if y == start.1 {
+        start.0.max(pane.0)
+    } else {
+        pane.0
+    };
+    let last = if y == end.1 {
+        (end.0 + 1).min(pane.1)
+    } else {
+        pane.1
+    };
+    (first, last.max(first))
+}
+
+/// Two cells in reading order: by row, then by column.
+fn ordered(a: (u16, u16), b: (u16, u16)) -> ((u16, u16), (u16, u16)) {
+    if (a.1, a.0) <= (b.1, b.0) {
+        (a, b)
+    } else {
+        (b, a)
+    }
+}
+
+/// The columns of the pane that holds a cell: from after the `│` before
+/// it, if any, to the `│` after it, or the edge.
+fn pane_of(buf: &Buffer, (x, y): (u16, u16)) -> Columns {
+    let width = buf.area.width;
+    let bar = |c: &u16| buf[(*c, y)].symbol() == "│";
+    let first = (0..x).rev().find(bar).map_or(0, |c| c + 1);
+    let last = (x..width).find(bar).unwrap_or(width);
+    (first, last)
+}
+
+/// The characters of a row's columns.
+fn symbols(buf: &Buffer, y: u16, (first, last): Columns) -> String {
+    (first..last).map(|x| buf[(x, y)].symbol()).collect()
+}
+
+/// The word under a cell: the run of characters around it that are not
+/// spaces or a pane's `│`, without the punctuation around it, and without
+/// a full stop, question or exclamation mark that ends it.
+pub fn word_at(buf: &Buffer, cell: (u16, u16)) -> String {
+    let (row, at) = row_around(buf, cell);
+    let (start, end) = word_span(&row, at);
+    let word: String = row[start..end].iter().collect();
+    let around: &[char] = &[
+        ',', ';', ':', '(', ')', '[', ']', '"', '“', '”', '‘', '’', '\'',
+    ];
+    word.trim_matches(around)
+        .trim_end_matches(['.', '?', '!'])
+        .to_string()
+}
+
+/// Where the run of characters that are not spaces around a place begins
+/// and ends.
+fn word_span(row: &[char], at: usize) -> (usize, usize) {
+    let apart = |c: &char| c.is_whitespace();
+    let start = row[..at].iter().rposition(apart).map_or(0, |i| i + 1);
+    let end = row[at..]
+        .iter()
+        .position(apart)
+        .map_or(row.len(), |i| at + i);
+    (start, end)
+}
+
+/// The characters of the pane's row that holds a cell, and where in them
+/// the cell is.
+fn row_around(buf: &Buffer, (x, y): (u16, u16)) -> (Vec<char>, usize) {
+    let pane = pane_of(buf, (x, y));
+    let row: Vec<char> = symbols(buf, y, pane).chars().collect();
+    let at = usize::from(x.saturating_sub(pane.0)).min(row.len());
+    (row, at)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -341,5 +517,83 @@ mod tests {
         assert_eq!(pressed(&f13, &Config::default()), Some(Key::F(13)));
         let f35 = named_key(KeyCode::F35, NamedKey::F35);
         assert_eq!(pressed(&f35, &Config::default()), Some(Key::F(35)));
+    }
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+    use ratatui::layout::Rect;
+
+    /// A buffer of these rows, each as wide as the first.
+    fn screen(rows: &[&str]) -> Buffer {
+        let width = rows[0].chars().count() as u16;
+        let mut buf = Buffer::empty(Rect::new(0, 0, width, rows.len() as u16));
+        for (y, r) in rows.iter().enumerate() {
+            buf.set_string(0, y as u16, r, ratatui::style::Style::default());
+        }
+        buf
+    }
+
+    const PANES: [&str; 3] = [
+        "• Buran flew in 1988.   │ LINKS OF IT   ",
+        "  It landed by itself,  │ cites 1.3     ",
+        "  see 1.3.              │ #12 here      ",
+    ];
+
+    #[test]
+    fn a_selection_reads_in_order_within_its_pane() {
+        // Catches the other pane's text taken in, rows out of order, a
+        // drag up read backwards, or a row's indent kept.
+        let buf = screen(&PANES);
+        let down = Selection {
+            from: (8, 0),
+            to: (8, 1),
+        };
+        assert_eq!(down.text(&buf), "flew in 1988. It land");
+        let up = Selection {
+            from: (8, 1),
+            to: (8, 0),
+        };
+        assert_eq!(up.text(&buf), down.text(&buf));
+        let right = Selection {
+            from: (26, 1),
+            to: (34, 1),
+        };
+        assert_eq!(right.text(&buf), "cites 1.3");
+        assert!(
+            Selection {
+                from: (3, 2),
+                to: (3, 2)
+            }
+            .is_click()
+        );
+    }
+
+    #[test]
+    fn a_click_takes_the_word_under_it_without_its_punctuation() {
+        // Catches a word cut at the click, punctuation around it kept, an
+        // address's own full stop lost, or the pane's bar taken in.
+        let buf = screen(&PANES);
+        assert_eq!(word_at(&buf, (7, 2)), "1.3");
+        assert_eq!(word_at(&buf, (17, 0)), "1988");
+        assert_eq!(word_at(&buf, (20, 1)), "itself");
+        assert_eq!(word_at(&buf, (27, 2)), "#12");
+        assert_eq!(word_at(&buf, (21, 2)), "");
+    }
+
+    #[test]
+    fn marking_reverses_the_cells_selected_alone() {
+        // Catches a cell outside the selection marked, or one inside it
+        // left as it was.
+        let mut buf = screen(&PANES);
+        Selection {
+            from: (2, 0),
+            to: (6, 0),
+        }
+        .mark(&mut buf);
+        let reversed = |x: u16| buf[(x, 0)].modifier.contains(Modifier::REVERSED);
+        assert!((2..=6).all(reversed));
+        assert!(!reversed(1) && !reversed(7));
     }
 }
