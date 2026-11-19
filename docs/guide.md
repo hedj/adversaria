@@ -706,7 +706,10 @@ The memex suggests these and more, without any language model:
 `pane suggestions` shows them, at most five, ranked by evidence, each with
 why it was offered. The pane never takes the keyboard: `accept N` adopts
 the Nth, with its evidence; `dismiss N` hides it until its evidence
-changes. While the pane has focus, suggestions keep their places.
+changes. While the pane has focus, suggestions keep their places, and
+keys still edit the outline at its cursor, the reversed line in the
+outline pane; the text cursor is drawn only in the pane with focus, so
+where in the line a key acts is not shown.
 
 ## 4. Around the memex
 

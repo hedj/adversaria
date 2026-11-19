@@ -1370,9 +1370,15 @@ imported (six extensions), that purge leaves a hash (it leaves null, and
 the blob stays), and the tutorial's silence on READ AS, `query` and
 questions.
 
-Not checked: whether the suggestions pane takes keys while it has focus
-(the guide says it never does); the claims of what has been tested on
-real desktops.
+Not checked: the claims of what has been tested on real desktops.
+
+Then checked, by a probe test (not kept): with the suggestions pane in
+focus, a typed character, Enter, Up and Backspace edit the outline at
+its cursor, as the design means ("it never takes the keyboard"; the
+milestone 5 test types with the outline in focus). The outline's cursor
+line stays reversed, but the text cursor is drawn only in the focused
+pane (`shows_text_cursor`), so a key's place in the line is not shown.
+The links pane, by contrast, refuses unbound keys.
 
 ## 4. Where it stands
 
