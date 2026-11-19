@@ -373,7 +373,9 @@ It is false that the rest is smaller than 0.
 ```
 
 These are a fact, a claim from a source, two boxes, a rule and a
-constraint. With an item selected, the right pane shows, under `READ AS`,
+constraint. A box is a value with a name, such as the income;
+`Nothing has more than 1 value.` says that each box holds one, and
+`Nothing has more than 1 date.` the same of dates. With an item selected, the right pane shows, under `READ AS`,
 each statement its text was read as, in Prolog, as the memex runs it
 (`fact  date(buran_flight, 1988)`, `rule  rest(A):-cell(income, B), …`),
 and its tags (`tag  item_tag(12, money)`). A text read before the memex

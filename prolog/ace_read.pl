@@ -28,6 +28,7 @@ from one mapping:
 | It is false that S. | constraint(S) |
 | No fish is a bird. | constraint((fish(X), bird(X))) |
 | Nothing has more than 1 date. | constraint((date(E, A), date(E, B), A \== B)) |
+| Nothing has more than 1 value. | constraint((cell(B, X), cell(B, Y), X \== Y)) |
 | What is an animal? (Who swims? Which animals swim? Which things are animals?) | question(X, animal(X)) |
 | Is Nemo an animal? (Does Nemo swim?) | question(none, animal(nemo)) |
 
@@ -281,8 +282,8 @@ singular(C, C).
 then_statement([-drs(_, Inner)], [], constraint((G1, G2, V1 \== V2))) :-
     more_than_one(Inner, N, A),
     !,
-    G1 =.. [N, A, V1],
-    G2 =.. [N, A, V2].
+    owned(N, A, V1, G1),
+    owned(N, A, V2, G2).
 then_statement([-drs(_, Conds)], If, constraint(Body)) :-
     !,
     goals(Conds, Not),
@@ -311,6 +312,12 @@ bound_by(Body, Head) :-
     term_variables(Body, Bound),
     term_variables(Head, Named),
     forall(member(V, Named), ( member(B, Bound), B == V )).
+
+%   The goal of an owner's noun: "the date of X" is date(X, R), and "the
+%   value of X" is X's box, cell(X, R), so that "Nothing has more than 1
+%   value" says that a box holds one value.
+owned(value, X, R, cell(X, R)) :- !.
+owned(N, X, R, G) :- G =.. [N, X, R].
 
 %   "has more than 1 N": a count of N greater than 1 that A has, in
 %   either order.
@@ -386,7 +393,7 @@ goal(_, property(_, _, _, _), _) :- !, fail.
 goal(Conds, object(R, N, countable, na, eq, 1), G) :-
     !,
     (   member(relation(O, of, Owner), Conds), O == R
-    ->  value(Owner, X), G =.. [N, X, R]
+    ->  value(Owner, X), owned(N, X, R, G)
     ;   valued(Conds, R)
     ->  G = cell(N, R)
     ;   G =.. [N, R]

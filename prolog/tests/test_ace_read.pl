@@ -81,6 +81,13 @@ test(what_must_not_be_is_a_constraint) :-
     reads("Nothing has more than 1 date.", [constraint((date(E, D1), date(E, D2), D1 \== D2))]),
     assertion(E-D1-D2 == '$VAR'(0)-'$VAR'(1)-'$VAR'(2)).
 
+test(a_box_holds_one_value) :-
+    % Catches "value" read as a relation value(E, V), which no box is:
+    % a box's value is the second place of cell(Name, Value), so "Nothing
+    % has more than 1 value" is the constraint that a box holds one.
+    reads("Nothing has more than 1 value.", [constraint((cell(B, V1), cell(B, V2), V1 \== V2))]),
+    assertion(B-V1-V2 == '$VAR'(0)-'$VAR'(1)-'$VAR'(2)).
+
 test(sentences_each_give_their_statements) :-
     % Catches a text of two sentences read as its first alone, or two
     % equal values given to one owner: each noun keeps its own owner.

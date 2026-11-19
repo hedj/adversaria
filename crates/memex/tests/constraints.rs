@@ -303,3 +303,19 @@ fn a_constraint_that_raises_an_error_when_tried_is_not_kept() {
     let not_kept = "constraint not kept: tried against a planted violation";
     assert_eq!(said, format!("{not_kept}, it did not fire ({why})"));
 }
+
+#[test]
+fn a_sentence_says_that_a_box_holds_one_value() {
+    // Catches "Nothing has more than 1 value" read as a relation value/2,
+    // which no box is, so two rents broke nothing.
+    let mut r = Room::new("one-value");
+    r.items(&["The rent is 1200.", "Nothing has more than 1 value."]);
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    let kept = "constraint Nothing has more than 1 value kept: it fires on a planted violation";
+    assert_eq!(r.app.session.message, kept);
+    r.items(&["The rent is 1300."]);
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    assert!(r.shows("1 constraint violation"), "{:#?}", r.lines());
+}

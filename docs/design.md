@@ -438,6 +438,7 @@ The reader (`prolog/ace_read.pl`) maps APE's logical form (its DRS) to the noteb
 | If the rent is X and the food is Y and the income is Z then X + Y =< Z. | the constraint `false :- cell(rent, A), cell(food, B), cell(income, C), \+ A+B =< C` |
 | It is false that the rent is greater than the income. | the constraint `false :- cell(rent, A), cell(income, B), A > B` |
 | Nothing has more than 1 date. | the constraint `false :- date(A, B), date(A, C), B \== C` |
+| Nothing has more than 1 value. | the constraint `false :- cell(A, B), cell(A, C), B \== C`: a box holds one value, since "the value of X" is the box `cell(X, R)` |
 | What is an animal? (Who swims? Which animals swim? What is the date of Buran-flight?) | a question: every answer, each by its label if it has one, sorted, or none: `findall(N, (animal(A), (label(A, L) -> N = L ; atomic(A) -> atom_string(A, N) ; N = A)), Ns), sort(Ns, S), (S == [] -> Answer = none ; atomic_list_concat(S, ', ', Answer))` |
 | Is Nemo an animal? (Does Nemo swim?) | a question of whether: `animal(nemo) -> Answer = yes ; Answer = no` |
 

@@ -1387,6 +1387,20 @@ Backspace, Up, Enter and Delete change nothing in either pane, and the
 outline takes keys again after `switch`) failed for suggestions before
 the change and passes after.
 
+### A box holds one value, in English (19 November 2026)
+
+"One value per box" could be said only in Prolog
+(`false :- cell(B, X), cell(B, Y), X \= Y`), and the tutorial asked for
+it so. The reader now takes "the value of X" as X's box, `cell(X, R)`,
+so `Nothing has more than 1 value.` reads as that constraint, as
+`Nothing has more than 1 date.` reads as one date per thing.
+
+Checked: a reader test (`a_box_holds_one_value`) and a memex test
+(`a_sentence_says_that_a_box_holds_one_value`: kept after its planted
+check, then two rents give 1 violation). With the new clause taken out,
+the memex test fails. The reading is new only for text read from now
+on: a journal keeps what each text was read as, so old readings stand.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
