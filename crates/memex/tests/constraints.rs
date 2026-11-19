@@ -44,6 +44,37 @@ fn a_constraint_without_variables_is_tried_too() {
 }
 
 #[test]
+fn a_constraint_may_wrap_a_fact_in_a_construct() {
+    // Catches the planted check calling \+, findall or forall directly,
+    // where the facts they wrap are not predicates: the constraint was
+    // refused with an existence error, though it can fire.
+    for (n, body) in [
+        "cell(C, R), \\+ known(C)",
+        "cell(C, R), \\+ (known(C), R > 0)",
+        "cell(C, R), findall(K, known(K), []) ",
+        "cell(C, R), forall(known(K), K \\== C)",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let said = stated(&format!("wrap-{n}"), &format!("unknown: false :- {body}."));
+        assert_eq!(
+            said, "constraint unknown kept: it fires on a planted violation",
+            "{body}"
+        );
+    }
+    let mut r = Room::new("wrap-fires");
+    r.items(&["rent", "known"]);
+    r.command("fact cell(rent, 1200)");
+    r.command("constraint unknown: false :- cell(C, R), \\+ known(C).");
+    r.app.evaluate().unwrap();
+    assert!(r.shows("1 constraint violation"), "{:#?}", r.lines());
+    r.command("fact known(rent)");
+    r.app.evaluate().unwrap();
+    assert!(!r.shows("constraint violation"), "{:#?}", r.lines());
+}
+
+#[test]
 fn a_constraint_that_can_never_fire_is_still_refused() {
     let said = stated("never", "never: false :- cell(C, R), R > 5, R < 3.");
     assert!(said.starts_with("constraint not kept"), "{said}");

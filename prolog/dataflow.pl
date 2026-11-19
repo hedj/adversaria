@@ -117,9 +117,24 @@ control(findall(T, G, L, R)) :- !, findall(T, beliefs(G), L, R).
 control(forall(C, A)) :- !, forall(beliefs(C), beliefs(A)).
 control(G) :- call(G).
 
-%   The planted check calls built-ins directly: it tests a constraint
-%   against planted facts alone, not against the world's beliefs.
-planted_call(G) :- vet(G), call(G).
+%   The planted check tests a constraint against planted facts alone, not
+%   against the world's beliefs: it calls built-ins directly, and proves
+%   the goals inside a construct from the planted facts, as control/1
+%   proves them from beliefs.
+planted_call(Fs, G) :- vet(G), planted_control(G, Fs).
+
+planted_control((C -> T ; E), Fs) :- !,
+    ( planted_holds(C, Fs) -> planted_holds(T, Fs) ; planted_holds(E, Fs) ).
+planted_control((C *-> T ; E), Fs) :- !,
+    ( planted_holds(C, Fs) *-> planted_holds(T, Fs) ; planted_holds(E, Fs) ).
+planted_control((A ; B), Fs) :- !, ( planted_holds(A, Fs) ; planted_holds(B, Fs) ).
+planted_control((C -> T), Fs) :- !, ( planted_holds(C, Fs) -> planted_holds(T, Fs) ).
+planted_control((C *-> T), Fs) :- !, ( planted_holds(C, Fs) *-> planted_holds(T, Fs) ).
+planted_control(\+ A, Fs) :- !, \+ planted_holds(A, Fs).
+planted_control(findall(T, G, L), Fs) :- !, findall(T, planted_holds(G, Fs), L).
+planted_control(findall(T, G, L, R), Fs) :- !, findall(T, planted_holds(G, Fs), L, R).
+planted_control(forall(C, A), Fs) :- !, forall(planted_holds(C, Fs), planted_holds(A, Fs)).
+planted_control(G, _) :- call(G).
 
 %!  vet(+Goal) is det.
 %   Throw error(permission_error(call, not_allowed, What), _) unless Goal
@@ -262,7 +277,7 @@ plant_check(Vars, Body, Result) :-
 planted(Vs-B, P, Facts) :-
     copy_term(Vs-B, P-Ground),
     literals(Ground, Facts, Builtins),
-    maplist(planted_call, Builtins),
+    maplist(planted_call(Facts), Builtins),
     planted_holds(Ground, Facts).
 
 %   Values for N variables near the numbers the body holds: each number,
@@ -292,8 +307,8 @@ literals(G, [G], []).
 
 %   Run the body with the planted facts as the only beliefs.
 planted_holds((A, B), Fs) :- !, planted_holds(A, Fs), planted_holds(B, Fs).
-planted_holds(G, _) :- builtin(G), !, planted_call(G).
-planted_holds(G, Fs) :- memberchk(G, Fs).
+planted_holds(G, Fs) :- builtin(G), !, planted_call(Fs, G).
+planted_holds(G, Fs) :- member(G, Fs).
 
 
 		 /*******************************
