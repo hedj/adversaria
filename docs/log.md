@@ -1256,6 +1256,15 @@ was tried: "energia launch" in "energia launches"); sentences taken for
 titles; a link that records no suggestion; a world of items alone not
 read; outline suggestions not asked.
 
+### Tags (19 November 2026)
+
+From the same choice (Obsidian's tags): each #tag in an item's text is
+offered to goals as item_tag(Item, Tag), computed from the text as
+item_text is, so it follows the text with no entry to write or retract,
+and undo needs nothing. Checked: a unit test of what is a tag; a
+constraint over tags fires and clears as the text changes; derived text
+counts tagged items. With no tag facts, both memex tests fail.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

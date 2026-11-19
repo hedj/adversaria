@@ -261,6 +261,15 @@ Where a command takes an ADDRESS, any of these name an item:
 | `help` | `help` | lists every command on the message line |
 | `quit` | `quit` | writes what is pending and leaves |
 
+**Tags.** A `#` at the start of a text or after a space, then a word,
+tags the item: `Buran #reusable #Soviet-space` gives `item_tag(Item,
+reusable)` and `item_tag(Item, soviet_space)` (lower case, hyphens made
+underscores, as the reader writes names). Tags follow the text: there is
+nothing to write or take back. Views, derived text and constraints read
+them, as `constraint not both draft and final: false :- item_tag(I,
+draft), item_tag(I, final).` does. `C#`, `#1`, a heading's `# ` and a web
+address's `/#anchor` are not tags.
+
 **Links typed in text.** Write `[[Buran flight]]` in an item's text and,
 at the pause, the item links to the item named so, else to the first
 whose text it is (ignoring case), else to a new item holding it, at the
@@ -579,8 +588,9 @@ layer node(id(S), text(T), shape(decision)) where decision(S, T)
 layer edge(from(A), to(B), text(L)) where next(A, B, L)
 ```
 
-Your own outline as a tree. The outline is offered to goals as three kinds
-of fact, `item_text(Item, Text)`, `item_under(Item, Parent)` and
+Your own outline as a tree. The outline is offered to goals as four kinds
+of fact, `item_text(Item, Text)`, `item_under(Item, Parent)`,
+`item_tag(Item, Tag)` for each `#tag` in an item's text, and
 `item_link(From, To, Type)`, one for each link, of any type, typed in text
 or made by `link`:
 
