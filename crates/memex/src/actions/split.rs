@@ -130,10 +130,12 @@ fn abbreviated(text: &[char], i: usize) -> bool {
     initial || ABBREVIATIONS.contains(&word.trim_start_matches(['(', '"', '\'']))
 }
 
-/// Words a full stop shortens, not ends: "e.g.", "Dr." and the like.
-const ABBREVIATIONS: [&str; 26] = [
-    "e.g", "i.e", "etc", "cf", "vs", "viz", "approx", "no", "nos", "fig", "figs", "p", "pp", "vol",
-    "ed", "eds", "mr", "mrs", "ms", "dr", "prof", "st", "jr", "sr", "al", "ca",
+/// Words a full stop shortens and does not end a sentence after, even
+/// before a capital: "e.g. Buran", "Dr. Smith", "et al. (2020)". Not
+/// "etc.", which so often ends one: before a capital it does.
+const ABBREVIATIONS: [&str; 25] = [
+    "e.g", "i.e", "cf", "vs", "viz", "approx", "no", "nos", "fig", "figs", "p", "pp", "vol", "ed",
+    "eds", "mr", "mrs", "ms", "dr", "prof", "st", "jr", "sr", "al", "ca",
 ];
 
 /// A range without the spaces at its ends.
@@ -181,6 +183,16 @@ mod tests {
         assert_eq!(
             parts("It flew. \"Once,\" they said."),
             ["It flew.", "\"Once,\" they said."]
+        );
+        // Catches "etc." taken for no end before a capital, or for one
+        // before a small letter.
+        assert_eq!(
+            parts("Rockets, shuttles etc. Then it flew. Rockets etc. and more."),
+            [
+                "Rockets, shuttles etc.",
+                "Then it flew.",
+                "Rockets etc. and more."
+            ]
         );
         assert!(parts("   ").is_empty());
     }

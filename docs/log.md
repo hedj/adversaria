@@ -1278,7 +1278,9 @@ revised). A decimal point is no sentence end. An abbreviation such as "e.g. "
 was taken for one; a later change the same day ends a sentence only
 where the next word starts one (a capital, a digit, a quote or a
 bracket) and the word before is no abbreviation (from a list of 26) or
-initial.
+initial. "etc." was in that list, so "… etc. Then …" did not split; it
+is now out of it, so it ends a sentence before a capital and not
+before a small letter.
 
 Checked: a unit test of sentences; four tests in tests/split.rs.
 Breaks, each failing a test: no closing record; the parts read as their
