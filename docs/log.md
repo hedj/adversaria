@@ -1481,6 +1481,11 @@ where the review held.
    version wrote "↑ 16 more" over the top and bottom rows; the review
    found it hid part of a violation's text and a chart's axis, and that
    "more" of rows read as items: so a row is kept, and items counted.
+6. Bold was faked by drawing text twice a pixel apart, which smeared
+   it. The first fix drew bold brighter instead; the review measured
+   the step at 1.26:1, too weak to tell on a lone word. Bold is now Hack
+   Bold, bundled (the same release as egui's Hack Regular, so each
+   glyph is as wide and the grid holds).
 
 ## 4. Where it stands
 

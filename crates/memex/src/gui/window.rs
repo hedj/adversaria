@@ -311,6 +311,7 @@ fn open_window(el: &ActiveEventLoop) -> Result<Gfx, String> {
         .with_inner_size(winit::dpi::LogicalSize::new(1280.0, 800.0));
     let window = Arc::new(el.create_window(attributes).map_err(|e| e.to_string())?);
     let ctx = egui::Context::default();
+    ctx.set_fonts(super::paint::fonts());
     let mut painter = pollster::block_on(egui_wgpu::winit::Painter::new(
         ctx.clone(),
         Default::default(),

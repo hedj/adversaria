@@ -2,8 +2,9 @@
 //! grid of one monospace character's width and one line's height, so wide
 //! characters and lines drawn in box characters keep the grid. Colours
 //! and the modifiers the screen uses (bold, dim, italic, reversed,
-//! underlined) are drawn as egui can: bold as the text drawn twice, a
-//! pixel apart, since egui's default fonts have no bold face.
+//! underlined) are drawn as egui can; bold in Hack Bold, bundled
+//! (crates/memex/fonts), since egui's fonts have Hack Regular alone and
+//! text drawn twice a pixel apart, as bold once was, smears.
 
 use super::boxes::{self, Brush, Grid};
 use super::cells::Cells;
@@ -16,6 +17,35 @@ use ratatui::style::{Color, Modifier};
 /// The text and background the memex draws on, with no other colour.
 pub const INK: Color32 = Color32::from_rgb(0xdc, 0xdc, 0xdc);
 pub const PAPER: Color32 = Color32::from_rgb(0x1c, 0x1c, 0x1c);
+
+/// The bold face of the cells' font: Hack Bold, of the release whose
+/// Regular egui bundles, so every glyph has the same width.
+static HACK_BOLD: &[u8] = include_bytes!("../../fonts/Hack-Bold.ttf");
+
+/// egui's fonts, and Hack Bold as the family "bold", falling back to the
+/// monospace family's fonts for what it lacks.
+pub fn fonts() -> egui::FontDefinitions {
+    use egui::{FontData, FontFamily};
+    let mut defs = egui::FontDefinitions::default();
+    let bold = std::sync::Arc::new(FontData::from_static(HACK_BOLD));
+    defs.font_data.insert("Hack-Bold".into(), bold);
+    let mono = defs
+        .families
+        .get(&FontFamily::Monospace)
+        .cloned()
+        .unwrap_or_default();
+    let family = std::iter::once("Hack-Bold".to_string())
+        .chain(mono)
+        .collect();
+    defs.families
+        .insert(FontFamily::Name("bold".into()), family);
+    defs
+}
+
+/// The font bold cells are drawn in.
+pub fn bold_font() -> FontId {
+    FontId::new(font().size, egui::FontFamily::Name("bold".into()))
+}
 
 /// The font cells are drawn in.
 pub fn font() -> FontId {
@@ -75,22 +105,13 @@ fn paint_cell(p: &Painter, cell: &Cell, mut brush: Brush) {
 }
 
 /// A cell's text: a box-drawing or block character as shapes that fill
-/// the cell (crate::gui::boxes), anything else in the font; bold as the
-/// text drawn twice, a pixel apart.
+/// the cell (crate::gui::boxes), anything else in the font.
 fn paint_text(p: &Painter, cell: &Cell, brush: &Brush) {
     if let Some(shapes) = drawn(cell.symbol(), brush) {
         return p.extend(shapes);
     }
     let job = LayoutJob::single_section(cell.symbol().to_string(), format(cell, brush.ink));
-    let galley = p.layout_job(job);
-    if cell.modifier.contains(Modifier::BOLD) {
-        p.galley(
-            brush.cell.min + Vec2::new(1.0, 0.0),
-            galley.clone(),
-            brush.ink,
-        );
-    }
-    p.galley(brush.cell.min, galley, brush.ink);
+    p.galley(brush.cell.min, p.layout_job(job), brush.ink);
 }
 
 /// A cell's symbol as shapes: no shapes for a blank, the shapes of a
@@ -112,8 +133,13 @@ fn format(cell: &Cell, fg: Color32) -> TextFormat {
         true => Stroke::new(1.0, fg),
         false => Stroke::NONE,
     };
+    let font_id = if m.contains(Modifier::BOLD) {
+        bold_font()
+    } else {
+        font()
+    };
     TextFormat {
-        font_id: font(),
+        font_id,
         color: fg,
         italics: m.contains(Modifier::ITALIC),
         underline,
@@ -211,6 +237,30 @@ mod tests {
         assert_eq!(rev, (PAPER, INK));
         let (dim, _) = colours(&cell(Modifier::DIM, Color::Reset, Color::Reset));
         assert_ne!(dim, INK);
+    }
+
+    #[test]
+    fn bold_is_drawn_in_hack_bold_as_wide_as_the_regular() {
+        // Catches bold drawn in the regular face (or twice, smeared), or a
+        // bold face whose width breaks the cell grid.
+        assert_eq!(
+            format(&cell(Modifier::BOLD, Color::Reset, Color::Reset), INK).font_id,
+            bold_font()
+        );
+        assert_eq!(
+            format(&cell(Modifier::empty(), Color::Reset, Color::Reset), INK).font_id,
+            font()
+        );
+        let ctx = egui::Context::default();
+        ctx.set_fonts(fonts());
+        let mut out = ctx.run_ui(Default::default(), |_| {});
+        out.textures_delta.clear();
+        let width = |f: &FontId| ctx.fonts_mut(|x| x.glyph_width(f, 'M'));
+        assert_eq!(width(&bold_font()), width(&font()));
+        assert!(
+            ctx.fonts_mut(|x| x.has_glyph(&bold_font(), '‼')),
+            "falls back to the regular"
+        );
     }
 
     #[test]
