@@ -1,15 +1,25 @@
 # Adversaria
 
-Adversaria is a notebook that runs in a window on your own computer.
-Notes are kept as an outline. Every change is written to an append-only
-journal, and a separate program signs and dates the journal's entries.
-Facts in the notes are Prolog terms. Material from outside (documents,
-Wikidata, analysis results) is recorded as claims with their sources,
-separate from what you have adopted as your own beliefs. Constraints
-written in Prolog mark facts and claims that conflict. A supposition opens
-a second set of facts beside the current one, so the two can be compared.
-An item can draw facts as a chart, a table, a timeline or a diagram, from
-marks declared over Prolog queries; these update as the facts change.
+Adversaria is a notebook that keeps what you hold true apart from what
+your sources say, notices when they conflict, and lets you try "what if
+the other source is right?" side by side, without losing anything.
+
+You write notes as an outline. Short sentences in plain, controlled
+English, such as `The date of Buran-flight is 1988.` or
+`Talk-notes says that the date of Buran-flight is 1989.`, are read as
+facts and claims; a rule such as `Nothing has more than 1 date.` is
+checked whenever they change, and marks the items that break it.
+Everything else stays prose. Documents, Wikidata and analysis results
+come in as claims with their sources, until you adopt them. Every change
+is kept in a permanent journal, which a separate program signs and
+dates. Facts can be drawn as charts, tables, timelines and diagrams that
+follow the facts.
+
+The notebook's window is called the memex, after Vannevar Bush's 1945
+design for a personal knowledge machine. It reasons in Prolog, a logic
+language; you can write Prolog where English is not enough, but you
+need not know it to begin. docs/introduction.md says, in a page, what
+it is for.
 
 This repository holds a prototype, written in Rust with SWI-Prolog. It
 was built to test three questions over a month of use: whether
@@ -24,8 +34,9 @@ screen (see docs/log.md).
   draws through Vulkan or OpenGL; the Nix shell supplies Mesa's drivers.
   NVIDIA's own driver outside NixOS needs nixGL (recalled, not tested).
 - Nix, which provides everything else. Without Nix you
-  need Rust (cargo), SWI-Prolog (`swipl`), Pandoc and curl, and Python 3
-  to run the tests.
+  need Rust (cargo), SWI-Prolog (`swipl`), APE (the controlled English
+  parser, found through `APE_HOME`), Pandoc and curl, and Python 3 to run
+  the tests.
 
 ## Getting started
 
@@ -75,6 +86,7 @@ make test
 
 ## Documentation
 
+- Why: docs/introduction.md, what it is for, in a page.
 - Start: docs/tutorial.md, a first session.
 - Use: docs/guide.md, the user guide: every command, the files kept, the
   tools, and the configuration.
