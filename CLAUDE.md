@@ -6,7 +6,7 @@ Adversaria is a notebook that records everything, checks claims, and compares al
 
 It runs on the user's own computer. It keeps a permanent, dated, signed record of notes, sources and decisions. Everything imported is a claim to test, not a fact. Alternatives sit side by side as worlds.
 
-This repository holds the prototype for a PC. Its first stage is an experiment. It must show whether constraints find real errors, whether people adopt suggestions and keep them, and whether clerical work falls. Build what tests these questions, and nothing more.
+This repository holds the prototype for a PC. Its first stage is an experiment. It must show whether constraints find real errors, whether people adopt suggestions and keep them, and whether clerical work falls.
 
 ## Honesty
 
