@@ -84,26 +84,57 @@ struct Split {
 }
 
 /// A text's sentences: each ends after a full stop, question mark or
-/// exclamation mark followed by a space, or at the text's end; the spaces
-/// between are left out, and so is a part of spaces alone.
+/// exclamation mark that ends a sentence (sentence_ends), or at the
+/// text's end; the spaces between are left out, and so is a part of
+/// spaces alone.
 pub(crate) fn sentences(text: &[char]) -> Vec<Range<usize>> {
     let mut parts = Vec::new();
     let mut start = 0;
     for i in 0..text.len() {
-        let ends = matches!(text[i], '.' | '?' | '!')
-            && text.get(i + 1).is_some_and(|c| c.is_whitespace());
-        if ends {
+        if sentence_ends(text, i) {
             parts.push(start..i + 1);
             start = i + 1;
         }
     }
     parts.push(start..text.len());
-    parts
-        .into_iter()
-        .map(|r| trimmed(text, r))
-        .filter(|r| !r.is_empty())
-        .collect()
+    let parts = parts.into_iter().map(|r| trimmed(text, r));
+    parts.filter(|r| !r.is_empty()).collect()
 }
+
+/// Whether the mark at i ends a sentence: a full stop, question mark or
+/// exclamation mark, then a space, then a word that starts one (a capital,
+/// a digit, a quote or a bracket); and, for a full stop, the word before
+/// it is not an abbreviation ("e.g.", "Dr.") or an initial ("J.").
+fn sentence_ends(text: &[char], i: usize) -> bool {
+    let mark = matches!(text[i], '.' | '?' | '!');
+    let spaced = text.get(i + 1).is_some_and(|c| c.is_whitespace());
+    mark && spaced && starts_sentence(&text[i + 1..]) && !(text[i] == '.' && abbreviated(text, i))
+}
+
+/// Whether the first word after the spaces starts a sentence: a capital,
+/// a digit, a quote or a bracket.
+fn starts_sentence(rest: &[char]) -> bool {
+    let next = rest.iter().find(|c| !c.is_whitespace());
+    next.is_some_and(|c| c.is_uppercase() || c.is_ascii_digit() || "\"'“‘([".contains(*c))
+}
+
+/// Whether the word before a full stop at i is an abbreviation or an
+/// initial.
+fn abbreviated(text: &[char], i: usize) -> bool {
+    let start = text[..i]
+        .iter()
+        .rposition(|c| c.is_whitespace())
+        .map_or(0, |s| s + 1);
+    let word: String = text[start..i].iter().collect::<String>().to_lowercase();
+    let initial = word.chars().count() == 1 && word.chars().all(char::is_alphabetic);
+    initial || ABBREVIATIONS.contains(&word.trim_start_matches(['(', '"', '\'']))
+}
+
+/// Words a full stop shortens, not ends: "e.g.", "Dr." and the like.
+const ABBREVIATIONS: [&str; 26] = [
+    "e.g", "i.e", "etc", "cf", "vs", "viz", "approx", "no", "nos", "fig", "figs", "p", "pp", "vol",
+    "ed", "eds", "mr", "mrs", "ms", "dr", "prof", "st", "jr", "sr", "al", "ca",
+];
 
 /// A range without the spaces at its ends.
 fn trimmed(text: &[char], r: Range<usize>) -> Range<usize> {
@@ -138,6 +169,19 @@ mod tests {
             ["Buran flew in 1988.", "It flew once!", "Why only once?"]
         );
         assert_eq!(parts("Pi is 3.14 and no more"), ["Pi is 3.14 and no more"]);
+        // Catches an abbreviation, an initial or a lower-case word after a
+        // full stop taken for a sentence end.
+        assert_eq!(
+            parts("Shuttles, e.g. Buran, flew. Dr. Smith and J. Jones wrote it. see p. 4 too."),
+            [
+                "Shuttles, e.g. Buran, flew.",
+                "Dr. Smith and J. Jones wrote it. see p. 4 too."
+            ]
+        );
+        assert_eq!(
+            parts("It flew. \"Once,\" they said."),
+            ["It flew.", "\"Once,\" they said."]
+        );
         assert!(parts("   ").is_empty());
     }
 }
