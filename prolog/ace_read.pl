@@ -28,7 +28,7 @@ from one mapping:
 | It is false that S. | constraint(S) |
 | No fish is a bird. | constraint((fish(X), bird(X))) |
 | Nothing has more than 1 date. | constraint((date(E, A), date(E, B), A \== B)) |
-| What is an animal? (Who swims? Which animals swim?) | question(X, animal(X)) |
+| What is an animal? (Who swims? Which animals swim? Which things are animals?) | question(X, animal(X)) |
 | Is Nemo an animal? (Does Nemo swim?) | question(none, animal(nemo)) |
 
 A rule's value has a name of its own: "If C then the rest is X - Y" is a
@@ -44,6 +44,7 @@ a name the notebook gives (ace.rs, lexicon_of) comes back as it is.
 :- module(ace_read, [ace_read/2, ace_read/3, ace_read_text/3]).
 
 :- use_module(ace, [ace_drs/4]).
+:- use_module(ape(lexicon/lexicon_interface), [noun_pl/3]).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
 
@@ -66,7 +67,7 @@ ace_read(Text, Result) :-
 %   N(R), not cell(N, R)) and Boxes the names of its boxes ("What is the
 %   N?", for N one of them, asks for cell(N, R), not N(R)).
 ace_read(Text, Words, Result) :-
-    ace_drs(Text, Paraphrase, Drs, Messages),
+    parsed(Text, Paraphrase, Drs, Messages),
     (   var(Paraphrase)
     ->  Result = not_ace(Messages)
     ;   plain(Drs, drs(_, Conditions)),
@@ -77,6 +78,54 @@ ace_read(Text, Words, Result) :-
     ;   why_unread(Drs, Why),
         Result = unread(Paraphrase, Why, Messages)
     ).
+
+%   What APE makes of a text. A question APE rejects is tried once more
+%   with each plural after "are" made singular: ACE has no plural there,
+%   and "Which things are animals?" asks what "Which things are an
+%   animal?" does, as each thing asked of must be one. A statement is
+%   not tried again: "Nemo and Dory are an animal" would say they are one
+%   animal together.
+parsed(Text, Paraphrase, Drs, Messages) :-
+    ace_drs(Text, P0, D0, M0),
+    (   var(P0),
+        singular_question(Text, Singular),
+        ace_drs(Singular, P1, D1, M1),
+        nonvar(P1)
+    ->  Paraphrase = P1, Drs = D1, Messages = M1
+    ;   Paraphrase = P0, Drs = D0, Messages = M0
+    ).
+
+%   A question with each plural noun after "are" made singular, if it
+%   has one.
+singular_question(Text, Singular) :-
+    split_string(Text, " ", " ", Tokens),
+    last(Tokens, Last),
+    string_concat(_, "?", Last),
+    respelled(Tokens, Respelled),
+    Respelled \== Tokens,
+    atomic_list_concat(Respelled, ' ', Atom),
+    atom_string(Atom, Singular).
+
+respelled([], []).
+respelled(["are", Plural|Ts], ["are", Article, Word|Rs]) :-
+    singular_noun(Plural, Article, Word),
+    !,
+    respelled(Ts, Rs).
+respelled([T|Ts], [T|Rs]) :-
+    respelled(Ts, Rs).
+
+%   A plural noun's singular, with its article and the token's trailing
+%   question mark, if it has one: "animals?" is "an", "animal?".
+singular_noun(Token, Article, Word) :-
+    (   string_concat(Core, "?", Token) -> End = "?" ; Core = Token, End = "" ),
+    atom_string(Plural, Core),
+    noun_pl(Plural, Lemma, _),
+    atom_string(Lemma, Sg),
+    article(Sg, Article),
+    string_concat(Sg, End, Word).
+
+article(Word, "an") :- sub_string(Word, 0, 1, _, First), sub_string("aeiou", _, 1, _, First), !.
+article(_, "a").
 
 %!  ace_read_text(+Text:string, +Words, -Result) is det.
 %   As ace_read/3, with each statement as the text of the command the
@@ -318,9 +367,10 @@ bind(predicate(_, be, R, expr(Op, A, B)), Acc, [R is E|Acc]) :-
 expression(X) :- compound(X), X \= '$VAR'(_), functor(X, F, 2), memberchk(F, [+, -, *, /]).
 
 %   A goal of a condition, or none for one that only names a variable
-%   (something) or is used by another condition (an owner's "of", an
+%   (something, a thing) or is used by another condition (an owner's "of", an
 %   adjective's property).
 goal(_, object(_, something, dom, na, na, na), _) :- !, fail.
+goal(_, object(_, thing, countable, na, eq, 1), _) :- !, fail.
 goal(_, relation(_, of, _), _) :- !, fail.
 goal(_, property(_, _, _), _) :- !, fail.
 goal(_, property(_, _, _, _), _) :- !, fail.

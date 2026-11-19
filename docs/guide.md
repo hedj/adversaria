@@ -329,10 +329,12 @@ all: ACE the notebook cannot state says `not read:` and why.
 Ask in English, too: `What is an animal?`, `Who swims?`, `What is the
 income?`, `Is Nemo an animal?`. After the pause, the answer is drawn
 under the question (`→ dory, nemo`, `→ yes`, or `→ none`) and changes
-as the facts do. A thing with a label is answered by it: with `The label
+as the facts do. `Which things are animals?` works too: ACE has no
+plural after "are", so the memex asks it as `Which things are an
+animal?`, which means the same; it does so for questions only. A thing with a label is answered by it: with `The label
 of Nemo is "Nemo the clownfish".`, the answer is `→ Nemo the
-clownfish, dory`. Write a question in the singular after "is":
-`Which things are animals?` is not ACE. "A fish is an
+clownfish, dory`. A thing, as in "which things", is
+anything at all. "A fish is an
 animal." is ACE for one fish with no name; write `Every fish is an
 animal.` for all fish, or name one: `Nemo is a fish.` The table in docs/design.md (§ Reading controlled English) lists what
 each kind of sentence is read as.

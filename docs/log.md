@@ -1190,8 +1190,9 @@ asked; the answer in place of the text; no answer line; no box names;
 "under" not read back; the old reading kept; a world's row without its
 question.
 
-Not done: "Which things are animals?" is not ACE (no plural after "are"
-in ACE). Answers were written as Prolog writes them (entities in lower
+Not done then: "Which things are animals?" was not ACE (no plural after
+"are" in ACE); a later change the same day asks such a question in the
+singular, for questions only. Answers were written as Prolog writes them (entities in lower
 case); since a later change the same day, each is shown by its label
 where it has one, sorted by its text.
 

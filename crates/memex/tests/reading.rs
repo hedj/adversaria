@@ -383,3 +383,11 @@ fn an_answer_is_shown_by_its_label() {
     r.app.evaluate().unwrap();
     assert!(r.shows("→ Nemo the clownfish, dory"), "{:#?}", r.lines());
 }
+
+#[test]
+fn which_things_are_animals_is_answered() {
+    // Catches the question left prose (ACE has no plural after "are"; the
+    // reader asks it in the singular) or "things" asked as a kind.
+    let r = asking("ask-plural", "Which things are animals?");
+    assert!(r.shows("→ dory, nemo"), "{:#?}", r.lines());
+}

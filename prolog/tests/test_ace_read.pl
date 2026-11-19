@@ -137,6 +137,16 @@ test(a_question_asks_for_its_answer_or_whether) :-
     reads("Is Nemo an animal?", [question(none, animal(nemo))]),
     reads("Does Nemo swim?", [question(none, swim(nemo))]).
 
+test(a_plural_after_are_is_asked_as_its_singular) :-
+    % Catches "Which things are animals?" left not ACE (ACE has no plural
+    % after "are"), "thing" asked as a kind no fact states, or a statement
+    % respelled: "Nemo and Dory are animals" is not one animal.
+    reads("Which things are animals?", [question('$VAR'(0), animal('$VAR'(0)))]),
+    reads("Which animals are birds?", [question('$VAR'(0), (animal('$VAR'(0)), bird('$VAR'(0))))]),
+    ace_lexicon([], _),
+    ace_read("Nemo and Dory are animals and Bubbles is a fish.", not_ace(_)),
+    ace_read("Which things are blorbs?", not_ace(_)).
+
 test(a_question_of_a_box_asks_for_its_value) :-
     % Catches "What is the income?" read as a kind, income(X), where the
     % world has the box: ACE gives "the" and "an" alike.
