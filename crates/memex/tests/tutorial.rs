@@ -240,7 +240,7 @@ fn a_claim_and_a_rule(t: &mut T) {
     t.pause();
     t.says("constraint Nothing has more than 1 date kept: it fires on a planted violation");
     t.shows("1 disagreement between sources");
-    t.shows("‼ sources disagree under rule 1.4: 1988 here; 1989 in 1.3");
+    t.shows("? sources disagree under rule 1.4: 1988 here; 1989 in 1.3");
     t.lacks("constraint violation");
 }
 

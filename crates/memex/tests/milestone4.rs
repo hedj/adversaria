@@ -5,7 +5,7 @@ use memex::app::{App, Event, Key, Mode, Quasi};
 use memex::config::Config;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
-use ratatui::style::Modifier;
+use ratatui::style::Style;
 
 mod support;
 use support::{Room, replayed};
@@ -83,11 +83,11 @@ impl Screen {
         );
     }
     /// The modifiers of the first cell where text starts.
-    fn style_of(&self, text: &str) -> Modifier {
+    fn style_of(&self, text: &str) -> Style {
         for (y, l) in self.lines.iter().enumerate() {
             if let Some(i) = l.find(text) {
                 let x = l[..i].chars().count() as u16;
-                return self.buf[(x, y as u16)].modifier;
+                return self.buf[(x, y as u16)].style();
             }
         }
         panic!("no {text:?}")
@@ -155,12 +155,13 @@ fn scene_two_as_written() {
         !s.has("constraint violation"),
         "a claim is not a belief: no violation"
     );
-    s.assert("‼ sources disagree under “one date per event”: 1988 here; 1989 in 2.1");
-    s.assert("‼ sources disagree under “one date per event”: 1989 here; 1988 in 1.1");
+    s.assert("? sources disagree under “one date per event”: 1988 here; 1989 in 2.1");
+    s.assert("? sources disagree under “one date per event”: 1989 here; 1988 in 1.1");
     assert!(
-        s.style_of("‼ sources disagree under “one date per event”: 1988")
-            .contains(Modifier::DIM),
-        "shown less loudly"
+        s.style_of("? sources disagree under “one date per event”: 1988")
+            .fg
+            == memex::ui::disagreement().fg,
+        "shown as a disagreement, amber"
     );
     s.assert("[my notes, conference talk]");
     s.assert("The flight came a year after Energia's first launch. [derived]");
@@ -197,10 +198,15 @@ fn adopting_turns_a_disagreement_into_a_violation_and_back() {
     app.evaluate().unwrap();
     let s = screen(&app);
     s.assert("1 constraint violation");
+    let top = s.style_of("1 constraint violation").fg;
+    assert_eq!(
+        top,
+        memex::ui::violation().fg,
+        "the top bar's count, red too"
+    );
     assert!(
-        s.style_of("‼ breaks “one date per event”: 1988 here")
-            .contains(Modifier::BOLD),
-        "a violation is shown loudly"
+        s.style_of("‼ breaks “one date per event”: 1988 here").fg == memex::ui::violation().fg,
+        "a violation is shown as one, red"
     );
     tap(&mut app, Key::F(4));
     app.evaluate().unwrap();

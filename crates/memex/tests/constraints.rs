@@ -319,3 +319,24 @@ fn a_sentence_says_that_a_box_holds_one_value() {
     r.app.evaluate().unwrap();
     assert!(r.shows("1 constraint violation"), "{:#?}", r.lines());
 }
+
+#[test]
+fn the_item_of_a_broken_rule_has_a_red_bullet() {
+    // Catches the rule itself left unmarked while the facts that break it
+    // are marked: its bullet takes the violation's colour.
+    let mut r = Room::new("rule-bullet");
+    r.items(&[
+        "The rent is 1200.",
+        "It is false that the rent is greater than 1000.",
+    ]);
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    assert!(r.shows("1 constraint violation"), "{:#?}", r.lines());
+    let bullet = r.style_of("• 2. It is false").fg;
+    assert_eq!(bullet, memex::ui::violation().fg);
+    assert_ne!(
+        r.style_of("• 1. The rent").fg,
+        bullet,
+        "a fact's bullet stays plain"
+    );
+}

@@ -1462,6 +1462,13 @@ where the review held.
    semicolons between facts, a space within one, and the rule cited by
    its address ("breaks rule 2.7: income 2000 here; rent 1200 in 2.2;
    food 900 in 2.3"): twelve rows became three.
+3. Severity had no colour (a disagreement dim, a violation bold white).
+   Violations are red and marked ‼, disagreements amber and marked ?,
+   in the marks, the top bar's counts, the constraint pane and the
+   rule's own bullet; a chart's bars keep their fill and their values
+   turn red. The review measured the first amber and red as alike to
+   red-green colour-blind eyes, so they now differ in lightness and in
+   sign; and found all-red bars alarmed without saying where.
 
 ## 4. Where it stands
 

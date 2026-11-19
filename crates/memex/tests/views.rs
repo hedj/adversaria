@@ -281,12 +281,10 @@ fn a_view_is_drawn_under_its_item_and_its_marks_lead_to_their_facts() {
     command(&mut app, "layer rule(y(I)) where cell(income, I)");
     the_chart_is_drawn_under_its_item(&app);
     the_food_bar_leads_to_its_fact(&mut app);
-    // Break the rule: the bars on the facts in the violation are drawn bold.
+    // Break the rule: a bar on a fact in the violation keeps its plain
+    // fill, and its value, on top of it, is drawn in the violation's red.
     command(&mut app, "set cell(food, 900)");
-    let (s, _, buf) = screen(&app);
-    let bar = food_bar(&s);
-    let loud = buf[bar].modifier.contains(ratatui::style::Modifier::BOLD);
-    assert!(loud, "loud bar");
+    the_bar_keeps_its_fill_and_its_value_is_red(&app);
     a_supposition_draws_the_view_in_each_world(&mut app);
 }
 
@@ -320,6 +318,23 @@ fn food_label(s: &[String]) -> (u16, u16) {
 
 /// A cell of the food bar: the nearest bar cell above its label, in the
 /// column the bar is drawn in.
+/// The food bar's top cell is plain, and the cell above it, its value,
+/// is red.
+fn the_bar_keeps_its_fill_and_its_value_is_red(app: &App) {
+    let (s, _, buf) = screen(app);
+    let top = bar_top(&s);
+    assert_eq!(buf[top].fg, ratatui::style::Color::Reset, "a plain fill");
+    let red = memex::ui::violation().fg.unwrap();
+    assert_eq!(buf[(top.0, top.1 - 1)].fg, red, "its value red");
+}
+
+/// The food bar's top cell.
+fn bar_top(s: &[String]) -> (u16, u16) {
+    let (x, bottom) = food_bar(s);
+    let fill = |y: &u16| s[*y as usize].chars().nth(x as usize) == Some('█');
+    (x, (0..=bottom).rev().take_while(fill).last().unwrap())
+}
+
 fn food_bar(s: &[String]) -> (u16, u16) {
     let (x, y) = food_label(s);
     let column = x as usize + 2;

@@ -118,7 +118,7 @@ it is kept.
 The top bar now says `1 disagreement between sources`, and under your
 fact is a mark:
 
-    ‼ sources disagree under rule 1.4: 1988 here; 1989 in 1.3
+    ? sources disagree under rule 1.4: 1988 here; 1989 in 1.3
 
 Items are addressed by number: 1.3 is the third item under item 1, the
 claim, and rule 1.4 is the rule you just wrote. It is a disagreement, not an error, because 1989 is only a claim.
@@ -353,8 +353,8 @@ docs/guide.md, § 3.3 has recipes to copy for line charts, tables, Gantt
 charts and flowcharts.
 
 Leap to `food is 5` and make it `900.` again. The food bar rises, and
-all three bars are drawn bold: the cost rule's violation rests on the
-income, rent and food, and so does every bar. Leap to `food is 9` and
+the values above all three bars turn red: the cost rule's violation
+rests on the income, rent and food, and so does every bar. Leap to `food is 9` and
 make it `500.` to put it back.
 
 ### 15. A sentence, a query and a timeline

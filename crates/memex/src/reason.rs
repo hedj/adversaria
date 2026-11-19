@@ -173,6 +173,11 @@ impl ConstraintEval {
 }
 
 impl WorldEval {
+    /// A constraint, as reasoning found it, by its name.
+    pub fn constraint_named(&self, name: &str) -> Option<&ConstraintEval> {
+        self.constraints.iter().find(|c| c.constraint.name == name)
+    }
+
     /// The entries whose facts are in violations: what rests on them is
     /// shown loud.
     pub fn violated_facts(&self) -> std::collections::BTreeSet<u64> {

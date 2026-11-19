@@ -23,6 +23,29 @@ use wrap::{Wrapped, wrap};
 fn dim() -> Style {
     Style::default().add_modifier(Modifier::DIM)
 }
+/// A violation: beliefs that break a rule. Red, as an error is.
+pub fn violation() -> Style {
+    Style::default().fg(Color::Rgb(0xf0, 0x50, 0x50))
+}
+
+/// A disagreement between sources: a claim against a belief or another
+/// claim. Amber, as a warning is: to look at, not yet an error.
+pub fn disagreement() -> Style {
+    Style::default().fg(Color::Rgb(0xf2, 0xc0, 0x3a))
+}
+
+/// A mark's line under its item: ‼ for a violation, ? for a
+/// disagreement, each in its colour.
+fn mark_line(indent: &str, (loud, m): (bool, String)) -> Line<'static> {
+    let sign = if loud { "‼" } else { "?" };
+    Line::styled(format!("{indent}  {sign} {m}"), finding_style(loud))
+}
+
+/// A finding's style, by whether it is a violation.
+fn finding_style(loud: bool) -> Style {
+    if loud { violation() } else { disagreement() }
+}
+
 fn bold() -> Style {
     Style::default().add_modifier(Modifier::BOLD)
 }
@@ -301,15 +324,16 @@ fn top_lines(app: &App, width: u16) -> Top {
         },
         None => Top {
             left,
-            right: Some(Line::from(right).right_aligned()),
+            right: Some(right.right_aligned()),
         },
     }
 }
 
-/// A line, then a gap, then a span.
-fn beside(line: Line<'static>, gap: usize, right: Span<'static>) -> Line<'static> {
+/// A line, then a gap, then another line.
+fn beside(line: Line<'static>, gap: usize, right: Line<'static>) -> Line<'static> {
     let gap = Span::raw(" ".repeat(gap));
-    Line::from_iter(line.spans.into_iter().chain([gap, right]))
+    let spans = line.spans.into_iter().chain([gap]).chain(right.spans);
+    Line::from_iter(spans)
 }
 
 /// The top bar's left: the room, its world or worlds, and how many
@@ -349,12 +373,11 @@ fn world_spans(app: &App) -> Vec<Span<'static>> {
 /// The top bar's right: the world's status, else the pane with focus,
 /// The top bar's right, dim: what reasoning found, or else the pane in
 /// focus.
-fn top_right(app: &App) -> Span<'static> {
-    let text = match app.reason.eval[0].as_ref().map(status) {
-        Some(s) if !s.is_empty() => s,
-        _ => format!("pane {} of 2", app.session.view.focus + 1),
-    };
-    Span::styled(text, dim())
+fn top_right(app: &App) -> Line<'static> {
+    match app.reason.eval[0].as_ref().map(status) {
+        Some(found) if !found.spans.is_empty() => found,
+        _ => Line::styled(format!("pane {} of 2", app.session.view.focus + 1), dim()),
+    }
 }
 
 /// The right pane for a view: its layers, each with its goal and how many
@@ -629,14 +652,35 @@ impl<'a> OutlinePane<'a> {
     /// number.
     fn item_head(&self, id: u64, depth: usize) -> Vec<Span<'static>> {
         let indent = Span::raw("  ".repeat(depth));
-        let mut spans = vec![
-            indent,
-            Span::styled(format!("{} ", self.tree_mark(id)), dim()),
-        ];
+        let mut spans = vec![indent, self.bullet(id)];
         if depth == 0 {
             spans.push(Span::raw(format!("{}. ", self.outline().number(id))));
         }
         spans
+    }
+
+    /// An item's bullet: its tree mark, in its style.
+    fn bullet(&self, id: u64) -> Span<'static> {
+        Span::styled(format!("{} ", self.tree_mark(id)), self.bullet_style(id))
+    }
+
+    /// The style of an item's bullet: dim, or, for an item that states
+    /// a rule with findings, the colour of the worst.
+    fn bullet_style(&self, id: u64) -> Style {
+        let found = self.rule_stated(id);
+        match found.map(|c| (c.violations.is_empty(), c.disagreements.is_empty())) {
+            Some((false, _)) => violation(),
+            Some((true, false)) => disagreement(),
+            _ => dim(),
+        }
+    }
+
+    /// The rule an item states, as reasoning found it: the one named by
+    /// its text.
+    fn rule_stated(&self, id: u64) -> Option<&ConstraintEval> {
+        let text = self.outline().text(id);
+        let e = self.app.reason.eval[0].as_ref()?;
+        e.constraint_named(text.trim_end_matches('.'))
     }
 
     /// • for an item with none under it, ▶ for a folded one, ▼ for one
@@ -717,10 +761,7 @@ impl<'a> OutlinePane<'a> {
     /// An item's marks, each under it, set in: bold if loud, else dim.
     fn mark_lines(&self, id: u64, depth: usize) -> Vec<Line<'static>> {
         let indent = "  ".repeat(depth + 1);
-        let line = |(loud, m)| {
-            let style = if loud { bold() } else { dim() };
-            Line::styled(format!("{indent}  ‼ {m}"), style)
-        };
+        let line = |mark| mark_line(&indent, mark);
         self.marks_of(id).into_iter().map(line).collect()
     }
 
@@ -1087,7 +1128,7 @@ fn row_line(row: &[(char, view::Ink)], pad: &str) -> Line<'static> {
 /// A row's runs of one ink, to its last mark, each in its style.
 fn ink_spans(row: &[(char, view::Ink)]) -> Vec<Span<'static>> {
     let mut runs: Vec<(String, view::Ink)> = vec![];
-    for &(c, ink) in row {
+    for (c, ink) in row.iter().map(neutral_fill) {
         match runs.last_mut() {
             Some((run, i)) if *i == ink => run.push(c),
             _ => runs.push((c.to_string(), ink)),
@@ -1103,12 +1144,23 @@ fn ink_spans(row: &[(char, view::Ink)]) -> Vec<Span<'static>> {
     spans.collect()
 }
 
+/// A chart's fill (a bar's blocks) is drawn plain even where it rests on
+/// a violation: each number may be right where only their sum breaks a
+/// rule, so the bar's value, not its whole area, shows it.
+fn neutral_fill(&(c, ink): &(char, view::Ink)) -> (char, view::Ink) {
+    let fill = ('▁'..='█').contains(&c) || matches!(c, '▌' | '▐');
+    match (fill, ink) {
+        (true, view::Ink::Loud) => (c, view::Ink::Plain),
+        _ => (c, ink),
+    }
+}
+
 /// The style each ink is drawn in.
 fn ink_style(ink: view::Ink) -> Style {
     match ink {
         view::Ink::Plain => Style::default(),
         view::Ink::Dim => dim(),
-        view::Ink::Loud => bold(),
+        view::Ink::Loud => violation(),
     }
 }
 
@@ -1913,23 +1965,50 @@ fn where_from(outline: &Outline, p: &Prov) -> String {
 }
 
 /// What the top bar says of the current world's constraints.
-fn status(e: &WorldEval) -> String {
+fn status(e: &WorldEval) -> Line<'static> {
     let v: usize = e.constraints.iter().map(|c| c.violations.len()).sum();
     let d: usize = e.constraints.iter().map(|c| c.disagreements.len()).sum();
-    let mut parts = Vec::new();
-    if v > 0 {
-        parts.push(format!(
-            "{v} constraint violation{}",
-            if v == 1 { "" } else { "s" }
-        ));
+    let counts = [
+        (
+            v,
+            ["constraint violation", "constraint violations"],
+            violation(),
+        ),
+        (
+            d,
+            [
+                "disagreement between sources",
+                "disagreements between sources",
+            ],
+            disagreement(),
+        ),
+    ];
+    let shown = counts.into_iter().filter(|(n, ..)| *n > 0);
+    let spans: Vec<Span<'static>> = shown.map(count_span).collect();
+    Line::from(interleaved(spans, Span::styled(" · ", dim())))
+}
+
+/// A count of findings of a kind, in its colour.
+fn count_span((n, names, style): (usize, [&str; 2], Style)) -> Span<'static> {
+    Span::styled(counted_finding(n, names), style)
+}
+
+/// How many findings of a kind: "1 constraint violation", "2
+/// disagreements between sources".
+fn counted_finding(n: usize, [one, many]: [&str; 2]) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
+/// Spans with a separator between each two.
+fn interleaved(spans: Vec<Span<'static>>, sep: Span<'static>) -> Vec<Span<'static>> {
+    let mut out = Vec::new();
+    for (i, s) in spans.into_iter().enumerate() {
+        if i > 0 {
+            out.push(sep.clone());
+        }
+        out.push(s);
     }
-    if d > 0 {
-        parts.push(format!(
-            "{d} disagreement{} between sources",
-            if d == 1 { "" } else { "s" }
-        ));
-    }
-    parts.join(" · ")
+    out
 }
 
 /// The predicates a goal or body calls, by name, and through the world's
@@ -2036,9 +2115,9 @@ impl ConstraintPane<'_> {
 
     /// A constraint's violations, loud, then its disagreements.
     fn found(&self, c: &ConstraintEval) -> Vec<Line<'static>> {
-        let violations = self.kind("violations", &c.violations, bold());
+        let violations = self.kind("violations", &c.violations, violation());
         let disagreements = "disagreements between sources";
-        let disagreements = self.kind(disagreements, &c.disagreements, Style::default());
+        let disagreements = self.kind(disagreements, &c.disagreements, disagreement());
         [violations, disagreements].concat()
     }
 
@@ -3054,7 +3133,7 @@ mod tests {
     fn each_ink_has_its_style() {
         let style = |ink| figure_lines(&figure("a", ink), 0)[0].spans[1].style;
         assert_eq!(style(Ink::Dim), dim());
-        assert_eq!(style(Ink::Loud), bold());
+        assert_eq!(style(Ink::Loud), violation());
         assert_eq!(style(Ink::Plain), Style::default());
     }
 }

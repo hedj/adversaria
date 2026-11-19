@@ -133,7 +133,10 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   name in quotes), the item's own fact, and each other fact in the
   conflict with where it is: `‼ breaks rule 2.7: income 2000 here; rent
   1200 in 2.2; food 900 in 2.3`. A
-  violation is shown bold; a disagreement dim. An item that shows
+  violation (beliefs that break a rule) is red and marked `‼`; a
+  disagreement between sources (a claim against a belief or another
+  claim) is amber and marked `?`. The item that states the rule has a
+  bullet of the same colour, and the top bar's counts are coloured so. An item that shows
   derived text ends in `[derived]`; one that states a claim ends in its
   source, in brackets. A result whose input files have changed says `input
   changed since:` and the files. Text the memex has read is cyan; under a
@@ -642,8 +645,9 @@ reference line: `layer rule(y(1500))`.
 
 The view is drawn under its item and changes as the facts do. With the
 cursor on it, the right pane lists its layers, with how many marks each
-draws. A mark that rests on a fact in a violation is drawn bold (a grid
-box gains `!`). With the mouse on (§ 2.3), a click on a mark goes to the
+draws. A mark that rests on a fact in a violation is drawn red; a bar
+keeps its plain fill, and its value above it is red, since each number
+may be right where only their sum breaks a rule (a grid box gains `!`). With the mouse on (§ 2.3), a click on a mark goes to the
 item that states its fact. In a supposition, each world draws its own
 copy of every view, side by side. `retract` removes a layer, by its entry
 number, shown in the right pane. A layer whose goal raises an error is
