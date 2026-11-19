@@ -1278,9 +1278,12 @@ revised). A decimal point is no sentence end. An abbreviation such as "e.g. "
 was taken for one; a later change the same day ends a sentence only
 where the next word starts one (a capital, a digit, a quote or a
 bracket) and the word before is no abbreviation (from a list of 26) or
-initial. "etc." was in that list, so "… etc. Then …" did not split; it
-is now out of it, so it ends a sentence before a capital and not
-before a small letter.
+initial. "etc." was in that list, so "… etc. Then …" did not split. The
+abbreviations are now of two kinds: 19 that never end a sentence
+(e.g., Dr., p., approx., ...), and 7 that may (etc., et al., Jr., Sr.,
+ed., eds., St.), which do before a capital letter only, not before a
+digit, bracket or quote: "Ed Martin, Jr. Then" splits, "Smith et al.
+(2020) saw" does not. Still wrong: "King Jr. Day" splits.
 
 Checked: a unit test of sentences; four tests in tests/split.rs.
 Breaks, each failing a test: no closing record; the parts read as their

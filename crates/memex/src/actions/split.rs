@@ -101,42 +101,90 @@ pub(crate) fn sentences(text: &[char]) -> Vec<Range<usize>> {
     parts.filter(|r| !r.is_empty()).collect()
 }
 
-/// Whether the mark at i ends a sentence: a full stop, question mark or
-/// exclamation mark, then a space, then a word that starts one (a capital,
-/// a digit, a quote or a bracket); and, for a full stop, the word before
-/// it is not an abbreviation ("e.g.", "Dr.") or an initial ("J.").
+/// Whether the character at i ends a sentence: a full stop, question
+/// mark or exclamation mark, then a space, then a word that may start one,
+/// by what the word before the mark is (Shortened).
 fn sentence_ends(text: &[char], i: usize) -> bool {
-    let mark = matches!(text[i], '.' | '?' | '!');
-    let spaced = text.get(i + 1).is_some_and(|c| c.is_whitespace());
-    mark && spaced && starts_sentence(&text[i + 1..]) && !(text[i] == '.' && abbreviated(text, i))
+    let Some(kind) = mark_kind(text, i) else {
+        return false;
+    };
+    after_space(text, i).is_some_and(|c| kind.ends_before(c))
 }
 
-/// Whether the first word after the spaces starts a sentence: a capital,
-/// a digit, a quote or a bracket.
-fn starts_sentence(rest: &[char]) -> bool {
-    let next = rest.iter().find(|c| !c.is_whitespace());
-    next.is_some_and(|c| c.is_uppercase() || c.is_ascii_digit() || "\"'“‘([".contains(*c))
+/// The first character after the spaces that follow i, if a space does.
+fn after_space(text: &[char], i: usize) -> Option<char> {
+    let rest = text
+        .get(i + 1..)
+        .filter(|r| r.first().is_some_and(|c| c.is_whitespace()))?;
+    rest.iter().find(|c| !c.is_whitespace()).copied()
 }
 
-/// Whether the word before a full stop at i is an abbreviation or an
-/// initial.
-fn abbreviated(text: &[char], i: usize) -> bool {
+/// What a word before a full stop is: a word that ends a sentence before a
+/// capital, a digit, a quote or a bracket; an abbreviation that may end one,
+/// before a capital letter only ("… thrown by Ed Martin, Jr. Then"); or an
+/// abbreviation or initial that never does ("e.g. Buran", "Dr. Smith",
+/// "J. Jones").
+#[derive(Clone, Copy, PartialEq)]
+enum Shortened {
+    Not,
+    MayEnd,
+    Never,
+}
+
+impl Shortened {
+    /// Whether a sentence ends before a word that starts so.
+    fn ends_before(self, c: char) -> bool {
+        match self {
+            Shortened::Never => false,
+            Shortened::MayEnd => c.is_uppercase(),
+            Shortened::Not => c.is_uppercase() || c.is_ascii_digit() || "\"'“‘([".contains(c),
+        }
+    }
+}
+
+/// What the word before the character at i is, if it is a mark that can
+/// end a sentence; only a full stop shortens.
+fn mark_kind(text: &[char], i: usize) -> Option<Shortened> {
+    match text[i] {
+        '?' | '!' => Some(Shortened::Not),
+        '.' => Some(shortened(text, i)),
+        _ => None,
+    }
+}
+
+/// What the word before a full stop at i is.
+fn shortened(text: &[char], i: usize) -> Shortened {
     let start = text[..i]
         .iter()
         .rposition(|c| c.is_whitespace())
         .map_or(0, |s| s + 1);
     let word: String = text[start..i].iter().collect::<String>().to_lowercase();
-    let initial = word.chars().count() == 1 && word.chars().all(char::is_alphabetic);
-    initial || ABBREVIATIONS.contains(&word.trim_start_matches(['(', '"', '\'']))
+    kind_of(word.trim_start_matches(['(', '"', '\'']))
 }
 
-/// Words a full stop shortens and does not end a sentence after, even
-/// before a capital: "e.g. Buran", "Dr. Smith", "et al. (2020)". Not
-/// "etc.", which so often ends one: before a capital it does.
-const ABBREVIATIONS: [&str; 25] = [
-    "e.g", "i.e", "cf", "vs", "viz", "approx", "no", "nos", "fig", "figs", "p", "pp", "vol", "ed",
-    "eds", "mr", "mrs", "ms", "dr", "prof", "st", "jr", "sr", "al", "ca",
+/// What a word, in lower case, is before a full stop.
+fn kind_of(word: &str) -> Shortened {
+    let initial = word.chars().count() == 1 && word.chars().all(char::is_alphabetic);
+    if initial || NEVER_END.contains(&word) {
+        Shortened::Never
+    } else if MAY_END.contains(&word) {
+        Shortened::MayEnd
+    } else {
+        Shortened::Not
+    }
+}
+
+/// Abbreviations that always come before what they shorten, so never end
+/// a sentence: "e.g. Buran", "Dr. Smith", "p. 4", "approx. 5".
+const NEVER_END: [&str; 19] = [
+    "e.g", "i.e", "cf", "vs", "viz", "approx", "ca", "no", "nos", "fig", "figs", "p", "pp", "vol",
+    "mr", "mrs", "ms", "dr", "prof",
 ];
+
+/// Abbreviations that may end a sentence: they do before a capital
+/// letter, not before a digit, a bracket or a quote ("Smith et al.
+/// (2020)").
+const MAY_END: [&str; 7] = ["etc", "al", "jr", "sr", "ed", "eds", "st"];
 
 /// A range without the spaces at its ends.
 fn trimmed(text: &[char], r: Range<usize>) -> Range<usize> {
@@ -192,6 +240,20 @@ mod tests {
                 "Rockets, shuttles etc.",
                 "Then it flew.",
                 "Rockets etc. and more."
+            ]
+        );
+        // Catches "et al." or "Jr." held to never end a sentence, or "et
+        // al." before a bracket taken for an end.
+        assert_eq!(
+            parts(
+                "It was thrown by Ed Martin, Jr. Then it rolled. Smith et al. (2020) saw it. So did Jones et al. They wrote."
+            ),
+            [
+                "It was thrown by Ed Martin, Jr.",
+                "Then it rolled.",
+                "Smith et al. (2020) saw it.",
+                "So did Jones et al.",
+                "They wrote."
             ]
         );
         assert!(parts("   ").is_empty());
