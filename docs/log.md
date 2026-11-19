@@ -1140,7 +1140,10 @@ in an unwrapped box; the foot line is cut at the screen's edge.
   `crates/memex/src/ui/wrap.rs` does the wrapping and maps a column of
   a line to its row.
 
-Not yet: the foot line is still cut at the screen's edge.
+- The foot: its two lines (what is typed, and the guide or the
+  message) each take as many rows as they wrap to, up to three, so the
+  outline keeps the rest of the screen; a message longer than three
+  rows is cut at the third.
 The referent count does not see a child module, so `ui.rs` reads as
 holding 6 modules; a reader holds 7 (its child `wrap` too).
 

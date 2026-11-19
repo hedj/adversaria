@@ -318,3 +318,36 @@ fn the_text_cursor_at_the_end_of_a_long_item_is_on_its_last_row() {
     let end = row.find("1993.").expect("the cursor is on the last row") + "1993.".len();
     assert_eq!(at.x as usize, row[..end].chars().count(), "{row}");
 }
+
+#[test]
+fn a_held_quasimodes_guide_is_shown_whole_at_80_columns() {
+    // Catches the foot's guide cut at the screen's edge.
+    let mut room = Room::new("screen-foot-wrap");
+    room.hold(Quasi::Command, "");
+    let rows = room.lines_at(80, 30);
+    let words = rows
+        .iter()
+        .rev()
+        .take(3)
+        .rev()
+        .flat_map(|r| r.split_whitespace());
+    let foot = words.collect::<Vec<_>>().join(" ");
+    let guide = "to run on the target · Esc completes · ? lists what may come next";
+    assert!(foot.contains(guide), "{foot}");
+}
+
+#[test]
+fn a_long_message_wraps_to_three_rows_at_most() {
+    // Catches a long message cut at the screen's edge, or one that takes
+    // as many rows as it likes from the outline.
+    let mut room = Room::new("screen-said-wrap");
+    room.items(&["The programme"]);
+    let said: Vec<String> = (1..=90).map(|n| format!("w{n}")).collect();
+    room.app.session.message = said.join(" ");
+    let rows = room.lines_at(80, 30);
+    let foot = rows[27..].join(" ");
+    assert!(foot.trim_start().starts_with("w1 w2"), "{rows:#?}");
+    assert!(foot.contains("w40"), "the third row is shown: {foot}");
+    assert!(!foot.contains("w90"), "a fourth row is not: {foot}");
+    assert!(rows.iter().any(|r| r.contains("• 1. The programme")));
+}

@@ -60,20 +60,30 @@ pub fn draw(f: &mut Frame, app: &App) {
 
 /// Draw the screen, and say where clicks would land.
 pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
-    let [top, body, foot @ ..] = screen_areas(f.area());
+    let [top, body] = draw_foot(f, app);
     draw_top(f, app, top);
-    let hits = draw_body(f, app, body);
-    draw_prompt(f, app, foot);
-    hits
+    draw_body(f, app, body)
 }
 
-/// The screen's rows: the top bar, the body, and the foot's two lines.
-fn screen_areas(area: Rect) -> [Rect; 4] {
+/// Draw the foot, as many rows as its lines take wrapped; the rows above
+/// it: the top bar's and the body's.
+fn draw_foot(f: &mut Frame, app: &App) -> [Rect; 2] {
+    let lines = foot_lines(app);
+    let [top, body, foot @ ..] = screen_areas(f.area(), &lines);
+    draw_prompt(f, lines, foot);
+    [top, body]
+}
+
+/// The screen's rows: the top bar, the body, and the foot's two lines,
+/// each as many rows as it takes wrapped, up to three.
+fn screen_areas(area: Rect, foot: &[Line<'static>; 2]) -> [Rect; 4] {
+    let rows = |l: &Line<'static>| wrapped_height(std::slice::from_ref(l), area.width).min(3);
+    let [prompt, said] = foot.each_ref().map(rows);
     let rows = [
         Constraint::Length(1),
         Constraint::Min(3),
-        Constraint::Length(1),
-        Constraint::Length(1),
+        Constraint::Length(prompt),
+        Constraint::Length(said),
     ];
     Layout::vertical(rows).areas(area)
 }
@@ -1285,10 +1295,16 @@ fn bold_between(text: &str, i: usize, j: usize) -> [Span<'static>; 3] {
 
 /// The foot: what is typed or asked, and under it what to do, or the
 /// message.
-fn draw_prompt(f: &mut Frame, app: &App, rows: [Rect; 2]) {
+fn draw_prompt(f: &mut Frame, lines: [Line<'static>; 2], rows: [Rect; 2]) {
+    let [line, said] = lines;
+    f.render_widget(wrapped(vec![line]), rows[0]);
+    f.render_widget(wrapped(vec![said]), rows[1]);
+}
+
+/// The foot's two lines: what is typed, and what the memex says, dim.
+fn foot_lines(app: &App) -> [Line<'static>; 2] {
     let (line, said) = foot(app);
-    f.render_widget(Paragraph::new(line), rows[0]);
-    f.render_widget(Paragraph::new(Span::styled(said, dim())), rows[1]);
+    [line, Line::styled(said, dim())]
 }
 
 /// The foot's two lines, by the mode.
