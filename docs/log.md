@@ -1475,6 +1475,12 @@ where the review held.
    on the ground, and a short line's patch was easy to miss) the tint
    runs across the pane, on every wrapped row. The review's left accent
    bar is left to finding 14, which gives the outline a gutter.
+5. An outline longer than its pane was cut off with no sign. When it
+   overflows, the pane keeps its last row to say how many items lie
+   above and below ("↑ 6 items above · ↓ continues below"). The first
+   version wrote "↑ 16 more" over the top and bottom rows; the review
+   found it hid part of a violation's text and a chart's axis, and that
+   "more" of rows read as items: so a row is kept, and items counted.
 
 ## 4. Where it stands
 

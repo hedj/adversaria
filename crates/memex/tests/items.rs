@@ -190,3 +190,46 @@ fn bar_cells(r: &Room) -> Vec<(u16, u16)> {
     let cells = lines[y].chars().enumerate().filter(|(_, c)| *c == '█');
     cells.map(|(x, _)| (x as u16, y as u16)).collect()
 }
+
+/// The screen, 80 by 12, with the cursor on the first item.
+fn at_the_first(r: &mut Room) -> Vec<String> {
+    let first = r.app.notebook.outline.in_order()[0];
+    r.put_cursor(first);
+    r.lines_at(80, 12)
+}
+
+/// A room of thirty items, the cursor on the last.
+fn thirty_items(name: &str) -> Room {
+    let mut r = Room::new(name);
+    let texts: Vec<String> = (1..=30).map(|i| format!("item {i}")).collect();
+    r.items(&texts.iter().map(String::as_str).collect::<Vec<_>>());
+    r
+}
+
+#[test]
+fn an_outline_longer_than_its_pane_says_how_many_rows_are_out_of_view() {
+    // Catches rows cut off at the pane's foot, or above it, with no sign.
+    let mut r = thirty_items("more-rows");
+    let lines = r.lines_at(80, 12);
+    assert!(
+        lines.iter().any(|l| l.contains("↑ 26 items above")),
+        "{lines:#?}"
+    );
+    let lines = at_the_first(&mut r);
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains("↓") && l.contains("items below")),
+        "{lines:#?}"
+    );
+    assert!(
+        !lines.iter().any(|l| l.contains("↑")),
+        "nothing above the first"
+    );
+    let short = Room::new("no-more");
+    let shown = short.lines_at(80, 12);
+    assert!(
+        !shown.iter().any(|l| l.contains("↓") || l.contains("↑")),
+        "{shown:#?}"
+    );
+}

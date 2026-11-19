@@ -598,10 +598,7 @@ impl<'a> OutlinePane<'a> {
     /// and a long outline is not drawn whole on every keystroke.
     fn drawn(&self) -> Drawn {
         let rows = self.app.visible();
-        let mut drawn = Drawn::default();
-        for (id, depth) in self.near(&rows) {
-            self.item(&mut drawn, *id, *depth);
-        }
+        let mut drawn = self.drawn_near(&rows);
         if rows.is_empty() {
             let empty = "(empty: type to write the first item)";
             drawn.push(Line::styled(empty, dim()), 0);
@@ -609,14 +606,26 @@ impl<'a> OutlinePane<'a> {
         drawn
     }
 
-    /// The rows within a screen's height of the cursor's row, either side.
-    fn near<'r>(&self, rows: &'r [(u64, usize)]) -> &'r [(u64, usize)] {
-        near(rows, self.cursor(), self.rows.height as usize)
+    /// Where the rows within a screen's height of the cursor's row lie.
+    fn near(&self, rows: &[(u64, usize)]) -> std::ops::Range<usize> {
+        near_range(rows, self.cursor(), self.rows.height as usize)
+    }
+
+    /// The items near the cursor's, drawn, with how many lie before and
+    /// after them.
+    fn drawn_near(&self, rows: &[(u64, usize)]) -> Drawn {
+        let range = self.near(rows);
+        let mut drawn = Drawn::around(&range, rows.len());
+        for (id, depth) in &rows[range] {
+            self.item(&mut drawn, *id, *depth);
+        }
+        drawn
     }
 
     /// An item's lines: the item, a click on all of it; its marks; and its
     /// view, if it is one.
     fn item(&self, drawn: &mut Drawn, id: u64, depth: usize) {
+        drawn.starts.push(drawn.lines.len());
         if id == self.cursor() {
             drawn.cursor = Some((drawn.lines.len(), depth));
         }
@@ -863,11 +872,12 @@ impl<'a> OutlinePane<'a> {
     }
 }
 
-/// The rows within a screen's height of the cursor's row, either side.
-fn near(rows: &[(u64, usize)], cursor: u64, height: usize) -> &[(u64, usize)] {
+/// Where the rows within a screen's height of the cursor's row lie among
+/// all the rows.
+fn near_range(rows: &[(u64, usize)], cursor: u64, height: usize) -> std::ops::Range<usize> {
     let at = rows.iter().position(|(id, _)| *id == cursor).unwrap_or(0);
     let first = at.saturating_sub(height);
-    &rows[first..rows.len().min(first + 2 * height + 1)]
+    first..rows.len().min(first + 2 * height + 1)
 }
 
 /// The lines of an outline pane, before they are wrapped and their window
@@ -878,6 +888,10 @@ struct Drawn {
     lines: Vec<(Line<'static>, usize)>,
     places: Vec<Place>,
     cursor: Option<(usize, usize)>,
+    /// The line each item drawn starts on, and how many items lie before
+    /// and after those drawn.
+    starts: Vec<usize>,
+    skipped: (usize, usize),
 }
 
 /// An outline pane's lines wrapped to its width: each line's rows, and the
@@ -918,6 +932,11 @@ impl Laid {
         first..first + self.wrapped[line].rows.len()
     }
 
+    /// How many rows all the lines take.
+    fn len(&self) -> usize {
+        self.wrapped.iter().map(|w| w.rows.len()).sum()
+    }
+
     /// All the rows, in order.
     fn rows(self) -> Vec<Line<'static>> {
         self.wrapped.into_iter().flat_map(|w| w.rows).collect()
@@ -949,6 +968,79 @@ impl Place {
     fn reach(&self) -> (usize, usize) {
         let (x, width) = self.span;
         (x, x.saturating_add(width))
+    }
+}
+
+/// An outline pane's area for its rows: all of it, or, when they do not
+/// fit, all but its last row, which says how many lie beyond.
+fn kept_for_beyond(area: Rect, more: bool) -> Rect {
+    match more && area.height > 1 {
+        true => Rect {
+            height: area.height - 1,
+            ..area
+        },
+        false => area,
+    }
+}
+
+/// What lies beyond an outline pane's window: how many items wholly
+/// above and below it, and whether an item in it runs on below.
+struct Beyond {
+    above: usize,
+    below: usize,
+    cut: bool,
+}
+
+impl Beyond {
+    /// From the rows each item takes and the window's edges: how many
+    /// items lie wholly above it and wholly below it, and whether one in
+    /// it runs on below it.
+    fn of(rows: &[(usize, usize)], (top, bottom): (usize, usize)) -> Beyond {
+        let above = rows.iter().filter(|(_, end)| *end <= top).count();
+        let below = rows.iter().filter(|(first, _)| *first >= bottom).count();
+        let cut = runs_past(rows, bottom);
+        Beyond { above, below, cut }
+    }
+
+    /// With the items not drawn, before and after those that are.
+    fn skipping(self, (before, after): (usize, usize)) -> Beyond {
+        Beyond {
+            above: self.above + before,
+            below: self.below + after,
+            ..self
+        }
+    }
+}
+
+/// Whether an item runs on past a row: starts before it, ends after.
+fn runs_past(rows: &[(usize, usize)], row: usize) -> bool {
+    rows.iter().any(|(first, end)| *first < row && *end > row)
+}
+
+/// What lies beyond the window, in words: "↑ 26 items above · ↓ 3 items
+/// below", each side only if any do; "↓ continues below" when only the
+/// last item in view runs on.
+fn beyond_text(b: Beyond) -> String {
+    let side =
+        |n: usize, arrow: &str, side: &str| format!("{arrow} {n} {} {side}", plural(n, "item"));
+    let mut said = vec![];
+    if b.above > 0 {
+        said.push(side(b.above, "↑", "above"));
+    }
+    match (b.below, b.cut) {
+        (0, true) => said.push("↓ continues below".to_string()),
+        (0, false) => {}
+        (n, _) => said.push(side(n, "↓", "below")),
+    }
+    said.join(" · ")
+}
+
+/// "1 item", "2 items".
+fn plural(n: usize, one: &str) -> String {
+    if n == 1 {
+        one.to_string()
+    } else {
+        format!("{one}s")
     }
 }
 
@@ -1016,9 +1108,34 @@ impl Window {
         let shown: Vec<Line> = rows.into_iter().skip(self.offset).take(height).collect();
         f.render_widget(Paragraph::new(shown), self.area);
     }
+
+    /// On the row below the window, kept for it, how many rows lie above
+    /// and below it: so the outline is known to go on, and nothing it
+    /// shows is covered.
+    fn beyond(&self, f: &mut Frame, counts: Beyond) {
+        let row = Rect::new(self.area.x, self.area.bottom(), self.area.width, 1);
+        f.render_widget(
+            Paragraph::new(Line::styled(beyond_text(counts), dim())),
+            row,
+        );
+    }
+
+    /// Its first row among all the rows, and the one after its last.
+    fn edges(&self) -> (usize, usize) {
+        (self.offset, self.offset + self.area.height as usize)
+    }
 }
 
 impl Drawn {
+    /// Nothing drawn yet, to draw a range of so many items: those before
+    /// and after it are skipped.
+    fn around(range: &std::ops::Range<usize>, total: usize) -> Drawn {
+        Drawn {
+            skipped: (range.start, total - range.end),
+            ..Drawn::default()
+        }
+    }
+
     /// Add a line, whose wrapped rows are set in by a hang.
     fn push(&mut self, line: Line<'static>, hang: usize) {
         self.lines.push((line, hang));
@@ -1035,12 +1152,48 @@ impl Drawn {
     fn show(self, f: &mut Frame, outline: &OutlinePane) -> Hits {
         let laid = Laid::new(&self.lines, outline.rows.width as usize);
         let cursor = self.text_place(&laid, outline);
-        let window = Window::over(outline.rows, cursor);
+        let window = self.window(&laid, outline.rows, cursor);
         outline.put_text_cursor(f, window.place(cursor));
         let hits = self.hits(&laid, window);
         window.ground(f, self.cursor_rows(&laid));
+        self.say_beyond(f, &laid, window, outline.rows);
         window.draw(f, laid.rows());
         hits
+    }
+
+    /// The window over the pane's rows that keeps the text cursor in
+    /// view: all the pane, or, when not all the items are shown, all but
+    /// its last row.
+    fn window(&self, laid: &Laid, rows: Rect, cursor: Option<(usize, usize)>) -> Window {
+        let more = laid.len() > rows.height as usize || self.skipped != (0, 0);
+        Window::over(kept_for_beyond(rows, more), cursor)
+    }
+
+    /// On the row kept for it, if one is, how many items lie beyond.
+    fn say_beyond(&self, f: &mut Frame, laid: &Laid, window: Window, rows: Rect) {
+        if window.area != rows {
+            window.beyond(f, self.beyond(laid, window));
+        }
+    }
+
+    /// What lies beyond the window.
+    fn beyond(&self, laid: &Laid, window: Window) -> Beyond {
+        Beyond::of(&self.item_rows(laid), window.edges()).skipping(self.skipped)
+    }
+
+    /// The rows each item drawn takes: its first, and the one after its
+    /// last.
+    fn item_rows(&self, laid: &Laid) -> Vec<(usize, usize)> {
+        let ends = self
+            .starts
+            .iter()
+            .skip(1)
+            .copied()
+            .chain([self.lines.len()]);
+        let lines = self.starts.iter().zip(ends);
+        lines
+            .map(|(s, e)| (laid.first[*s], laid.rows_of(e - 1).end))
+            .collect()
     }
 
     /// The rows the cursor's item takes, wrapped: from its first, how many.
@@ -3103,6 +3256,26 @@ fn change_line((seq, what, retracted): &(u64, String, bool)) -> Line<'static> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn what_lies_beyond_the_window_is_counted_in_items() {
+        // Catches an item partly shown counted as beyond, the last item
+        // in view running on past the foot said nothing of, or items not
+        // drawn left out of the count.
+        let rows = [(0, 2), (2, 3), (3, 9), (9, 10)];
+        let b = Beyond::of(&rows, (2, 5));
+        assert_eq!((b.above, b.below, b.cut), (1, 1, true));
+        assert_eq!(
+            beyond_text(Beyond::of(&rows, (2, 5)).skipping((25, 0))),
+            "↑ 26 items above · ↓ 1 item below"
+        );
+        let cut = Beyond {
+            above: 0,
+            below: 0,
+            cut: true,
+        };
+        assert_eq!(beyond_text(cut), "↓ continues below");
+    }
     use view::Ink;
 
     #[test]

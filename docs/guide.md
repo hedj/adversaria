@@ -125,7 +125,9 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   entries (`journal`). On the right, a count of violations and
   disagreements; when there are none, which pane has focus (`pane 1 of
   2`). In a narrow window the right side takes a row of its own.
-- **Left pane:** the outline. `▼` marks an item with items under it, `▶` a
+- **Left pane:** the outline. When it runs past the pane, the pane's
+  last row says how many items lie above and below (`↑ 6 items above ·
+  ↓ continues below`); the outline scrolls to keep the cursor in view. `▼` marks an item with items under it, `▶` a
   folded one (followed by how many items it hides), `•` an item with none.
   Top-level items show their number. Under an item, `‼` lines are its
   marks: one for each constraint its facts break or disagree under,
