@@ -64,6 +64,22 @@ fn a_sentence_waits_to_be_read_until_the_user_pauses() {
 }
 
 #[test]
+fn a_kind_and_a_rule_on_it_are_read_and_kept() {
+    // Catches "Nemo is a fish" read as a box, or a rule over a kind that
+    // the memex's own checks refuse.
+    let mut r = Room::new("read-kind");
+    r.items(&["Nemo is a fish.", "Every fish is an animal."]);
+    r.app.idle();
+    assert!(
+        facts(&r.app).contains(&"fish(nemo)".to_string()),
+        "{:?}",
+        facts(&r.app)
+    );
+    let said = &r.app.session.message;
+    assert_eq!(said, "rule animal/1 kept");
+}
+
+#[test]
 fn a_changed_sentence_is_read_again_in_place_of_the_old() {
     // Catches the old reading kept beside the new, so the item states two
     // dates, or the new text not read.

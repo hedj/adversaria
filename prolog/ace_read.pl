@@ -8,20 +8,25 @@ whole is not read at all: every condition of the DRS must be used.
 
 A discourse referent stands for its value. A noun phrase is a goal on
 it: "the date of X" is date(X, R), and "the income", with no owner, is
-the box cell(income, R). "is" makes two values one: R = 1988, or, for a
-sum, R is A + B. So a fact, a rule's body and a constraint's body come
+the box cell(income, R) when R stands for a value (it is a number, a
+sum or a variable, or it is compared); otherwise R is a thing and the
+noun its kind: "Nemo is a fish" is fish(nemo). "is" makes two values
+one: R = 1988, or, for a sum, R is A + B. So a fact, a rule's body and a constraint's body come
 from one mapping:
 
 | ACE | Read as |
 | The date of Buran-flight is 1988. | fact(date(buran_flight, 1988)) |
 | The income is 2000. | fact(cell(income, 2000)) |
 | Buran is a:reusable. | fact(reusable(buran)) |
+| Nemo is a fish. | fact(fish(nemo)) |
+| Every fish is an animal. | rule(animal(X), fish(X)) |
 | Buran-flight follows Energia-launch. | fact(follow(buran_flight, energia_launch)) |
 | Talk-notes says that S. | claim("Talk-notes", F) for each fact F of S |
 | If C then the rest is X - Y. | rule(rest(R), (C, R is X - Y)) |
 | If C then X + Y =< Z. | constraint((C, \+ X + Y =< Z)) |
 | If C then it is false that S. | constraint((C, S)) |
 | It is false that S. | constraint(S) |
+| No fish is a bird. | constraint((fish(X), bird(X))) |
 | Nothing has more than 1 date. | constraint((date(E, A), date(E, B), A \== B)) |
 
 A rule's value has a name of its own: "If C then the rest is X - Y" is a
@@ -171,8 +176,21 @@ then_statement([formula(L, Op, R)], If, constraint(Body)) :-
 then_statement(Then, If, rule(Head, Body)) :-
     goals(Then, [Head|Rest]),
     \+ comparison_goal(Head),
+    maplist(arithmetic, Rest),
     append(If, Rest, Goals),
-    conjunction(Goals, Body).
+    conjunction(Goals, Body),
+    bound_by(Body, Head).
+
+%   What a rule concludes is one goal and the sums that give its value:
+%   "Every fish has a fin" concludes a fin and having it, and is not read.
+arithmetic(_ is _).
+
+%   Every variable of the head is one the body binds: the rule speaks only
+%   of what its condition names.
+bound_by(Body, Head) :-
+    term_variables(Body, Bound),
+    term_variables(Head, Named),
+    forall(member(V, Named), ( member(B, Bound), B == V )).
 
 %   "has more than 1 N": a count of N greater than 1 that A has, in
 %   either order.
@@ -217,7 +235,7 @@ claim_of(Source, fact(F), claim(Source, F)).
 goals(Conds, Goals) :-
     partition(binding(Conds), Conds, Bindings, Others),
     used_all(Others),
-    convlist(goal(Others), Others, Found),
+    convlist(goal(Conds), Others, Found),
     foldl(bind, Bindings, [], Arithmetic),
     append(Found, Arithmetic, Goals).
 
@@ -230,7 +248,8 @@ binding(Conds, predicate(_, be, _, V)) :-
 %   that computes it.
 bind(predicate(_, be, R, V), Acc, Acc) :-
     value(V, X), \+ expression(X), !,
-    R = X.
+    value(R, Y),
+    Y = X.
 bind(predicate(_, be, R, expr(Op, A, B)), Acc, [R is E|Acc]) :-
     expression_value(expr(Op, A, B), E).
 
@@ -247,7 +266,9 @@ goal(Conds, object(R, N, countable, na, eq, 1), G) :-
     !,
     (   member(relation(O, of, Owner), Conds), O == R
     ->  value(Owner, X), G =.. [N, X, R]
-    ;   G = cell(N, R)
+    ;   valued(Conds, R)
+    ->  G = cell(N, R)
+    ;   G =.. [N, R]
     ).
 goal(Conds, predicate(_, be, S, A), G) :-
     !,
@@ -261,6 +282,23 @@ goal(_, predicate(_, Verb, S, O), G) :-
     value(S, X), value(O, Y), G =.. [Verb, X, Y].
 goal(_, formula(L, Op, R), G) :-
     comparison(Op, L, R, G).
+
+%   A noun's referent that stands for a value, which makes the noun a box:
+%   it "is" a number, a string, a sum or a variable, it is compared, or it
+%   is what something is compared with. Any other is a thing, and the noun
+%   its kind ("Nemo is a fish" is fish(nemo)).
+valued(Conds, R) :-
+    member(C, Conds),
+    valued_by(C, Conds, R),
+    !.
+
+valued_by(predicate(_, be, R0, V), Conds, R) :- R0 == R, value_side(Conds, V).
+valued_by(property(_, _, comp_than, R0), _, R) :- R0 == R.
+valued_by(formula(L, _, Rt), _, R) :- ( L == R ; Rt == R ).
+
+value_side(_, V) :- nonvar(V), memberchk(V, [int(_), real(_), string(_), expr(_, _, _)]), !.
+value_side(Conds, V) :- member(object(V0, something, dom, na, na, na), Conds), V0 == V, !.
+value_side(Conds, V) :- member(property(V0, _, comp_than, _), Conds), V0 == V, !.
 
 property_of(property(A0, _, _), A) :- A0 == A.
 property_of(property(A0, _, _, _), A) :- A0 == A.

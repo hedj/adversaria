@@ -423,13 +423,16 @@ Nothing that comes from outside is trusted as a fact. An imported document, a we
 
 The author's decision (18 November 2026): the memex reads what the user writes, so that no statement is written twice, once in English and again in Prolog. An item whose text is ACE is read as the statements it makes, as written, with no step to confirm; its text is drawn so that the user sees which text has a formal meaning to the memex. An item whose text is not ACE stays prose, with a quiet hint, at the cursor, of where APE stopped. Facts, claims, rules and constraints are all read.
 
-The reader (`prolog/ace_read.pl`) maps APE's logical form (its DRS) to the notebook's statements. A discourse referent stands for its value: a noun phrase is a goal on it ("the date of X" is `date(X, R)`; "the income", with no owner, is the box `cell(income, R)`), and "is" makes two values one, or computes one ("R is A + B"). So a fact, a rule's body and a constraint's body come from one mapping. A text is read whole or not at all: every condition of the DRS must be one the mapping knows, so a reading never states less than the text says.
+The reader (`prolog/ace_read.pl`) maps APE's logical form (its DRS) to the notebook's statements. A discourse referent stands for its value: a noun phrase is a goal on it ("the date of X" is `date(X, R)`; "the income", with no owner, is the box `cell(income, R)` when R stands for a value: it is a number, a string, a sum or a variable, or it is compared; any other referent is a thing, and its noun the thing's kind, so "Nemo is a fish" is `fish(nemo)`), and "is" makes two values one, or computes one ("R is A + B"). So a fact, a rule's body and a constraint's body come from one mapping. A text is read whole or not at all: every condition of the DRS must be one the mapping knows, so a reading never states less than the text says. A rule concludes one goal, with the sums that give its value, about what its condition names: "Every fish has a fin" (some fin for each fish) is not read, nor is a fact about a thing with no name, such as "A fish is an animal" (one fish, unnamed).
 
 | ACE | Read as |
 | --- | --- |
 | The date of Buran-flight is 1988. (Buran-flight's date is 1988.) | the fact `date(buran_flight, 1988)` |
 | The income is 2000. | the fact `cell(income, 2000)`, a box |
 | Buran is a:reusable. · Buran-flight follows Energia-launch. | the facts `reusable(buran)` · `follow(buran_flight, energia_launch)` |
+| Nemo is a fish. | the fact `fish(nemo)`, a kind |
+| Every fish is an animal. (Every fish swims.) | the rule `animal(A) :- fish(A)` (`swim(A) :- fish(A)`) |
+| No fish is a bird. | the constraint `false :- fish(A), bird(A)` |
 | Talk-notes says that the date of Buran-flight is 1989. (claims, states, believes, reports) | the claim `claims("Talk-notes", date(buran_flight, 1989))` |
 | If the income is X and the rent is Y then the rest is X - Y. | the rule `rest(A) :- cell(income, B), cell(rent, C), A is B-C` |
 | If the rent is X and the food is Y and the income is Z then X + Y =< Z. | the constraint `false :- cell(rent, A), cell(food, B), cell(income, C), \+ A+B =< C` |

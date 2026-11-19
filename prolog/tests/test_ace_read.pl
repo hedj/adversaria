@@ -27,6 +27,30 @@ test(a_noun_with_no_owner_is_a_box) :-
     % at all: a box is cell(Name, Value), as the boxes of the tutorial.
     reads("The income is 2000.", [fact(cell(income, 2000))]).
 
+test(a_noun_that_is_not_a_value_is_a_kind) :-
+    % Catches a kind read as a box ("Nemo is a fish" as cell(fish, ...)),
+    % a name left as APE gives it (named('Nemo')), or a kind lost in a
+    % rule or a constraint.
+    reads("Nemo is a fish.", [fact(fish(nemo))]),
+    reads("Every fish is an animal.", [rule(animal(X), fish(X))]),
+    reads("Every fish swims.", [rule(swim(Y), fish(Y))]),
+    reads("No fish is a bird.", [constraint((fish(Z), bird(Z)))]),
+    assertion(X-Y-Z == '$VAR'(0)-'$VAR'(0)-'$VAR'(0)).
+
+test(a_rule_concludes_one_thing_of_what_it_names) :-
+    % Catches "Every fish has a fin" read as "anything a fish has is a
+    % fin" (a conclusion of more than one goal), or a rest of Y that the
+    % condition does not name (a head variable the body does not bind).
+    ace_lexicon([], _),
+    ace_read("Every fish has a fin.", unread(_, _)),
+    ace_read("If the income is X then the rest is Y.", unread(_, _)).
+
+test(something_with_no_name_is_not_a_fact) :-
+    % Catches "A fish is an animal", which ACE reads as one fish with no
+    % name, stated as a fact with a variable in it.
+    ace_lexicon([], _),
+    ace_read("A fish is an animal.", unread(_, _)).
+
 test(an_adjective_and_a_verb_are_facts_of_their_entities) :-
     % Catches a proper name kept with its capitals or hyphens, or a verb's
     % subject and object swapped.
