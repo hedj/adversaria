@@ -3,15 +3,14 @@
 This tutorial takes about forty minutes (an estimate), in four parts of
 four steps each, in one session:
 
-- A. First notes: an outline, facts written in controlled English, and a
-  sentence computed from them,
-  after the design's user story (docs/design.md, § A user story): notes
+- A. First notes: an outline, facts written in controlled English, a
+  sentence computed from them and a query, after the design's user story (docs/design.md, § A user story): notes
   on the Soviet Buran space shuttle.
 - B. Checking a claim: a claim from a source, a constraint that catches
   the conflict, and the claim questioned, adopted, taken back and tried
   in a supposed world.
-- C. Boxes that compute: a small budget, from boxes and rules, all in
-  sentences.
+- C. Boxes that compute: a small budget, from boxes and rules, and a
+  question about it, all in sentences.
 - D. Views, and leaving: the budget as a chart and a table, part A's
   dates as a timeline, and how to leave.
 
@@ -93,6 +92,12 @@ colour is prose. A name written with a capital and hyphens, such as
 that its date is 1988. A label lets the memex write facts about the thing
 in words.
 
+The right pane shows, under `READ AS`, what the item at the cursor was
+read as, in Prolog, the language the memex reasons in:
+
+    fact  date(energia_launch, 1987)
+    fact  label(energia_launch, "Energia's first launch")
+
 If you change a cyan sentence, what it said is taken back and the new
 text read. A text is read whole or not at all, so it never says less to
 the memex than to you.
@@ -114,6 +119,13 @@ facts:
     The flight came a year after Energia's first launch. [derived]
 
 If a date changes, the sentence changes with it.
+
+To run a query by itself, run the command `query date(E, Y)`. It finds
+every date the memex believes, and says:
+
+    2 answers: E = buran_flight, Y = 1988 · E = energia_launch, Y = 1987
+
+A query only reads; it writes nothing to the journal.
 
 While Left Ctrl is held: `?` lists the commands that match what you have
 typed; Esc completes the command name; Backspace erases. A tap of Left Ctrl
@@ -241,6 +253,14 @@ To show the rest, press Enter, type `left`, and run the command:
 It reads:
 
     Left over: 400 [derived]
+
+You can also ask in English. Press Enter and type `What is the rest?`.
+After the pause, the question turns cyan, and the line under it gives
+the answer:
+
+    → 400
+
+The answer changes as the boxes do.
 
 ### 10. Rules between the boxes
 

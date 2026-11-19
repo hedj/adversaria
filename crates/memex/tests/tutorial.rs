@@ -226,6 +226,9 @@ fn part_one(t: &mut T) {
     t.read("The date of Buran-flight is 1988.");
     t.read("The date of Energia-launch is 1987.");
     t.lacks("prose: not ACE");
+    t.shows("READ AS");
+    t.shows("fact  date(energia_launch, 1987)");
+    t.shows("fact  label(energia_launch, \"Energia's first launch\")");
 
     // Step 4: a derived sentence.
     t.tap(Key::Enter);
@@ -233,6 +236,8 @@ fn part_one(t: &mut T) {
     t.command("derive The flight came {N:years} after Energia's first launch. where date(buran_flight, B), date(energia_launch, E), N is B - E");
     t.look("derived");
     t.shows("The flight came a year after Energia's first launch. [derived]");
+    t.command("query date(E, Y)");
+    t.says("2 answers: E = buran_flight, Y = 1988 · E = energia_launch, Y = 1987");
 
     // Step 5: a claim and a constraint.
     t.tap(Key::Enter);
@@ -312,6 +317,12 @@ fn part_two(t: &mut T) {
     t.command("derive Left over: {L} where rest(L)");
     t.look("left over");
     t.shows("Left over: 400 [derived]");
+    t.tap(Key::Enter);
+    t.typ("What is the rest?");
+    t.pause();
+    t.look("question");
+    t.read("What is the rest?");
+    t.shows("→ 400");
 
     // Step 10: constraints.
     t.tap(Key::Enter);
