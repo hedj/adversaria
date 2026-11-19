@@ -6,6 +6,7 @@
 mod claims;
 mod definitions;
 mod layers;
+mod query;
 mod sources;
 
 use crate::app::App;

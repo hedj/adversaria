@@ -1319,6 +1319,20 @@ one undo takes the name and its links back (format version 1 revised).
 Checked: two tests in tests/inline_links.rs; breaks, each failing one:
 no relinking, no closing record, undo ignoring it.
 
+### Prolog queries (19 November 2026)
+
+At the author's request, `query GOAL` runs a Prolog goal over the
+current world's beliefs, proved as derived text is (through rules), and
+says its answers by their variables, or yes or no. The goal is vetted
+as a definition is, and run as limit(21, beliefs(Goal)), so a huge or
+endless goal shows 20 answers and says there are more. A query writes
+nothing. Checked: five tests in tests/query.rs; breaks, each failing a
+test: no vetting; facts only (no rules); yes said as no. With no limit,
+the many-answers test hangs (killed by a 90 s timeout) rather than
+failing; a smaller limit than 1000 is not told apart from 21, as both
+show 20. A `?` after a space cannot be typed in Command (it lists), so
+`?- goal` cannot be typed; write the goal alone.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

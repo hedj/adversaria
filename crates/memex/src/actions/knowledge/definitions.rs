@@ -59,7 +59,7 @@ impl App {
             .map_err(|w| format!("rule not kept: {w}"))
     }
 
-    fn sync_engine(&mut self) -> Result<(), String> {
+    pub(super) fn sync_engine(&mut self) -> Result<(), String> {
         let facts = self.notebook.facts_now()?;
         self.reason
             .engine(0)?

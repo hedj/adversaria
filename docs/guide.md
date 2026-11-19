@@ -320,6 +320,7 @@ reader reads the text without its brackets, so `The date of
 | `close` | `close` | closes the supposition and returns to the actual world; it stays in the journal |
 | `commit` | `commit` | makes the supposed world the actual one |
 | `undo` | `undo` | undoes the last change on this branch |
+| `query` | `query GOAL` | runs a Prolog goal over this world's beliefs, through rules, as derived text does: `query animal(X)` says `2 answers: X = nemo · X = dory`; a goal without variables is answered `yes` or `no`. At most 20 answers are shown. The goal may only read facts, compare and compute, as a definition may; a query writes nothing to the journal |
 | `redo` | `redo` | redoes what undo undid, along the current branch |
 | `retract` | `retract ENTRY` | reverses one earlier entry, by its number, keeping later work; lists what depends on it first |
 

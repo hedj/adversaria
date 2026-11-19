@@ -255,6 +255,14 @@ pub const COMMANDS: &[Command] = &[
         brief: "write what is pending and leave",
     },
     Command {
+        name: "query",
+        run: App::cmd_query,
+        target: false,
+        slots: &[("goal", Slot::Text)],
+        help: "run a Prolog goal over this world's beliefs, through rules: each answer by its variables (at most 20), yes or no for a goal without them; it may only read facts, compare and compute",
+        brief: "run a Prolog query",
+    },
+    Command {
         name: "redo",
         run: App::cmd_redo,
         target: false,
