@@ -2,8 +2,9 @@
 //! user sees and is in the middle of, how the session is set up, and what
 //! it has noticed outside the journal (docs/structure.md § The code's structure).
 
-use crate::app::{Active, Key, Mode, PendingText, View};
+use crate::app::{Active, Click, Event, Key, Mode, PendingText, Press, View};
 use crate::notebook::strings;
+use crate::plumb::Offer;
 use format::record::Entry;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -26,8 +27,108 @@ pub struct Session {
     /// The last leap's pattern and direction, for leaping again.
     pub(crate) last_leap: Option<(String, bool)>,
     pub keys: Keys,
+    /// The plumbing rules a right-click asks (crate::plumb).
+    pub plumber: crate::plumb::Plumber,
     pub quit: bool,
     outside: Outside,
+}
+
+/// What a right-click offers (crate::plumb): the offers, the one chosen,
+/// and the cell, column and row, where the menu opens.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Menu {
+    pub offers: Vec<Offer>,
+    pub chosen: usize,
+    pub at: (u16, u16),
+}
+
+/// What the menu does with a key or a click.
+pub enum Answer {
+    Keep(Menu),
+    Close,
+    Run(String),
+}
+
+impl Menu {
+    /// A menu of offers, the first chosen, at a cell.
+    pub fn new(offers: Vec<Offer>, at: (u16, u16)) -> Menu {
+        Menu {
+            offers,
+            chosen: 0,
+            at,
+        }
+    }
+
+    /// A key: Up and Down choose, Enter or a number runs, Esc closes; any
+    /// other key, or a release, keeps the menu as it is.
+    pub fn answer(self, ev: Event) -> Answer {
+        if ev.press == Press::Up {
+            return Answer::Keep(self);
+        }
+        let n = self.offers.len();
+        match ev.key {
+            Key::Up => Answer::Keep(self.moved(n - 1)),
+            Key::Down => Answer::Keep(self.moved(1)),
+            Key::Escape => Answer::Close,
+            Key::Enter => {
+                let i = self.chosen;
+                self.run(i)
+            }
+            Key::Char(c) => self.numbered(c),
+            _ => Answer::Keep(self),
+        }
+    }
+
+    /// A click: on an offer, it runs; anywhere else, the menu closes.
+    pub fn clicked(&self, c: &Click) -> Answer {
+        let on = |o: &&Offer| Click::Command(o.line.clone()) == *c;
+        self.offers
+            .iter()
+            .find(on)
+            .map_or(Answer::Close, |o| Answer::Run(o.line.clone()))
+    }
+
+    /// Each offer's words, by its number (the first nine), and whether it
+    /// is the one chosen, with its command line.
+    pub fn entries(&self) -> Vec<(String, bool, String)> {
+        let number = |i: usize| {
+            if i < 9 {
+                (i + 1).to_string()
+            } else {
+                " ".into()
+            }
+        };
+        let entry = |(i, o): (usize, &Offer)| {
+            (
+                format!("{} {}", number(i), o.label),
+                i == self.chosen,
+                o.line.clone(),
+            )
+        };
+        self.offers.iter().enumerate().map(entry).collect()
+    }
+
+    /// The menu with the choice moved on, round at the end.
+    fn moved(self, by: usize) -> Menu {
+        let chosen = (self.chosen + by) % self.offers.len();
+        Menu { chosen, ..self }
+    }
+
+    /// Run an offer by its number, 1 to 9; another key keeps the menu.
+    fn numbered(self, c: char) -> Answer {
+        match c.to_digit(10).and_then(|d| (d as usize).checked_sub(1)) {
+            Some(i) => self.run(i),
+            None => Answer::Keep(self),
+        }
+    }
+
+    /// Run the offer at a place, if there is one.
+    fn run(self, i: usize) -> Answer {
+        match self.offers.get(i) {
+            Some(o) => Answer::Run(o.line.clone()),
+            None => Answer::Keep(self),
+        }
+    }
 }
 
 /// The pattern and direction of a leap entry.

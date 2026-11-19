@@ -61,7 +61,111 @@ pub fn draw(f: &mut Frame, app: &App) {
 /// Draw the screen, and say where clicks would land.
 pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
     let body = draw_edges(f, app);
-    draw_body(f, app, body)
+    let hits = draw_body(f, app, body);
+    match MenuBox::open(app) {
+        Some(menu) => menu.draw(f, hits),
+        None => hits,
+    }
+}
+
+/// What a right-click offers, as drawn at its cell: each entry's line,
+/// whether it is the one chosen, and what a click on it runs.
+struct MenuBox {
+    entries: Vec<(String, bool, Click)>,
+    at: (u16, u16),
+}
+
+impl MenuBox {
+    /// The menu, if one is open.
+    fn open(app: &App) -> Option<MenuBox> {
+        let Mode::Menu(m) = &app.session.mode else {
+            return None;
+        };
+        let entry = |(text, chosen, line)| (text, chosen, Click::Command(line));
+        let entries = m.entries().into_iter().map(entry).collect();
+        Some(MenuBox { entries, at: m.at })
+    }
+
+    /// The menu in a box below its cell, or above it where there is no
+    /// room below, inside the screen; its entries are clicked first.
+    fn draw(&self, f: &mut Frame, under: Hits) -> Hits {
+        let area = placed(f.area(), self.at, self.size(f.area()));
+        f.render_widget(Clear, area);
+        let block = Block::default().borders(Borders::ALL).title(" act on ");
+        f.render_widget(Paragraph::new(self.lines()).block(block), area);
+        let mut hits = self.hits(area);
+        hits.0.extend(under.outside(area).0);
+        hits
+    }
+
+    /// Each entry's line, cut to 60 characters, the chosen one reversed.
+    fn lines(&self) -> Vec<Line<'static>> {
+        let line = |(text, chosen, _): &(String, bool, Click)| {
+            let shown = format!(" {} ", shortened(text, 62));
+            let style = if *chosen {
+                reversed()
+            } else {
+                Style::default()
+            };
+            Line::styled(shown, style)
+        };
+        self.entries.iter().map(line).collect()
+    }
+
+    /// The box's width and height, with its border, within the screen.
+    fn size(&self, screen: Rect) -> (u16, u16) {
+        let widest = self.lines().iter().map(Line::width).max().unwrap_or(0);
+        let w = (widest as u16 + 2).min(screen.width);
+        (w, (self.entries.len() as u16 + 2).min(screen.height))
+    }
+
+    /// Where a click on each entry that fits lands: its row in the box.
+    fn hits(&self, area: Rect) -> Hits {
+        let fits = area.height.saturating_sub(2) as usize;
+        let each = self.entries.iter().take(fits).enumerate();
+        Hits(
+            each.map(|(i, e)| (entry_row(area, i), e.2.clone()))
+                .collect(),
+        )
+    }
+}
+
+/// The row of a box's entry, inside its border.
+fn entry_row(area: Rect, i: usize) -> Rect {
+    let inner = area.inner(ratatui::layout::Margin::new(1, 1));
+    Rect {
+        y: inner.y + i as u16,
+        height: 1,
+        ..inner
+    }
+}
+
+/// A box of a size at a cell, inside the screen.
+fn placed(screen: Rect, at: (u16, u16), (w, h): (u16, u16)) -> Rect {
+    Rect::new(
+        at.0.min(screen.width - w),
+        top_of(screen.height, at.1, h),
+        w,
+        h,
+    )
+}
+
+/// A box's top row: below its cell, or above it where there is no room
+/// below.
+fn top_of(height: u16, y: u16, h: u16) -> u16 {
+    if y + 1 + h <= height {
+        y + 1
+    } else {
+        y.saturating_sub(h)
+    }
+}
+
+/// A text cut to so many characters, with an ellipsis if it was longer.
+fn shortened(text: &str, most: usize) -> String {
+    match text.chars().count() > most {
+        true => text.chars().take(most - 1).chain(['…']).collect(),
+        false => text.to_string(),
+    }
 }
 
 /// Draw the top bar and the foot, each as many rows as its lines take
@@ -1463,6 +1567,10 @@ fn foot(app: &App) -> (Line<'static>, String) {
         Mode::ConfirmSuppose {
             text, readings, at, ..
         } => suppose_foot(app, text, readings, *at),
+        Mode::Menu { .. } => (
+            asked("ACT ON", String::new()),
+            "Up, Down choose · Enter or a number runs · Esc closes · or click one".into(),
+        ),
         Mode::Normal => normal_foot(app),
     }
 }

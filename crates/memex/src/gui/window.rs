@@ -26,6 +26,7 @@ use winit::window::{Window, WindowId};
 pub fn run(dir: &Path, config: Config) -> Result<(), String> {
     let mut app = App::open(dir).map_err(|e| e.to_string())?;
     app.session.keys = config.keys();
+    app.session.plumber = config.plumber()?;
     let event_loop = EventLoop::new().map_err(|e| format!("no window: {e}"))?;
     let mut memex = Memex::new(app, config);
     event_loop.run_app(&mut memex).map_err(|e| e.to_string())?;

@@ -7,6 +7,7 @@ use crate::app::{
 };
 use crate::outline::TOP;
 use crate::reason;
+use crate::session::{Answer, Menu};
 use format::terms::Term;
 use serde_json::json;
 
@@ -23,7 +24,31 @@ impl App {
                 at,
                 english,
             } => self.confirm_suppose((text, english), readings, at, ev),
+            Mode::Menu(m) => self.answered(m.answer(ev)),
         };
+    }
+
+    /// Plumb a text: open a menu of the commands its rules offer, at a
+    /// cell; or, if none matches, say so.
+    pub fn plumb(&mut self, text: &str, at: (u16, u16)) {
+        let names_item = |t: &str| self.resolve(t).is_some();
+        let offers = self.session.plumber.offers(text, &names_item);
+        if offers.is_empty() {
+            self.session.message = format!("nothing acts on “{}”", text.trim());
+            return;
+        }
+        self.session.message.clear();
+        self.session.mode = Mode::Menu(Menu::new(offers, at));
+    }
+
+    /// Do what the menu answers: keep it, close it, or run an offer as a
+    /// bound key runs its command, keeping any confirmation it asks for.
+    fn answered(&mut self, a: Answer) -> Mode {
+        match a {
+            Answer::Keep(m) => Mode::Menu(m),
+            Answer::Close => Mode::Normal,
+            Answer::Run(line) => self.run_bound(&line),
+        }
     }
 
     /// A click, from the mouse. It acts only when no quasimode or question
@@ -31,6 +56,11 @@ impl App {
     /// view change like an arrow key; a command is run as a bound key runs
     /// it, keeping any confirmation it asks for.
     pub fn click(&mut self, c: &Click) {
+        if let Mode::Menu(m) = &self.session.mode {
+            let answer = m.clicked(c);
+            self.session.mode = self.answered(answer);
+            return;
+        }
         if self.session.mode != Mode::Normal {
             return;
         }

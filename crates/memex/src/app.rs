@@ -501,6 +501,8 @@ pub enum Mode {
         at: usize,
         english: Option<String>,
     },
+    /// What a right-click offers (crate::session::Menu).
+    Menu(crate::session::Menu),
 }
 
 /// Text typed into an item but not yet written.

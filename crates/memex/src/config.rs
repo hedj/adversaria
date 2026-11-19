@@ -275,6 +275,11 @@ fn quasi_named(name: &str) -> Option<Quasi> {
 }
 
 impl Config {
+    /// The plumber of its rules, before the defaults (crate::plumb).
+    pub fn plumber(&self) -> Result<crate::plumb::Plumber, String> {
+        crate::plumb::Plumber::new(&self.plumb)
+    }
+
     /// The keys it binds, for a session.
     pub fn keys(&self) -> Keys {
         Keys(self.bindings.clone())

@@ -125,6 +125,13 @@ pub struct Plumber {
     rules: Vec<Compiled>,
 }
 
+impl Default for Plumber {
+    /// The defaults alone.
+    fn default() -> Plumber {
+        Plumber::new(&[]).expect("the default rules are regular expressions")
+    }
+}
+
 /// A rule and its pattern, made to match the whole text.
 struct Compiled {
     rule: Rule,
