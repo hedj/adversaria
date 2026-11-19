@@ -1019,17 +1019,66 @@ fn transcluded_at(outline: &Outline, t: u64) -> String {
 /// The matches of a Leap, or the commands a Command may be, in a box at the
 /// foot of the outline pane.
 fn draw_list(f: &mut Frame, app: &App, a: &Active, area: Rect) {
-    let lines = list_lines(app, a);
-    let r = foot_box(area, lines.len());
+    let lines = list_shown(app, a, area);
+    let r = foot_box(area, &lines);
     f.render_widget(Clear, r);
-    let boxed = Paragraph::new(lines).block(Block::default().borders(Borders::ALL));
-    f.render_widget(boxed, r);
+    f.render_widget(boxed(lines), r);
 }
 
-/// A box at the foot of an area, as high as its lines and borders need,
-/// at most the area, and a column short of it, for the pane's border.
-fn foot_box(area: Rect, lines: usize) -> Rect {
-    let height = (lines as u16 + 2).min(area.height);
+/// Lines wrapped in a box with borders all round.
+fn boxed(lines: Vec<Line<'static>>) -> Paragraph<'static> {
+    wrapped(lines).block(Block::default().borders(Borders::ALL))
+}
+
+/// What a quasimode's list shows in its box at the foot of an area: as
+/// much of the list as fits.
+fn list_shown(app: &App, a: &Active, area: Rect) -> Vec<Line<'static>> {
+    fitted(list_lines(app, a), area)
+}
+
+/// The width and height inside a list's box at the foot of an area: less
+/// its borders, and a column for the pane's border.
+fn list_inside(area: Rect) -> (u16, u16) {
+    (area.width.saturating_sub(3), area.height.saturating_sub(2))
+}
+
+/// As many of the lines as fit inside a list's box at the foot of an area
+/// once wrapped; if some do not, the last row says how many more there
+/// are.
+fn fitted(lines: Vec<Line<'static>>, area: Rect) -> Vec<Line<'static>> {
+    let inside = list_inside(area);
+    let total = lines.len();
+    let mut kept: Vec<Line<'static>> = Vec::new();
+    for line in lines {
+        kept.push(line);
+        if !fits(&kept, inside, total - kept.len()) {
+            kept.pop();
+            break;
+        }
+    }
+    let more = total - kept.len();
+    if more > 0 {
+        kept.push(Line::styled(
+            format!("… and {more} more: type more to narrow the list"),
+            dim(),
+        ));
+    }
+    kept
+}
+
+/// Whether lines fit inside a box once wrapped, with a row to spare for
+/// saying how many more there are, when there are more.
+fn fits(lines: &[Line<'static>], (width, height): (u16, u16), more: usize) -> bool {
+    let room = height.saturating_sub(u16::from(more > 0));
+    wrapped_height(lines, width) <= room
+}
+
+/// A box at the foot of an area, as high as its lines wrapped and its
+/// borders need, at most the area, and a column short of it, for the
+/// pane's border.
+fn foot_box(area: Rect, lines: &[Line<'static>]) -> Rect {
+    let rows = wrapped_height(lines, list_inside(area).0);
+    let height = (rows + 2).min(area.height);
     let y = area.y + area.height - height;
     let width = area.width.saturating_sub(1);
     Rect {

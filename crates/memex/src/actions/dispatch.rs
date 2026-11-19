@@ -24,6 +24,9 @@ pub struct Command {
     target: bool,
     slots: &'static [(&'static str, Slot)],
     pub help: &'static str,
+    /// What it does, short enough for the list of commands that match
+    /// what is typed (at most 32 characters).
+    pub brief: &'static str,
 }
 
 pub const COMMANDS: &[Command] = &[
@@ -33,6 +36,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[("suggestion", Slot::Word)],
         help: "adopt the nth suggestion shown, with its evidence",
+        brief: "adopt the nth suggestion shown",
     },
     Command {
         name: "adopt",
@@ -40,6 +44,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[],
         help: "make the target's claims beliefs, keeping their source",
+        brief: "make the target's claims beliefs",
     },
     Command {
         name: "claim",
@@ -47,6 +52,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[("that", Slot::Text)],
         help: "the target states a claim: a Prolog fact, then from and its source",
+        brief: "the target states a claim",
     },
     Command {
         name: "check",
@@ -54,6 +60,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[("which", Slot::Word)],
         help: "check quote (the text is in its source) or check source (the DOI, through Crossref)",
+        brief: "check a quote or a source",
     },
     Command {
         name: "close",
@@ -61,6 +68,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[],
         help: "close the supposition and return to the actual world; it stays in the journal",
+        brief: "return to the actual world",
     },
     Command {
         name: "commit",
@@ -68,6 +76,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[],
         help: "make the supposed world the actual one",
+        brief: "make the supposed world actual",
     },
     Command {
         name: "constraint",
@@ -75,6 +84,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[("named", Slot::Text)],
         help: "a constraint: its name, a colon, then a Prolog denial false :- ...",
+        brief: "a rule that must never break",
     },
     Command {
         name: "copy",
@@ -82,6 +92,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[("after", Slot::Addr)],
         help: "copy the target's text to a new item after an item",
+        brief: "copy the target's text",
     },
     Command {
         name: "delete",
@@ -89,6 +100,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[],
         help: "delete the target: a word, or an item and its branch",
+        brief: "delete a word, or a branch",
     },
     Command {
         name: "fold",
@@ -96,6 +108,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[],
         help: "hide the target's branch",
+        brief: "hide the target's branch",
     },
     Command {
         name: "dismiss",
@@ -103,6 +116,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[("suggestion", Slot::Word)],
         help: "dismiss the nth suggestion shown; it returns only if its evidence changes",
+        brief: "dismiss the nth suggestion",
     },
     Command {
         name: "derive",
@@ -110,6 +124,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[("text", Slot::Text)],
         help: "the target shows a computed text: a template with {Var}, then where and a Prolog goal",
+        brief: "show a text computed from facts",
     },
     Command {
         name: "export",
@@ -117,6 +132,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[("to", Slot::Text)],
         help: "export the outline, or one section, as a document (md, docx, odt, tex, html)",
+        brief: "export as a document",
     },
     Command {
         name: "fact",
@@ -124,6 +140,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[("that", Slot::Text)],
         help: "the target states a belief: a Prolog fact",
+        brief: "the target states a belief",
     },
     Command {
         name: "follow",
@@ -131,6 +148,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[("link", Slot::Word)],
         help: "go to the item at the end of the target's nth link",
+        brief: "go to the end of the nth link",
     },
     Command {
         name: "help",
@@ -138,6 +156,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[],
         help: "list every command",
+        brief: "list every command",
     },
     Command {
         name: "import",
@@ -145,6 +164,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[("from", Slot::Text)],
         help: "import wikidata, document or results, then a file: what it says arrives as claims",
+        brief: "import a file as claims",
     },
     Command {
         name: "indent",
@@ -152,6 +172,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[],
         help: "make the target a child of the item above it",
+        brief: "make the target a child",
     },
     Command {
         name: "interrogate",
@@ -159,6 +180,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[],
         help: "ask of the target's claim: who else claims it, who disputes it, its source and record",
+        brief: "question the target's claim",
     },
     Command {
         name: "layer",
@@ -166,6 +188,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[("mark", Slot::Text)],
         help: "add a layer to the target's view: a mark, then where and a goal; one mark per solution",
+        brief: "add a layer to a view",
     },
     Command {
         name: "link",
@@ -173,6 +196,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[("from", Slot::Addr), ("to", Slot::Addr), ("as", Slot::Word)],
         help: "link one item to another; the type defaults to link",
+        brief: "link one item to another",
     },
     Command {
         name: "move",
@@ -180,6 +204,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[("after", Slot::Addr)],
         help: "move the target's branch to follow an item",
+        brief: "move the target's branch",
     },
     Command {
         name: "name",
@@ -187,6 +212,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[("as", Slot::Word)],
         help: "give the target a name that addresses it",
+        brief: "give the target a name",
     },
     Command {
         name: "new",
@@ -194,6 +220,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[],
         help: "a new item after the target",
+        brief: "a new item after the target",
     },
     Command {
         name: "outdent",
@@ -201,6 +228,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[],
         help: "make the target a sibling of its parent",
+        brief: "make the target a sibling",
     },
     Command {
         name: "pane",
@@ -208,6 +236,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[("shows", Slot::Word)],
         help: "set the other pane to outline or links",
+        brief: "set the other pane",
     },
     Command {
         name: "quit",
@@ -215,6 +244,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[],
         help: "write what is pending and leave",
+        brief: "write what is pending and leave",
     },
     Command {
         name: "redo",
@@ -222,6 +252,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[],
         help: "redo what undo undid, along the current branch",
+        brief: "redo what undo undid",
     },
     Command {
         name: "rule",
@@ -229,6 +260,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[("that", Slot::Text)],
         help: "define a predicate from others: Head :- Body. Usable in derive, constraint, layer and other rules",
+        brief: "define a predicate from others",
     },
     Command {
         name: "ace",
@@ -236,6 +268,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[("sentence", Slot::Text)],
         help: "what APE makes of a sentence of controlled English: its paraphrase, or where it fails and APE's advice",
+        brief: "what APE makes of a sentence",
     },
     Command {
         name: "set",
@@ -243,6 +276,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[("that", Slot::Text)],
         help: "state a fact and retract the beliefs it directly contradicts under a constraint; the fact goes where the replaced one was",
+        brief: "state a fact in place of others",
     },
     Command {
         name: "retract",
@@ -250,6 +284,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[("entry", Slot::Word)],
         help: "reverse one earlier entry, keeping later work; lists what depends on it first",
+        brief: "reverse one earlier entry",
     },
     Command {
         name: "suppose",
@@ -257,6 +292,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[("that", Slot::Text)],
         help: "start a named world with nothing supposed; hold Suppose to suppose a statement",
+        brief: "start a named world",
     },
     Command {
         name: "switch",
@@ -264,6 +300,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[],
         help: "move to the other pane",
+        brief: "move to the other pane",
     },
     Command {
         name: "transclude",
@@ -271,6 +308,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[("from", Slot::Addr)],
         help: "show an item's text in place, in a new item after the target",
+        brief: "show an item's text in place",
     },
     Command {
         name: "unadopt",
@@ -278,6 +316,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[],
         help: "retract the target's last adoption",
+        brief: "retract the last adoption",
     },
     Command {
         name: "undo",
@@ -285,6 +324,7 @@ pub const COMMANDS: &[Command] = &[
         target: false,
         slots: &[],
         help: "undo the last change on this branch",
+        brief: "undo the last change",
     },
     Command {
         name: "unfold",
@@ -292,6 +332,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[],
         help: "show the target's branch",
+        brief: "show the target's branch",
     },
 ];
 
@@ -558,11 +599,11 @@ fn usage(c: &Command) -> String {
     format!("{} {} — {}", c.name, slots.join(" "), c.help)
 }
 
-/// The commands whose names start so, each with what it does.
+/// The commands whose names start so, each with what it does, briefly.
 fn commands_starting(prefix: &str) -> Vec<String> {
     COMMANDS
         .iter()
         .filter(|c| c.name.starts_with(prefix))
-        .map(|c| format!("{} — {}", c.name, c.help))
+        .map(|c| format!("{} — {}", c.name, c.brief))
         .collect()
 }

@@ -181,3 +181,60 @@ fn a_click_lands_on_the_item_drawn_there_when_the_outline_is_scrolled() {
     let id = twenty_first(&room);
     assert_eq!(click, Some(Click::Item { pane: 0, id }));
 }
+
+/// The text inside the list's box at 80 by 30, its rows joined by spaces.
+fn listed(room: &Room) -> Vec<String> {
+    let rows = room.lines_at(80, 30);
+    let inside = rows.iter().filter_map(|l| l.strip_prefix('│'));
+    inside
+        .map(|l| l.split('│').next().unwrap_or("").trim_end().to_string())
+        .collect()
+}
+
+#[test]
+fn the_commands_listed_are_shown_whole_at_80_columns() {
+    // Catches a command's line cut off at the box's edge, as each was
+    // when the list gave the whole help.
+    let mut room = Room::new("screen-list");
+    room.hold(Quasi::Command, "c");
+    let shown = listed(&room);
+    let starting = memex::actions::COMMANDS
+        .iter()
+        .filter(|c| c.name.starts_with('c'));
+    for c in starting {
+        let line = format!("{} — {}", c.name, c.brief);
+        assert!(shown.contains(&line), "{line:?} not whole in {shown:#?}");
+    }
+}
+
+#[test]
+fn a_list_too_long_for_its_box_says_how_many_more() {
+    // Catches commands dropped from the foot of the box without a word.
+    let mut room = Room::new("screen-more");
+    room.hold(Quasi::Command, "?");
+    let shown = listed(&room);
+    let commands = shown.iter().filter(|l| l.contains(" — ")).count();
+    let more = memex::actions::COMMANDS.len() - commands;
+    let last = format!("… and {more} more: type more to narrow the list");
+    assert_eq!(shown.last(), Some(&last), "{shown:#?}");
+}
+
+#[test]
+fn a_chosen_commands_help_is_wrapped_whole() {
+    // Catches the full help of a chosen command cut at the box's edge.
+    let mut room = Room::new("screen-usage");
+    room.hold(Quasi::Command, "constraint ");
+    let shown = listed(&room).join(" ");
+    let help = memex::actions::COMMANDS
+        .iter()
+        .find(|c| c.name == "constraint");
+    assert!(shown.contains(help.unwrap().help), "{shown}");
+}
+
+#[test]
+fn every_brief_help_fits_the_list() {
+    // Catches a brief help too long for the list at 80 columns.
+    for c in memex::actions::COMMANDS {
+        assert!(c.brief.chars().count() <= 32, "{}: {}", c.name, c.brief);
+    }
+}
