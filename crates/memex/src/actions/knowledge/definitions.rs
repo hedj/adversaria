@@ -128,24 +128,51 @@ impl App {
         let (template, goal) = text
             .split_once(" where ")
             .ok_or("derive (text) a template with {Var}, where a goal")?;
+        let shown = Shown {
+            template: template.trim(),
+            under: false,
+        };
+        self.define_derived(target, goal, shown, "not derived")
+    }
+
+    /// The target asks a question: a goal that binds Answer, whose answer
+    /// is drawn under the item's text, which stays as written.
+    pub(crate) fn ask(&mut self, goal: &str, target: u64) -> Result<String, String> {
+        let shown = Shown {
+            template: "{Answer}",
+            under: true,
+        };
+        self.define_derived(target, goal, shown, "not asked")
+    }
+
+    /// Parse, check and keep the goal whose answer an item shows, as it is
+    /// shown; if it is refused, why, after the refusal's first words.
+    fn define_derived(
+        &mut self,
+        target: u64,
+        goal: &str,
+        shown: Shown,
+        refused: &str,
+    ) -> Result<String, String> {
         let (g, names) = self.parse_term(goal.trim().trim_end_matches('.'), "not a Prolog goal")?;
-        self.vet_definition(&g, "not derived")?;
-        self.write_derive(target, template.trim(), &names, g)?;
+        self.vet_definition(&g, refused)?;
+        self.write_derive(target, shown, &names, g)?;
         Ok(String::new())
     }
 
     fn write_derive(
         &mut self,
         item: u64,
-        template: &str,
+        shown: Shown,
         names: &[String],
         goal: Term,
     ) -> Result<(), String> {
         let fact = encoded(&query_def(item, goal))?;
-        self.write_here(
-            "edit",
-            json!({"op": "derive", "item": item, "template": template, "names": names, "facts": [fact]}),
-        )?;
+        let mut body = json!({"op": "derive", "item": item, "template": shown.template, "names": names, "facts": [fact]});
+        if shown.under {
+            body["under"] = json!(true);
+        }
+        self.write_here("edit", body)?;
         Ok(())
     }
 }
@@ -240,4 +267,11 @@ impl App {
         let places: Vec<String> = replaced.iter().map(|t| self.fact_place(*t)).collect();
         format!("set; replaced the fact at {}", places.join(", "))
     }
+}
+
+/// How derived text is shown: its template, and whether under the item's
+/// own text (an answer) or in its place.
+struct Shown<'a> {
+    template: &'a str,
+    under: bool,
 }

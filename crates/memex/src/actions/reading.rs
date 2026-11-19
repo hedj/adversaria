@@ -122,6 +122,7 @@ impl App {
             Kind::Claim(source) => self.cmd_claim(&[&format!("{t} from {source}")], item),
             Kind::Rule => self.cmd_rule(&[t], item),
             Kind::Constraint => self.cmd_constraint(&[&format!("{name}: {t}")], item),
+            Kind::Question => self.ask(t, item),
         }
     }
 

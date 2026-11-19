@@ -1170,6 +1170,30 @@ Not done: the left of the top bar is cut after two rows (a long
 supposition's name loses its end, and "journal N" with it, at 60
 columns); the worlds view does not scroll, as before.
 
+### Questions in English (19 November 2026)
+
+At the author's request, the reader reads questions, and the memex
+answers them under their text: which (what, who, which) gives every
+answer, sorted and joined by commas, or none; whether gives yes or no.
+A question is kept as a derive entry with "under": true (journal format
+version 1 revised; design.md), so its answer follows the facts as
+derived text does, and is drawn under the item, which keeps its text.
+The memex gives the reader the world's box names, so "What is the
+income?" asks for the box's value, since ACE reads "the" as "a".
+
+Checked: the reader's tests, 17 (3 new; one runs the answering goal
+against facts); seven memex tests (which, and its answer after a new
+fact; whether, yes and no; a box's value; a question made prose loses
+its answer; the answer after reopening the journal; each world of a
+supposition answers it). Breaks, each failing tests: the question not
+asked; the answer in place of the text; no answer line; no box names;
+"under" not read back; the old reading kept; a world's row without its
+question.
+
+Not done: "Which things are animals?" is not ACE (no plural after "are"
+in ACE); answers are written as Prolog writes them (entities in lower
+case, not their labels).
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

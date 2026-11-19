@@ -341,10 +341,17 @@ fn read_text() -> Style {
     Style::default().fg(Color::Cyan)
 }
 
+/// A question's answer, filled in from the current world, if the item
+/// asks one and it has been evaluated.
+fn answer_of(app: &App, id: u64) -> Option<String> {
+    let d = app.notebook.outline.derived.get(&id).filter(|d| d.under)?;
+    app.reason.eval[0].as_ref()?.derived_text(id, d)
+}
+
 /// A derived item's text, filled in from the current world, if it has
-/// been evaluated.
+/// been evaluated; not a question's answer, which is drawn under its text.
 fn derived_spans(app: &App, id: u64) -> Option<Vec<Span<'static>>> {
-    let d = app.notebook.outline.derived.get(&id)?;
+    let d = app.notebook.outline.derived.get(&id).filter(|d| !d.under)?;
     let e = app.reason.eval[0].as_ref()?;
     let text = e.derived_text(id, d)?;
     Some(vec![Span::raw(text), Span::styled(" [derived]", dim())])
@@ -484,6 +491,7 @@ impl<'a> OutlinePane<'a> {
         drawn.places.push(Place::of(line, self.click(id)));
         drawn.push(self.item_line(id, depth), self.head_width(id, depth));
         let set_in = 2 * depth + 4;
+        drawn.push_lines(self.answer_line(id, depth), set_in + 2);
         drawn.push_lines(self.prose_line(id, depth), set_in);
         drawn.push_lines(self.mark_lines(id, depth), set_in + 2);
         if self.outline().views.contains_key(&id) {
@@ -553,6 +561,17 @@ impl<'a> OutlinePane<'a> {
         } else {
             reversed
         }
+    }
+
+    /// Under a question, its answer in the current world, once evaluated.
+    fn answer_line(&self, id: u64, depth: usize) -> Option<Line<'static>> {
+        let answer = answer_of(self.app, id)?;
+        let indent = Span::raw("  ".repeat(depth + 2));
+        Some(Line::from(vec![
+            indent,
+            Span::styled("→ ", dim()),
+            Span::raw(answer),
+        ]))
     }
 
     /// Under the item at the cursor, why its text was not read, if it was
@@ -2243,9 +2262,18 @@ impl<'a> Side<'a> {
     /// An item's text in this world: derived text as the world fills it,
     /// else as the outline holds it.
     fn text(&self, i: u64) -> String {
-        let derived = self.outline.derived.get(&i).zip(self.eval);
-        let derived = derived.and_then(|(d, e)| e.derived_text(i, d));
-        derived.unwrap_or_else(|| self.outline.text(i))
+        match self.filled(i) {
+            Some((true, answer)) => format!("{} → {answer}", self.outline.text(i)),
+            Some((false, text)) => text,
+            None => self.outline.text(i),
+        }
+    }
+
+    /// What this world fills in for an item, if it derives anything:
+    /// whether it is a question's answer, and the text.
+    fn filled(&self, i: u64) -> Option<(bool, String)> {
+        let (d, e) = self.outline.derived.get(&i).zip(self.eval)?;
+        Some((d.under, e.derived_text(i, d)?))
     }
 
     /// The entries whose facts this world states.

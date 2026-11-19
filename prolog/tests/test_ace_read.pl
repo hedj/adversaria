@@ -108,9 +108,9 @@ test(each_statement_is_written_as_the_command_text_for_it) :-
     % another sum, or a string written without its quotes.
     ace_lexicon([], _),
     ace_read_text("If the income is X and the rent is Y and the food is Z then the rest is X - (Y + Z).",
-                  [], read(_, [said(rule, R)], _)),
+                  words([], []), read(_, [said(rule, R)], _)),
     assertion(R == "rest(A):-cell(income, B), cell(rent, C), cell(food, D), A is B-(C+D)"),
-    ace_read_text("The label of Buran-flight is \"Buran's flight\".", [], read(_, [said(fact, F)], _)),
+    ace_read_text("The label of Buran-flight is \"Buran's flight\".", words([], []), read(_, [said(fact, F)], _)),
     assertion(F == "label(buran_flight, \"Buran's flight\")").
 
 test(a_box_a_rule_defines_is_the_rule_value) :-
@@ -118,12 +118,60 @@ test(a_box_a_rule_defines_is_the_rule_value) :-
     % rest" read as the box where a rule, of the world or of the same
     % text, defines it, so a constraint on it never fires.
     ace_lexicon([], _),
-    ace_read("It is false that the rest is smaller than 0.", [rest], read(_, [W], _)),
+    ace_read("It is false that the rest is smaller than 0.", words([rest], []), read(_, [W], _)),
     assertion(W == constraint((rest('$VAR'(0)), '$VAR'(0) < 0))),
-    ace_read("It is false that the rest is smaller than 0.", [], read(_, [B], _)),
+    ace_read("It is false that the rest is smaller than 0.", words([], []), read(_, [B], _)),
     assertion(B == constraint((cell(rest, '$VAR'(0)), '$VAR'(0) < 0))),
     ace_read("If the income is X then the rest is X - 1. It is false that the rest is smaller than 0.",
              read(_, [_, C], _)),
     assertion(C == constraint((rest('$VAR'(2)), '$VAR'(2) < 0))).
+
+test(a_question_asks_for_its_answer_or_whether) :-
+    % Catches a question read as a statement, the wrong referent taken
+    % for the answer, a plural ("which animals") not read as its kind, or
+    % a yes-or-no question given an answer variable.
+    reads("What is an animal?", [question('$VAR'(0), animal('$VAR'(0)))]),
+    reads("Who swims?", [question('$VAR'(0), swim('$VAR'(0)))]),
+    reads("Which animals swim?", [question('$VAR'(0), (animal('$VAR'(0)), swim('$VAR'(0))))]),
+    reads("What is the date of Buran-flight?", [question('$VAR'(0), date(buran_flight, '$VAR'(0)))]),
+    reads("Is Nemo an animal?", [question(none, animal(nemo))]),
+    reads("Does Nemo swim?", [question(none, swim(nemo))]).
+
+test(a_question_of_a_box_asks_for_its_value) :-
+    % Catches "What is the income?" read as a kind, income(X), where the
+    % world has the box: ACE gives "the" and "an" alike.
+    ace_lexicon([], _),
+    ace_read("What is the income?", words([], [income]), read(_, [Q], _)),
+    assertion(Q == question('$VAR'(0), cell(income, '$VAR'(0)))).
+
+:- dynamic animal/1.
+animal(nemo).
+animal(dory).
+
+test(a_questions_text_is_a_goal_that_gives_the_answer) :-
+    % Catches answers left unsorted, kept twice, or not joined; no answer
+    % not said as none; or whether not answered yes or no. The text
+    % is run as the memex runs it: read back, then called.
+    ace_lexicon([], _),
+    ace_read_text("What is an animal?", words([], []), read(_, [said(question, Which)], _)),
+    answer_of(Which, A1),
+    assertion(A1 == 'dory, nemo'),
+    ace_read_text("Is Nemo an animal?", words([], []), read(_, [said(question, Whether)], _)),
+    answer_of(Whether, A2),
+    assertion(A2 == yes),
+    ace_read_text("Is Bubbles an animal?", words([], []), read(_, [said(question, Not)], _)),
+    answer_of(Not, A3),
+    assertion(A3 == no),
+    retractall(animal(_)),
+    ace_read_text("What is an animal?", words([], []), read(_, [said(question, None)], _)),
+    answer_of(None, A4),
+    assertion(A4 == none),
+    assertz(animal(nemo)), assertz(animal(dory)).
+
+%   The answer a question's goal text gives, called in this module.
+answer_of(Text, Answer) :-
+    term_string(Goal, Text, [variable_names(Names)]),
+    memberchk('Answer'=Answer, Names),
+    call(Goal).
 
 :- end_tests(ace_read).

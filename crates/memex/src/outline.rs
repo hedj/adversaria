@@ -114,6 +114,9 @@ pub struct Link {
 pub struct Derive {
     pub template: String,
     pub names: Vec<String>,
+    /// Shown under the item's own text (a question's answer), not in its
+    /// place.
+    pub under: bool,
 }
 
 /// A layer of a view: a mark drawn for each solution of a goal.
@@ -610,7 +613,15 @@ impl Outline {
     fn set_derived(&mut self, b: &Body) -> Option<()> {
         let id = self.item_in(b)?;
         let (template, names) = (b.text("template").into(), b.texts("names"));
-        self.derived.insert(id, Derive { template, names });
+        let under = b.0.get("under") == Some(&Value::Bool(true));
+        self.derived.insert(
+            id,
+            Derive {
+                template,
+                names,
+                under,
+            },
+        );
         Some(())
     }
 

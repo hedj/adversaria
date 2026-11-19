@@ -280,3 +280,89 @@ fn a_reading_is_kept_in_the_journal() {
     assert!(app.notebook.outline.has_meaning(item));
     assert_eq!(facts_of(&app, item), ["date(buran_flight, 1988)"]);
 }
+
+/// A room with fish, a rule that every fish is an animal, and a question,
+/// read and evaluated.
+fn asking(name: &str, question: &str) -> Room {
+    let mut r = Room::new(name);
+    r.items(&[
+        "Nemo is a fish.",
+        "Dory is a fish.",
+        "Every fish is an animal.",
+        question,
+    ]);
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    r
+}
+
+#[test]
+fn a_question_is_answered_under_it_and_the_answer_follows_the_facts() {
+    // Catches a question read as a statement, its answer drawn in place of
+    // its text, or an answer that does not change with the facts.
+    let mut r = asking("ask-which", "What is an animal?");
+    assert!(r.shows("What is an animal?"), "{:#?}", r.lines());
+    assert!(r.shows("→ dory, nemo"), "{:#?}", r.lines());
+    r.tap(&[Key::Enter]);
+    r.typ("Bubbles is a fish.");
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    assert!(r.shows("→ bubbles, dory, nemo"), "{:#?}", r.lines());
+}
+
+#[test]
+fn a_question_of_whether_is_answered_yes_or_no() {
+    let r = asking("ask-whether", "Is Nemo an animal?");
+    assert!(r.shows("→ yes"), "{:#?}", r.lines());
+    let r = asking("ask-whether-not", "Is Bubbles an animal?");
+    assert!(r.shows("→ no"), "{:#?}", r.lines());
+}
+
+#[test]
+fn a_question_of_a_box_is_answered_with_its_value() {
+    // Catches "What is the income?" asked of a kind, income(X), not of the
+    // box the world holds: the answer would be none.
+    let mut r = Room::new("ask-box");
+    r.items(&["The income is 2000.", "What is the income?"]);
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    assert!(r.shows("→ 2000"), "{:#?}", r.lines());
+}
+
+#[test]
+fn a_question_made_prose_loses_its_answer() {
+    // Catches the answer of a question left after its text changed.
+    let mut r = asking("ask-unsaid", "What is an animal?");
+    r.tap(&[Key::End, Key::Backspace]);
+    r.typ(", I wonder");
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    assert!(!r.shows("→ dory, nemo"), "{:#?}", r.lines());
+}
+
+#[test]
+fn a_questions_answer_is_kept_in_the_journal() {
+    // Catches a question known only to the session: reopened, it is
+    // answered again.
+    let r = asking("ask-reopen", "Who is an animal?");
+    let mut app = support::replayed(&r.dir);
+    app.evaluate().unwrap();
+    let mut t = ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 20)).unwrap();
+    t.draw(|f| memex::ui::draw(f, &app)).unwrap();
+    let screen = format!("{:?}", t.backend().buffer());
+    assert!(screen.contains("→ dory, nemo"), "{screen}");
+}
+
+#[test]
+fn in_a_supposition_each_world_answers_the_question() {
+    // Catches a world showing a question's answer without its question,
+    // or in place of it.
+    let mut r = asking("ask-worlds", "What is an animal?");
+    r.command("suppose that w");
+    r.app.evaluate().unwrap();
+    let rows = r.lines_at(120, 24);
+    let row = rows.iter().find(|l| l.starts_with("What is an animal?"));
+    let row = row.unwrap_or_else(|| panic!("{rows:#?}"));
+    let sides: Vec<&str> = row.split('│').map(str::trim).collect();
+    assert_eq!(sides, ["What is an animal? → dory, nemo"; 2], "{rows:#?}");
+}

@@ -57,13 +57,15 @@ pub struct Said {
 }
 
 /// What a statement is: a fact, a claim and its source, a rule ("Head :-
-/// Body") or a constraint ("false :- Body").
+/// Body"), a constraint ("false :- Body") or a question.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
     Fact,
     Claim(String),
     Rule,
     Constraint,
+    /// A question: a goal that binds Answer to its answer.
+    Question,
 }
 
 /// A message of APE's: an error or a warning, its kind (word, sentence,
@@ -209,10 +211,11 @@ impl Ace {
     /// (ace_read_text/2).
     pub fn read_with(&mut self, words: Words, text: &str) -> Result<Reading, Error> {
         self.set_lexicon(words.lexicon)?;
-        let rules = make_list(words.rules.into_iter().map(Term::Atom).collect());
+        let names = |n: Vec<String>| make_list(n.into_iter().map(Term::Atom).collect());
+        let words = call("words", vec![names(words.rules), names(words.boxes)]);
         let goal = call(
             "ace_read_text",
-            vec![Term::Str(text.into()), rules, Term::Var(0)],
+            vec![Term::Str(text.into()), words, Term::Var(0)],
         );
         reading_of(&self.only_answer(&goal)?)
     }
@@ -296,6 +299,7 @@ fn kind_of(t: &Term) -> Result<Kind, Error> {
         Term::Atom(k) if k == "fact" => Ok(Kind::Fact),
         Term::Atom(k) if k == "rule" => Ok(Kind::Rule),
         Term::Atom(k) if k == "constraint" => Ok(Kind::Constraint),
+        Term::Atom(k) if k == "question" => Ok(Kind::Question),
         _ => Err(bad("kind of statement", t)),
     }
 }
@@ -540,20 +544,36 @@ fn unknown_words(notes: &[Message]) -> String {
     }
 }
 
-/// What a world gives the reader: its lexicon, and the names of its rules
-/// of one argument, whose values the reader reads in place of boxes.
+/// What a world gives the reader: its lexicon, the names of its rules of
+/// one argument, whose values the reader reads in place of boxes, and the
+/// names of its boxes, which a question asks the value of.
 pub struct Words {
     pub lexicon: Vec<Term>,
     pub rules: Vec<String>,
+    pub boxes: Vec<String>,
 }
 
 /// The words a world's facts give the reader.
 pub fn words_of(facts: &[(u64, Term)]) -> Words {
-    let rules = facts.iter().filter_map(|(_, f)| one_place_rule(f));
-    let rules: BTreeSet<String> = rules.collect();
+    let names = |pick: fn(&Term) -> Option<String>| {
+        let names: BTreeSet<String> = facts.iter().filter_map(|(_, f)| pick(f)).collect();
+        names.into_iter().collect()
+    };
     Words {
         lexicon: lexicon_of(facts),
-        rules: rules.into_iter().collect(),
+        rules: names(one_place_rule),
+        boxes: names(box_name),
+    }
+}
+
+/// The name of a box a fact gives a value: cell(Name, Value).
+fn box_name(fact: &Term) -> Option<String> {
+    match fact {
+        Term::Compound(f, a) if f == "cell" && a.len() == 2 => match &a[0] {
+            Term::Atom(name) => Some(name.clone()),
+            _ => None,
+        },
+        _ => None,
     }
 }
 

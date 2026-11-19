@@ -28,6 +28,8 @@ from one mapping:
 | It is false that S. | constraint(S) |
 | No fish is a bird. | constraint((fish(X), bird(X))) |
 | Nothing has more than 1 date. | constraint((date(E, A), date(E, B), A \== B)) |
+| What is an animal? (Who swims? Which animals swim?) | question(X, animal(X)) |
+| Is Nemo an animal? (Does Nemo swim?) | question(none, animal(nemo)) |
 
 A rule's value has a name of its own: "If C then the rest is X - Y" is a
 rule for rest(R), not for the box cell(rest, R), as a rule may not read
@@ -56,31 +58,35 @@ a name the notebook gives (ace.rs, lexicon_of) comes back as it is.
 %   variables numbered ('$VAR'(0), ...): the query protocol sends no
 %   variable a query did not have.
 ace_read(Text, Result) :-
-    ace_read(Text, [], Result).
+    ace_read(Text, words([], []), Result).
 
-%!  ace_read(+Text:string, +Rules:list(atom), -Result) is det.
-%   As ace_read/2, where Rules are the names of the world's rules of one
-%   argument: "the N", for N one of them, is N(R), not cell(N, R).
-ace_read(Text, Rules, Result) :-
+%!  ace_read(+Text:string, +Words, -Result) is det.
+%   As ace_read/2, with the world's words: words(Rules, Boxes), Rules the
+%   names of its rules of one argument ("the N", for N one of them, is
+%   N(R), not cell(N, R)) and Boxes the names of its boxes ("What is the
+%   N?", for N one of them, asks for cell(N, R), not N(R)).
+ace_read(Text, Words, Result) :-
     ace_drs(Text, Paraphrase, Drs, Messages),
     (   var(Paraphrase)
     ->  Result = not_ace(Messages)
     ;   plain(Drs, drs(_, Conditions)),
         statements(Conditions, Read)
-    ->  ruled(Rules, Read, Statements),
+    ->  ruled(Words, Read, Statements),
         numbervars(Statements, 0, _),
         Result = read(Paraphrase, Statements, Messages)
     ;   why_unread(Drs, Why),
         Result = unread(Paraphrase, Why, Messages)
     ).
 
-%!  ace_read_text(+Text:string, +Rules:list(atom), -Result) is det.
+%!  ace_read_text(+Text:string, +Words, -Result) is det.
 %   As ace_read/3, with each statement as the text of the command the
 %   memex runs for it, its terms written as Prolog writes them (quoted,
 %   with the brackets their operators need): said(Kind, Text), Kind fact,
-%   claim(Source), rule ("Head :- Body") or constraint ("false :- Body").
-ace_read_text(Text, Rules, Result) :-
-    ace_read(Text, Rules, Read),
+%   claim(Source), rule ("Head :- Body"), constraint ("false :- Body") or
+%   question (a goal that binds Answer to the answer: the answers, sorted
+%   and joined by commas, or yes or no).
+ace_read_text(Text, Words, Result) :-
+    ace_read(Text, Words, Read),
     (   Read = read(P, Statements, Ms)
     ->  maplist(statement_text, Statements, Texts),
         Result = read(P, Texts, Ms)
@@ -91,16 +97,28 @@ statement_text(fact(F), said(fact, T)) :- written(F, T).
 statement_text(claim(Source, F), said(claim(Source), T)) :- written(F, T).
 statement_text(rule(H, B), said(rule, T)) :- written((H :- B), T).
 statement_text(constraint(B), said(constraint, T)) :- written((false :- B), T).
+statement_text(question(A, G), said(question, T)) :- answering(A, G, Goal), written(Goal, T).
+
+%   The goal that answers a question: for which things, all of them,
+%   sorted and joined by commas, or none; for whether, yes or no. Its new variables are numbered past
+%   the question's own.
+answering(none, G, (G -> Answer = yes ; Answer = no)) :-
+    !,
+    Answer = '$VAR'('Answer').
+answering(A, G, Goal) :-
+    Goal = (findall(A, G, L), sort(L, S), (S == [] -> Answer = none ; atomic_list_concat(S, ', ', Answer))),
+    Answer = '$VAR'('Answer'),
+    numbervars(L-S, 1000, _).
 
 written(Term, Text) :-
     format(string(Text), "~W", [Term, [quoted(true), numbervars(true), spacing(next_argument)]]).
 
 %   The statements with each box a rule defines read as the rule's
 %   value: the rules of the world, and those the statements make.
-ruled(Rules, Read, Statements) :-
+ruled(words(Rules, Boxes), Read, Statements) :-
     convlist(rule_name, Read, Made),
     append(Rules, Made, Names),
-    maplist(ruled_statement(Names), Read, Statements).
+    maplist(ruled_statement(names(Names, Boxes)), Read, Statements).
 
 ruled_statement(Names, S, RS) :- ruled_kind(S, Names, RS).
 
@@ -108,6 +126,7 @@ ruled_kind(rule(H, B), Names, rule(RH, RB)) :- ruled_head(H, RH), ruled_goals(B,
 ruled_kind(constraint(B), Names, constraint(RB)) :- ruled_goals(B, Names, RB).
 ruled_kind(fact(F), Names, fact(RF)) :- ruled_goals(F, Names, RF).
 ruled_kind(claim(S, F), Names, claim(S, RF)) :- ruled_goals(F, Names, RF).
+ruled_kind(question(A, G), Names, question(A, RG)) :- ruled_goals(G, Names, RG).
 
 rule_name(rule(cell(N, _), _), N).
 
@@ -115,7 +134,8 @@ ruled_head(cell(N, R), H) :- !, H =.. [N, R].
 ruled_head(H, H).
 
 %   A goal, or a conjunction of goals, with each box a rule defines read
-%   as the rule's value.
+%   as the rule's value, and each kind that is a box of the world read as
+%   the box ("What is the income?" asks for cell(income, X)).
 ruled_goals(G, Names, RG) :-
     (   var(G)
     ->  RG = G
@@ -123,8 +143,11 @@ ruled_goals(G, Names, RG) :-
     ->  RG = (RA, RB), ruled_goals(A, Names, RA), ruled_goals(B, Names, RB)
     ;   G = (\+ A)
     ->  RG = (\+ RA), ruled_goals(A, Names, RA)
-    ;   G = cell(N, R), atom(N), memberchk(N, Names)
+    ;   G = cell(N, R), atom(N), Names = names(Rules, _), memberchk(N, Rules)
     ->  RG =.. [N, R]
+    ;   compound(G), G =.. [N, R], Names = names(Rules, Boxes),
+        memberchk(N, Boxes), \+ memberchk(N, Rules)
+    ->  RG = cell(N, R)
     ;   RG = G
     ).
 
@@ -150,6 +173,7 @@ plain_condition(C-_, P) :- !, plain_condition(C, P).
 plain_condition(A => B, PA => PB) :- !, plain(A, PA), plain(B, PB).
 plain_condition(-D, -P) :- !, plain(D, P).
 plain_condition(L:D, L:P) :- !, plain(D, P).
+plain_condition(question(D), question(P)) :- !, plain(D, P).
 plain_condition(C, C).
 
 %   The statements a DRS's top level makes: its implications and
@@ -163,13 +187,34 @@ statements(Conditions, Statements) :-
 
 complex(_ => _).
 complex(-_).
+complex(question(_)).
 
 complex_statement(drs(_, If) => drs(_, Then), Statement) :-
     goals(If, Body),
     then_statement(Then, Body, Statement).
+complex_statement(question(drs(_, Conds)), question(Answer, Goal)) :-
+    partition(query_condition, Conds, Queries, Asked),
+    maplist(singular, Asked, Singular),
+    goals(Singular, Goals),
+    conjunction(Goals, Goal),
+    answer(Queries, Goal, Answer).
 complex_statement(-drs(_, Conds), constraint(Body)) :-
     goals(Conds, Goals),
     conjunction(Goals, Body).
+
+%   A question asks what (who, which) one referent is, or, with none,
+%   whether its goals hold.
+query_condition(query(_, _)).
+
+answer([], _, none).
+answer([query(X, _)], Goal, X) :-
+    term_variables(Goal, Vs),
+    member(V, Vs), V == X, !.
+
+%   In a question, "which animals" asks of the kind, as "which animal"
+%   does.
+singular(object(R, N, countable, na, geq, 2), object(R, N, countable, na, eq, 1)) :- !.
+singular(C, C).
 
 %   What follows from If's goals: a value (a rule), a comparison that
 %   must hold, or a state that must not.
