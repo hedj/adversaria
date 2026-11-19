@@ -147,9 +147,9 @@ fn editing(n: NamedKey) -> Option<Key> {
     })
 }
 
-/// A function key, F1 to F12.
+/// A function key, F1 to F35, as the configuration names them.
 fn function(n: NamedKey) -> Option<Key> {
-    const KEYS: [NamedKey; 12] = [
+    const KEYS: [NamedKey; 35] = [
         NamedKey::F1,
         NamedKey::F2,
         NamedKey::F3,
@@ -162,6 +162,29 @@ fn function(n: NamedKey) -> Option<Key> {
         NamedKey::F10,
         NamedKey::F11,
         NamedKey::F12,
+        NamedKey::F13,
+        NamedKey::F14,
+        NamedKey::F15,
+        NamedKey::F16,
+        NamedKey::F17,
+        NamedKey::F18,
+        NamedKey::F19,
+        NamedKey::F20,
+        NamedKey::F21,
+        NamedKey::F22,
+        NamedKey::F23,
+        NamedKey::F24,
+        NamedKey::F25,
+        NamedKey::F26,
+        NamedKey::F27,
+        NamedKey::F28,
+        NamedKey::F29,
+        NamedKey::F30,
+        NamedKey::F31,
+        NamedKey::F32,
+        NamedKey::F33,
+        NamedKey::F34,
+        NamedKey::F35,
     ];
     let at = KEYS.iter().position(|k| *k == n)?;
     Some(Key::F(at as u8 + 1))
@@ -308,5 +331,15 @@ mod tests {
         // Catches a function key dropped as unbound, or misnumbered.
         let f10 = named_key(KeyCode::F10, NamedKey::F10);
         assert_eq!(pressed(&f10, &Config::default()), Some(Key::F(10)));
+    }
+
+    #[test]
+    fn every_function_key_the_configuration_names_arrives() {
+        // Catches F13 to F35, which the configuration takes, dropped by
+        // the window, so a key bound to one did nothing.
+        let f13 = named_key(KeyCode::F13, NamedKey::F13);
+        assert_eq!(pressed(&f13, &Config::default()), Some(Key::F(13)));
+        let f35 = named_key(KeyCode::F35, NamedKey::F35);
+        assert_eq!(pressed(&f35, &Config::default()), Some(Key::F(35)));
     }
 }
