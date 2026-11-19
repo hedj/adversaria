@@ -243,7 +243,7 @@ pub const COMMANDS: &[Command] = &[
         run: App::cmd_pane,
         target: false,
         slots: &[("shows", Slot::Word)],
-        help: "set the other pane to outline or links",
+        help: "set the other pane to outline, links or suggestions",
         brief: "set the other pane",
     },
     Command {
