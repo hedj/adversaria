@@ -438,7 +438,7 @@ The reader (`prolog/ace_read.pl`) maps APE's logical form (its DRS) to the noteb
 | If the rent is X and the food is Y and the income is Z then X + Y =< Z. | the constraint `false :- cell(rent, A), cell(food, B), cell(income, C), \+ A+B =< C` |
 | It is false that the rent is greater than the income. | the constraint `false :- cell(rent, A), cell(income, B), A > B` |
 | Nothing has more than 1 date. | the constraint `false :- date(A, B), date(A, C), B \== C` |
-| What is an animal? (Who swims? Which animals swim? What is the date of Buran-flight?) | a question: every answer, sorted, or none: `findall(A, animal(A), L), sort(L, S), (S == [] -> Answer = none ; atomic_list_concat(S, ', ', Answer))` |
+| What is an animal? (Who swims? Which animals swim? What is the date of Buran-flight?) | a question: every answer, each by its label if it has one, sorted, or none: `findall(N, (animal(A), (label(A, L) -> N = L ; atomic(A) -> atom_string(A, N) ; N = A)), Ns), sort(Ns, S), (S == [] -> Answer = none ; atomic_list_concat(S, ', ', Answer))` |
 | Is Nemo an animal? (Does Nemo swim?) | a question of whether: `animal(nemo) -> Answer = yes ; Answer = no` |
 
 A proper name is an entity: its letters in lower case and its hyphens made underscores (Buran-flight is `buran_flight`), as the notebook's names are; a name the notebook gives through APE's user lexicon (`lexicon_of`) comes back as the entity it names. Each statement goes to the memex as the text of the command that states it (`fact`, `claim`, `rule`, `constraint`), so a statement read is checked as one typed is: a constraint read is still tried against a planted violation, and the memex says what the commands said (a constraint kept, a statement refused, and why).

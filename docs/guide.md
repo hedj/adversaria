@@ -329,7 +329,9 @@ all: ACE the notebook cannot state says `not read:` and why.
 Ask in English, too: `What is an animal?`, `Who swims?`, `What is the
 income?`, `Is Nemo an animal?`. After the pause, the answer is drawn
 under the question (`→ dory, nemo`, `→ yes`, or `→ none`) and changes
-as the facts do. Write a question in the singular after "is":
+as the facts do. A thing with a label is answered by it: with `The label
+of Nemo is "Nemo the clownfish".`, the answer is `→ Nemo the
+clownfish, dory`. Write a question in the singular after "is":
 `Which things are animals?` is not ACE. "A fish is an
 animal." is ACE for one fish with no name; write `Every fish is an
 animal.` for all fish, or name one: `Nemo is a fish.` The table in docs/design.md (§ Reading controlled English) lists what

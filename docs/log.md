@@ -1191,8 +1191,9 @@ asked; the answer in place of the text; no answer line; no box names;
 question.
 
 Not done: "Which things are animals?" is not ACE (no plural after "are"
-in ACE); answers are written as Prolog writes them (entities in lower
-case, not their labels).
+in ACE). Answers were written as Prolog writes them (entities in lower
+case); since a later change the same day, each is shown by its label
+where it has one, sorted by its text.
 
 ## 4. Where it stands
 

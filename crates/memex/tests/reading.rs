@@ -366,3 +366,20 @@ fn in_a_supposition_each_world_answers_the_question() {
     let sides: Vec<&str> = row.split('│').map(str::trim).collect();
     assert_eq!(sides, ["What is an animal? → dory, nemo"; 2], "{rows:#?}");
 }
+
+#[test]
+fn an_answer_is_shown_by_its_label() {
+    // Catches an answer shown by its Prolog name though its thing has a
+    // label, or a goal the memex refuses to run (label/2, atom_string/2).
+    let mut r = Room::new("ask-label");
+    r.items(&[
+        "Nemo is a fish.",
+        "Dory is a fish.",
+        "The label of Nemo is \"Nemo the clownfish\".",
+        "Every fish is an animal.",
+        "What is an animal?",
+    ]);
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    assert!(r.shows("→ Nemo the clownfish, dory"), "{:#?}", r.lines());
+}

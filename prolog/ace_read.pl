@@ -99,16 +99,18 @@ statement_text(rule(H, B), said(rule, T)) :- written((H :- B), T).
 statement_text(constraint(B), said(constraint, T)) :- written((false :- B), T).
 statement_text(question(A, G), said(question, T)) :- answering(A, G, Goal), written(Goal, T).
 
-%   The goal that answers a question: for which things, all of them,
-%   sorted and joined by commas, or none; for whether, yes or no. Its new variables are numbered past
+%   The goal that answers a question: for which things, all of them, each
+%   by its label if it has one, else as its name is written, sorted and
+%   joined by commas, or none; for whether, yes or no. Its new variables are numbered past
 %   the question's own.
 answering(none, G, (G -> Answer = yes ; Answer = no)) :-
     !,
     Answer = '$VAR'('Answer').
 answering(A, G, Goal) :-
-    Goal = (findall(A, G, L), sort(L, S), (S == [] -> Answer = none ; atomic_list_concat(S, ', ', Answer))),
+    Named = (label(A, L0) -> N = L0 ; atomic(A) -> atom_string(A, N) ; N = A),
+    Goal = (findall(N, (G, Named), L), sort(L, S), (S == [] -> Answer = none ; atomic_list_concat(S, ', ', Answer))),
     Answer = '$VAR'('Answer'),
-    numbervars(L-S, 1000, _).
+    numbervars(L0-N-L-S, 1000, _).
 
 written(Term, Text) :-
     format(string(Text), "~W", [Term, [quoted(true), numbervars(true), spacing(next_argument)]]).

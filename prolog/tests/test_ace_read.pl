@@ -144,7 +144,7 @@ test(a_question_of_a_box_asks_for_its_value) :-
     ace_read("What is the income?", words([], [income]), read(_, [Q], _)),
     assertion(Q == question('$VAR'(0), cell(income, '$VAR'(0)))).
 
-:- dynamic animal/1.
+:- dynamic animal/1, label/2.
 animal(nemo).
 animal(dory).
 
@@ -167,6 +167,17 @@ test(a_questions_text_is_a_goal_that_gives_the_answer) :-
     answer_of(None, A4),
     assertion(A4 == none),
     assertz(animal(nemo)), assertz(animal(dory)).
+
+test(an_answer_is_shown_by_its_label) :-
+    % Catches an answer shown as its Prolog name where it has a label, or
+    % answers without labels lost, or sorted by kind of term rather than
+    % by their text.
+    ace_lexicon([], _),
+    assertz(label(nemo, "Nemo the clownfish")),
+    ace_read_text("What is an animal?", words([], []), read(_, [said(question, Which)], _)),
+    answer_of(Which, A),
+    retractall(label(_, _)),
+    assertion(A == 'Nemo the clownfish, dory').
 
 %   The answer a question's goal text gives, called in this module.
 answer_of(Text, Answer) :-
