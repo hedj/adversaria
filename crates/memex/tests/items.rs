@@ -248,3 +248,16 @@ fn an_empty_notebook_says_how_to_begin() {
     r.items(&["first"]);
     assert!(!r.shows("right-click a word"), "gone once there is an item");
 }
+
+#[test]
+fn a_heading_has_no_prose_hint_and_a_sentence_has_one() {
+    // Catches "prose: not ACE" under every heading and name, which said
+    // nothing worth a row, or under no sentence.
+    let mut r = Room::new("prose-hint");
+    r.items(&["Spending chart"]);
+    r.app.idle();
+    assert!(!r.shows("prose:"), "{:#?}", r.lines());
+    r.items(&["Buran flew once, unmanned."]);
+    r.app.idle();
+    assert!(r.shows("prose: not ACE"), "{:#?}", r.lines());
+}

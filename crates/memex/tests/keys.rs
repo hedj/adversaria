@@ -4,6 +4,7 @@
 mod support;
 
 use memex::app::{Event, Key, Mode, Quasi, ScopeLevel};
+use ratatui::style::Modifier;
 use support::Room;
 
 #[test]
@@ -78,15 +79,33 @@ fn right_at_the_end_of_the_text_stays() {
 }
 
 #[test]
-fn the_top_bar_names_the_room_its_world_its_entries_and_the_pane() {
+fn the_top_bar_names_the_notebook_and_its_world() {
+    // Catches the journal's jargon back in the top bar ("room", the count
+    // of entries).
     let r = Room::new("top");
     let top = r.lines().remove(0);
     let room = r.app.journal().room();
-    let left = format!("room {room}   world actual   journal 1");
     assert!(
-        top.starts_with(&left) && top.trim_end().ends_with("pane 1 of 2"),
+        top.starts_with(&format!("notebook {room}   world actual")),
         "{top}"
     );
+    assert!(!top.contains("journal") && !top.contains("room "), "{top}");
+}
+
+#[test]
+fn the_pane_with_focus_has_its_heading_bright() {
+    // Catches focus shown nowhere, or as text naming a pane not on the
+    // screen: the focused pane's heading is bold and not dim, the other's
+    // dim, and they change places with the focus.
+    let mut r = Room::new("focus-heading");
+    r.items(&["Alpha"]);
+    let lit = |r: &Room, text: &str| {
+        let m = r.style_of(text).add_modifier;
+        m.contains(Modifier::BOLD) && !m.contains(Modifier::DIM)
+    };
+    assert!(lit(&r, "OUTLINE") && !lit(&r, "LINKS OF THE"));
+    r.tap(&[Key::F(6)]);
+    assert!(!lit(&r, "OUTLINE") && lit(&r, "LINKS OF THE"));
 }
 
 #[test]
@@ -94,17 +113,20 @@ fn the_top_bar_puts_a_right_side_that_does_not_fit_on_a_row_of_its_own() {
     // Catches the right side drawn over the left, or dropped, as it was
     // until 19 November 2026: the status it shows (a violation, say) was
     // then not shown at all at 80 columns.
-    let r = Room::new("top-narrow");
-    let rows = r.lines_at(11, 12);
-    assert_eq!(
-        rows[0].trim_end(),
-        "room",
+    let mut r = Room::new("top-narrow");
+    r.items(&["rent"]);
+    r.command("fact cell(rent, 1200)");
+    r.command("constraint limit: false :- cell(rent, R), R > 1000.");
+    r.app.evaluate().unwrap();
+    let rows = r.lines_at(16, 12);
+    assert!(
+        rows[0].starts_with("notebook"),
         "the left is not drawn over: {rows:#?}"
     );
-    assert_eq!(
-        rows[2], "pane 1 of 2",
-        "the right has its own row: {rows:#?}"
-    );
+    let right = rows
+        .iter()
+        .position(|r| r.trim().starts_with("1 constraint"));
+    assert!(right.is_some(), "the right has its own row: {rows:#?}");
 }
 
 #[test]

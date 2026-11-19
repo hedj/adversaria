@@ -1494,6 +1494,14 @@ where the review held.
    tutorial. The empty right pane says what will appear there. The
    review asked for the first step to stand out, for "release to run
    it", both Alt keys, undo, and the right pane: all taken.
+8. Jargon on the screen: the top bar's "room" and entry count, "pane 1
+   of 2", "recomputed at journal N", "layer kept", "retracted here" in a
+   supposed world, and "prose: not ACE" under every heading. Now the
+   bar says "notebook …" and the world; the pane with focus has its
+   heading bright; the rest reads plainly. The review found "focus:
+   outline" named a pane not on screen in a supposed world, and that the
+   marks' "rule 2.7" clashed with the program's own word for a
+   constraint (a rule is a definition here): both changed.
 
 ## 4. Where it stands
 

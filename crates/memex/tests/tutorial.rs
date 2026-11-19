@@ -240,7 +240,7 @@ fn a_claim_and_a_rule(t: &mut T) {
     t.pause();
     t.says("constraint Nothing has more than 1 date kept: it fires on a planted violation");
     t.shows("1 disagreement between sources");
-    t.shows("? sources disagree under rule 1.4: 1988 here; 1989 in 1.3");
+    t.shows("? sources disagree under constraint 1.4: 1988 here; 1989 in 1.3");
     t.lacks("constraint violation");
 }
 
@@ -254,7 +254,7 @@ fn the_claim_questioned(t: &mut T) {
     t.shows("adopting it would raise 1 violation of Nothing has more than 1 date");
     t.key(Key::F(3));
     t.shows("1 constraint violation");
-    t.shows("‼ breaks rule 1.4: 1988 here; 1989 in 1.3");
+    t.shows("‼ breaks constraint 1.4: 1988 here; 1989 in 1.3");
     t.key(Key::F(4));
     t.says("retracted");
     t.lacks("constraint violation");
@@ -268,7 +268,7 @@ fn the_claim_supposed(t: &mut T) {
     t.key(Key::Enter);
     t.says("set aside in this world: 1.1");
     t.shows("WORLD · SUPPOSE THE FLIGHT WAS IN 1989");
-    t.shows("0 violations · 1.1 retracted here");
+    t.shows("0 violations · 1.1 set aside here");
     t.command("close");
     t.says("it stays in the journal");
     assert_eq!(t.app.reason.world(), "actual");

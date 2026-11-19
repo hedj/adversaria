@@ -300,7 +300,12 @@ fn the_top_bar_keeps_its_left_whole() {
     // not fit: here a revision's world, on 80 columns.
     let mut r = Room::new("rev-top");
     revised(&mut r, "# T\n", "# T\n");
-    let top = r.lines().remove(0);
+    let rows = r.lines();
+    let top = rows[..3]
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     assert!(top.contains("suppose: revision of d.md"), "{top}");
 }
 

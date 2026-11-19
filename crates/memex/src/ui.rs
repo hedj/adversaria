@@ -289,10 +289,25 @@ fn draw_panes(f: &mut Frame, app: &App, area: Rect) -> Hits {
     let [left, right] = pane_areas(area);
     let mut hits = draw_pane(f, app, 1, right);
     hits.0.extend(draw_pane(f, app, 0, left).0);
+    focus_heading(f, app, [left, right]);
     match app.session.listed() {
         Some(a) => cover(f, app, a, left, hits),
         None => hits,
     }
+}
+
+/// The heading of the pane with focus, on its first row, drawn bright
+/// and bold, the other's dim: which pane takes the keys, shown where it is.
+fn focus_heading(f: &mut Frame, app: &App, panes: [Rect; 2]) {
+    let pane = panes[app.session.view.focus.min(1)];
+    let row = Rect {
+        height: 1.min(pane.height),
+        ..pane
+    };
+    let bright = Style::default()
+        .remove_modifier(Modifier::DIM)
+        .add_modifier(Modifier::BOLD);
+    f.buffer_mut().set_style(row, bright);
 }
 
 /// The body's panes: three fifths of it, then two fifths.
@@ -342,21 +357,14 @@ fn beside(line: Line<'static>, gap: usize, right: Line<'static>) -> Line<'static
     Line::from_iter(spans)
 }
 
-/// The top bar's left: the room, its world or worlds, and how many
-/// entries the journal holds.
+/// The top bar's left: the notebook's name, and its world or worlds.
 fn top_left(app: &App) -> Line<'static> {
     let mut spans = vec![
-        Span::styled("room ", dim()),
+        Span::styled("notebook ", dim()),
         Span::styled(app.journal().room(), bold()),
         Span::raw("   "),
     ];
     spans.extend(world_spans(app));
-    let n = app.journal().entries().len();
-    spans.extend([
-        Span::raw("   "),
-        Span::styled("journal ", dim()),
-        Span::styled(n.to_string(), bold()),
-    ]);
     Line::from(spans)
 }
 
@@ -382,7 +390,7 @@ fn world_spans(app: &App) -> Vec<Span<'static>> {
 fn top_right(app: &App) -> Line<'static> {
     match app.reason.eval[0].as_ref().map(status) {
         Some(found) if !found.spans.is_empty() => found,
-        _ => Line::styled(format!("pane {} of 2", app.session.view.focus + 1), dim()),
+        _ => Line::default(),
     }
 }
 
@@ -759,9 +767,19 @@ impl<'a> OutlinePane<'a> {
     /// Under the item at the cursor, why its text was not read, if it was
     /// written in this session and was not: a quiet hint, nowhere else.
     fn prose_line(&self, id: u64, depth: usize) -> Option<Line<'static>> {
-        let hint = self.hint_here(id)?;
+        let hint = self.hint_here(id).filter(|h| self.says_why(id, h))?;
         let indent = "  ".repeat(depth + 1);
         Some(Line::styled(format!("{indent}  {hint}"), dim()))
+    }
+
+    /// Whether a hint says something worth the row: why ACE was not read,
+    /// always; why a text is prose, only if it reads as a sentence (it
+    /// ends in a full stop, question or exclamation mark), not under a
+    /// heading or a name.
+    fn says_why(&self, id: u64, hint: &str) -> bool {
+        let text = self.outline().text(id);
+        let sentence = text.trim_end().ends_with(['.', '?', '!']);
+        !hint.starts_with("prose:") || sentence
     }
 
     /// Under the item at the cursor, its [[links]] that name no item yet,
@@ -2115,7 +2133,7 @@ fn rule_named(outline: &Outline, name: &str) -> String {
     let item = outline.in_order().into_iter().find(states);
     item.map_or_else(
         || format!("“{name}”"),
-        |i| format!("rule {}", outline.number(i)),
+        |i| format!("constraint {}", outline.number(i)),
     )
 }
 
@@ -2334,7 +2352,7 @@ impl ConstraintPane<'_> {
         if found.is_empty() {
             return vec![];
         }
-        let heading = format!("{title} · recomputed at journal {}", self.e.at);
+        let heading = title.to_string();
         let rows = found.iter().map(|s| Line::styled(self.row(s), style));
         let heading = std::iter::once(Line::styled(heading, dim()));
         heading.chain(rows).chain([Line::raw("")]).collect()
@@ -2965,7 +2983,7 @@ impl<'a> Sides<'a> {
         let here = Span::styled(here, if differs { bold() } else { Style::default() });
         let gone = self
             .sets_aside_at(i)
-            .then(|| Span::styled("  (fact retracted here)", dim()));
+            .then(|| Span::styled("  (fact set aside here)", dim()));
         Line::from_iter(std::iter::once(here).chain(gone))
     }
 
@@ -3002,7 +3020,7 @@ impl<'a> Sides<'a> {
         }
         let under = self.set_aside_where(|cs| cs.is_some_and(|cs| cs.contains(&c.seq)));
         if k == 1 && !under.is_empty() {
-            line += &format!(" · {under} retracted here");
+            line += &format!(" · {under} set aside here");
         }
         line
     }

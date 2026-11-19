@@ -191,7 +191,7 @@ fn each_fact_set_aside_is_marked_on_its_own_row() {
     r.app.evaluate().unwrap();
     let marked = column(&r, 1)
         .iter()
-        .filter(|l| l.contains("(fact retracted here)"))
+        .filter(|l| l.contains("(fact set aside here)"))
         .count();
     assert_eq!(marked, 2, "{}", r.app.session.message);
 }
@@ -277,11 +277,11 @@ fn a_fact_set_aside_is_named_on_the_line_of_its_constraint_alone() {
             .unwrap_or_default()
     };
     assert!(
-        line("Constraint one value:").contains("retracted here"),
+        line("Constraint one value:").contains("set aside here"),
         "{lines:#?}"
     );
     assert!(
-        !line("Constraint within income:").contains("retracted here"),
+        !line("Constraint within income:").contains("set aside here"),
         "{lines:#?}"
     );
 }
@@ -303,7 +303,7 @@ fn a_fact_retracted_by_hand_is_named_on_a_line_of_its_own() {
     let lines = column(&r, 1);
     let on_constraint = lines
         .iter()
-        .any(|l| l.starts_with("Constraint") && l.contains("retracted here"));
+        .any(|l| l.starts_with("Constraint") && l.contains("set aside here"));
     let own = lines
         .iter()
         .filter(|l| l.starts_with("Retracted here: "))

@@ -12,7 +12,7 @@ impl App {
         let (mark_text, goal_text) = split_where(&words.join(" "));
         let (mark, goal) = self.parse_layer(&mark_text, &goal_text)?;
         self.keep_layer(target, (&mark_text, &goal_text), mark, goal)?;
-        Ok(format!("layer kept: {mark_text}"))
+        Ok(format!("layer added: {mark_text}"))
     }
 
     /// A mark and a goal, parsed as one term so they share their variables.

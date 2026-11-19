@@ -120,20 +120,21 @@ Without the sealer, entries are written but not sealed until a sealer runs.
 
 ### 2.2 The screen
 
-- **Top bar:** the journal directory's name (`room`), the world (`world
-  actual`, or `worlds actual | suppose: …`) and the number of journal
-  entries (`journal`). On the right, a count of violations and
-  disagreements; when there are none, which pane has focus (`pane 1 of
-  2`). In a narrow window the right side takes a row of its own.
+- **Top bar:** the notebook's name (its journal directory's,
+  `notebook …`) and the world (`world actual`, or `worlds actual |
+  suppose: …`). On the right, a count of violations and disagreements.
+  In a narrow window the right side takes a row of its own. The pane
+  with focus, which takes the keys, has its heading bright; the other's
+  is dim.
 - **Left pane:** the outline. When it runs past the pane, the pane's
   last row says how many items lie above and below (`↑ 6 items above ·
   ↓ continues below`); the outline scrolls to keep the cursor in view. `▼` marks an item with items under it, `▶` a
   folded one (followed by how many items it hides), `•` an item with none.
   Top-level items show their number. Under an item, `‼` lines are its
   marks: one for each constraint its facts break or disagree under,
-  naming the constraint (`rule 1.4` when an item states it, else its
+  naming the constraint (`constraint 1.4` when an item states it, else its
   name in quotes), the item's own fact, and each other fact in the
-  conflict with where it is: `‼ breaks rule 2.7: income 2000 here; rent
+  conflict with where it is: `‼ breaks constraint 2.7: income 2000 here; rent
   1200 in 2.2; food 900 in 2.3`. A
   violation (beliefs that break a rule) is red and marked `‼`; a
   disagreement between sources (a claim against a belief or another
@@ -455,7 +456,8 @@ and its tags (`tag  item_tag(12, money)`). A text read before the memex
 kept these forms shows none until its text changes. Change the text, and
 what it said is taken back and the new text read; undo takes back a
 sentence and what it said together. Text that is not ACE stays prose:
-at the cursor, a dim line says where APE stopped (`prose: not ACE, it
+at the cursor, if it reads as a sentence (it ends in `.`, `?` or `!`),
+a dim line says where APE stopped (`prose: not ACE, it
 stops at …`). A text is read whole or not at all: ACE the notebook cannot
 state says `not read:` and why.
 

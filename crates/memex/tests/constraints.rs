@@ -239,8 +239,8 @@ fn the_constraints_of_an_item_are_drawn_apart() {
 fn a_kind_with_no_findings_has_no_heading() {
     // Catches the heading of each kind drawn whether or not it has rows.
     let r = over_the_limit("no-kind");
-    assert!(r.shows("violations · recomputed at journal"));
-    assert!(!r.shows("disagreements between sources ·"));
+    assert!(r.shows("│  violations"));
+    assert!(!r.shows("│  disagreements between sources"));
 }
 
 /// A derived text, at an item of its own, that reads the rents.

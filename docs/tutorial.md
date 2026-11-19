@@ -120,10 +120,10 @@ it is kept.
 The top bar now says `1 disagreement between sources`, and under your
 fact is a mark:
 
-    ? sources disagree under rule 1.4: 1988 here; 1989 in 1.3
+    ? sources disagree under constraint 1.4: 1988 here; 1989 in 1.3
 
 Items are addressed by number: 1.3 is the third item under item 1, the
-claim, and rule 1.4 is the rule you just wrote. It is a disagreement, not an error, because 1989 is only a claim.
+claim, and constraint 1.4 is the rule you just wrote. It is a disagreement, not an error, because 1989 is only a claim.
 You wrote the rule once; it now checks every date in the notebook,
 those you add later and those that arrive from documents and sources.
 
@@ -145,7 +145,7 @@ source's record, and what adopting it would do:
 Press **F3** to adopt the claim. It is now a belief, with its source kept.
 The top bar says `1 constraint violation`, and the mark is loud:
 
-    ‼ breaks rule 1.4: 1988 here; 1989 in 1.3
+    ‼ breaks constraint 1.4: 1988 here; 1989 in 1.3
 
 Two beliefs now conflict. Press **F4** to take the adoption back. The
 notebook says the adoption is retracted, and the violation is gone.
@@ -171,7 +171,7 @@ Press Enter. A second world opens beside the actual one, row for row:
 
 In the supposed world your 1988 fact is set aside, so the rule holds;
 the notebook says `set aside in this world: 1.1`, and the rule's row
-says `0 violations · 1.1 retracted here`. Your actual world is
+says `0 violations · 1.1 set aside here`. Your actual world is
 untouched. In part D you will compute a sentence from the dates, which
 each world would show its own way.
 

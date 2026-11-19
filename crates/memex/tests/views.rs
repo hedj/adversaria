@@ -106,7 +106,7 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
     let mut app = budget("layer");
     item(&mut app, "chart");
     let m = command(&mut app, "layer bar(x(C), y(V)) where cell(C, V)");
-    assert!(m.starts_with("layer kept"), "{m}");
+    assert!(m.starts_with("layer added"), "{m}");
     let chart = find(&app, "chart");
     assert_eq!(
         marks(&app, chart),
@@ -653,7 +653,7 @@ fn the_room_is_named_after_its_journal_directory() {
     let app = App::open(&dir).unwrap();
     let name = dir.file_name().unwrap().to_string_lossy().into_owned();
     let top = screen(&app).0.remove(0);
-    assert!(top.contains(&format!("room {name}")), "{top}");
+    assert!(top.starts_with(&format!("notebook {name}")), "{top}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

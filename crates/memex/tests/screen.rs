@@ -401,15 +401,26 @@ fn the_worlds_wrap_and_stay_row_for_row() {
     assert!(right.starts_with("The income"), "{rows:#?}");
 }
 
+/// A rent over a limit: one constraint violation, for the top bar.
+fn violated(room: &mut Room) {
+    room.items(&["rent"]);
+    room.command("fact cell(rent, 1200)");
+    room.command("constraint limit: false :- cell(rent, R), R > 1000.");
+    room.app.evaluate().unwrap();
+}
+
 #[test]
 fn the_top_bars_status_has_a_row_of_its_own_beside_a_long_room_name() {
     // Catches the status dropped when the room's name leaves no room for
     // it, as it was at 80 columns: the top bar's right is what says a
     // constraint is violated.
-    let room = Room::new("screen-a-room-with-a-name-long-enough-to-fill-the-top-bar");
+    let mut room = Room::new("screen-a-room-with-a-name-long-enough-to-fill-the-top-bar");
+    violated(&mut room);
     let rows = room.lines_at(80, 24);
     assert!(
-        rows[..3].iter().any(|r| r.trim() == "pane 1 of 2"),
+        rows[..3]
+            .iter()
+            .any(|r| r.trim() == "1 constraint violation"),
         "{rows:#?}"
     );
 }
@@ -447,13 +458,13 @@ fn a_row_one_world_wraps_further_keeps_the_next_rows_together() {
     room.release(Quasi::Suppose);
     room.tap(&[Key::Enter]);
     room.app.evaluate().unwrap(); // as the window does
-    // At 52 columns "(fact retracted here)" takes a row of its own on
+    // At 52 columns "(fact set aside here)" takes a row of its own on
     // the supposed side, so that side's pair is a row taller.
     let rows = room.lines_at(52, 30);
     let right = |r: &String| r.split('│').nth(1).unwrap_or("").trim_start().to_string();
     let own_row = rows
         .iter()
-        .any(|r| right(r).starts_with("(fact retracted here)"));
+        .any(|r| right(r).starts_with("(fact set aside here)"));
     assert!(own_row, "the supposed side is a row taller: {rows:#?}");
     let below = rows.iter().find(|r| r.starts_with("The income"));
     let below = right(below.expect("The income"));

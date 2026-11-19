@@ -168,10 +168,7 @@ fn scene_two_as_written() {
     s.assert("CONSTRAINT · ONE DATE PER EVENT");
     s.assert("    date(E, D1),");
     s.assert("    D1 \\= D2.");
-    s.assert(&format!(
-        "disagreements between sources · recomputed at journal {}",
-        app.journal().entries().len()
-    ));
+    s.assert("│  disagreements between sources");
     s.assert("buran_flight: 1988 (1.1) · 1989 (2.1)");
     s.assert("depends on these facts");
     s.assert("1.3 The flight came a year after");
@@ -370,8 +367,8 @@ fn the_worlds_are_side_by_side(app: &App) {
     s.assert("1987 Energia's first launch ── 1988 Buran's flight");
     s.assert("1987 Energia's first launch ── 1989 Buran's flight");
     s.assert("Constraint one date per event: 0 violations, 1 disagreement");
-    s.assert("Constraint one date per event: 0 violations · 1.1 retracted here");
-    s.assert("(fact retracted here)");
+    s.assert("Constraint one date per event: 0 violations · 1.1 set aside here");
+    s.assert("(fact set aside here)");
 }
 
 /// Scene 3, closed: the actual world again, as it was, and the
