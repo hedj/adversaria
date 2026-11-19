@@ -1121,6 +1121,29 @@ Checked: the reader's 14 tests and the memex's 14 reading tests pass.
 Breaks, each failing a test: every reason unstated (two reader tests);
 the two hints swapped (two memex tests).
 
+### Wrapping (19 November 2026)
+
+The author: "word wrapping is messed up almost everywhere", and the
+list shown while Command is held and the "not read" hint were cut off.
+Rendered at 80 by 30 (measured): the outline did not wrap at all, so
+items, marks and hints were cut at the pane's edge (about 46 columns);
+the command list gave each command's whole help (up to 121 characters)
+in an unwrapped box; the foot line is cut at the screen's edge.
+
+- The command list (4a40cd0): a brief help per command (at most 32
+  characters), the whole help, wrapped, once a command is chosen, and
+  "… and N more" when the list is taller than its box.
+- The outline: each line is wrapped at spaces to the pane's width, its
+  later rows set in under its text (an item's under its text, past its
+  number; a mark's under its words, past ⚑). Scrolling, the places a
+  click acts on and the text cursor count rows, not lines.
+  `crates/memex/src/ui/wrap.rs` does the wrapping and maps a column of
+  a line to its row.
+
+Not yet: the foot line is still cut at the screen's edge.
+The referent count does not see a child module, so `ui.rs` reads as
+holding 6 modules; a reader holds 7 (its child `wrap` too).
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

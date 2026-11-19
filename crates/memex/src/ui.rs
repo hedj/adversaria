@@ -2,6 +2,8 @@
 //! story, scene 1). Drawing reads the state and changes nothing, so the same
 //! state always draws the same screen.
 
+mod wrap;
+
 use crate::actions::command_help;
 use crate::app::{Active, App, Click, Mode, PaneKind, Quasi, ScopeLevel, View};
 use crate::outline::{Layer, Link, Outline, Run, TOP};
@@ -16,6 +18,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use std::collections::BTreeMap;
+use wrap::{Wrapped, wrap};
 
 fn dim() -> Style {
     Style::default().add_modifier(Modifier::DIM)
@@ -381,7 +384,7 @@ impl<'a> OutlinePane<'a> {
         }
         if rows.is_empty() {
             let empty = "(empty: type to write the first item)";
-            drawn.lines.push(Line::styled(empty, dim()));
+            drawn.push(Line::styled(empty, dim()), 0);
         }
         drawn
     }
@@ -397,11 +400,12 @@ impl<'a> OutlinePane<'a> {
         if id == self.cursor() {
             drawn.cursor = Some((drawn.lines.len(), depth));
         }
-        let line = (drawn.lines.len(), 0, self.rows.width as usize);
+        let line = (drawn.lines.len(), 0, usize::MAX);
         drawn.places.push(Place::of(line, self.click(id)));
-        drawn.lines.push(self.item_line(id, depth));
-        drawn.lines.extend(self.prose_line(id, depth));
-        drawn.lines.extend(self.mark_lines(id, depth));
+        drawn.push(self.item_line(id, depth), self.head_width(id, depth));
+        let set_in = 2 * depth + 4;
+        drawn.push_lines(self.prose_line(id, depth), set_in);
+        drawn.push_lines(self.mark_lines(id, depth), set_in + 2);
         if self.outline().views.contains_key(&id) {
             self.view_lines(drawn, id, 2 * depth + 2);
         }
@@ -420,6 +424,12 @@ impl<'a> OutlinePane<'a> {
         } else {
             line
         }
+    }
+
+    /// How many cells an item's head takes: the column its text starts at,
+    /// under which its wrapped rows start.
+    fn head_width(&self, id: u64, depth: usize) -> usize {
+        Line::from(self.item_head(id, depth)).width()
     }
 
     /// An item's indent and its mark of the tree; at the top level, its
@@ -512,7 +522,7 @@ impl<'a> OutlinePane<'a> {
     fn view_lines(&self, drawn: &mut Drawn, id: u64, indent: usize) {
         let fig = self.figure(id, indent);
         let places = self.view_places(&fig, (drawn.lines.len(), indent));
-        drawn.lines.extend(figure_lines(&fig, indent));
+        drawn.push_lines(figure_lines(&fig, indent), indent);
         drawn.places.extend(places);
     }
 
@@ -551,20 +561,12 @@ impl<'a> OutlinePane<'a> {
     }
 
     /// The text cursor, if this pane shows it and its row is in the
-    /// window, where the column fits.
+    /// window: a row of the window and a column.
     fn put_text_cursor(&self, f: &mut Frame, at: Option<(usize, usize)>) {
-        let at = at.filter(|_| self.shows_text_cursor());
-        if let Some(position) = at.and_then(|(row, depth)| self.text_cursor_at(row, depth)) {
-            f.set_cursor_position(position);
+        if let Some((row, x)) = at.filter(|_| self.shows_text_cursor()) {
+            let at = (self.rows.x + x as u16, self.rows.y + row as u16);
+            f.set_cursor_position(Position::new(at.0, at.1));
         }
-    }
-
-    /// Where the text cursor is on a row of the window, if its column
-    /// fits.
-    fn text_cursor_at(&self, row: usize, depth: usize) -> Option<Position> {
-        let x = self.rows.x as usize + self.text_column(depth);
-        let y = self.rows.y + row as u16;
-        (x < self.rows.right() as usize).then(|| Position::new(x as u16, y))
     }
 
     /// Whether this pane shows the text cursor: it has the focus, in
@@ -596,13 +598,52 @@ fn near(rows: &[(u64, usize)], cursor: u64, height: usize) -> &[(u64, usize)] {
     &rows[first..rows.len().min(first + 2 * height + 1)]
 }
 
-/// The lines of an outline pane, before its window is chosen: each line,
-/// each place a click acts on, and the cursor's line and depth.
+/// The lines of an outline pane, before they are wrapped and their window
+/// is chosen: each line and the indent of its wrapped rows, each place a
+/// click acts on, and the cursor's line and depth.
 #[derive(Default)]
 struct Drawn {
-    lines: Vec<Line<'static>>,
+    lines: Vec<(Line<'static>, usize)>,
     places: Vec<Place>,
     cursor: Option<(usize, usize)>,
+}
+
+/// An outline pane's lines wrapped to its width: each line's rows, and the
+/// row each line starts on.
+struct Laid {
+    wrapped: Vec<Wrapped>,
+    first: Vec<usize>,
+}
+
+impl Laid {
+    /// Lines wrapped to a width, each with its hang.
+    fn new(lines: &[(Line<'static>, usize)], width: usize) -> Laid {
+        let wrapped: Vec<_> = lines.iter().map(|(l, h)| wrap(l, width, *h)).collect();
+        let sizes = wrapped.iter().map(|w| w.rows.len());
+        let first = sizes
+            .scan(0, |at, n| Some(std::mem::replace(at, *at + n)))
+            .collect();
+        Laid { wrapped, first }
+    }
+
+    /// The row and column where a column of a line is drawn.
+    fn place(&self, line: usize, col: usize) -> (usize, usize) {
+        let (k, x) = self.wrapped[line].place(col);
+        (self.first[line] + k, x)
+    }
+
+    /// Where a reach of a line's columns, [from, to), is drawn: each row,
+    /// its first column and its width.
+    fn spans(&self, line: usize, (from, to): (usize, usize)) -> Vec<(usize, usize, usize)> {
+        let below = self.first[line];
+        let rows = self.wrapped[line].spans((from, to)).into_iter();
+        rows.map(|(k, x, w)| (below + k, x, w)).collect()
+    }
+
+    /// All the rows, in order.
+    fn rows(self) -> Vec<Line<'static>> {
+        self.wrapped.into_iter().flat_map(|w| w.rows).collect()
+    }
 }
 
 /// A place a click acts on: its line, its column and width, and what it
@@ -620,62 +661,111 @@ impl Place {
         Place { line, span, click }
     }
 
-    /// A click on it, if it is in the window, where it is drawn in an area
-    /// whose first line is the window's.
-    fn add_to(&self, hits: &mut Hits, area: Rect, offset: usize) {
-        let shown = (offset..offset + area.height as usize).contains(&self.line);
-        if shown {
-            hits.add(area, self.rect(area, offset), self.click.clone());
-        }
+    /// A click on each row of it in the window.
+    fn add_to(&self, hits: &mut Hits, laid: &Laid, window: Window) {
+        let spans = laid.spans(self.line, self.reach());
+        window.add(hits, spans, &self.click);
     }
 
-    /// Where it is drawn in an area whose first line is the window's.
-    fn rect(&self, area: Rect, offset: usize) -> Rect {
+    /// The columns it covers on its line: [from, to).
+    fn reach(&self) -> (usize, usize) {
         let (x, width) = self.span;
-        let y = area.y + (self.line - offset) as u16;
-        Rect::new(area.x + x as u16, y, width as u16, 1)
+        (x, x.saturating_add(width))
+    }
+}
+
+/// The rows of an outline pane shown in its area: from the first, its
+/// offset among all the rows.
+#[derive(Clone, Copy)]
+struct Window {
+    area: Rect,
+    offset: usize,
+}
+
+impl Window {
+    /// The window over an area that keeps a row in view (the text
+    /// cursor's), with two rows below it where there is room, but never at
+    /// the cost of its own.
+    fn over(area: Rect, at: Option<(usize, usize)>) -> Window {
+        let row = at.map_or(0, |(row, _)| row);
+        let offset = (row + 3).saturating_sub(area.height as usize).min(row);
+        Window { area, offset }
+    }
+
+    /// The row of the window that a row is, if it is in it.
+    fn row(&self, row: usize) -> Option<u16> {
+        let y = row.checked_sub(self.offset)?;
+        (y < self.area.height as usize).then_some(y as u16)
+    }
+
+    /// A place among the rows, on the window: its row of the window and
+    /// its column.
+    fn place(&self, at: Option<(usize, usize)>) -> Option<(usize, usize)> {
+        let (row, x) = at?;
+        Some((self.row(row)? as usize, x))
+    }
+
+    /// A click on each of a row's columns that is in the window: each a
+    /// row, its first column and its width.
+    fn add(&self, hits: &mut Hits, spans: Vec<(usize, usize, usize)>, click: &Click) {
+        let rects = spans.into_iter().filter_map(|s| self.rect(s));
+        rects.for_each(|r| hits.add(self.area, r, click.clone()));
+    }
+
+    /// Where a row's columns are drawn, if the row is in the window.
+    fn rect(&self, (row, x, w): (usize, usize, usize)) -> Option<Rect> {
+        let y = self.row(row)?;
+        Some(self.at(x, y, w))
+    }
+
+    /// The cells of a row of the window, from a column, of a width.
+    fn at(&self, x: usize, y: u16, w: usize) -> Rect {
+        Rect::new(self.area.x + x as u16, self.area.y + y, w as u16, 1)
+    }
+
+    /// Draw the rows in the window.
+    fn draw(&self, f: &mut Frame, rows: Vec<Line<'static>>) {
+        let height = self.area.height as usize;
+        let shown: Vec<Line> = rows.into_iter().skip(self.offset).take(height).collect();
+        f.render_widget(Paragraph::new(shown), self.area);
     }
 }
 
 impl Drawn {
-    /// The window onto the lines, in the pane's rows; then the text cursor,
-    /// and the places in the window.
+    /// Add a line, whose wrapped rows are set in by a hang.
+    fn push(&mut self, line: Line<'static>, hang: usize) {
+        self.lines.push((line, hang));
+    }
+
+    /// Add lines, each with the same hang.
+    fn push_lines(&mut self, lines: impl IntoIterator<Item = Line<'static>>, hang: usize) {
+        lines.into_iter().for_each(|l| self.push(l, hang));
+    }
+
+    /// The lines wrapped to the pane's width; the window onto them that
+    /// keeps the text cursor in view; then the text cursor, and the places
+    /// in the window.
     fn show(self, f: &mut Frame, outline: &OutlinePane) -> Hits {
-        let rows = outline.rows;
-        let offset = self.offset(rows.height as usize);
-        let hits = self.hits(rows, offset);
-        outline.put_text_cursor(f, self.cursor_row(offset, rows.height as usize));
-        f.render_widget(self.window(offset, rows.height as usize), rows);
+        let laid = Laid::new(&self.lines, outline.rows.width as usize);
+        let cursor = self.text_place(&laid, outline);
+        let window = Window::over(outline.rows, cursor);
+        outline.put_text_cursor(f, window.place(cursor));
+        let hits = self.hits(&laid, window);
+        window.draw(f, laid.rows());
         hits
     }
 
-    /// The first line in a window of a height: two lines below the
-    /// cursor's are kept in view where there is room, but never at the
-    /// cost of the cursor's own.
-    fn offset(&self, height: usize) -> usize {
-        let at = self.cursor.map_or(0, |(line, _)| line);
-        let below = (at + 3).saturating_sub(height).min(at);
-        below.min(self.lines.len().saturating_sub(1))
-    }
-
-    /// The cursor's row in a window, if it is in it, and its depth.
-    fn cursor_row(&self, offset: usize, height: usize) -> Option<(usize, usize)> {
+    /// Where the text cursor is drawn among the rows: its row and column.
+    fn text_place(&self, laid: &Laid, outline: &OutlinePane) -> Option<(usize, usize)> {
         let (line, depth) = self.cursor?;
-        let row = line.checked_sub(offset).filter(|r| *r < height)?;
-        Some((row, depth))
+        Some(laid.place(line, outline.text_column(depth)))
     }
 
-    /// The lines in a window.
-    fn window(self, offset: usize, height: usize) -> Paragraph<'static> {
-        let shown: Vec<Line> = self.lines.into_iter().skip(offset).take(height).collect();
-        Paragraph::new(shown)
-    }
-
-    /// The places in a window, each where it is drawn in an area.
-    fn hits(&self, area: Rect, offset: usize) -> Hits {
+    /// The places in a window, each where it is drawn.
+    fn hits(&self, laid: &Laid, window: Window) -> Hits {
         let mut hits = Hits::default();
         let places = self.places.iter();
-        places.for_each(|p| p.add_to(&mut hits, area, offset));
+        places.for_each(|p| p.add_to(&mut hits, laid, window));
         hits
     }
 }

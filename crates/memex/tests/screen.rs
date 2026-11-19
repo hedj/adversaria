@@ -238,3 +238,83 @@ fn every_brief_help_fits_the_list() {
         assert!(c.brief.chars().count() <= 32, "{}: {}", c.name, c.brief);
     }
 }
+
+const BURAN: &str = "Buran flew once, unmanned, on 15 November 1988, from Baikonur, after many delays, and never flew again because the programme was cancelled in 1993.";
+
+/// The outline's column at 80 by 30: each row up to the pane's border.
+fn outline_rows(room: &Room) -> Vec<String> {
+    let rows = room.lines_at(80, 30).into_iter().skip(2);
+    let left = |l: String| l.split('│').next().unwrap_or("").trim_end().to_string();
+    rows.map(left).collect()
+}
+
+/// The outline's rows from the one that holds a text, joined by spaces as
+/// a reader joins wrapped rows.
+fn read_from(room: &Room, start: &str) -> String {
+    let rows = outline_rows(room);
+    let at = rows.iter().position(|r| r.contains(start)).expect(start);
+    let words = rows[at..]
+        .iter()
+        .flat_map(|r| r.split_whitespace().map(String::from));
+    words.collect::<Vec<_>>().join(" ")
+}
+
+#[test]
+fn a_long_item_wraps_whole_under_its_text() {
+    // Catches an item cut at the pane's edge, or its later rows set back
+    // to the edge rather than under its text.
+    let mut room = Room::new("screen-wrap");
+    room.items(&["The programme", BURAN]);
+    assert!(read_from(&room, "• 2. Buran").starts_with(&format!("• 2. {BURAN}")));
+    let rows = outline_rows(&room);
+    let second = rows.iter().position(|r| r.starts_with("• 2.")).unwrap() + 1;
+    assert!(rows[second].starts_with("     1988,"), "{rows:#?}");
+}
+
+#[test]
+fn a_hint_that_the_text_is_not_read_is_shown_whole() {
+    // Catches the "not read" hint cut at the pane's edge.
+    let mut room = Room::new("screen-hint");
+    room.items(&["A fish is an animal."]);
+    room.app.idle();
+    let hint = room
+        .app
+        .session
+        .prose_hint(room.app.cursor())
+        .unwrap()
+        .to_string();
+    assert!(
+        read_from(&room, "not read:").starts_with(&hint),
+        "{:#?}",
+        outline_rows(&room)
+    );
+}
+
+#[test]
+fn a_click_on_a_wrapped_items_second_row_selects_it() {
+    // Catches clicks placed by line, not by row, once lines wrap: the
+    // second row of an item would select nothing, or the item below.
+    let mut room = Room::new("screen-wrap-click");
+    room.items(&[BURAN, "Below"]);
+    let rows = room.lines_at(80, 30);
+    let y = rows.iter().position(|r| r.contains("     1988,")).unwrap();
+    let id = room.outline().in_order()[0];
+    let click = room.hits_at(80, 30).at(10, y as u16).cloned();
+    assert_eq!(click, Some(Click::Item { pane: 0, id }));
+}
+
+#[test]
+fn the_text_cursor_at_the_end_of_a_long_item_is_on_its_last_row() {
+    // Catches the text cursor put past the pane's edge on the item's first
+    // row, as when lines were not wrapped.
+    let mut room = Room::new("screen-wrap-cursor");
+    room.items(&[BURAN]);
+    room.tap(&[Key::End]);
+    let mut t = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 30)).unwrap();
+    t.draw(|f| memex::ui::draw(f, &room.app)).unwrap();
+    let at = t.get_cursor_position().unwrap();
+    let rows = room.lines_at(80, 30);
+    let row = &rows[at.y as usize];
+    let end = row.find("1993.").expect("the cursor is on the last row") + "1993.".len();
+    assert_eq!(at.x as usize, row[..end].chars().count(), "{row}");
+}
