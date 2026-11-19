@@ -600,10 +600,28 @@ impl<'a> OutlinePane<'a> {
         let rows = self.app.visible();
         let mut drawn = self.drawn_near(&rows);
         if rows.is_empty() {
-            let empty = "(empty: type to write the first item)";
-            drawn.push(Line::styled(empty, dim()), 0);
+            drawn.push_lines(self.first_steps(), 2);
         }
         drawn
+    }
+
+    /// What an empty notebook shows: the first thing to do, plainly, and
+    /// the keys to know, dim, each key first.
+    fn first_steps(&self) -> Vec<Line<'static>> {
+        let palette = self.app.session.keys.key_for("palette");
+        let steps = [
+            "Enter makes a new item · Tab puts it under the one above".to_string(),
+            format!("hold Left Ctrl (Command), type a command, release to run it · {palette} lists them"),
+            "hold Right Alt (Leap) and type, to jump to an item with that text · Left Alt jumps back".into(),
+            "right-click a word for what can act on it".into(),
+            "a mistake? hold Left Ctrl, type undo, release · nothing is ever lost".into(),
+            "docs/introduction.md says what this is for · docs/tutorial.md is a first session".into(),
+        ];
+        let step = |s: String| Line::styled(format!("  {s}"), dim());
+        std::iter::once(Line::raw("Type to write the first item."))
+            .chain([Line::raw("")])
+            .chain(steps.into_iter().map(step))
+            .collect()
     }
 
     /// Where the rows within a screen's height of the cursor's row lie.
@@ -1524,12 +1542,18 @@ fn links_lines(outline: &Outline, id: u64) -> Vec<Line<'static>> {
         Line::raw(""),
     ];
     if id == TOP {
+        lines.push(nothing_selected());
         return lines;
     }
     lines.extend([Line::raw(outline.text(id)), Line::raw("")]);
     lines.extend(link_lines(outline, id));
     lines.extend(transclusion_lines(outline, id));
     lines
+}
+
+/// What the links pane says with no item selected.
+fn nothing_selected() -> Line<'static> {
+    Line::styled("(the selected item and its links appear here)", dim())
 }
 
 /// An item's links, under a heading for each kind, numbered in order.

@@ -233,3 +233,18 @@ fn an_outline_longer_than_its_pane_says_how_many_rows_are_out_of_view() {
         "{shown:#?}"
     );
 }
+
+#[test]
+fn an_empty_notebook_says_how_to_begin() {
+    // Catches an empty notebook that names no key, or names the palette's
+    // default key when the configuration moved it.
+    let mut r = Room::new("first-steps");
+    assert!(r.shows("Type to write the first item."));
+    assert!(r.shows("hold Left Ctrl (Command), type a command, release to run it · F1 lists them"));
+    assert!(r.shows("(the selected item and its links appear here)"));
+    assert!(r.shows("right-click a word for what can act on it"));
+    r.bind("F1 = \"\"\nF12 = \"palette\"");
+    assert!(r.shows("· F12 lists them"), "{:#?}", r.lines());
+    r.items(&["first"]);
+    assert!(!r.shows("right-click a word"), "gone once there is an item");
+}

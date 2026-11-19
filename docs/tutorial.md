@@ -44,7 +44,9 @@ uses its own journal, which you can delete when you are done.
 The window is the memex, the notebook. It has a top bar, your outline on
 the left, and a second pane on the right. The outline says:
 
-    (empty: type to write the first item)
+    Type to write the first item.
+
+and, under it, the keys to know, which this tutorial takes in turn.
 
 ### 2. A fact, and a note
 

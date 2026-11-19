@@ -183,7 +183,7 @@ fn the_tutorial_works_as_written() {
     };
 
     t.look("start");
-    t.shows("(empty: type to write the first item)");
+    t.shows("Type to write the first item.");
 
     part_a(&mut t);
     part_b(&mut t);

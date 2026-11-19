@@ -1486,6 +1486,14 @@ where the review held.
    the step at 1.26:1, too weak to tell on a lone word. Bold is now Hack
    Bold, bundled (the same release as egui's Hack Regular, so each
    glyph is as wide and the grid holds).
+7. An empty notebook said only "(empty: type to write the first item)".
+   It now says "Type to write the first item." plainly, then, dim, the
+   keys to know, each key first: Enter and Tab; Left Ctrl, type, release
+   (with the palette's key, as configured); Right and Left Alt; the
+   right-click; undo, and that nothing is lost; the introduction and
+   tutorial. The empty right pane says what will appear there. The
+   review asked for the first step to stand out, for "release to run
+   it", both Alt keys, undo, and the right pane: all taken.
 
 ## 4. Where it stands
 
