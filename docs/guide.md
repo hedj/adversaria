@@ -1,8 +1,9 @@
 # User guide
 
 This guide describes the Adversaria prototype as built: the memex, which is
-the notebook you use in a window, and the programs around it. For a first
-session, follow docs/tutorial.md. For why it is built this way, see
+the notebook you use in a window, and the programs around it. For what it
+is for, in a page, read docs/introduction.md; for a first session, follow
+docs/tutorial.md. For why it is built this way, see
 docs/design.md; for what has been tested and what has not, docs/log.md.
 
 Contents, four parts of four:
@@ -20,45 +21,56 @@ Contents, four parts of four:
 
 ### 1.1 The record
 
-**Journal.** Everything you do is an entry in an append-only journal: a file
-of JSON lines, each joined by a hash to its parent, the entry it follows on
-its branch (after an undo or in a supposed world, not always the line before
-it). Nothing is ever overwritten or erased, except by `purge` (§ 4.2). There
-is no Save: what you type is written a second after you stop, or when you do
-anything else. Undo is an entry too.
+**Journal.** So that nothing is lost, and you can always go back,
+everything you do is an entry in an append-only journal: a file of JSON
+lines, each joined by a hash to its parent, the entry it follows on its
+branch (after an undo or in a supposed world, not always the line before
+it). Nothing is ever overwritten or erased, except by `purge` (§ 4.2).
+There is no Save: what you type is written a second after you stop, or
+when you do anything else. Undo is an entry too.
 
-**Seal.** A separate program, the sealer, holds a signing key and signs
-the journal's entries, dated. The memex itself never sees the key. A sealed
-entry can be shown to have existed, unchanged, by its date.
+**Seal.** So that you can show a note existed, unchanged, on a date (for
+a lab notebook, for priority, or to trust your own record), a separate
+program, the sealer, holds a signing key and signs the journal's entries,
+dated. The memex itself never sees the key.
 
 ### 1.2 The outline
 
 **Outline.** Your notes are an outline of items. Each item has text, may
-have items under it, and may state facts.
-
-**Quasimode.** A state that lasts only while you hold a key, such as
-Command: hold the key, type a command, release to run it. You cannot forget
-you are in it. See § 2.3.
+have items under it, and may state facts. Most items are prose, notes
+for you; the notebook reads the rest (§ 1.3).
 
 ### 1.3 Facts, claims and beliefs
 
-**Fact, claim, belief.** A fact is a Prolog term an item states, such as
-`date(buran_flight, 1988)`. A fact you state is a belief. A fact from a
-source (a talk, a paper, Wikidata, an analysis) is a claim:
-`claims(Source, Fact)`. A claim becomes a belief only when you adopt it,
-and the adoption keeps its source.
+**Fact, claim, belief.** Notes mix what you checked with what someone
+told you; these keep them apart. A fact is a statement the notebook can
+check and compute from, written as a short English sentence
+(`The date of Buran-flight is 1988.`) and kept as a Prolog term
+(`date(buran_flight, 1988)`). A fact you state is a belief. A fact from a
+source (a talk, a paper, Wikidata, an analysis) is a claim
+(`Talk-notes says that the date of Buran-flight is 1989.`). A claim
+becomes a belief only when you adopt it, and the adoption keeps its
+source, so what rests on a source can be found, and taken back if the
+source proves wrong.
 
 ### 1.4 Constraints and worlds
 
-**Constraint.** A rule that must never be broken, written as a Prolog
-denial: `false :- ...`. When beliefs break it, that is a **violation**. When
-a claim and a belief, or two claims, would break it, that is a
-**disagreement between sources**. Both are marked under the items involved.
+**Constraint.** So that a conflict is found when it arrives, not months
+later, a constraint says what must never be: `Nothing has more than 1
+date.`, or in Prolog a denial, `false :- ...`. Written once, it checks
+every fact, now and later. When beliefs break it, that is a
+**violation**. When a claim and a belief, or two claims, would break it,
+that is a **disagreement between sources**. Both are marked under the
+items involved. Before it is kept, a constraint is tried on a made-up
+case that should break it (a planted violation): one that could never
+fire would give false comfort, so it is refused.
 
-**World.** The facts as they stand are the actual world. A supposition
-opens a second world in which something else holds; the two are shown side
-by side. Closing a world keeps it in the journal; committing it makes it
-the actual world.
+**World.** So that you can try "what if?" without changing what you
+believe, the facts as they stand are the actual world, and a supposition
+opens a second world in which something else holds; the two are shown
+side by side. Closing a world keeps it in the journal; committing it
+makes it the actual world. A co-author's revision of a document opens in
+a world too, one change per entry (§ 4.1).
 
 ## 2. Working
 
@@ -153,6 +165,11 @@ The defaults are below. All of them can be changed (§ 4.3).
 | Left, Right, Home, End | move within the item's text |
 
 #### Quasimodes
+
+A quasimode is a state that lasts only while you hold a key: hold the
+Command key, type a command, and release to run it. You cannot forget
+you are in one, as you can with a mode. Each is also a gesture of its
+own: searching, commanding and supposing each have a key.
 
 | Quasimode | Default keys | While held | On release |
 | --- | --- | --- | --- |
@@ -494,6 +511,10 @@ definitions are stored in.
 
 ### 3.2 Worlds
 
+When you do not yet know which source is right, or what a change would
+do, suppose it: the notebook shows what follows beside what you believe,
+and changes nothing you believe.
+
 Hold Suppose and type a statement in your own words, such as `the flight
 was in 1989`. The memex reads it against the facts it knows and offers each
 reading: `Do you mean: Suppose that the date of Buran's flight is 1989.`
@@ -550,6 +571,10 @@ constraints, with what changed.
 journal. `commit` makes the supposed world the actual one.
 
 ### 3.3 Views
+
+A view draws your facts, and changes as they do; it draws only beliefs,
+never a claim you have not adopted, and shows in bold what breaks a
+constraint.
 
 A view is an item that draws something: a chart, a timeline, a grid, a
 flowchart, a tree. There are no chart types. A view is made of layers,
@@ -670,6 +695,11 @@ may not (§ 3.1).
 
 ### 3.4 Suggestions and Wikidata
 
+Wikidata, a public knowledge base, is a second source to check your
+facts against: its dates and statements come in as claims, and your
+constraints compare them with yours. The memex also suggests links,
+rules and references from what you have written, each with why.
+
 The memex can read a subset of Wikidata, a public knowledge base, as
 claims whose source is Wikidata. Make a subset with the `wikidata` tool
 (§ 4.2), then:
@@ -716,6 +746,10 @@ nothing is typed where no text cursor is drawn.
 ## 4. Around the memex
 
 ### 4.1 Documents and results
+
+Your drafts, your co-authors' revisions and your analyses' results come
+in so that the same rules check them, each change can be chosen, and a
+result is marked when its data changes.
 
 **Import a document** in Markdown, Word, OpenDocument, LaTeX or HTML, by
 its extension (`.md` or `.markdown`, `.docx`, `.odt`, `.tex`, `.html` or
@@ -836,7 +870,7 @@ Or run them from `target/release/` after `cargo build --release`.
 | `check` | `check DIR` | checks a journal: the chain, every seal's signature, that every entry is sealed, and the blobs. Prints `ok:` and counts, or the first fault; exits 1 on a fault, so a journal written while no sealer ran fails until one has |
 | `wikidata` | `wikidata --items Q2548,Q15180 --out FILE` | writes those items of Wikidata as Prolog facts |
 | | `wikidata --min-sitelinks K [--limit N] --out FILE` | the same for up to N items (100 000 if not given) with at least K site links |
-| `measures` | `measures DIR` | the measures report for the experiment, from the journal alone |
+| `measures` | `measures DIR` | the measures report for the prototype's trial, from the journal alone: the violations shown and later corrected, the suggestions adopted and those later retracted, and your actions by kind, with the share that was clerical (searching, following links, navigating) |
 | `memex` | `memex [--config FILE] [--mouse \| --no-mouse] DIR` | the notebook; the flags override the configuration's `[mouse]` |
 | | `memex --print-config` | writes the default configuration |
 
