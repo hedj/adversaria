@@ -128,7 +128,11 @@ Without the sealer, entries are written but not sealed until a sealer runs.
 - **Left pane:** the outline. `▼` marks an item with items under it, `▶` a
   folded one (followed by how many items it hides), `•` an item with none.
   Top-level items show their number. Under an item, `‼` lines are its
-  marks: each constraint solution that rests on one of its facts. A
+  marks: one for each constraint its facts break or disagree under,
+  naming the constraint (`rule 1.4` when an item states it, else its
+  name in quotes), the item's own fact, and each other fact in the
+  conflict with where it is: `‼ breaks rule 2.7: income 2000 here; rent
+  1200 in 2.2; food 900 in 2.3`. A
   violation is shown bold; a disagreement dim. An item that shows
   derived text ends in `[derived]`; one that states a claim ends in its
   source, in brackets. A result whose input files have changed says `input

@@ -106,7 +106,7 @@ fn an_items_marks_are_set_in_under_it() {
     r.command("fact cell(rent, 1200)");
     r.command("constraint limit: false :- cell(C, R), R > 1000.");
     r.app.evaluate().unwrap();
-    let line = "    ‼ limit, violation: cell(rent, 1200) here";
+    let line = "    ‼ breaks “limit”: cell(rent, 1200) here";
     assert!(
         r.lines().iter().any(|l| l.starts_with(line)),
         "{:?}",

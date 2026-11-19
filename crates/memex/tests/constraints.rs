@@ -181,7 +181,7 @@ fn a_finding_on_one_fact_is_marked_under_its_item() {
         .filter(|l| l.contains('‼'))
         .count();
     assert_eq!(marks, 1);
-    assert!(r.shows("‼ limit, violation: cell(rent, 1200) here"));
+    assert!(r.shows("‼ breaks “limit”: cell(rent, 1200) here"));
     assert!(r.shows("CONSTRAINT · LIMIT"));
 }
 
@@ -219,7 +219,7 @@ fn a_finding_whose_facts_share_nothing_is_listed_without_a_key() {
     r.command("constraint rent first: false :- cell(rent, R), cell(food, F), R > F.");
     r.app.flush();
     r.app.evaluate().unwrap();
-    assert!(r.shows("│  rent, 1200 (1) · food, 300 (2)"));
+    assert!(r.shows("│  rent 1200 (1) · food 300 (2)"));
 }
 
 #[test]

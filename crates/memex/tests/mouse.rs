@@ -103,7 +103,7 @@ fn a_click_on_an_item_moves_the_cursor_there() {
     click_on(&mut app, "Buran flew");
     assert_eq!(app.here(), "Buran flew once, in 1988.");
     // A click on the mark line itself acts on nothing.
-    assert_eq!(hit_on(&app, "‼ one date per event"), None);
+    assert_eq!(hit_on(&app, "‼ sources disagree under"), None);
     // Typing after a click goes into the clicked item.
     typ(&mut app, " Once.");
     app.flush();

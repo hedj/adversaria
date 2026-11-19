@@ -1707,8 +1707,8 @@ fn difference(a: &Term, b: &Term) -> (String, String) {
                 .map(|(p, q)| (reason::show(p), reason::show(q)))
                 .collect();
             (
-                d.iter().map(|p| p.0.clone()).collect::<Vec<_>>().join(", "),
-                d.iter().map(|p| p.1.clone()).collect::<Vec<_>>().join(", "),
+                d.iter().map(|p| p.0.clone()).collect::<Vec<_>>().join(" "),
+                d.iter().map(|p| p.1.clone()).collect::<Vec<_>>().join(" "),
             )
         }
         (x, y) => (reason::show(x), reason::show(y)),
@@ -1730,45 +1730,153 @@ pub fn item_marks(e: &WorldEval, outline: &Outline, item: u64) -> Vec<(bool, Str
         .iter()
         .flat_map(ConstraintEval::findings)
         .collect();
-    let marks = findings
+    let parts = findings
         .iter()
         .flat_map(|f| finding_marks(f, outline, item));
-    marks.collect()
+    merged(parts.collect())
 }
 
-/// A finding's marks under an item: its first fact there against each
+/// A mark in parts: whether it is loud, what it says of the item's own
+/// fact, and the other facts it is against, each with where it is.
+struct Mark {
+    loud: bool,
+    head: String,
+    rest: Vec<String>,
+}
+
+impl Mark {
+    /// Whether it says the same of the item as another: the same kind,
+    /// the same rule, the same fact here.
+    fn says_same(&self, other: &Mark) -> bool {
+        self.loud == other.loud && self.head == other.head
+    }
+
+    /// Name more other facts, each once.
+    fn add(&mut self, rest: Vec<String>) {
+        for r in rest {
+            if !self.rest.contains(&r) {
+                self.rest.push(r);
+            }
+        }
+    }
+
+    /// Its text: what it says of the item, then the other facts.
+    fn text(self) -> (bool, String) {
+        match self.rest.is_empty() {
+            true => (self.loud, self.head),
+            false => (
+                self.loud,
+                format!("{}; {}", self.head, self.rest.join("; ")),
+            ),
+        }
+    }
+}
+
+/// Marks that say the same of the item, one each: the facts they are
+/// against, in order, each once. So a rule the item breaks with others
+/// is one mark, not one for each other fact or each solution.
+fn merged(marks: Vec<Mark>) -> Vec<(bool, String)> {
+    let mut out: Vec<Mark> = Vec::new();
+    for m in marks {
+        match out.iter_mut().find(|o| o.says_same(&m)) {
+            Some(o) => o.add(m.rest),
+            None => out.push(m),
+        }
+    }
+    out.into_iter().map(Mark::text).collect()
+}
+
+/// A finding's mark under an item: its first fact there against each
 /// other fact, or, if it rests on the item's facts alone, those facts.
-fn finding_marks(f: &Finding, outline: &Outline, item: u64) -> Vec<(bool, String)> {
-    if let Some(mark) = alone_mark(f, outline, item) {
-        return vec![mark];
-    }
-    let against = against_item(f, outline, item);
-    against.iter().map(|a| a.mark(outline)).collect()
+fn finding_marks(f: &Finding, outline: &Outline, item: u64) -> Option<Mark> {
+    let m = Marking { f, outline, item };
+    m.alone().or_else(|| m.against())
 }
 
-/// The mark of a finding that rests on an item's facts alone: those facts.
-fn alone_mark(f: &Finding, outline: &Outline, item: u64) -> Option<(bool, String)> {
-    let (mine, others) = split_by_item(f.sol, outline, item);
-    if mine.is_empty() || !others.is_empty() {
-        return None;
+/// A finding, marked under an item of an outline.
+struct Marking<'a> {
+    f: &'a Finding<'a>,
+    outline: &'a Outline,
+    item: u64,
+}
+
+impl<'a> Marking<'a> {
+    /// The finding's facts, each with its provenance: the item's, and
+    /// the rest.
+    fn split(&self) -> (Vec<Sourced<'a>>, Vec<Sourced<'a>>) {
+        split_by_item(self.f.sol, self.outline, self.item)
     }
-    let facts: Vec<String> = mine.iter().map(|(_, t)| reason::show(inner(t))).collect();
-    Some(f.mark(&format!("{} here", facts.join(", "))))
+
+    /// The mark of a finding that rests on the item's facts alone: those
+    /// facts.
+    fn alone(&self) -> Option<Mark> {
+        let (mine, others) = self.split();
+        if mine.is_empty() || !others.is_empty() {
+            return None;
+        }
+        let facts: Vec<String> = mine.iter().map(|(_, t)| reason::show(inner(t))).collect();
+        Some(self.mark(&facts.join("; "), vec![]))
+    }
+
+    /// The mark of a finding that rests on the item's facts and others:
+    /// its first fact here, against each other fact.
+    fn against(&self) -> Option<Mark> {
+        let against = against_item(self.f, self.outline, self.item);
+        let here = against.first()?.here_text();
+        let theres = against.iter().map(|a| a.there_text(self.outline));
+        Some(self.mark(&here, theres.collect()))
+    }
+
+    /// A mark: what the finding is, by the rule it is of, then what it
+    /// says of the item's fact, and the others.
+    fn mark(&self, here: &str, rest: Vec<String>) -> Mark {
+        let head = format!("{}: {here} here", finding_kind(self.f, self.outline));
+        Mark {
+            loud: self.f.violation,
+            head,
+            rest,
+        }
+    }
+}
+
+/// What a finding is, by the rule it is of.
+fn finding_kind(f: &Finding, outline: &Outline) -> String {
+    let rule = rule_named(outline, f.name);
+    match f.violation {
+        true => format!("breaks {rule}"),
+        false => format!("sources disagree under {rule}"),
+    }
+}
+
+/// A rule, by the address of the item that states it when one does (its
+/// text is the rule's name), else by its name: short, as each mark under
+/// each item names it.
+fn rule_named(outline: &Outline, name: &str) -> String {
+    let states = |i: &u64| outline.text(*i).trim_end_matches('.') == name;
+    let item = outline.in_order().into_iter().find(states);
+    item.map_or_else(
+        || format!("“{name}”"),
+        |i| format!("rule {}", outline.number(i)),
+    )
 }
 
 /// A fact of an item against another fact of a finding that rests on both.
 struct Against<'a> {
-    finding: &'a Finding<'a>,
     here: &'a Term,
     there: Sourced<'a>,
 }
 
 impl Against<'_> {
-    /// The mark: how the facts differ, and where the other comes from.
-    fn mark(&self, outline: &Outline) -> (bool, String) {
-        let (a, b) = difference(self.here, self.there.1);
-        let from = where_from(outline, self.there.0);
-        self.finding.mark(&format!("{a} here, {b} in {from}"))
+    /// What the item's fact holds that the other's does not.
+    fn here_text(&self) -> String {
+        difference(self.here, self.there.1).0
+    }
+
+    /// What the other fact holds that the item's does not, and where it
+    /// comes from.
+    fn there_text(&self, outline: &Outline) -> String {
+        let b = difference(self.here, self.there.1).1;
+        format!("{b} in {}", where_from(outline, self.there.0))
     }
 }
 
@@ -1779,11 +1887,7 @@ fn against_item<'a>(f: &'a Finding, outline: &Outline, item: u64) -> Vec<Against
     let Some((_, here)) = mine.first() else {
         return vec![];
     };
-    let against = |there| Against {
-        finding: f,
-        here,
-        there,
-    };
+    let against = |there| Against { here, there };
     others.into_iter().map(against).collect()
 }
 

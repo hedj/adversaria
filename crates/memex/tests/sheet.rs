@@ -217,7 +217,7 @@ fn a_rule_is_written_once_and_used_everywhere() {
     );
     command(&mut app, "set cell(food, 900)");
     shows(&app, "Spent: 2100 [derived]");
-    shows(&app, "within income, violation");
+    shows(&app, "breaks “within income”");
     each_bad_rule_is_refused(&mut app);
 }
 
@@ -294,7 +294,7 @@ fn a_violation_through_a_rule_rests_on_the_facts_under_it() {
     for f in ["cell(rent, 1200)", "cell(food, 900)", "cell(income, 2000)"] {
         assert!(facts.iter().any(|(_, x)| x == f), "{f} in {facts:?}");
     }
-    shows(&app, "within income, violation");
+    shows(&app, "breaks “within income”");
 }
 
 /// The facts the one violation of a constraint rests on: each entry, and

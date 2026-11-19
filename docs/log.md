@@ -1457,6 +1457,11 @@ where the review held.
    or drawn as shapes. The review rejected the first replacement, ▲, as
    one of the outline's fold triangles (▼ ▶) and as "rising" beside a
    number; the mark is ‼, and the prompt "Enter: yes · Esc: no".
+2. One rule broken by three numbers drew six two-line marks. Marks are
+   now one per item per rule, listing the other facts; on review, also
+   semicolons between facts, a space within one, and the rule cited by
+   its address ("breaks rule 2.7: income 2000 here; rent 1200 in 2.2;
+   food 900 in 2.3"): twelve rows became three.
 
 ## 4. Where it stands
 

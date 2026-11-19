@@ -122,7 +122,7 @@ fn a_planted_wrong_date_is_reported_against_wikidata() {
     accept(&mut app, "date is Wikidata's P606");
     let s = screen(&app);
     assert_shows(&s, "1 disagreement between sources");
-    let mark = "‼ one date per event, sources disagree: 1989 here, 1988 in Wikidata";
+    let mark = "‼ sources disagree under “one date per event”: 1989 here; 1988 in Wikidata";
     assert_shows(&s, mark);
 }
 

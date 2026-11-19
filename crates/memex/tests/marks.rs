@@ -30,10 +30,26 @@ fn first_marks(room: &Room) -> Vec<String> {
 #[test]
 fn an_items_marks_name_each_other_fact_of_a_finding_once() {
     let room = three_cells("marks-each");
-    let marks = [
-        "sum, violation: a, 1 here, b, 2 in 2",
-        "sum, violation: a, 1 here, c, 9 in 3",
-    ];
+    // One mark for the rule the item breaks, naming each other fact,
+    // not one mark for each.
+    let marks = ["breaks “sum”: a 1 here; b 2 in 2; c 9 in 3"];
+    assert_eq!(first_marks(&room), marks);
+}
+
+#[test]
+fn findings_of_one_rule_on_an_item_are_one_mark() {
+    // Catches a mark for each solution of a rule: three dates for one
+    // event are two disagreements on the first, shown as one mark.
+    let mut room = Room::new("marks-merged");
+    room.items(&["first"]);
+    room.command("fact date(e, 1988)");
+    for (name, year) in [("talk", 1989), ("book", 1990)] {
+        room.items(&["", name]);
+        room.command(&format!("claim date(e, {year}) from {name}"));
+    }
+    room.command("constraint one date: false :- date(E, A), date(E, B), A \\== B.");
+    room.app.evaluate().unwrap();
+    let marks = ["sources disagree under “one date”: 1988 here; 1989 in 2; 1990 in 3"];
     assert_eq!(first_marks(&room), marks);
 }
 
@@ -44,5 +60,5 @@ fn an_item_stating_two_facts_of_a_finding_is_marked_by_its_first() {
     room.command("fact cell(b, 5)");
     room.app.evaluate().unwrap();
     let marks = first_marks(&room);
-    assert!(marks.iter().all(|m| m.contains(": a, 1 here")), "{marks:?}");
+    assert!(marks.iter().all(|m| m.contains(": a 1 here")), "{marks:?}");
 }
