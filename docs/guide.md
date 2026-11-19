@@ -166,6 +166,12 @@ Within a quasimode:
   `?` again hides the list; what you typed stays.
 - **Repeat a Leap:** a second tap of a latched, empty Leap repeats the last
   pattern.
+- **Leap or make:** in Leap, Enter goes to the match, as release does; if
+  no item holds the pattern, Enter makes a new item holding it, after the
+  cursor's item, and puts the cursor at its end. Searching for a note and
+  making one are one gesture. Releasing on no match makes nothing, so a
+  mistyped pattern is only reported. The new item is read at the pause,
+  as typed text is.
 - **Focus lost while a key is held** (as by Alt+Tab): the release goes to
   another window, so the memex does not wait for it. A quasimode held with
   nothing typed is left without acting; Scope puts back the target it

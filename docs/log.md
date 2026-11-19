@@ -1196,6 +1196,16 @@ singular, for questions only. Answers were written as Prolog writes them (entiti
 case); since a later change the same day, each is shown by its label
 where it has one, sorted by its text.
 
+### Leap or make (19 November 2026)
+
+From the author's choice of the suggestions drawn from personal
+knowledge management tools (nvALT's one box for search and creation):
+in Leap, Enter with no match makes a new item holding the pattern,
+after the cursor's item, and its text waits to be read. Releasing on no
+match makes nothing, as before. Checked: four tests in tests/keys.rs;
+breaks, each failing a test: Enter ending Leap as before, the new item
+not read, the cursor left behind.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

@@ -133,14 +133,19 @@ impl App {
     }
 
     /// A new item after one, with text and spans; its sequence number.
-    fn create_after(&mut self, after: u64, add: &str, spans: Value) -> Result<u64, String> {
+    pub(crate) fn create_after(
+        &mut self,
+        after: u64,
+        add: &str,
+        spans: Value,
+    ) -> Result<u64, String> {
         let under = self.notebook.outline.parent_or_top(after);
         let body =
             json!({"op": "create", "under": under, "after": after, "add": add, "spans": spans});
         Ok(self.write_here("edit", body)?.seq)
     }
 
-    fn go_to(&mut self, id: u64) {
+    pub(crate) fn go_to(&mut self, id: u64) {
         self.set_cursor(id);
         self.write_view("move", json!({}));
     }

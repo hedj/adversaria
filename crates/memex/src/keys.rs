@@ -262,6 +262,9 @@ impl App {
                 Quasi::Command => a.input = complete_command(&a.input),
                 _ => a.apply_repair(),
             },
+            Key::Enter if matches!(a.q(), Quasi::LeapForward | Quasi::LeapBack) => {
+                return self.leap_or_create(a);
+            }
             Key::Enter => return self.finish(a),
             _ => {}
         }
@@ -287,6 +290,30 @@ impl App {
             }
             false => format!("no reading of “{text}”: a world of that name, with nothing supposed"),
         }
+    }
+
+    /// Enter in Leap: leap, or, if nothing holds the pattern, make a new
+    /// item holding it after the cursor's, as notational velocity does:
+    /// searching and making a note are one gesture. Its text waits to be
+    /// read, as typed text does. Releasing Leap on no match only says so,
+    /// so a mistyped pattern makes nothing.
+    fn leap_or_create(&mut self, a: Active) -> Mode {
+        let pattern = a.input.trim().to_string();
+        let found = self.leap_matches(&pattern, a.q() == Quasi::LeapForward);
+        if pattern.is_empty() || !found.is_empty() {
+            return self.finish(a);
+        }
+        self.flush_text();
+        let spans = json!([[0, 0, pattern.chars().count()]]);
+        match self.create_after(self.cursor(), &pattern, spans) {
+            Ok(item) => {
+                self.go_to(item);
+                self.will_read(item, item);
+                self.session.message = format!("a new item: “{pattern}”");
+            }
+            Err(why) => self.session.message = why,
+        }
+        Mode::Normal
     }
 
     /// End a quasimode: do what it was for.

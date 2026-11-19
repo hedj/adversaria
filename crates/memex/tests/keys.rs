@@ -106,3 +106,62 @@ fn the_top_bar_puts_a_right_side_that_does_not_fit_on_a_row_of_its_own() {
         "the right has its own row: {rows:#?}"
     );
 }
+
+#[test]
+fn enter_in_leap_with_no_match_makes_an_item_holding_the_pattern() {
+    // Catches Enter that only says nothing matched, an item made in the
+    // wrong place or without the pattern, or the cursor left behind.
+    let mut r = Room::new("leap-create");
+    r.items(&["Alpha", "Beta"]);
+    let alpha = r.outline().in_order()[0];
+    r.put_cursor(alpha);
+    r.hold(Quasi::LeapForward, "Gamma ray");
+    r.tap(&[Key::Enter]);
+    r.release(Quasi::LeapForward);
+    r.app.flush();
+    let order: Vec<String> = r.outline().in_order().iter().map(|i| r.text(*i)).collect();
+    assert_eq!(order, ["Alpha", "Gamma ray", "Beta"]);
+    assert_eq!(r.here(), "Gamma ray");
+    assert!(matches!(r.app.session.mode, memex::app::Mode::Normal));
+}
+
+#[test]
+fn enter_in_leap_with_a_match_leaps_and_makes_nothing() {
+    let mut r = Room::new("leap-enter-found");
+    r.items(&["Alpha", "Beta"]);
+    let alpha = r.outline().in_order()[0];
+    r.put_cursor(alpha);
+    r.hold(Quasi::LeapForward, "bet");
+    r.tap(&[Key::Enter]);
+    r.release(Quasi::LeapForward);
+    assert_eq!(r.outline().in_order().len(), 2);
+    assert_eq!(r.here(), "Beta");
+}
+
+#[test]
+fn releasing_leap_with_no_match_makes_nothing() {
+    // Catches a mistyped pattern turned into an item.
+    let mut r = Room::new("leap-release-none");
+    r.items(&["Alpha"]);
+    r.hold(Quasi::LeapForward, "Gamma");
+    r.release(Quasi::LeapForward);
+    assert_eq!(r.outline().in_order().len(), 1);
+    assert!(r.app.session.message.contains("no item holds"));
+}
+
+#[test]
+fn an_item_made_from_leap_is_read_like_typed_text() {
+    // Catches the new item's text never read: it was not typed, so only
+    // Leap can say it waits to be read.
+    let mut r = Room::new("leap-create-read");
+    r.items(&["Alpha"]);
+    r.hold(Quasi::LeapForward, "The income is 2000.");
+    r.tap(&[Key::Enter]);
+    r.release(Quasi::LeapForward);
+    r.app.idle();
+    assert!(
+        r.facts().contains(&"cell(income, 2000)".to_string()),
+        "{:?}",
+        r.facts()
+    );
+}
