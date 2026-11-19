@@ -151,6 +151,14 @@ pub const COMMANDS: &[Command] = &[
         brief: "go to the end of the nth link",
     },
     Command {
+        name: "go",
+        run: App::cmd_go,
+        target: false,
+        slots: &[("text", Slot::Text)],
+        help: "go to the item an address names, else to the next that holds the text",
+        brief: "go to an address or a text",
+    },
+    Command {
         name: "help",
         run: App::cmd_help,
         target: false,

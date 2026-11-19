@@ -146,6 +146,24 @@ impl App {
         Ok(self.write_here("edit", body)?.seq)
     }
 
+    /// Go to the item words address, else to the next item that holds
+    /// them, as Leap does; a plumbed text arrives here (crate::plumb).
+    pub(crate) fn cmd_go(&mut self, words: &[&str], _: u64) -> Result<String, String> {
+        let text = words.join(" ");
+        if let Some(id) = self.resolve(&text) {
+            self.unfold_to(id);
+            self.go_to(id);
+            return Ok(String::new());
+        }
+        let found = self.leap_matches(&text, true).first().copied();
+        let id = found.ok_or(format!("no item is or holds “{text}”"))?;
+        self.unfold_to(id);
+        self.set_cursor(id);
+        let leap = json!({"pattern": text, "forward": true, "found": found});
+        self.write_view("leap", leap);
+        Ok(String::new())
+    }
+
     pub(crate) fn go_to(&mut self, id: u64) {
         self.set_cursor(id);
         self.write_view("move", json!({}));

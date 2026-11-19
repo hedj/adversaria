@@ -294,6 +294,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | `transclude` | `transclude from ADDRESS` | makes a new item after the target that shows ADDRESS's text in place |
 | `link` | `link [FROM] to TO [as TYPE]` | links two items; FROM defaults to the target, TYPE to `link`. `cites`, `supports` and `opposes` read well in the links pane |
 | `name` | `name WORD` | names the target, so WORD addresses it; the name `title` also heads the outline |
+| `go` | `go TEXT` | goes to the item TEXT addresses, else to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3) |
 | `follow` | `follow [N]` | goes to the other end of the target's Nth link (default 1) |
 | `fold` | `fold` | hides the target's branch |
 | `unfold` | `unfold` | shows the target's branch |
