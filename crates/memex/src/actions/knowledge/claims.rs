@@ -180,8 +180,18 @@ impl App {
             ("constraint", Term::Compound(_, a)) if a.len() == 3 => self.adopt_constraint(a, mark),
             ("rule", Term::Compound(_, a)) if a.len() == 2 => self.adopt_rule(a, mark),
             ("reference", Term::Compound(_, a)) if a.len() == 2 => self.adopt_reference(a, mark),
+            ("mention", Term::Compound(_, a)) if a.len() == 4 => self.adopt_mention(a, mark),
             _ => self.adopt_facts(&s.facts, mark),
         }
+    }
+
+    /// A suggested link between an item whose text names another and that
+    /// item: a link, which records the suggestion it adopts.
+    fn adopt_mention(&mut self, a: &[Term], mark: Value) -> Result<(), String> {
+        let (Term::Int(from), Term::Int(to)) = (&a[0], &a[1]) else {
+            return Err("not adopted: the suggestion names no items".into());
+        };
+        self.write_suggested_link(*from as u64, *to as u64, mark)
     }
 
     /// A suggested constraint, its name, variables and body, once it fires

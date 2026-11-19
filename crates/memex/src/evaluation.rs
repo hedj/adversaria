@@ -72,9 +72,12 @@ impl App {
         Ok(())
     }
 
-    /// The current world's engine's suggestions, if it has facts.
+    /// The current world's engine's suggestions, if it has facts or
+    /// items: an item's text may mention another's.
     fn engine_suggestions(&mut self) -> Result<Vec<Suggestion>, String> {
-        if !self.reason.has_facts() {
+        let items = !self.notebook.outline.top.is_empty();
+        let asked = self.reason.has_facts() || (items && self.reason.started());
+        if !asked {
             return Ok(vec![]);
         }
         let engine = self.reason.engine(0)?;

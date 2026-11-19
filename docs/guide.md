@@ -637,7 +637,11 @@ The memex suggests these and more, without any language model:
   against a planted violation;
 - rules found in your beliefs, such as `Q(X, Y) :- P(X, Y)`, with their
   exceptions;
-- references, chosen only among works already in the store.
+- references, chosen only among works already in the store;
+- links for unlinked mentions: an item whose text names another item's
+  text, as whole words in any case, and does not link to it. Only short
+  texts are taken as names (3 to 60 characters, six words at most, not
+  ending in `.`, `?` or `!`). Accepting it writes the link.
 
 `pane suggestions` shows them, at most five, ranked by evidence, each with
 why it was offered. The pane never takes the keyboard: `accept N` adopts

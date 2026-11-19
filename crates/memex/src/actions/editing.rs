@@ -176,6 +176,19 @@ impl App {
         self.write_here("link", body).map(|_| ())
     }
 
+    /// A link a suggestion proposed, recording the suggestion it adopts.
+    pub(crate) fn write_suggested_link(
+        &mut self,
+        from: u64,
+        to: u64,
+        mark: Value,
+    ) -> Result<(), String> {
+        let fact = link_fact("link", from, to)?;
+        let body =
+            json!({"from": from, "to": to, "type": "link", "facts": [fact], "suggestion": mark});
+        self.write_here("link", body).map(|_| ())
+    }
+
     fn write_link(&mut self, from: u64, to: u64, kind: &str) -> Result<String, String> {
         let fact = link_fact(kind, from, to)?;
         self.write_here(

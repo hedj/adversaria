@@ -20,8 +20,11 @@ pub struct World {
 impl World {
     /// What reasoning finds in the world, in the engine in `slot`, which is
     /// started only if the world has facts.
+    /// A world with neither facts nor items is not read: there is nothing
+    /// to reason over. One with items alone is: views, questions and
+    /// suggestions read the outline's facts.
     pub fn evaluate(self, slot: &mut Option<Engine>) -> Result<WorldEval, String> {
-        if self.facts.is_empty() {
+        if self.facts.is_empty() && self.outline.top.is_empty() {
             return Ok(self.unread());
         }
         self.read_in(slot)

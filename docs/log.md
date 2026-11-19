@@ -1234,6 +1234,28 @@ change needs it). Checked: a gallery test in tests/views.rs draws the
 graph (Alpha to Beta, not the unlinked Gamma) and reads the type back
 through derive; with no link facts it fails.
 
+### Unlinked mentions as suggestions (19 November 2026)
+
+From the same choice (Obsidian's unlinked mentions): an item whose text
+names another item's short text, as whole words in any case, and does
+not link to it, is offered a link, as a suggestion with its evidence.
+Accepting it writes a link that carries "suggestion", which the
+measures already count as an adoption. Suggestions are now grouped in
+dataflow.pl by the source of their evidence: Wikidata, beliefs, outline.
+
+A world with items but no facts of its own was not read at all; it is
+now, as mentions, views of item_text and questions need it. Measured on
+10,000 prose items (release build): first evaluation 2.12 s, later
+0.137 to 0.139 s; with the mention clause off, 2.13 s, then 0.097 to
+0.104 s. So mentions add about 35 to 40 ms per evaluation at that size,
+and a notebook of prose alone now pays what one with a single fact did.
+
+Checked: four tests in tests/mentions.rs. Breaks, each failing a test:
+linked items offered; no word edges (unseen until a title's last word
+was tried: "energia launch" in "energia launches"); sentences taken for
+titles; a link that records no suggestion; a world of items alone not
+read; outline suggestions not asked.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

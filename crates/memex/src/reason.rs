@@ -250,8 +250,8 @@ impl WorldEval {
 /// adds, its evidence, and a score by which suggestions are ranked.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Suggestion {
-    /// link, mapping, constraint(Name, Vars, Body), rule(Head, Body) or
-    /// reference(Entity, Work).
+    /// link, mapping, constraint(Name, Vars, Body), rule(Head, Body),
+    /// reference(Entity, Work) or mention(From, To, Excerpt, Title).
     pub kind: Term,
     pub facts: Vec<Term>,
     pub evidence: String,
@@ -308,6 +308,9 @@ impl Suggestion {
             ("mapping", _) => format!("{} is Wikidata's {}", arg(&fact, 0), arg(&fact, 1)),
             ("constraint", Term::Compound(_, x)) if x.len() == 3 => constraint_words(&x[0], &x[2]),
             ("rule", kind) => format!("rule {} :- {}", arg(kind, 0), arg(kind, 1)),
+            ("mention", Term::Compound(_, x)) if x.len() == 4 => {
+                format!("link “{}” to “{}”", plain(&x[2]), plain(&x[3]))
+            }
             ("reference", kind) => {
                 format!(
                     "cite {} for the claims about {}",
@@ -317,6 +320,14 @@ impl Suggestion {
             }
             (_, kind) => show(kind),
         }
+    }
+}
+
+/// A string's text, or any other term as Prolog writes it.
+fn plain(t: &Term) -> String {
+    match t {
+        Term::Str(s) => s.clone(),
+        other => show(other),
     }
 }
 

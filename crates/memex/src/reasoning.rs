@@ -108,6 +108,11 @@ impl Reasoning {
     }
 
     /// Whether the current world has an engine and facts.
+    /// Whether the current world's engine is running.
+    pub(crate) fn started(&self) -> bool {
+        self.engines[0].is_some()
+    }
+
     pub(crate) fn has_facts(&self) -> bool {
         let facts = self.eval[0].as_ref().is_some_and(|e| !e.facts.is_empty());
         self.engines[0].is_some() && facts
