@@ -172,6 +172,8 @@ fn in_tutorial(s: &str) {
 
 #[test]
 fn the_tutorial_works_as_written() {
+    // The tutorial's paths are from the repository, where `make run` starts.
+    std::env::set_current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).unwrap();
     let dir = temp("all");
     let mut app = App::open(&dir).unwrap();
     app.set_durable(false);
@@ -183,11 +185,10 @@ fn the_tutorial_works_as_written() {
     t.look("start");
     t.shows("(empty: type to write the first item)");
 
-    part_one(&mut t);
-
-    // Part C, then part D, in the same session.
-    part_two(&mut t);
-    part_three(&mut t);
+    part_a(&mut t);
+    part_b(&mut t);
+    part_c(&mut t);
+    part_d(&mut t);
 
     // Step 16: leave. The journal, opened again, replays to the same budget.
     t.key(Key::F(10));
@@ -197,102 +198,145 @@ fn the_tutorial_works_as_written() {
     app.set_durable(false);
     app.evaluate().unwrap();
     let t = T { app, dump: t.dump };
-    t.shows("Left over: 300 [derived]");
+    t.shows("→ 300");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// Steps 2 to 8: an outline, facts read from what is written, a derived
-/// sentence, a claim and a constraint, Leap, interrogation and adoption,
-/// and a supposition.
-fn part_one(t: &mut T) {
-    // Step 2: an outline.
+/// Steps 2 to 5: a fact beside prose, a claim and the rule that catches
+/// it, the claim questioned, adopted and taken back, and supposed.
+fn part_a(t: &mut T) {
+    a_fact_and_prose(t);
+    a_claim_and_a_rule(t);
+    the_claim_questioned(t);
+    the_claim_supposed(t);
+}
+
+/// Step 2: a fact the memex reads, beside prose it keeps as written.
+fn a_fact_and_prose(t: &mut T) {
     t.typ("The programme");
     t.tap(Key::Enter);
-    t.typ("Buran flew once, unmanned, on 15 November 1988.");
     t.tap(Key::Tab);
-    t.pause();
-    t.look("outline");
-    t.shows("▼ 1. The programme");
-    t.shows("  • Buran flew once, unmanned, on 15 November 1988.");
-    t.shows("prose: not ACE, it stops at Buran <> flew once, unmanned, on 15 November 1988.");
-
-    // Step 3: facts, written so that the memex reads them.
-    t.tap(Key::Enter);
     t.typ("The date of Buran-flight is 1988. The label of Buran-flight is \"Buran's flight\".");
     t.tap(Key::Enter);
-    t.typ("The date of Energia-launch is 1987. The label of Energia-launch is \"Energia's first launch\".");
+    t.typ("Buran flew once, unmanned, on 15 November 1988.");
     t.pause();
-    t.look("facts");
+    t.look("fact and prose");
+    t.shows("▼ 1. The programme");
     t.read("The date of Buran-flight is 1988.");
-    t.read("The date of Energia-launch is 1987.");
-    t.lacks("prose: not ACE");
+    t.shows("prose: not ACE, it stops at Buran <> flew once, unmanned, on 15 November 1988.");
+    t.tap(Key::Up);
     t.shows("READ AS");
-    t.shows("fact  date(energia_launch, 1987)");
-    t.shows("fact  label(energia_launch, \"Energia's first launch\")");
+    t.shows("fact  date(buran_flight, 1988)");
+    t.shows("fact  label(buran_flight, \"Buran's flight\")");
+    t.tap(Key::Down);
+}
 
-    // Step 4: a derived sentence.
-    t.tap(Key::Enter);
-    t.typ("gap");
-    t.command("derive The flight came {N:years} after Energia's first launch. where date(buran_flight, B), date(energia_launch, E), N is B - E");
-    t.look("derived");
-    t.shows("The flight came a year after Energia's first launch. [derived]");
-    t.command("query date(E, Y)");
-    t.says("2 answers: E = buran_flight, Y = 1988 · E = energia_launch, Y = 1987");
-
-    // Step 5: a claim and a constraint.
+/// Step 3: a claim from a source, and the rule that catches it.
+fn a_claim_and_a_rule(t: &mut T) {
     t.tap(Key::Enter);
     t.typ("Talk-notes says that the date of Buran-flight is 1989.");
     t.tap(Key::Enter);
     t.typ("Nothing has more than 1 date.");
     t.pause();
-    t.look("constraint");
     t.says("constraint Nothing has more than 1 date kept: it fires on a planted violation");
     t.shows("1 disagreement between sources");
-    t.shows("⚑ Nothing has more than 1 date, sources disagree: 1988 here, 1989 in 1.5");
+    t.shows("⚑ Nothing has more than 1 date, sources disagree: 1988 here, 1989 in 1.3");
     t.lacks("constraint violation");
+}
 
-    // Step 6: Leap, from the end of the outline, wrapping to the top.
-    t.hold(Quasi::LeapForward, "date of buran");
-    t.look("leap");
-    assert!(t.here().starts_with("The date of Buran-flight"));
-    t.shows("CONSTRAINT · NOTHING HAS MORE THAN 1 DATE");
-
-    // Step 7: interrogate, adopt, unadopt.
-    t.hold(Quasi::LeapForward, "talk");
+/// Step 4: the claim questioned, adopted, and the adoption taken back.
+fn the_claim_questioned(t: &mut T) {
+    t.tap(Key::Up);
+    assert!(t.here().starts_with("Talk-notes"));
     t.key(Key::F(2));
-    t.look("interrogate");
     t.shows("INTERROGATE · WHAT IS CLAIMED HERE");
     t.shows("who claims the contrary");
     t.shows("adopting it would raise 1 violation of Nothing has more than 1 date");
     t.key(Key::F(3));
-    t.look("adopt");
     t.shows("1 constraint violation");
-    t.shows("⚑ Nothing has more than 1 date, violation: 1988 here, 1989 in 1.5");
+    t.shows("⚑ Nothing has more than 1 date, violation: 1988 here, 1989 in 1.3");
     t.key(Key::F(4));
-    t.look("unadopt");
     t.says("retracted");
     t.lacks("constraint violation");
-    t.shows("1 disagreement between sources");
-
-    // Step 8: suppose.
-    t.hold(Quasi::Suppose, "the flight was in 1989");
-    assert!(matches!(t.app.session.mode, Mode::ConfirmSuppose { .. }));
-    t.look("suppose?");
-    t.shows("Do you mean: Suppose that the date of Buran's flight is 1989.  ⏎ yes · Esc no");
-    t.key(Key::Enter);
-    t.look("supposed");
-    t.says("set aside in this world: 1.2");
-    t.shows("WORLD · SUPPOSE THE FLIGHT WAS IN 1989");
-    t.shows("The flight came two years after Energia's first launch.");
-    t.command("close");
-    t.look("closed");
-    t.says("it stays in the journal");
-    assert_eq!(t.app.reason.world(), "actual");
-    t.shows("The flight came a year after Energia's first launch.");
 }
 
-fn part_two(t: &mut T) {
-    // Step 9: boxes after the last item of part B, at the top level.
+/// Step 5: the claim supposed true, in a world beside the actual one.
+fn the_claim_supposed(t: &mut T) {
+    t.hold(Quasi::Suppose, "the flight was in 1989");
+    assert!(matches!(t.app.session.mode, Mode::ConfirmSuppose { .. }));
+    t.shows("Do you mean: Suppose that the date of Buran's flight is 1989.  ⏎ yes · Esc no");
+    t.key(Key::Enter);
+    t.says("set aside in this world: 1.1");
+    t.shows("WORLD · SUPPOSE THE FLIGHT WAS IN 1989");
+    t.shows("0 violations · 1.1 retracted here");
+    t.command("close");
+    t.says("it stays in the journal");
+    assert_eq!(t.app.reason.world(), "actual");
+}
+
+/// Steps 6 to 9: a draft imported, a co-author's revision taken in,
+/// Leap, and a quotation changed and caught.
+fn part_b(t: &mut T) {
+    a_draft_imported(t);
+    a_revision_taken_in(t);
+    t.hold(Quasi::LeapForward, "fully automatic");
+    t.look("leap");
+    assert!(t.here().starts_with("The chief designer wrote"));
+    a_quotation_checked(t);
+}
+
+/// Step 6: a document, imported as items.
+fn a_draft_imported(t: &mut T) {
+    t.command("import document docs/tutorial/draft/essay.md");
+    t.says("imported essay.md: 6 items; losses: none");
+    t.shows("▼ 2. How Buran’s flight software was reviewed");
+    t.shows("Two teams reviewed the flight software.");
+}
+
+/// Step 7: the co-author's version, its changes one by one; one is
+/// rejected, the other kept.
+fn a_revision_taken_in(t: &mut T) {
+    t.command("import document docs/tutorial/revised/essay.md");
+    t.look("revision");
+    t.shows("WORLD · REVISION OF ESSAY.MD");
+    t.shows("#53  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”");
+    t.shows("#54  added: “Each team wrote its findings in the DRAKON language.”");
+    t.command("retract 53");
+    t.shows("nothing depends on it · Enter retracts · Esc keeps it");
+    t.key(Key::Enter);
+    t.look("retracted");
+    t.command("commit");
+    t.look("committed");
+    assert_eq!(t.app.reason.world(), "actual");
+    t.shows("Two teams reviewed the flight software.");
+    t.shows("Each team wrote its findings in the DRAKON language.");
+}
+
+/// Step 9: a quotation changed, and the check that catches it.
+fn a_quotation_checked(t: &mut T) {
+    t.retype_end("fully automatic", "fully automatic.".len(), "automatic.");
+    t.command("check quote");
+    t.says("quote check: misquoted");
+    t.retype_end(
+        "landing was automatic",
+        "automatic.".len(),
+        "fully automatic.",
+    );
+    t.command("check quote");
+    t.says("quote check: quoted");
+}
+
+/// Steps 10 to 13: boxes and rules in sentences, a question, a rule
+/// between them, a change, and a what-if.
+fn part_c(t: &mut T) {
+    boxes_and_rules(t);
+    rules_between_the_boxes(t);
+    a_value_changed(t);
+    a_what_if(t);
+}
+
+/// Step 10: boxes, rules over them, and a question answered.
+fn boxes_and_rules(t: &mut T) {
     t.hold(Quasi::LeapForward, "nothing has");
     t.tap(Key::Enter);
     t.tap(Key::BackTab);
@@ -300,71 +344,88 @@ fn part_two(t: &mut T) {
     t.tap(Key::Enter);
     t.tap(Key::Tab);
     t.typ("The income is 2000.");
-    t.tap(Key::Enter);
-    t.typ("The rent is 1200.");
-    t.tap(Key::Enter);
-    t.typ("The food is 400.");
-    t.tap(Key::Enter);
-    t.typ("If the rent is X and the food is Y then the cost is X + Y.");
-    t.tap(Key::Enter);
-    t.typ("If the income is X and the cost is Y then the rest is X - Y.");
+    for line in [
+        "The rent is 1200.",
+        "The food is 400.",
+        "If the rent is X and the food is Y then the cost is X + Y.",
+        "If the income is X and the cost is Y then the rest is X - Y.",
+        "What is the rest?",
+    ] {
+        t.tap(Key::Enter);
+        t.typ(line);
+    }
     t.pause();
     t.look("boxes");
-    t.says("rule rest/1 kept");
     t.read("The food is 400.");
-    t.tap(Key::Enter);
-    t.typ("left");
-    t.command("derive Left over: {L} where rest(L)");
-    t.look("left over");
-    t.shows("Left over: 400 [derived]");
-    t.tap(Key::Enter);
-    t.typ("What is the rest?");
-    t.pause();
-    t.look("question");
     t.read("What is the rest?");
     t.shows("→ 400");
+}
 
-    // Step 10: constraints.
+/// Step 11: rules between the boxes, both in sentences.
+fn rules_between_the_boxes(t: &mut T) {
     t.tap(Key::Enter);
     t.typ("It is false that the cost is greater than the income.");
     t.pause();
-    t.look("within income");
     t.says("constraint It is false that the cost is greater than the income kept: it fires on a planted violation");
-    t.command("constraint one value per box: false :- cell(B, X), cell(B, Y), X \\= Y.");
-    t.says("constraint one value per box kept: it fires on a planted violation");
+    t.tap(Key::Enter);
+    t.typ("Nothing has more than 1 value.");
+    t.pause();
+    t.look("within income");
+    t.says("constraint Nothing has more than 1 value kept: it fires on a planted violation");
+}
 
-    // Step 11: change a value.
+/// Step 12: a value changed, and what follows from it.
+fn a_value_changed(t: &mut T) {
     t.retype_end("food is 4", 4, "900.");
     t.look("food 900");
-    t.shows("Left over: -100 [derived]");
+    t.shows("→ -100");
     t.shows("1 constraint violation");
     t.retype_end("food is 9", 4, "500.");
-    t.look("food 500");
-    t.shows("Left over: 300 [derived]");
+    t.shows("→ 300");
     t.lacks("constraint violation");
+}
 
-    // Step 12: what if.
+/// Step 13: what if the rent rose.
+fn a_what_if(t: &mut T) {
     t.hold(Quasi::Suppose, "rent is 1600");
     t.look("suppose rent?");
     t.shows("Do you mean: Suppose that the cell of rent is 1600.  ⏎ yes · Esc no");
     t.key(Key::Enter);
     t.look("supposed rent");
     t.says("set aside in this world: 2.2; left for you: 1 violation of It is false that the cost is greater than the income");
-    t.shows("Left over: -100");
+    t.shows("→ -100");
     t.command("close");
-    t.shows("Left over: 300 [derived]");
+    t.shows("→ 300");
 }
 
-fn part_three(t: &mut T) {
+/// Steps 14 and 15: a chart of the boxes, and text and a timeline
+/// computed from part A's dates.
+fn part_d(t: &mut T) {
     let chart = a_chart_with_a_limit(t);
     loud_while_over_income(t, chart);
-    the_boxes_as_a_grid(t);
+    a_sentence_computed(t);
     the_dates_as_a_timeline(t);
 }
 
-/// Step 13: a chart of the boxes, with a limit: its item.
+/// Step 15: a second date, a sentence computed from both, and a query.
+fn a_sentence_computed(t: &mut T) {
+    t.hold(Quasi::LeapForward, "buran flew once, unmanned");
+    t.tap(Key::Enter);
+    t.typ("The date of Energia-launch is 1987. The label of Energia-launch is \"Energia's first launch\".");
+    t.pause();
+    t.read("The date of Energia-launch is 1987.");
+    t.tap(Key::Enter);
+    t.typ("gap");
+    t.command("derive The flight came {N:years} after Energia's first launch. where date(buran_flight, B), date(energia_launch, E), N is B - E");
+    t.look("derived");
+    t.shows("The flight came a year after Energia's first launch. [derived]");
+    t.command("query date(E, Y)");
+    t.says("2 answers: E = buran_flight, Y = 1988 · E = energia_launch, Y = 1987");
+}
+
+/// Step 14: a chart of the boxes, with a limit: its item.
 fn a_chart_with_a_limit(t: &mut T) -> u64 {
-    t.hold(Quasi::LeapForward, "left over");
+    t.hold(Quasi::LeapForward, "what is the rest");
     t.tap(Key::Enter);
     t.tap(Key::BackTab);
     t.typ("Spending chart");
@@ -380,7 +441,7 @@ fn a_chart_with_a_limit(t: &mut T) -> u64 {
     chart
 }
 
-/// Step 13: food at 900 breaks "spending within income" with rent and
+/// Step 14: food at 900 breaks "spending within income" with rent and
 /// income, so the three bars are loud; back at 500, none is.
 fn loud_while_over_income(t: &mut T, chart: u64) {
     t.retype_end("food is 5", 4, "900.");
@@ -420,16 +481,6 @@ fn loud_columns(fig: &memex::view::Figure) -> Vec<usize> {
     (0..w)
         .filter(|x| fig.rows.iter().any(|r| r.get(*x) == loud))
         .collect()
-}
-
-/// Step 14: the same boxes as a grid.
-fn the_boxes_as_a_grid(t: &mut T) {
-    t.tap(Key::Enter);
-    t.typ("Budget table");
-    t.command("layer cell(x(value), y(C), text(V)) where cell(C, V)");
-    t.look("table");
-    t.shows("food   │   500");
-    t.shows("income │  2000");
 }
 
 /// Step 15: part A's dates as a timeline; the claimed date is not a

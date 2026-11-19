@@ -1401,6 +1401,22 @@ check, then two rents give 1 violation). With the new clause taken out,
 the memex test fails. The reading is new only for text read from now
 on: a journal keeps what each text was read as, so old readings stand.
 
+### The tutorial for a newcomer (19 November 2026)
+
+A review written as a newcomer (comfortable with computers, new to the
+memex and to Prolog) found that the tutorial taught how but not why:
+the first fact-like sentence was refused, Prolog and "quasimode" came
+before any payoff, and the strongest uses (a co-author's revision, a
+quotation check) were only in the guide. The tutorial is reordered: a
+claim caught by a rule within part A; a line on why before each step;
+part B new, with a draft and its revision (`docs/tutorial/`), Leap and
+`check quote`; part C entirely in sentences, with a question; `derive`
+and `query` moved to part D; sealing given a reason.
+
+Checked: the tutorial test performs every new step and checks every
+quoted screen text. Broken once (a change's entry number altered in the
+tutorial): it fails.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
