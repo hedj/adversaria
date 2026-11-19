@@ -1224,6 +1224,16 @@ Breaks, each failing a test: no retraction; prose recording no reading
 (undo then took back only the link); the brackets handed to the reader;
 no new item for a missing target; a text matched before a name.
 
+### Links as facts for views (19 November 2026)
+
+From the same choice (Obsidian's graph view): each link between two
+items is offered to goals as item_link(From, To, Type), beside
+item_text/2 and item_under/2, so a view can draw the graph of every link,
+and a suggestion can tell linked items from unlinked ones (the next
+change needs it). Checked: a gallery test in tests/views.rs draws the
+graph (Alpha to Beta, not the unlinked Gamma) and reads the type back
+through derive; with no link facts it fails.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

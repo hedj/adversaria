@@ -565,6 +565,45 @@ fn gallery_the_outline_itself_as_a_tree() {
     a_click_on_the_interview_box_goes_to_its_item(&mut app);
 }
 
+#[test]
+fn gallery_the_links_as_a_graph() {
+    // The links are offered to goals as item_link(From, To, Type).
+    // Catches a link left out, its type lost, or an item with no links
+    // drawn as though it had one.
+    let mut app = open("gallery-links");
+    typ(&mut app, "Alpha");
+    item(&mut app, "Beta");
+    item(&mut app, "Gamma");
+    item(&mut app, "Links");
+    command(&mut app, "link 1 to 2 as supports");
+    command(
+        &mut app,
+        "layer node(id(I), text(T)) where item_text(I, T), (item_link(I, _, _) ; item_link(_, I, _))",
+    );
+    command(
+        &mut app,
+        "layer edge(from(F), to(T), text(K)) where item_link(F, T, K)",
+    );
+    let f = figure(&app, "Links").join("\n");
+    assert!(f.contains("Alpha") && f.contains("Beta"), "{f}");
+    assert!(!f.contains("Gamma"), "Gamma has no link: {f}");
+    item(&mut app, "kind");
+    command(&mut app, "derive The link is {K}. where item_link(_, _, K)");
+    assert_eq!(last_derived(&mut app), "The link is supports.");
+}
+
+/// The derived text of the last item, once evaluated.
+fn last_derived(app: &mut Room) -> String {
+    app.evaluate().unwrap();
+    let last = app.notebook.outline.in_order().into_iter().last().unwrap();
+    let d = &app.notebook.outline.derived[&last];
+    app.reason.eval[0]
+        .as_ref()
+        .unwrap()
+        .derived_text(last, d)
+        .unwrap()
+}
+
 /// Plan above Research above Read papers; Interview beside Read papers,
 /// and Write beside Research.
 fn each_child_is_drawn_under_its_parent(app: &App) {

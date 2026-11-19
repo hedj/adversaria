@@ -579,8 +579,10 @@ layer node(id(S), text(T), shape(decision)) where decision(S, T)
 layer edge(from(A), to(B), text(L)) where next(A, B, L)
 ```
 
-Your own outline as a tree. The outline is offered to goals as two kinds
-of fact, `item_text(Item, Text)` and `item_under(Item, Parent)`:
+Your own outline as a tree. The outline is offered to goals as three kinds
+of fact, `item_text(Item, Text)`, `item_under(Item, Parent)` and
+`item_link(From, To, Type)`, one for each link, of any type, typed in text
+or made by `link`:
 
 ```
 layer node(id(I), text(T)) where item_text(I, T)
@@ -590,7 +592,12 @@ layer edge(from(P), to(C)) where item_under(C, P)
 Links between items work the same way. `link 2 to 5 as supports` states
 `supports(From, To)` between the two items, so with the node layer above,
 `layer edge(from(A), to(B), text(supports)) where supports(A, B)` draws
-an argument map.
+an argument map. Every link at once, the graph of your notes:
+
+```
+layer node(id(I), text(T)) where item_text(I, T), (item_link(I, _, _) ; item_link(_, I, _))
+layer edge(from(F), to(T)) where item_link(F, T, _)
+```
 
 #### Refused
 

@@ -137,12 +137,30 @@ pub fn started(slot: &mut Option<Engine>) -> Result<&mut Engine, String> {
 }
 
 /// What an outline states of its items, as facts: item_text(Id, Text) for
-/// each, and item_under(Id, Parent) for each that is not top-level.
+/// each, item_under(Id, Parent) for each that is not top-level, and
+/// item_link(From, To, Type) for each link between two of its items.
 pub fn outline_facts(o: &Outline) -> Vec<(u64, Term)> {
-    o.in_order()
-        .into_iter()
-        .flat_map(|id| item_facts(o, id))
-        .collect()
+    let items = o.in_order().into_iter().flat_map(|id| item_facts(o, id));
+    items.chain(link_facts(o)).collect()
+}
+
+/// item_link(From, To, Type) for each link whose ends are both items,
+/// each by the item it is from.
+fn link_facts(o: &Outline) -> impl Iterator<Item = (u64, Term)> + '_ {
+    let live = o
+        .links
+        .iter()
+        .filter(|l| o.contains(l.from) && o.contains(l.to));
+    live.map(|l| (l.from, item_link(l.from, l.to, &l.kind)))
+}
+
+fn item_link(from: u64, to: u64, kind: &str) -> Term {
+    let args = vec![
+        Term::Int(from as i64),
+        Term::Int(to as i64),
+        Term::Atom(kind.into()),
+    ];
+    Term::Compound("item_link".into(), args)
 }
 
 fn item_facts(o: &Outline, id: u64) -> Vec<(u64, Term)> {
