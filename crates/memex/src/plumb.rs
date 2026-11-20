@@ -95,18 +95,18 @@ run = "fact $0"
 
 [[plumb]]
 name = "read $0 as ACE"
-match = '\p{Lu}.*[.?!]'
+match = '[^\s()]+(?:\s+[^\s()]+)+'
 run = "ace $0"
 
 [[plumb]]
 name = "link here to $0"
-match = '\S.{0,59}'
+match = '\S.*'
 if = "item"
 run = "link to $0"
 
 [[plumb]]
 name = "find $0"
-match = '\S.{0,59}'
+match = '\S.*'
 run = "go $0"
 "#;
 
@@ -245,6 +245,35 @@ mod tests {
         assert_eq!(
             lines(&p, "Nemo is a fish.", &[]),
             ["ace Nemo is a fish.", "go Nemo is a fish."]
+        );
+    }
+
+    #[test]
+    fn a_long_selection_or_a_lower_case_sentence_is_offered_its_commands() {
+        // Catches find and link cut off at 60 characters, so that a
+        // selection of two sentences was offered neither; and ACE offered
+        // only a sentence with a capital and a full stop, so "rent is
+        // 1200", which ace would say why it cannot read, was offered go
+        // alone.
+        let p = Plumber::new(&[]).unwrap();
+        let long =
+            "Talk-notes says that the date of Buran-flight is 1989. And it was the only flight.";
+        assert_eq!(
+            lines(&p, long, &[long]),
+            [
+                format!("ace {long}"),
+                format!("link to {long}"),
+                format!("go {long}")
+            ]
+        );
+        assert_eq!(
+            lines(&p, "rent is 1200", &[]),
+            ["ace rent is 1200", "go rent is 1200"]
+        );
+        assert_eq!(
+            lines(&p, "rent", &[]),
+            ["go rent"],
+            "one word is no sentence"
         );
     }
 

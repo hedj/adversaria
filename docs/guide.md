@@ -303,9 +303,9 @@ first:
 | `#` and a number | `retract` that entry |
 | the path of a file that exists, ending in `.md`, `.docx`, `.odt`, `.tex`, `.html` (and others Pandoc reads), `.json` or `.pl` | `import document`, `import results` or `import wikidata` |
 | a Prolog goal, such as `date(E, Y)` | `query` it, or state it as a `fact` here |
-| a sentence starting with a capital and ending in `.`, `?` or `!` | read it with `ace` |
-| up to 60 characters that name an item | `link to` it from here |
-| up to 60 characters | `go` to the next item holding them (find) |
+| two or more words, without brackets | read them with `ace`, which says why if it cannot |
+| text that names an item | `link to` it from here |
+| any text | `go` to the next item holding it (find) |
 
 Add your own with `[[plumb]]` in the configuration (§ 4.3); yours are
 offered before the built-in ones. Each has a `name` (the menu's words), a
