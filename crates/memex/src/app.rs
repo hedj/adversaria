@@ -76,15 +76,6 @@ pub enum Key {
     Quasi(Quasi),
 }
 
-/// What a mouse click acts on (crate::ui::Hits says where each is drawn).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Click {
-    /// An item's line in an outline pane: the cursor goes there.
-    Item { pane: usize, id: u64 },
-    /// A hint or a suggestion: the command line it stands for runs.
-    Command(String),
-}
-
 /// Keys the memex leaves free for the user's bindings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Special {

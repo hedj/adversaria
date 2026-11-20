@@ -2,8 +2,9 @@
 //! rules offer (docs/guide.md § 2.3, The mouse and Plumbing; crate::plumb).
 
 mod support;
-use memex::app::{Click, Key, Mode};
+use memex::app::{Key, Mode};
 use memex::config::Config;
+use memex::present::Presentation;
 use ratatui::style::Color;
 use support::Room;
 
@@ -67,7 +68,7 @@ fn a_click_on_an_offer_runs_it_and_elsewhere_closes() {
     // Catches the menu's entries not clickable, a click on what is under
     // the menu acting, or a click elsewhere leaving it open.
     let mut r = menu_on_two("menu-click");
-    let go = Click::Command("go 2".into());
+    let go = Presentation::Command("go 2".into());
     let hits = r.hits();
     assert!(
         hits.0.iter().position(|(_, c)| *c == go) == Some(0),
@@ -76,7 +77,7 @@ fn a_click_on_an_offer_runs_it_and_elsewhere_closes() {
     r.app.click(&go);
     assert_eq!(r.here(), "Energia launch");
     r.app.plumb("2", (4, 3));
-    r.app.click(&Click::Command("help".into()));
+    r.app.click(&Presentation::Command("help".into()));
     assert_eq!(r.app.session.mode, Mode::Normal);
     assert_eq!(r.app.session.message, "", "the click only closed the menu");
 }

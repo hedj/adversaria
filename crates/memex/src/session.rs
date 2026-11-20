@@ -2,9 +2,10 @@
 //! user sees and is in the middle of, how the session is set up, and what
 //! it has noticed outside the journal (docs/structure.md § The code's structure).
 
-use crate::app::{Active, Click, Event, Key, Mode, PendingText, Press, Quasi, View};
+use crate::app::{Active, Event, Key, Mode, PendingText, Press, Quasi, View};
 use crate::notebook::strings;
 use crate::plumb::Offer;
+use crate::present::Presentation;
 use format::record::Entry;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -83,8 +84,8 @@ impl Menu {
     }
 
     /// A click: on an offer, it runs; anywhere else, the menu closes.
-    pub fn clicked(&self, c: &Click) -> Answer {
-        let on = |o: &&Offer| Click::Command(o.line.clone()) == *c;
+    pub fn clicked(&self, c: &Presentation) -> Answer {
+        let on = |o: &&Offer| Presentation::Command(o.line.clone()) == *c;
         self.offers
             .iter()
             .find(on)

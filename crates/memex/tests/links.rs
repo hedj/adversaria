@@ -108,7 +108,7 @@ fn each_part_of_the_hint_under_an_interrogation_is_a_click_on_its_command() {
     let room = interrogated("hint-parts");
     let (x, y) = room.find("F4 retracts an adoption");
     let hits = room.hits();
-    let unadopt = Some(memex::app::Click::Command("unadopt".into()));
+    let unadopt = Some(memex::present::Presentation::Command("unadopt".into()));
     assert_eq!(hits.at(x, y).cloned(), unadopt, "its first cell");
     assert_eq!(hits.at(x - 1, y), None, "the gap before it");
 }

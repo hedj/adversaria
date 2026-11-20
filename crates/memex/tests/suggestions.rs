@@ -1,6 +1,6 @@
 //! The suggestion pane: what it lists, and how it says to act on it.
 
-use memex::app::Click;
+use memex::present::Presentation;
 
 mod support;
 use support::Room;
@@ -40,7 +40,7 @@ fn the_pane_counts_those_shown_of_all() {
 }
 
 /// What a click would act on at a column, down some rows.
-fn clicks(room: &Room, x: u16, rows: std::ops::Range<u16>) -> Vec<Option<Click>> {
+fn clicks(room: &Room, x: u16, rows: std::ops::Range<u16>) -> Vec<Option<Presentation>> {
     let hits = room.hits();
     rows.map(|y| hits.at(x, y).cloned()).collect()
 }
@@ -51,6 +51,6 @@ fn a_click_on_any_row_of_a_suggestion_wrapped_rows_too_accepts_it() {
     let (x, top) = room.find("1. buran_flight");
     let rows = top..room.find("2. buran_flight").1;
     assert!(rows.len() > 2, "its evidence wraps");
-    let accept = Some(Click::Command("accept 1".into()));
+    let accept = Some(Presentation::Command("accept 1".into()));
     assert!(clicks(&room, x, rows).iter().all(|c| *c == accept));
 }

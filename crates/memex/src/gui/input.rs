@@ -6,9 +6,10 @@
 //! (while Ctrl is held, as for the Command quasimode), the layout's
 //! character for the key, which Ctrl does not change.
 
-use crate::app::{Click, Event, Key, Press, Quasi, Special};
+use crate::app::{Event, Key, Press, Quasi, Special};
 use crate::config::{Config, QuasiKey};
-use crate::ui::Hits;
+use crate::present::Presentation;
+use crate::ui::Presentations;
 use ratatui::buffer::Buffer;
 use ratatui::style::Modifier;
 use winit::keyboard::{Key as Logical, KeyCode, NamedKey, PhysicalKey};
@@ -193,7 +194,7 @@ fn function(n: NamedKey) -> Option<Key> {
 }
 
 /// What a click on a cell acts on, if anything.
-pub fn clicked(hits: &Hits, (column, row): (u16, u16)) -> Option<Click> {
+pub fn clicked(hits: &Presentations, (column, row): (u16, u16)) -> Option<Presentation> {
     hits.at(column, row).cloned()
 }
 

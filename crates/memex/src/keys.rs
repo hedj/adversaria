@@ -1,13 +1,11 @@
-//! Keys and clicks: what each does in each mode, and leaping, which finds
+//! Keys: what each does in each mode, and leaping, which finds
 //! items by their text (docs/design.md § Quasimodes).
 
 use crate::actions::dispatch::{complete_command, in_quotes};
-use crate::app::{
-    Active, App, Click, Event, Hold, Key, Kind, Mode, PaneKind, Press, Quasi, ScopeLevel,
-};
+use crate::app::{Active, App, Event, Hold, Key, Kind, Mode, PaneKind, Press, Quasi, ScopeLevel};
 use crate::outline::TOP;
 use crate::reason;
-use crate::session::{Answer, Menu};
+use crate::session::Answer;
 use format::terms::Term;
 use serde_json::json;
 
@@ -28,61 +26,13 @@ impl App {
         };
     }
 
-    /// Plumb a text: open a menu of the commands its rules offer, at a
-    /// cell; or, if none matches, say so.
-    pub fn plumb(&mut self, text: &str, at: (u16, u16)) {
-        let names_item = |t: &str| self.resolve(t).is_some();
-        let offers = self.session.plumber.offers(text, &names_item);
-        if offers.is_empty() {
-            self.session.message = format!("nothing acts on “{}”", text.trim());
-            return;
-        }
-        self.session.message.clear();
-        self.session.mode = Mode::Menu(Menu::new(text, offers, at));
-    }
-
     /// Do what the menu answers: keep it, close it, or run an offer as a
     /// bound key runs its command, keeping any confirmation it asks for.
-    fn answered(&mut self, a: Answer) -> Mode {
+    pub(crate) fn answered(&mut self, a: Answer) -> Mode {
         match a {
             Answer::Keep(m) => Mode::Menu(m),
             Answer::Close => Mode::Normal,
             Answer::Run(line) => self.run_bound(&line),
-        }
-    }
-
-    /// A click, from the mouse. It acts only when no quasimode or question
-    /// is open, and does what the keyboard would: moving the cursor is a
-    /// view change like an arrow key; a command is run as a bound key runs
-    /// it, keeping any confirmation it asks for.
-    pub fn click(&mut self, c: &Click) {
-        if let Mode::Menu(m) = &self.session.mode {
-            let answer = m.clicked(c);
-            self.session.mode = self.answered(answer);
-            return;
-        }
-        if self.session.mode != Mode::Normal {
-            return;
-        }
-        match c {
-            Click::Item { pane, id } => {
-                if !self.notebook.outline.items.contains_key(id) || *pane > 1 {
-                    return;
-                }
-                self.flush_text();
-                self.session.message.clear();
-                if self.session.view.focus != *pane {
-                    self.session.view.focus = *pane;
-                    self.write_view("pane", json!({}));
-                }
-                self.set_cursor(*id);
-                self.session.view_dirty = true;
-            }
-            Click::Command(line) => {
-                self.flush();
-                self.session.message.clear();
-                self.run_simple(line);
-            }
         }
     }
 

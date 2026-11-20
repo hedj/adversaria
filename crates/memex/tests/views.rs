@@ -230,10 +230,16 @@ fn a_layer_that_could_not_be_drawn_or_would_act_is_refused() {
 }
 
 /// The screen, its text and its click regions, as the terminal would draw it.
-fn screen(app: &App) -> (Vec<String>, memex::ui::Hits, ratatui::buffer::Buffer) {
+fn screen(
+    app: &App,
+) -> (
+    Vec<String>,
+    memex::ui::Presentations,
+    ratatui::buffer::Buffer,
+) {
     use ratatui::{Terminal, backend::TestBackend};
     let mut t = Terminal::new(TestBackend::new(160, 60)).unwrap();
-    let mut hits = memex::ui::Hits::default();
+    let mut hits = memex::ui::Presentations::default();
     t.draw(|f| hits = memex::ui::draw_hits(f, app)).unwrap();
     let buf = t.backend().buffer().clone();
     (rows_of(&buf), hits, buf)

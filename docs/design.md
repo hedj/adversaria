@@ -163,6 +163,7 @@ The core is a store of items with permanent addresses, typed links and named tra
 | Keys are configured in a TOML file; a name given replaces its default, and a file the memex would have to guess at is refused | the author asked to adjust key bindings (12 November 2026); TOML is a standard format with a maintained Rust parser, and refusing a wrong file is safer than starting with keys the user did not choose |
 | The mouse is on by default, off by `[mouse] enabled = false` or `--no-mouse`; `--mouse` overrides the file | the author's decision (19 November 2026), reversing that of 12 November: the memex now runs in a window with no text selection of its own, and the mouse selects text and right-clicks to plumb it. Off by default had been chosen while the memex ran in a terminal, whose own selection the mouse got in the way of |
 | A right-click plumbs the selection, or the word under the pointer: a menu offers every command whose rule matches | after Plan 9's plumber (Pike, "Plumbing and Other Utilities"; plumb(6)), generalised by the author's request: Plan 9 runs the first rule that matches, and Pike's planned menu of overrides was not built; here every match is offered, in rule order, each command line once. A rule is a regular expression the whole text must match, an optional test (a file that exists, as Plan 9's isfile; an item that the text names), and a command line with $0 to $9. The defaults are written in the same `[[plumb]]` tables as the user's, which come first. Not done: Plan 9's expansion of a click by each rule (the longest match that holds the click); a click takes the word under it instead |
+| What the screen draws is presented, after Genera's Dynamic Windows and CLIM: each drawn object is recorded with the model object it stands for, a gesture on it acts on that object, and a command's argument can be typed or pointed at | the author's decision (20 November 2026), chosen over Model-View-Presenter's passive view: the screen then is a record of the model's objects, which the user can talk about by pointing (see Presentations) |
 | Views are layers of marks over goals, with no chart types; charts, grids, timelines and diagrams emerge from marks over the user's facts and rules | the author's decision (12 November 2026): spreadsheets and charts should emerge from boxes and rules the user makes; after the grammar of graphics, Vega-Lite and Observable Plot |
 | Views are drawn in characters first | no new dependency when made. In the window egui can draw shapes and images with no rasteriser crate, but views as images are not built |
 
@@ -712,6 +713,36 @@ As built (milestone 3, provisional): Leap forward is Right Alt and Leap back Lef
 Conventional shortcuts sit beside the quasimodes, for laptops without thumb keys and for accessibility: each quasimode can be latched by tapping its key instead of holding it, and a command palette offers every command by name with recognition. Holding remains the fast path; nothing needs it.
 
 Sources: [The Humane Interface](https://en.wikipedia.org/wiki/The_Humane_Interface), [Archy](<https://en.wikipedia.org/wiki/Archy_(software)>), [Mode (user interface)](<https://en.wikipedia.org/wiki/Mode_(user_interface)>).
+
+#### Presentations
+
+The screen is a record of presented objects, as in Genera's Dynamic
+Windows (Genera 7, 1986) and its successor CLIM: whatever the drawing
+code writes that stands for an object of the model (an item, a fact, a
+claim, a constraint, an entry, a chart's mark) is recorded with that
+object and the place it was drawn (crate::present; crate::ui::Presentations).
+The drawing code reads the model as it presents it; there is no separate
+description of the screen, unlike Model-View-Presenter's passive view.
+
+What the record is for:
+
+- A gesture on a presentation acts on its object. A click does its
+  default; a right-click offers the commands that take an object of its
+  type (CLIM's presentation translators). Plumbing (above) offers
+  commands for plain text; the two are one menu.
+- A command's argument can be typed or pointed at (CLIM's `accept`):
+  while a command line waits for an argument of a type, the presentations
+  of that type are highlighted, and a click on one supplies it.
+- The foot says what each button does over the presentation under the
+  pointer (Genera's mouse documentation line).
+
+Not adopted: output recording for redisplay. The screen is drawn whole
+from the model on each change, which has been fast enough (an
+impression, not measured).
+
+Sources: Symbolics, *Programming the User Interface* (Genera 8);
+LispWorks, *CLIM 2.0 User Guide*, ch. 6, Presentation Types; E.
+Ciccarelli, *Presentation Based User Interfaces*, MIT AI-TR-794 (1984).
 
 ### Views
 

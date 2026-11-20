@@ -5,8 +5,9 @@
 mod commands;
 mod wrap;
 
-use crate::app::{Active, App, Click, Mode, PaneKind, Quasi, ScopeLevel, View};
+use crate::app::{Active, App, Mode, PaneKind, Quasi, ScopeLevel, View};
 use crate::outline::{Layer, Link, Outline, Run, TOP};
+use crate::present::Presentation;
 use crate::reason::{
     self, ConstraintEval, Finding, Prov, Solution, Sourced, Suggestion, WorldEval,
 };
@@ -56,26 +57,26 @@ fn bold() -> Style {
     Style::default().add_modifier(Modifier::BOLD)
 }
 
-/// Where a click lands: the places drawn that a click acts on, in the
-/// frame just drawn.
+/// The presentations of the frame just drawn, each with the place it
+/// was drawn in: where a click lands, and what it stands for.
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct Hits(pub Vec<(Rect, Click)>);
+pub struct Presentations(pub Vec<(Rect, Presentation)>);
 
-impl Hits {
+impl Presentations {
     /// What a click at (x, y) would act on, if anything.
-    pub fn at(&self, x: u16, y: u16) -> Option<&Click> {
+    pub fn at(&self, x: u16, y: u16) -> Option<&Presentation> {
         self.0
             .iter()
             .find(|(r, _)| r.contains(Position { x, y }))
             .map(|(_, c)| c)
     }
     /// The clicks outside an area.
-    fn outside(mut self, area: Rect) -> Hits {
+    fn outside(mut self, area: Rect) -> Presentations {
         self.0.retain(|(r, _)| r.intersection(area).is_empty());
         self
     }
 
-    fn add(&mut self, area: Rect, r: Rect, c: Click) {
+    fn add(&mut self, area: Rect, r: Rect, c: Presentation) {
         let r = r.intersection(area);
         if r.width > 0 && r.height > 0 {
             self.0.push((r, c));
@@ -88,7 +89,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 }
 
 /// Draw the screen, and say where clicks would land.
-pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
+pub fn draw_hits(f: &mut Frame, app: &App) -> Presentations {
     let body = draw_edges(f, app);
     let hits = draw_body(f, app, body);
     match MenuBox::open(app) {
@@ -101,7 +102,7 @@ pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
 /// whether it is the one chosen, and what a click on it runs.
 struct MenuBox {
     title: String,
-    entries: Vec<(String, bool, Click)>,
+    entries: Vec<(String, bool, Presentation)>,
     at: (u16, u16),
 }
 
@@ -111,7 +112,7 @@ impl MenuBox {
         let Mode::Menu(m) = &app.session.mode else {
             return None;
         };
-        let entry = |(text, chosen, line)| (text, chosen, Click::Command(line));
+        let entry = |(text, chosen, line)| (text, chosen, Presentation::Command(line));
         let entries = m.entries().into_iter().map(entry).collect();
         let title = format!(" act on “{}” ", shortened(&m.text, 40));
         Some(MenuBox {
@@ -125,7 +126,7 @@ impl MenuBox {
     /// room below, inside the screen, with a cell of paper round it so
     /// the text under it does not run into its edge; its entries are
     /// clicked first.
-    fn draw(&self, f: &mut Frame, under: Hits) -> Hits {
+    fn draw(&self, f: &mut Frame, under: Presentations) -> Presentations {
         let area = placed(f.area(), self.at, self.size(f.area()));
         clear_round(f, area);
         f.render_widget(self.widget(), area);
@@ -153,7 +154,7 @@ impl MenuBox {
     /// width, the chosen one reversed.
     fn lines(&self) -> Vec<Line<'static>> {
         let inner = self.inner_width();
-        let line = |(text, chosen, _): &(String, bool, Click)| {
+        let line = |(text, chosen, _): &(String, bool, Presentation)| {
             let shown = format!(" {:<w$}", shortened(text, 62), w = inner - 1);
             let style = if *chosen {
                 reversed()
@@ -168,7 +169,8 @@ impl MenuBox {
     /// The width inside the border: the widest entry with a space each
     /// side, or the title with a rule and a space each side.
     fn inner_width(&self) -> usize {
-        let entry = |(text, _, _): &(String, bool, Click)| shortened(text, 62).chars().count() + 2;
+        let entry =
+            |(text, _, _): &(String, bool, Presentation)| shortened(text, 62).chars().count() + 2;
         let widest = self.entries.iter().map(entry).max().unwrap_or(0);
         widest.max(self.title.chars().count() + 2)
     }
@@ -180,10 +182,10 @@ impl MenuBox {
     }
 
     /// Where a click on each entry that fits lands: its row in the box.
-    fn hits(&self, area: Rect) -> Hits {
+    fn hits(&self, area: Rect) -> Presentations {
         let fits = area.height.saturating_sub(2) as usize;
         let each = self.entries.iter().take(fits).enumerate();
-        Hits(
+        Presentations(
             each.map(|(i, e)| (entry_row(area, i), e.2.clone()))
                 .collect(),
         )
@@ -313,17 +315,17 @@ fn screen_areas(area: Rect, edges: &Edges) -> [Rect; 4] {
 }
 
 /// The body: the two worlds while a supposition is open, else the panes.
-fn draw_body(f: &mut Frame, app: &App, area: Rect) -> Hits {
+fn draw_body(f: &mut Frame, app: &App, area: Rect) -> Presentations {
     if app.reason.supposition.is_some() {
         draw_worlds(f, app, area);
-        return Hits::default();
+        return Presentations::default();
     }
     draw_panes(f, app, area)
 }
 
 /// The two panes, and a quasimode's list over the left one: no click
 /// lands on what it covers.
-fn draw_panes(f: &mut Frame, app: &App, area: Rect) -> Hits {
+fn draw_panes(f: &mut Frame, app: &App, area: Rect) -> Presentations {
     let [left, right] = pane_areas(area);
     let mut hits = draw_pane(f, app, 1, right);
     hits.0.extend(draw_pane(f, app, 0, left).0);
@@ -355,7 +357,7 @@ fn pane_areas(area: Rect) -> [Rect; 2] {
 }
 
 /// Pane i, as its kind is drawn.
-fn draw_pane(f: &mut Frame, app: &App, i: usize, area: Rect) -> Hits {
+fn draw_pane(f: &mut Frame, app: &App, i: usize, area: Rect) -> Presentations {
     match app.session.view.pane_kind(i) {
         PaneKind::Outline => draw_outline(f, app, i, area),
         PaneKind::Links => draw_links(f, app, area),
@@ -364,7 +366,7 @@ fn draw_pane(f: &mut Frame, app: &App, i: usize, area: Rect) -> Hits {
 }
 
 /// A quasimode's list over an area, and the clicks outside it.
-fn cover(f: &mut Frame, app: &App, a: &Active, area: Rect, hits: Hits) -> Hits {
+fn cover(f: &mut Frame, app: &App, a: &Active, area: Rect, hits: Presentations) -> Presentations {
     draw_list(f, app, a, area);
     hits.outside(area)
 }
@@ -574,7 +576,7 @@ fn title(app: &App) -> String {
 /// An outline pane: its frame and title, then every line of the outline
 /// near the cursor, and the window onto them that keeps the cursor's line
 /// in view.
-fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Hits {
+fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Presentations {
     let rows = outline_frame(f, app, pane, area);
     let outline = OutlinePane { app, pane, rows };
     outline.drawn().show(f, &outline)
@@ -900,8 +902,8 @@ impl<'a> OutlinePane<'a> {
     }
 
     /// A click that selects an item in this pane.
-    fn click(&self, id: u64) -> Click {
-        Click::Item {
+    fn click(&self, id: u64) -> Presentation {
+        Presentation::Item {
             pane: self.pane,
             id,
         }
@@ -1014,18 +1016,18 @@ impl Laid {
 struct Place {
     line: usize,
     span: (usize, usize),
-    click: Click,
+    click: Presentation,
 }
 
 impl Place {
     /// A place on a line: the line, its first column and its width.
-    fn of((line, x, width): (usize, usize, usize), click: Click) -> Place {
+    fn of((line, x, width): (usize, usize, usize), click: Presentation) -> Place {
         let span = (x, width);
         Place { line, span, click }
     }
 
     /// A click on each row of it in the window.
-    fn add_to(&self, hits: &mut Hits, laid: &Laid, window: Window) {
+    fn add_to(&self, hits: &mut Presentations, laid: &Laid, window: Window) {
         let spans = laid.spans(self.line, self.reach());
         window.add(hits, spans, &self.click);
     }
@@ -1143,7 +1145,12 @@ impl Window {
 
     /// A click on each of a row's columns that is in the window: each a
     /// row, its first column and its width.
-    fn add(&self, hits: &mut Hits, spans: Vec<(usize, usize, usize)>, click: &Click) {
+    fn add(
+        &self,
+        hits: &mut Presentations,
+        spans: Vec<(usize, usize, usize)>,
+        click: &Presentation,
+    ) {
         let rects = spans.into_iter().filter_map(|s| self.rect(s));
         rects.for_each(|r| hits.add(self.area, r, click.clone()));
     }
@@ -1215,7 +1222,7 @@ impl Drawn {
     /// The lines wrapped to the pane's width; the window onto them that
     /// keeps the text cursor in view; then the text cursor, and the places
     /// in the window.
-    fn show(self, f: &mut Frame, outline: &OutlinePane) -> Hits {
+    fn show(self, f: &mut Frame, outline: &OutlinePane) -> Presentations {
         let laid = Laid::new(&self.lines, outline.rows.width as usize);
         let cursor = self.text_place(&laid, outline);
         let window = self.window(&laid, outline.rows, cursor);
@@ -1277,8 +1284,8 @@ impl Drawn {
     }
 
     /// The places in a window, each where it is drawn.
-    fn hits(&self, laid: &Laid, window: Window) -> Hits {
-        let mut hits = Hits::default();
+    fn hits(&self, laid: &Laid, window: Window) -> Presentations {
+        let mut hits = Presentations::default();
         let places = self.places.iter();
         places.for_each(|p| p.add_to(&mut hits, laid, window));
         hits
@@ -1437,13 +1444,13 @@ fn inverse(kind: &str) -> String {
 
 /// The links pane: the interrogation, if one is open; else what the
 /// selected item needs (right_panel).
-fn draw_links(f: &mut Frame, app: &App, area: Rect) -> Hits {
+fn draw_links(f: &mut Frame, app: &App, area: Rect) -> Presentations {
     let inner = inset(area);
     if let Some(item) = app.session.view.interrogate {
         return draw_interrogation(f, app, item, inner);
     }
     f.render_widget(right_panel(app, app.session.view.selected()), inner);
-    Hits::default()
+    Presentations::default()
 }
 
 /// What the selected item needs: its view's layers, the constraints its
@@ -1505,7 +1512,7 @@ fn wrapped(lines: Vec<Line<'static>>) -> Paragraph<'static> {
 
 /// An interrogation, and under it the hint of what adopts and what takes
 /// an adoption back, each part a click on its command.
-fn draw_interrogation(f: &mut Frame, app: &App, item: u64, inner: Rect) -> Hits {
+fn draw_interrogation(f: &mut Frame, app: &App, item: u64, inner: Rect) -> Presentations {
     let lines = interrogation(app, item);
     let used = hung(&lines, inner.width as usize).len() as u16;
     f.render_widget(Hung(lines), inner);
@@ -1521,7 +1528,7 @@ fn row_below(area: Rect, used: u16) -> Rect {
 
 /// The hint "F3 adopts · F4 retracts an adoption", by the keys bound,
 /// each part a click on its command.
-fn draw_adopt_hint(f: &mut Frame, app: &App, row: Rect) -> Hits {
+fn draw_adopt_hint(f: &mut Frame, app: &App, row: Rect) -> Presentations {
     let adopt = hint_part(app, "adopt", "adopts");
     let parts = [adopt, hint_part(app, "unadopt", "retracts an adoption")];
     f.render_widget(dim_text(joined(&parts)), row);
@@ -1534,13 +1541,16 @@ fn draw_adopt_hint(f: &mut Frame, app: &App, row: Rect) -> Hits {
 
 /// A part of a hint: the key bound to a command and what it does, and a
 /// click on the command.
-fn hint_part(app: &App, command: &str, does: &str) -> (String, Click) {
+fn hint_part(app: &App, command: &str, does: &str) -> (String, Presentation) {
     let key = app.session.keys.key_for(command);
-    (format!("{key} {does}"), Click::Command(command.into()))
+    (
+        format!("{key} {does}"),
+        Presentation::Command(command.into()),
+    )
 }
 
 /// The texts of a hint's parts, " · " between them.
-fn joined(parts: &[(String, Click)]) -> String {
+fn joined(parts: &[(String, Presentation)]) -> String {
     let texts: Vec<&str> = parts.iter().map(|(text, _)| text.as_str()).collect();
     texts.join(" · ")
 }
@@ -1555,12 +1565,12 @@ fn dim_text(text: String) -> Paragraph<'static> {
 struct Along {
     row: Rect,
     x: u16,
-    hits: Hits,
+    hits: Presentations,
 }
 
 impl Along {
     fn new(row: Rect) -> Self {
-        let hits = Hits::default();
+        let hits = Presentations::default();
         Along {
             row,
             x: row.x,
@@ -1569,7 +1579,7 @@ impl Along {
     }
 
     /// A part's text a click, then " · " before the next part.
-    fn part(&mut self, text: &str, click: Click) {
+    fn part(&mut self, text: &str, click: Presentation) {
         let width = text.chars().count() as u16;
         let at = Rect {
             x: self.x,
@@ -3290,7 +3300,7 @@ fn inset(area: Rect) -> Rect {
 
 /// The suggestion pane: few in view, ranked by evidence, each with why it
 /// was offered. It never takes the keyboard: accept or dismiss by command.
-fn draw_suggestions(f: &mut Frame, app: &App, area: Rect) -> Hits {
+fn draw_suggestions(f: &mut Frame, app: &App, area: Rect) -> Presentations {
     let inner = inset(area);
     let column = suggestion_lines(app, Column::new(inner));
     f.render_widget(Hung(column.lines), inner);
@@ -3327,12 +3337,12 @@ fn suggestion_lines(app: &App, mut column: Column) -> Column {
 
 /// The i-th suggestion shown, numbered from 1, with why it was offered; a
 /// click on it accepts it.
-fn suggestion_block(i: usize, s: &Suggestion) -> (Vec<Line<'static>>, Click) {
+fn suggestion_block(i: usize, s: &Suggestion) -> (Vec<Line<'static>>, Presentation) {
     let title = Line::raw(format!("{}. {}", i + 1, s.describe()));
     let why = Line::styled(format!("   {}", s.evidence), dim());
     (
         vec![title, why],
-        Click::Command(format!("accept {}", i + 1)),
+        Presentation::Command(format!("accept {}", i + 1)),
     )
 }
 
@@ -3341,7 +3351,7 @@ fn suggestion_block(i: usize, s: &Suggestion) -> (Vec<Line<'static>>, Click) {
 struct Column {
     lines: Vec<Line<'static>>,
     area: Rect,
-    hits: Hits,
+    hits: Presentations,
 }
 
 impl Column {
@@ -3349,12 +3359,12 @@ impl Column {
         Column {
             lines: vec![],
             area,
-            hits: Hits::default(),
+            hits: Presentations::default(),
         }
     }
 
     /// Add lines that a click on any of them, wrapped lines too, acts on.
-    fn clickable(&mut self, block: Vec<Line<'static>>, click: Click) {
+    fn clickable(&mut self, block: Vec<Line<'static>>, click: Presentation) {
         let rows = self.rows_of(&block);
         self.hits.add(self.area, rows, click);
         self.lines.extend(block);

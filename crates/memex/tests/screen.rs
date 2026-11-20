@@ -1,7 +1,8 @@
 //! The screen as a whole: its parts in each mode, and what covers what
 //! (docs/guide.md § 2.2).
 
-use memex::app::{Click, Key, Quasi};
+use memex::app::{Key, Quasi};
+use memex::present::Presentation;
 
 mod support;
 use support::{Room, replayed};
@@ -183,7 +184,7 @@ fn a_click_lands_on_the_item_drawn_there_when_the_outline_is_scrolled() {
         .position(|l| l.contains("21. item 21"));
     let click = room.hits_at(60, 12).at(2, y.unwrap() as u16).cloned();
     let id = twenty_first(&room);
-    assert_eq!(click, Some(Click::Item { pane: 0, id }));
+    assert_eq!(click, Some(Presentation::Item { pane: 0, id }));
 }
 
 /// The text inside the list's box at 80 by 30, its rows joined by spaces.
@@ -377,7 +378,7 @@ fn a_click_on_a_wrapped_items_second_row_selects_it() {
     let y = rows.iter().position(|r| r.contains("     1988,")).unwrap();
     let id = room.outline().in_order()[0];
     let click = room.hits_at(80, 30).at(10, y as u16).cloned();
-    assert_eq!(click, Some(Click::Item { pane: 0, id }));
+    assert_eq!(click, Some(Presentation::Item { pane: 0, id }));
 }
 
 #[test]

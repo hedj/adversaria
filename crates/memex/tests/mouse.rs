@@ -1,9 +1,10 @@
-//! The mouse: where clicks land (ui::Hits), and what a click does
+//! The mouse: where clicks land (ui::Presentations), and what a click does
 //! (App::click). The window's end, a click turned into a cell, is checked
 //! by tests/memex_in_a_window.py.
 
-use memex::app::{App, Click, Event, Key, Mode, PaneKind, Quasi};
-use memex::ui::Hits;
+use memex::app::{App, Event, Key, Mode, PaneKind, Quasi};
+use memex::present::Presentation;
+use memex::ui::Presentations;
 
 mod support;
 use support::{Room, replayed};
@@ -38,13 +39,13 @@ fn command(app: &mut App, line: &str) {
 
 /// What a click where a text is first drawn, on a wide screen, would act
 /// on.
-fn hit_on(r: &Room, text: &str) -> Option<Click> {
+fn hit_on(r: &Room, text: &str) -> Option<Presentation> {
     let (x, y) = r.find(text);
     r.hits().at(x, y).cloned()
 }
 
 /// Click where a text is drawn, as the terminal loop would.
-fn click_on(r: &mut Room, text: &str) -> Click {
+fn click_on(r: &mut Room, text: &str) -> Presentation {
     let c = hit_on(r, text).unwrap_or_else(|| panic!("nothing to click at {text:?}"));
     r.app.click(&c);
     r.app.evaluate().unwrap();
@@ -95,7 +96,7 @@ fn a_click_on_an_item_moves_the_cursor_there() {
     let mut app = notes("item");
     let talk = app.cursor();
     let c = click_on(&mut app, "The programme");
-    assert!(matches!(c, Click::Item { pane: 0, .. }));
+    assert!(matches!(c, Presentation::Item { pane: 0, .. }));
     assert_eq!(app.here(), "The programme");
     // The Buran item has a mark line under it; the next row is still Talk notes.
     click_on(&mut app, "Talk notes");
@@ -121,11 +122,11 @@ fn a_click_on_the_hint_adopts_and_retracts() {
     let mut app = notes("hint");
     tap(&mut app, Key::F(2));
     app.evaluate().unwrap();
-    let adopt = Click::Command("adopt".into());
+    let adopt = Presentation::Command("adopt".into());
     assert_eq!(click_on(&mut app, "F3 adopts"), adopt);
     assert_eq!(last_kind(&app), "adopt");
     assert!(app.shows("1 constraint violation"));
-    let unadopt = Click::Command("unadopt".into());
+    let unadopt = Presentation::Command("unadopt".into());
     assert_eq!(click_on(&mut app, "F4 retracts an adoption"), unadopt);
     assert_eq!(last_kind(&app), "retract");
     // The " · " between them does nothing.
@@ -141,7 +142,7 @@ fn a_click_on_a_suggestion_accepts_it() {
     let mut app = buran_with_suggestions("mouse-suggestion");
     let shown = shown_suggestions(&app);
     assert!(shown.len() >= 2, "{shown:?}");
-    let accept_2 = Click::Command("accept 2".into());
+    let accept_2 = Presentation::Command("accept 2".into());
     // Click the second suggestion's last line: its evidence, not its title.
     the_second_spans_its_evidence(&app, &shown[1], &accept_2);
     app.click(&accept_2);
@@ -165,7 +166,7 @@ fn buran_with_suggestions(name: &str) -> Room {
 
 /// The second suggestion's title, and its evidence lines below, are each
 /// a click that accepts it.
-fn the_second_spans_its_evidence(app: &Room, title: &str, accept: &Click) {
+fn the_second_spans_its_evidence(app: &Room, title: &str, accept: &Presentation) {
     let at = app.find(&format!("2. {title}"));
     let hits = app.hits();
     assert_eq!(
@@ -185,7 +186,7 @@ fn shown_suggestions(app: &App) -> Vec<String> {
 
 /// The last of the five rows below a place in its column where a click
 /// acts as this one does.
-fn last_row_of(hits: &Hits, (x, y): (u16, u16), click: &Click) -> u16 {
+fn last_row_of(hits: &Presentations, (x, y): (u16, u16), click: &Presentation) -> u16 {
     let rows = (y + 1..y + 6).rev();
     let mut same = rows.filter(|r| hits.at(x, *r) == Some(click));
     same.next().expect("a row below acts so")

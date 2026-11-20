@@ -5,11 +5,11 @@
 //! finds the session.
 
 use super::cells::Cells;
-use super::input::{Drag, KeyPress, clicked, map_key};
+use super::input::{Drag, KeyPress, map_key};
 use super::paint::{cell_size, paint};
-use crate::app::{App, Click, Event, Mode};
+use crate::app::{App, Event, Mode};
 use crate::config::Config;
-use crate::ui::{self, Hits};
+use crate::ui::{self, Presentations};
 use egui::{Vec2, ViewportId};
 use ratatui::Terminal;
 use std::num::NonZeroU32;
@@ -92,7 +92,7 @@ struct Input {
 /// text selected (crate::gui::input).
 #[derive(Default)]
 struct Mouse {
-    hits: Hits,
+    hits: Presentations,
     drag: Drag,
 }
 
@@ -143,17 +143,12 @@ impl Screen {
             self.cells = Terminal::new(Cells::new(columns, rows)).expect("cells in memory");
         }
         let selection = self.mouse.drag.selection;
-        let mut hits = Hits::default();
+        let mut hits = Presentations::default();
         let _ = self.cells.draw(|f| {
             hits = ui::draw_hits(f, app);
             selection.inspect(|s| s.mark(f.buffer_mut()));
         });
         self.mouse.hits = hits;
-    }
-
-    /// What a click at a cell acts on, if anything.
-    fn clicked(&self, cell: (u16, u16)) -> Option<Click> {
-        clicked(&self.mouse.hits, cell)
     }
 
     /// The text a right-click at a cell plumbs: the text selected, or the
@@ -225,9 +220,8 @@ impl Memex {
         if !self.input.config.mouse {
             return;
         }
-        let target = self.pointed().and_then(|cell| self.screen.clicked(cell));
-        if let Some(c) = target {
-            self.app.click(&c);
+        if let Some(cell) = self.pointed() {
+            self.app.click_at(&self.screen.mouse.hits, cell);
         }
     }
 
@@ -255,9 +249,7 @@ impl Memex {
 
     /// A click on the item drawn at a cell, if one is.
     fn click_item(&mut self, cell: (u16, u16)) {
-        if let Some(c @ Click::Item { .. }) = self.screen.clicked(cell) {
-            self.app.click(&c);
-        }
+        self.app.click_item_at(&self.screen.mouse.hits, cell);
     }
 
     /// The cell under the pointer, by column and row.
