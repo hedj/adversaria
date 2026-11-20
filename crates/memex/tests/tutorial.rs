@@ -262,12 +262,22 @@ fn the_claim_questioned(t: &mut T) {
 
 /// Step 5: the claim supposed true, in a world beside the actual one.
 fn the_claim_supposed(t: &mut T) {
-    t.hold(Quasi::Suppose, "the flight was in 1989");
+    // Held: the foot names Suppose and says what to do, then, as the
+    // sentence is typed, that it is not controlled English, which the
+    // tutorial says to let be.
+    t.app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
+    t.shows("type a statement · ? lists what may come next");
+    t.typ("the flight was in 1989");
+    t.shows("not ACE: the flight <> was in 1989.");
+    t.shows("release Suppose offers its readings");
+    t.app.handle(Event::up(Key::Quasi(Quasi::Suppose)));
+    t.app.evaluate().unwrap();
     assert!(matches!(t.app.session.mode, Mode::ConfirmSuppose { .. }));
     t.shows("Do you mean: Suppose that the date of Buran's flight is 1989.  Enter: yes · Esc: no");
     t.key(Key::Enter);
     t.says("set aside in this world: 1.1");
     t.shows("WORLD · SUPPOSE THE FLIGHT WAS IN 1989");
+    t.shows("worlds actual | suppose: the flight was in 1989");
     t.shows("0 violations, 0 disagreements");
     t.shows("1.1 set aside here");
     t.command("close");

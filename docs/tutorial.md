@@ -158,16 +158,30 @@ both stay in the journal.
 *Why: when you do not yet know which source is right, try each without
 changing what you believe.*
 
-Hold **Super** (the Windows or Command key) and type
-`the flight was in 1989`. Holding a key while you type is how the
-notebook takes a command of one kind: here, a supposition. Release it.
-The notebook reads your sentence against the facts and asks:
+Hold **Super** (the Windows or Command key). Holding a key while you
+type is how the notebook takes a command of one kind: here, a
+supposition. The foot of the screen says `SUPPOSE`, and under it what
+to do:
+
+    type a statement · ? lists what may come next · release Suppose offers its readings, or a world of that name if none
+
+Still holding Super, type `the flight was in 1989`. The foot now says:
+
+    not ACE: the flight <> was in 1989. · Esc: was → is (or was → wags, was → wars) · release Suppose offers its readings
+
+That is not a mistake. `not ACE` means the sentence is not in the
+controlled English the notebook reads exactly, which has no past
+tense; Esc would mend it by changing a word. Leave it as it is, and
+release Super. The notebook reads your sentence against the facts
+instead, finds the date it is about, and asks:
 
     Do you mean: Suppose that the date of Buran's flight is 1989.  Enter: yes · Esc: no
 
 Press Enter. A second world opens beside the actual one, row for row:
 
     WORLD · SUPPOSE THE FLIGHT WAS IN 1989
+
+and the top bar says `worlds actual | suppose: the flight was in 1989`.
 
 In the supposed world your 1988 fact is set aside, so the rule holds;
 the notebook says `set aside in this world: 1.1`. Your fact is struck
