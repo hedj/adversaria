@@ -195,4 +195,55 @@ impl App {
             _ => self.argument_from(p).is_some(),
         }
     }
+
+    /// What each button does over a presentation now, for the mouse
+    /// documentation line: in a menu, the offer's words; in Command, what
+    /// a click types in; else what a click does and what a right-click
+    /// offers.
+    pub fn documentation(&self, p: &Presentation) -> String {
+        if let Some(arg) = self.argument_from(p) {
+            return format!("click: type “{}” into the line", arg.trim_end());
+        }
+        if let Mode::Menu(m) = &self.session.mode {
+            return menu_documentation(m, p);
+        }
+        let offers = self.translators(p);
+        let said = [self.click_documentation(p), offers_documentation(&offers)];
+        said.into_iter().flatten().collect::<Vec<_>>().join(" · ")
+    }
+
+    /// What a click on a presentation does, if anything.
+    fn click_documentation(&self, p: &Presentation) -> Option<String> {
+        match p.clicked()? {
+            Presentation::Item { id, .. } => {
+                Some(format!("click: go to {}", self.notebook.outline.number(id)))
+            }
+            Presentation::Command(line) => Some(format!("click: run {line}")),
+            _ => None,
+        }
+    }
+}
+
+/// What a right-click on a presentation offers: up to three, then how
+/// many more.
+fn offers_documentation(offers: &[Offer]) -> Option<String> {
+    let first: Vec<&str> = offers.iter().take(3).map(|o| o.label.as_str()).collect();
+    let more = offers.len().saturating_sub(3);
+    let more = if more > 0 {
+        format!(", {more} more")
+    } else {
+        String::new()
+    };
+    (!first.is_empty()).then(|| format!("right-click: {}{more}", first.join(", ")))
+}
+
+/// What a click on a menu's offer does: its words.
+fn menu_documentation(m: &Menu, p: &Presentation) -> String {
+    let offer = m.offers.iter().find(|o| offered_as(o, p));
+    offer.map_or_else(String::new, |o| format!("click: {}", o.label))
+}
+
+/// Whether a presentation is an offer, as a menu draws it: its command.
+fn offered_as(o: &Offer, p: &Presentation) -> bool {
+    matches!(p, Presentation::Command(line) if *line == o.line)
 }

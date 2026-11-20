@@ -96,16 +96,39 @@ pub fn draw(f: &mut Frame, app: &App) {
     draw_hits(f, app);
 }
 
-/// Draw the screen, and say where clicks would land.
+/// Draw the screen, and say where each presentation is drawn.
 pub fn draw_hits(f: &mut Frame, app: &App) -> Presentations {
-    let body = draw_edges(f, app);
+    let (body, foot) = draw_edges(f, app);
     let hits = draw_body(f, app, body);
     let hits = match MenuBox::open(app) {
         Some(menu) => menu.draw(f, hits),
         None => hits,
     };
     show_pointed(f, app, &hits);
+    document_pointed(f, app, &hits, foot);
     hits
+}
+
+/// What the mouse does over the presentation under the pointer, on a
+/// row of the foot, cut to it, as Genera's mouse documentation line
+/// said (documentation_row).
+fn document_pointed(f: &mut Frame, app: &App, hits: &Presentations, foot: [Rect; 2]) {
+    if let Some(p) = pointed_sensitive(app, hits) {
+        draw_documentation(f, app.documentation(p), documentation_row(app, foot));
+    }
+}
+
+/// The foot's row for the mouse documentation: the first with nothing
+/// open, where a hint would be, so the message stays; else the second,
+/// the first holding what is typed.
+fn documentation_row(app: &App, foot: [Rect; 2]) -> Rect {
+    foot[usize::from(app.session.mode != Mode::Normal)]
+}
+
+/// A line of documentation over a row, dim, cut to it.
+fn draw_documentation(f: &mut Frame, said: String, row: Rect) {
+    f.render_widget(Clear, row);
+    f.render_widget(Paragraph::new(Line::styled(said, dim())), row);
 }
 
 /// The presentation under the pointer, if a click on it does something
@@ -125,14 +148,27 @@ fn pointed_sensitive<'a>(app: &App, hits: &'a Presentations) -> Option<&'a Prese
     app.sensitive(p).then_some(p)
 }
 
-/// The cells of an area that hold text, underlined.
+/// Each row of an area underlined from its first character to its last.
 fn underline_text(buf: &mut ratatui::buffer::Buffer, area: Rect) {
-    for at in area.intersection(buf.area).positions() {
-        let cell = &mut buf[at];
-        if !cell.symbol().trim().is_empty() {
-            cell.modifier.insert(Modifier::UNDERLINED);
+    let area = area.intersection(buf.area);
+    for y in area.top()..area.bottom() {
+        let row = Rect {
+            y,
+            height: 1,
+            ..area
+        };
+        if let Some((a, b)) = written_span(buf, row) {
+            (a..=b).for_each(|x| buf[(x, y)].modifier.insert(Modifier::UNDERLINED));
         }
     }
+}
+
+/// The first and last columns of a row of cells that hold a character.
+fn written_span(buf: &ratatui::buffer::Buffer, row: Rect) -> Option<(u16, u16)> {
+    let written = |x: &u16| !buf[(*x, row.y)].symbol().trim().is_empty();
+    let mut xs = (row.left()..row.right()).filter(written);
+    let first = xs.next()?;
+    Some((first, xs.next_back().unwrap_or(first)))
 }
 
 /// What a right-click offers, as drawn at its cell: each entry's line,
@@ -275,12 +311,12 @@ fn shortened(text: &str, most: usize) -> String {
 }
 
 /// Draw the top bar and the foot, each as many rows as its lines take
-/// wrapped; the rows between them: the body's.
-fn draw_edges(f: &mut Frame, app: &App) -> Rect {
+/// wrapped; the rows between them: the body's; and the foot's rows.
+fn draw_edges(f: &mut Frame, app: &App) -> (Rect, [Rect; 2]) {
     let edges = Edges::of(app, f.area().width);
     let [top, body, foot @ ..] = screen_areas(f.area(), &edges);
     edges.draw(f, top, foot);
-    body
+    (body, foot)
 }
 
 /// The top bar: its left (with the right beside it, when it fits), and

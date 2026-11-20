@@ -244,27 +244,72 @@ fn pointing_at_a_layer_supplies_its_entry_and_another_type_nothing() {
 
 #[test]
 fn the_pointer_shows_what_a_click_would_act_on_now() {
-    // Catches the presentation under the pointer not shown, or shown
-    // where a click would do nothing: an item, while the line waits for
-    // an entry.
+    // Catches the presentation under the pointer not shown, shown broken
+    // at each space, or shown where a click would do nothing: an item,
+    // while the line waits for an entry.
     let mut r = Room::new("pointed");
     r.items(&["Buran", "Energia"]);
-    let underlined = |r: &Room, text: &str| {
-        let (x, y) = r.find(text);
-        let buf = r.screen(160, 40);
-        buf[(x, y)]
-            .modifier
-            .contains(ratatui::style::Modifier::UNDERLINED)
-    };
     r.app.session.pointer = Some(r.find("2. Energia"));
-    assert!(underlined(&r, "2. Energia"));
+    assert!(underlined(&r, "2. Energia", 0));
+    assert!(underlined(&r, "2. Energia", 2), "unbroken at the space");
     assert!(
-        !underlined(&r, "1. Buran"),
+        !underlined(&r, "1. Buran", 0),
         "only what is under the pointer"
     );
     command_line(&mut r, "retract ");
-    assert!(!underlined(&r, "2. Energia"), "an item supplies no entry");
+    assert!(
+        !underlined(&r, "2. Energia", 0),
+        "an item supplies no entry"
+    );
     r.app.session.pointer = None;
     r.tap(&[memex::app::Key::Escape, memex::app::Key::Escape]);
-    assert!(!underlined(&r, "2. Energia"));
+    assert!(!underlined(&r, "2. Energia", 0));
+}
+
+/// Whether the cell so many columns into a text, where it is first
+/// drawn, is underlined.
+fn underlined(r: &Room, text: &str, into: u16) -> bool {
+    let (x, y) = r.find(text);
+    let cell = &r.screen(160, 40)[(x + into, y)];
+    cell.modifier.contains(ratatui::style::Modifier::UNDERLINED)
+}
+
+/// The screen's last two rows: the foot.
+fn foot(r: &Room) -> Vec<String> {
+    let lines = r.lines_at(160, 40);
+    lines[38..]
+        .iter()
+        .map(|l| l.trim_end().to_string())
+        .collect()
+}
+
+#[test]
+fn the_foot_says_what_the_mouse_does_over_what_is_under_it() {
+    // Catches no word of what a click and a right-click do over what the
+    // pointer is on, or the message hidden to say it.
+    let mut r = dated("document-normal");
+    r.app.session.message = "a message stays".into();
+    r.app.session.pointer = Some(r.find("Talk-notes says"));
+    let said = foot(&r);
+    assert_eq!(
+        said[0],
+        "click: go to 2 · right-click: question its claim, adopt its claims"
+    );
+    assert_eq!(said[1], "a message stays");
+    r.app.session.pointer = None;
+    assert!(!foot(&r)[0].starts_with("click:"), "nothing pointed at");
+}
+
+#[test]
+fn in_a_menu_or_a_command_the_foot_says_what_a_click_does_there() {
+    // Catches the line naming the object's own commands where a click
+    // would choose an offer, or type an argument.
+    let mut r = dated("document-modes");
+    right_click_on(&mut r, "? sources disagree");
+    r.app.session.pointer = Some(r.find("go to the item that states the rule"));
+    assert_eq!(foot(&r)[1], "click: go to the item that states the rule, 3");
+    r.tap(&[memex::app::Key::Escape]);
+    command_line(&mut r, "link to ");
+    r.app.session.pointer = Some(r.find("3. Nothing has"));
+    assert_eq!(foot(&r)[1], "click: type “3” into the line");
 }
