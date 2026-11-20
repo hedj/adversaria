@@ -111,14 +111,26 @@ impl Screen {
     /// window, and paint them.
     fn show(&mut self, ui: &egui::Ui, app: &App) {
         self.cell_size = cell_size(ui.ctx());
-        self.lay_out(app, ui.max_rect().size());
-        paint(ui.painter(), self.cells.backend(), self.cell_size);
+        self.lay_out(app, ui.max_rect().size() - 2.0 * self.margin());
+        paint(
+            ui.painter(),
+            self.cells.backend(),
+            self.cell_size,
+            self.margin(),
+        );
     }
 
-    /// The cell at a point, by column and row.
+    /// The paper between the window's edge and the cells: a cell's width
+    /// on every side, so the text does not touch the frame.
+    fn margin(&self) -> Vec2 {
+        Vec2::splat(self.cell_size.x)
+    }
+
+    /// The cell at a point, by column and row; a point in the margin is
+    /// in the nearest cell.
     fn cell_at(&self, at: Vec2) -> (u16, u16) {
-        let cell = at / self.cell_size;
-        (cell.x as u16, cell.y as u16)
+        let cell = (at - self.margin()) / self.cell_size;
+        (cell.x.max(0.0) as u16, cell.y.max(0.0) as u16)
     }
 
     /// Lay the app out in as many cells as fit in a window of this size
@@ -442,6 +454,21 @@ mod tests {
         let cells = &screen.cells.backend().buffer;
         let reversed = |x: u16| cells[(x, 0)].modifier.contains(Modifier::REVERSED);
         (0..4).map(reversed).collect()
+    }
+
+    #[test]
+    fn a_point_is_found_in_its_cell_past_the_margin() {
+        // Catches clicks mapped as if the cells began at the window's
+        // corner, a cell to the right and below the cell under the
+        // pointer, or a point in the margin found nowhere.
+        let screen = Screen::new();
+        let (w, h) = (9.0, 18.0);
+        assert_eq!(
+            screen.cell_at(Vec2::new(w + 3.0 * w + 1.0, w + 2.0 * h + 1.0)),
+            (3, 2)
+        );
+        assert_eq!(screen.cell_at(Vec2::new(w - 1.0, w - 1.0)), (0, 0));
+        assert_eq!(screen.cell_at(Vec2::new(1.0, 1.0)), (0, 0));
     }
 
     #[test]

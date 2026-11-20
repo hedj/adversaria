@@ -58,17 +58,39 @@ pub fn cell_size(ctx: &egui::Context) -> Vec2 {
     ctx.fonts_mut(|f| Vec2::new(f.glyph_width(&font, 'M'), f.row_height(&font)))
 }
 
-/// Paint every cell, then the text cursor, if it is shown.
-pub fn paint(p: &Painter, cells: &Cells, size: Vec2) {
+/// The colour of the bar that marks the cursor's line, in the margin.
+const ACCENT: Color32 = Color32::from_rgb(0x6c, 0x9b, 0xe0);
+
+/// Paint every cell, a margin from the window's edge, then the bar in
+/// the margin by the cursor's line, then the text cursor, if it is shown.
+pub fn paint(p: &Painter, cells: &Cells, size: Vec2, margin: Vec2) {
     p.rect_filled(p.clip_rect(), 0.0, PAPER);
-    let grid = Grid {
-        size,
-        pixel: 1.0 / p.pixels_per_point(),
-    };
+    let grid = Grid::new(size, 1.0 / p.pixels_per_point(), margin);
     paint_cells(p, cells, grid);
+    for y in cursor_line_rows(&cells.buffer) {
+        p.rect_filled(accent_bar(grid, y), 0.0, ACCENT);
+    }
     if let Some(at) = cells.cursor {
         paint_cursor(p, grid.rect(at));
     }
+}
+
+/// The rows of the cursor's line: those whose first cell has the
+/// cursor's ground (crate::ui::cursor), which nothing else is laid on.
+fn cursor_line_rows(buffer: &ratatui::buffer::Buffer) -> Vec<u16> {
+    let ground = crate::ui::cursor().bg;
+    let rows = buffer.area.rows().map(|r| r.y);
+    rows.filter(|y| Some(buffer[(0, *y)].bg) == ground)
+        .collect()
+}
+
+/// A bar in the margin, against a row's first cell, so the bar and the
+/// cursor's ground read as one shape: about three points wide, on whole
+/// pixels.
+fn accent_bar(grid: Grid, y: u16) -> Rect {
+    let row = grid.rect(Position::new(0, y));
+    let width = grid.points(3.0);
+    Rect::from_x_y_ranges(row.min.x - width..=row.min.x, row.y_range())
 }
 
 /// Each cell in its place on the grid.
@@ -280,12 +302,26 @@ mod tests {
     }
 
     #[test]
+    fn the_bar_marks_the_cursors_rows_in_the_margin() {
+        // Catches the bar on a row without the cursor's ground, drawn over
+        // the first cell rather than in the margin, or apart from the
+        // cursor's ground, so the two read as two shapes.
+        let mut buffer = ratatui::buffer::Buffer::empty(ratatui::layout::Rect::new(0, 0, 10, 5));
+        for y in [2, 3] {
+            buffer.set_style(ratatui::layout::Rect::new(0, y, 10, 1), crate::ui::cursor());
+        }
+        assert_eq!(cursor_line_rows(&buffer), [2, 3]);
+        let grid = Grid::new(Vec2::new(9.0, 18.0), 0.8, Vec2::splat(9.0));
+        let (bar, cell) = (accent_bar(grid, 2), grid.rect(Position::new(0, 2)));
+        assert!(bar.min.x > 0.0, "{bar:?} in the margin");
+        assert_eq!(bar.max.x, cell.min.x, "against the first cell, no gap");
+        assert_eq!(bar.y_range(), cell.y_range());
+    }
+
+    #[test]
     fn a_line_character_is_drawn_as_shapes_and_a_letter_by_the_font() {
         // Catches the divider left to the font's glyph, which stops short.
-        let grid = Grid {
-            size: Vec2::new(9.0, 18.0),
-            pixel: 1.0,
-        };
+        let grid = Grid::new(Vec2::new(9.0, 18.0), 1.0, Vec2::ZERO);
         let brush = brush(grid, Position::new(0, 0));
         assert!(drawn("│", &brush).is_some_and(|s| !s.is_empty()));
         assert!(drawn("a", &brush).is_none());
@@ -332,7 +368,7 @@ mod glyph_tests {
         Brush {
             cell: Rect::from_min_size(egui::Pos2::ZERO, size),
             ink: Color32::WHITE,
-            grid: Grid { size, pixel: 1.0 },
+            grid: Grid::new(size, 1.0, Vec2::ZERO),
         }
     }
 

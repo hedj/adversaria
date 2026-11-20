@@ -12,27 +12,45 @@ use egui::{Color32, Pos2, Rect, Shape, Stroke, Vec2};
 use ratatui::layout::Position;
 use std::f32::consts::FRAC_PI_2;
 
-/// The grid the cells lie on: a cell's size and a pixel, in points.
+/// The grid the cells lie on: a cell's size, a pixel, and where its
+/// first cell's corner is, in points.
 #[derive(Debug, Clone, Copy)]
 pub struct Grid {
-    pub size: Vec2,
-    pub pixel: f32,
+    size: Vec2,
+    pixel: f32,
+    origin: Vec2,
 }
 
 impl Grid {
+    /// A grid of cells of a size, a pixel, and its first cell's corner.
+    pub fn new(size: Vec2, pixel: f32, origin: Vec2) -> Grid {
+        Grid {
+            size,
+            pixel,
+            origin,
+        }
+    }
+
     /// Where a cell is, by its column and row. Its edges are on pixels, the
     /// same for neighbouring cells, so they meet with no seam between.
     pub fn rect(&self, at: Position) -> Rect {
-        let corner = |x: u16, y: u16| {
-            let points = Vec2::new(f32::from(x), f32::from(y)) * self.size;
-            ((points / self.pixel).round() * self.pixel).to_pos2()
-        };
-        Rect::from_min_max(corner(at.x, at.y), corner(at.x + 1, at.y + 1))
+        Rect::from_min_max(self.corner(at.x, at.y), self.corner(at.x + 1, at.y + 1))
     }
 
-    /// A light line's width: about a point, in whole pixels, at least one.
+    /// The top left corner of the cell at a column and row, on a pixel.
+    fn corner(&self, x: u16, y: u16) -> Pos2 {
+        let points = Vec2::new(f32::from(x), f32::from(y)) * self.size + self.origin;
+        ((points / self.pixel).round() * self.pixel).to_pos2()
+    }
+
+    /// About so many points, in whole pixels, at least one.
+    pub fn points(&self, n: f32) -> f32 {
+        (n / self.pixel).round().max(1.0) * self.pixel
+    }
+
+    /// A light line's width: about a point.
     fn line(&self) -> f32 {
-        (1.0 / self.pixel).round().max(1.0) * self.pixel
+        self.points(1.0)
     }
 }
 
@@ -262,6 +280,7 @@ mod tests {
         let grid = Grid {
             size: cell.size(),
             pixel: 0.8,
+            origin: Vec2::ZERO,
         };
         Brush {
             cell,
@@ -345,6 +364,7 @@ mod tests {
         let grid = Grid {
             size: Vec2::new(9.0, 18.0),
             pixel: 1.0,
+            origin: Vec2::ZERO,
         };
         let at = grid.rect(Position::new(3, 2));
         assert_eq!(at.min, Pos2::new(27.0, 36.0));
@@ -359,6 +379,7 @@ mod tests {
         let grid = Grid {
             size: Vec2::new(9.6, 17.5),
             pixel: 0.8,
+            origin: Vec2::ZERO,
         };
         for y in 0..40 {
             let (this, next) = (

@@ -1559,6 +1559,17 @@ where the review held.
    taken: the foot's "? lists what may come next" while the list is
    open; and rewording `accept`'s "adopt the nth suggestion", which is
    what accepting does.
+14. The text touched the window's edge, and the cursor's line was marked
+   by its tint alone (an accent bar was put off at finding 4). Now a
+   margin of one cell's width lies on every side, and a bar about three
+   points wide, brighter blue, is painted in the left margin beside
+   each row of the cursor's line: in the margin, not in a cell, so a
+   selection or a right-click never takes it in. The review measured
+   both in the screenshots and found the point of paper left between bar
+   and tint made two shapes of one: taken, the bar is against the cell.
+   Not taken: dimming the bar when the other pane has focus, which the
+   bright heading already shows (finding 8); narrower margins in a
+   narrow window; a bar down a view's rows.
 
 ## 4. Where it stands
 

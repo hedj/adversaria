@@ -128,7 +128,9 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   is dim.
 - **Left pane:** the outline. When it runs past the pane, the pane's
   last row says how many items lie above and below (`↑ 6 items above ·
-  ↓ continues below`); the outline scrolls to keep the cursor in view. `▼` marks an item with items under it, `▶` a
+  ↓ continues below`); the outline scrolls to keep the cursor in view.
+  The cursor's item is tinted blue-grey across the pane, with a brighter
+  blue bar beside it in the margin. `▼` marks an item with items under it, `▶` a
   folded one (followed by how many items it hides), `•` an item with none.
   Top-level items show their number. Under an item, `‼` lines are its
   marks: one for each constraint its facts break or disagree under,
