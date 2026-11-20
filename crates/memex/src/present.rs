@@ -39,6 +39,12 @@ pub enum Presentation {
 }
 
 impl Presentation {
+    /// Whether it is the user's own text, an item, whose words plumbing
+    /// may act on; the rest (a mark, a chart, a change) is the memex's.
+    pub fn is_text(&self) -> bool {
+        matches!(self, Presentation::Item { .. })
+    }
+
     /// What a click does on it, as one of the two things a click can do:
     /// put the cursor on an item, or run a command line. None: a click
     /// does nothing (a right-click offers what can be done).
@@ -127,7 +133,9 @@ impl App {
             self.click(item);
         }
         let mut offers = p.as_ref().map(|p| self.translators(p)).unwrap_or_default();
-        add_new(&mut offers, self.plumbed_words(text));
+        if p.as_ref().is_none_or(Presentation::is_text) {
+            add_new(&mut offers, self.plumbed_words(text));
+        }
         let title = p.map_or_else(|| text.to_string(), |p| self.presented_name(&p));
         self.offer_menu(&title, offers, at);
     }

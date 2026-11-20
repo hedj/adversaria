@@ -119,7 +119,7 @@ impl App {
         match p {
             P::Item { id, .. } => outline.text(*id),
             P::Fact { entry, .. } => self.fact_shown(*entry),
-            P::Constraint { entry, .. } => format!("constraint of entry {entry}"),
+            P::Constraint { entry, .. } => self.constraint_name(*entry),
             P::Layer { entry, .. } => format!("layer of entry {entry}"),
             P::Change(entry) => format!("change {entry}"),
             P::Suggestion(n) => format!("suggestion {n}"),
@@ -134,6 +134,16 @@ impl App {
         fact.map_or_else(
             || format!("fact of entry {entry}"),
             |(_, t)| crate::reason::show(t),
+        )
+    }
+
+    /// A constraint's name, by its entry.
+    fn constraint_name(&self, entry: u64) -> String {
+        let eval = self.reason.eval[0].as_ref();
+        let c = eval.and_then(|e| e.constraint_of(entry));
+        c.map_or_else(
+            || format!("constraint {entry}"),
+            |c| c.constraint.name.clone(),
         )
     }
 }

@@ -121,7 +121,8 @@ fn a_revisions_change_presents_its_entry_and_a_click_does_nothing() {
 /// makes it: the menu's offers, by command line.
 fn right_click_on(r: &mut Room, text: &str) -> Vec<String> {
     let at = r.find(text);
-    let word = text.split_whitespace().next().unwrap_or("");
+    let worded = |w: &&str| w.chars().any(char::is_alphanumeric);
+    let word = text.split_whitespace().find(worded).unwrap_or("");
     let hits = r.hits();
     r.app.right_click(&hits, at, word, false);
     offered(r)
@@ -163,6 +164,12 @@ fn a_mark_offers_its_rule_and_retracting_its_constraint() {
     let offers = right_click_on(&mut r, "? sources disagree");
     assert_eq!(offers[0], "go 3", "{offers:?}");
     assert!(offers[1].starts_with("retract "), "{offers:?}");
+    assert_eq!(offers.len(), 2, "no word of the mark plumbed: {offers:?}");
+    assert!(
+        r.shows("act on “Nothing has more than 1 date”"),
+        "{:#?}",
+        r.lines()
+    );
     r.tap(&[memex::app::Key::Enter]);
     assert_eq!(r.here(), "Nothing has more than 1 date.");
 }
@@ -219,6 +226,7 @@ fn pointing_at_an_item_supplies_it_to_the_line() {
     command_line(&mut r, "link to ");
     click_on(&mut r, "Energia");
     assert_eq!(line_now(&r), "link to 2 ");
+    assert!(r.shows("link (to) 2"), "the guide word shown once");
     assert_eq!(r.app.cursor(), items[0], "the cursor stays");
     r.tap(&[memex::app::Key::Enter]);
     assert_eq!(r.outline().links_of(items[0]).0.len(), 1);

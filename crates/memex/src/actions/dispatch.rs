@@ -518,8 +518,10 @@ impl App {
     /// The link command's line: its two ends, then its type.
     fn guided_link(&self, words: &[&str], open: bool) -> String {
         let (addr, kind) = split_kind(words);
-        let two = self.addresses(addr, 2).is_some();
-        let shown = self.guided_ends(addr, two);
+        // "to", typed, is the guide word the line shows in its place.
+        let addr: Vec<&str> = addr.iter().copied().filter(|w| *w != "to").collect();
+        let two = self.addresses(&addr, 2).is_some();
+        let shown = self.guided_ends(&addr, two);
         match kind {
             Some(k) => format!("{shown} (as) {k}"),
             None if open && two => format!("{shown} (as)"),
