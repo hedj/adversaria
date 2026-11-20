@@ -5,7 +5,7 @@ use memex::app::{App, Event, Key, Mode, Quasi};
 use memex::config::Config;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
-use ratatui::style::Style;
+use ratatui::style::{Color, Modifier, Style};
 
 mod support;
 use support::{Room, replayed};
@@ -365,9 +365,45 @@ fn the_worlds_are_side_by_side(app: &App) {
     s.assert("The flight came two years after Energia's first launch.");
     s.assert("1987 Energia's first launch ── 1988 Buran's flight");
     s.assert("1987 Energia's first launch ── 1989 Buran's flight");
-    s.assert("Constraint one date per event: 0 violations, 1 disagreement");
-    s.assert("Constraint one date per event: 0 violations · 1.1 set aside here");
-    s.assert("(fact set aside here)");
+    s.assert("Constraint one date per event:");
+    s.assert("  0 violations, 1 disagreement");
+    s.assert("  0 violations, 0 disagreements");
+    s.assert("  1.1 set aside here");
+    s.assert("The programme");
+    s.assert("How charts were reviewed");
+    let gone = "Buran flew once, unmanned, on 15 November 1988.  (1.1 set aside here)";
+    s.assert(gone);
+    let struck = s.style_of(gone).add_modifier;
+    assert!(
+        struck.contains(Modifier::CROSSED_OUT),
+        "the fact set aside is struck through"
+    );
+    let changed = s.style_of("The flight came two years").add_modifier;
+    assert!(
+        changed.contains(Modifier::BOLD | Modifier::UNDERLINED),
+        "the change is marked"
+    );
+    let one = s.style_of("1 disagreement").fg;
+    assert_eq!(
+        one,
+        memex::ui::disagreement().fg,
+        "a count not zero is coloured"
+    );
+    let zero = s.style_of("0 disagreements");
+    assert!(
+        matches!(zero.fg, None | Some(Color::Reset)),
+        "a count of zero is plain"
+    );
+    let mark = Modifier::BOLD | Modifier::UNDERLINED;
+    assert!(
+        zero.add_modifier.contains(mark),
+        "a count that changed is marked"
+    );
+    let same = s.style_of("0 violations").add_modifier;
+    assert!(
+        !same.contains(Modifier::BOLD),
+        "a count the same in both is not"
+    );
 }
 
 /// Scene 3, closed: the actual world again, as it was, and the

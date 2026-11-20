@@ -170,8 +170,12 @@ Press Enter. A second world opens beside the actual one, row for row:
     WORLD · SUPPOSE THE FLIGHT WAS IN 1989
 
 In the supposed world your 1988 fact is set aside, so the rule holds;
-the notebook says `set aside in this world: 1.1`, and the rule's row
-says `0 violations · 1.1 set aside here`. Your actual world is
+the notebook says `set aside in this world: 1.1`. Your fact is struck
+through and marked `(1.1 set aside here)`, and under the rule the
+supposed world counts `0 violations, 0 disagreements`, then
+`1.1 set aside here`; the actual world, beside it, still counts
+`1 disagreement`. A count or a row that differs between the worlds is
+bold and underlined. Your actual world is
 untouched. In part D you will compute a sentence from the dates, which
 each world would show its own way.
 

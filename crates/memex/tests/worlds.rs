@@ -191,7 +191,7 @@ fn each_fact_set_aside_is_marked_on_its_own_row() {
     r.app.evaluate().unwrap();
     let marked = column(&r, 1)
         .iter()
-        .filter(|l| l.contains("(fact set aside here)"))
+        .filter(|l| l.contains("set aside here)"))
         .count();
     assert_eq!(marked, 2, "{}", r.app.session.message);
 }
@@ -269,21 +269,23 @@ fn a_fact_set_aside_is_named_on_the_line_of_its_constraint_alone() {
     suppose(&mut r, "cell(food, 900)");
     r.app.evaluate().unwrap();
     let lines = column(&r, 1);
-    let line = |name: &str| {
-        lines
-            .iter()
-            .find(|l| l.contains(name))
-            .cloned()
-            .unwrap_or_default()
-    };
     assert!(
-        line("Constraint one value:").contains("set aside here"),
+        block(&lines, "Constraint one value:").contains("set aside here"),
         "{lines:#?}"
     );
     assert!(
-        !line("Constraint within income:").contains("set aside here"),
+        !block(&lines, "Constraint within income:").contains("set aside here"),
         "{lines:#?}"
     );
+}
+
+/// A constraint's block in a column: its name's line and the set-in lines
+/// under it, joined.
+fn block(lines: &[String], name: &str) -> String {
+    let from = lines.iter().position(|l| l.starts_with(name));
+    let rest = from.map_or(&[][..], |i| &lines[i..]);
+    let set_in = rest.iter().skip(1).take_while(|l| l.starts_with("  "));
+    rest.iter().take(1).chain(set_in).cloned().collect()
 }
 
 #[test]
@@ -303,7 +305,7 @@ fn a_fact_retracted_by_hand_is_named_on_a_line_of_its_own() {
     let lines = column(&r, 1);
     let on_constraint = lines
         .iter()
-        .any(|l| l.starts_with("Constraint") && l.contains("set aside here"));
+        .any(|l| l.trim_end().ends_with("set aside here"));
     let own = lines
         .iter()
         .filter(|l| l.starts_with("Retracted here: "))

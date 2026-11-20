@@ -2967,25 +2967,39 @@ impl<'a> Sides<'a> {
         }
     }
 
-    /// A row of the actual world: the item's text there, with a dashed
-    /// trail where the supposed world differs.
+    /// A row of the actual world: the item's text there, set in by its
+    /// level, with a dashed trail where the supposed world differs.
     fn actual_row(&self, i: u64) -> Line<'static> {
         let here = self.side(0).text(i);
         let trail = here != self.side(1).text(i);
         let trail = trail.then(|| Span::styled("  - - -", dim()));
-        Line::from_iter(std::iter::once(Span::raw(here)).chain(trail))
+        let text = Span::raw(format!("{}{here}", self.indent(i)));
+        Line::from_iter(std::iter::once(text).chain(trail))
     }
 
-    /// A row of the supposed world: the item's text there, bold where it
-    /// differs from the actual world, and whether its fact is set aside.
+    /// A row of the supposed world: the item's text there, set in by its
+    /// level; bold and underlined where it differs from the actual world;
+    /// struck through, and said so, where its fact is set aside.
     fn supposed_row(&self, i: u64) -> Line<'static> {
         let here = self.side(1).text(i);
+        let gone = self.sets_aside_at(i);
         let differs = here != self.side(0).text(i);
-        let here = Span::styled(here, if differs { bold() } else { Style::default() });
-        let gone = self
-            .sets_aside_at(i)
-            .then(|| Span::styled("  (fact set aside here)", dim()));
-        Line::from_iter(std::iter::once(here).chain(gone))
+        let style = changed_style(differs, gone);
+        let text = Span::styled(format!("{}{here}", self.indent(i)), style);
+        let said = gone.then(|| self.set_aside_note(i));
+        Line::from_iter(std::iter::once(text).chain(said))
+    }
+
+    /// A note on a row whose fact is set aside, with the row's place, so
+    /// that the constraint which set it aside can name it.
+    fn set_aside_note(&self, i: u64) -> Span<'static> {
+        let place = self.actual.number(i);
+        Span::styled(format!("  ({place} set aside here)"), dim())
+    }
+
+    /// An item's row's indent: two cells for each level below the top.
+    fn indent(&self, i: u64) -> String {
+        "  ".repeat(self.actual.depth_of(i))
     }
 
     /// Whether the supposed world sets aside a fact of an item of the
@@ -2995,35 +3009,55 @@ impl<'a> Sides<'a> {
         self.aside.entries.iter().any(|s| actual.states(i, *s))
     }
 
-    /// A line for each constraint of a world: how many violations and
+    /// The lines of each constraint of a world: how many violations and
     /// disagreements it has, and, in the supposed world, what it sets
     /// aside.
     fn constraint_lines(&self, k: usize) -> Vec<Line<'static>> {
         let Some(e) = self.side(k).eval else {
             return vec![];
         };
-        let mut lines: Vec<String> = e
-            .constraints
-            .iter()
-            .map(|c| self.constraint_line(k, c))
-            .collect();
+        let each = e.constraints.iter();
+        let mut lines: Vec<Line<'static>> =
+            each.flat_map(|c| self.constraint_block(k, c)).collect();
         if k == 1 {
-            lines.extend(self.unexplained_line());
+            lines.extend(self.unexplained_line().map(Line::raw));
         }
-        lines.into_iter().map(Line::raw).collect()
+        lines
     }
 
-    fn constraint_line(&self, k: usize, c: &ConstraintEval) -> String {
-        let violations = counted(c.violations.len(), "violation");
-        let mut line = format!("Constraint {}: {violations}", c.constraint.name);
-        if !c.disagreements.is_empty() {
-            line += &format!(", {}", counted(c.disagreements.len(), "disagreement"));
-        }
+    /// A constraint's lines in a world, the same number in each so the
+    /// worlds stay row for row: its name; both counts, so the worlds
+    /// compare count for count; and, where it sets facts aside, a line
+    /// naming them, blank in the actual world.
+    fn constraint_block(&self, k: usize, c: &ConstraintEval) -> Vec<Line<'static>> {
+        let name = Line::raw(format!("Constraint {}:", c.constraint.name));
+        let mut lines = vec![name, Line::from(self.counts_in(k, c))];
         let under = self.set_aside_where(|cs| cs.is_some_and(|cs| cs.contains(&c.seq)));
-        if k == 1 && !under.is_empty() {
-            line += &format!(" · {under} set aside here");
+        if !under.is_empty() {
+            let said = if k == 1 {
+                format!("  {under} set aside here")
+            } else {
+                String::new()
+            };
+            lines.push(Line::raw(said));
         }
-        line
+        lines
+    }
+
+    /// A constraint's counts in a world, set in; in the supposed world, a
+    /// count that differs from the actual world's is marked as changed.
+    fn counts_in(&self, k: usize, c: &ConstraintEval) -> Vec<Span<'static>> {
+        let mut spans = finding_counts(c);
+        if let (1, Some(a)) = (k, self.actual_of(c)) {
+            mark_changes(&mut spans, a, c);
+        }
+        std::iter::once(Span::raw("  ")).chain(spans).collect()
+    }
+
+    /// The actual world's evaluation of a constraint.
+    fn actual_of(&self, c: &ConstraintEval) -> Option<&ConstraintEval> {
+        let e = self.side(0).eval?;
+        e.constraints.iter().find(|a| a.seq == c.seq)
     }
 
     /// The facts set aside whose retraction records no constraint (one
@@ -3074,22 +3108,64 @@ impl<'a> Sides<'a> {
     }
 }
 
-/// The items that state facts or show derived values: the actual
-/// world's in its order, then the supposed world's that it lacks.
+/// The items of both worlds but their views, which follow the rows, so
+/// each world is seen whole, its notes and claims beside its facts: the
+/// actual world's in its order, then the supposed world's that it lacks.
 fn shared_rows(actual: &Outline, supposed: &Outline) -> Vec<u64> {
-    let mut rows = fact_rows(actual);
-    let more: Vec<u64> = fact_rows(supposed)
+    let mut rows = actual.in_order();
+    let more: Vec<u64> = supposed
+        .in_order()
         .into_iter()
         .filter(|i| !rows.contains(i))
         .collect();
     rows.extend(more);
+    rows.retain(|i| !supposed.views.contains_key(i));
     rows
 }
 
-/// An outline's items that state facts or show derived values, in order.
-fn fact_rows(o: &Outline) -> Vec<u64> {
-    let stating = |i: &u64| o.fact_item.values().any(|x| x == i) || o.derived.contains_key(i);
-    o.in_order().into_iter().filter(stating).collect()
+/// How a supposed world's row is drawn: struck through where its
+/// fact is set aside; bold and underlined where its text differs.
+fn changed_style(differs: bool, gone: bool) -> Style {
+    let changed = Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
+    match (gone, differs) {
+        (true, _) => Style::default().add_modifier(Modifier::CROSSED_OUT),
+        (false, true) => changed,
+        (false, false) => Style::default(),
+    }
+}
+
+/// A constraint's counts, each marked where it differs from the actual
+/// world's.
+fn mark_changes(spans: &mut [Span<'static>; 3], actual: &ConstraintEval, c: &ConstraintEval) {
+    mark_changed(&mut spans[0], actual.violations.len() != c.violations.len());
+    mark_changed(
+        &mut spans[2],
+        actual.disagreements.len() != c.disagreements.len(),
+    );
+}
+
+/// A span marked as changed, bold and underlined, if it is.
+fn mark_changed(span: &mut Span<'static>, changed: bool) {
+    if changed {
+        span.style = span
+            .style
+            .add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
+    }
+}
+
+/// A constraint's counts: its violations, then its disagreements.
+fn finding_counts(c: &ConstraintEval) -> [Span<'static>; 3] {
+    [
+        tinted_count(c.violations.len(), "violation", violation()),
+        Span::raw(", "),
+        tinted_count(c.disagreements.len(), "disagreement", disagreement()),
+    ]
+}
+
+/// A count of findings, in their colour when not zero.
+fn tinted_count(n: usize, kind: &str, style: Style) -> Span<'static> {
+    let style = if n > 0 { style } else { Style::default() };
+    Span::styled(counted(n, kind), style)
 }
 
 /// The entries whose facts the actual world states and the supposed one

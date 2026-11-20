@@ -623,8 +623,14 @@ a constraint (two dates for one event; two values for one cell). A
 violation that rests on the supposition and two or more other beliefs is
 left in place, and the message names it ("left for you: 1 violation of
 …"): any of those beliefs could be given up, and which one is your
-choice. The two worlds are shown row for row: derived text, timelines and
-constraints, with what changed.
+choice. The two worlds are shown row for row: the whole outline, set in by
+level, then each constraint and each view. In the supposed world a fact
+set aside is struck through and says so, with its place ("(1.1 set aside
+here)"); a row whose text differs is bold and underlined, with a dashed
+trail on the actual side. Each constraint gives both counts in both
+worlds, "0 violations, 1 disagreement", a count above zero in its
+colour, and in the supposed world a count that differs is bold and
+underlined; under it, what it set aside.
 
 `close` returns to the actual world and keeps the supposition in the
 journal. `commit` makes the supposed world the actual one.

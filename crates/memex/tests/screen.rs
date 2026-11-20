@@ -451,7 +451,7 @@ fn an_outlines_long_title_wraps_onto_its_second_row() {
 #[test]
 fn a_row_one_world_wraps_further_keeps_the_next_rows_together() {
     // Catches the two worlds' rows drifting apart when one side of a pair
-    // wraps to more rows: here the supposed side adds "(fact retracted
+    // wraps to more rows: here the supposed side adds "(set aside
     // here)" to the row whose fact it sets aside.
     let long = "The date of Buran-flight is 1988. The label of Buran-flight is \"Buran's flight\".";
     let mut room = Room::new("screen-worlds-pad");
@@ -462,13 +462,14 @@ fn a_row_one_world_wraps_further_keeps_the_next_rows_together() {
     room.release(Quasi::Suppose);
     room.tap(&[Key::Enter]);
     room.app.evaluate().unwrap(); // as the window does
-    // At 52 columns "(fact set aside here)" takes a row of its own on
-    // the supposed side, so that side's pair is a row taller.
+    // At 52 columns "(1 set aside here)" wraps to a row whose actual side
+    // is empty, so the supposed side's pair is a row taller.
     let rows = room.lines_at(52, 30);
     let right = |r: &String| r.split('│').nth(1).unwrap_or("").trim_start().to_string();
+    let left_empty = |r: &String| r.split('│').next().unwrap_or("").trim().is_empty();
     let own_row = rows
         .iter()
-        .any(|r| right(r).starts_with("(fact set aside here)"));
+        .any(|r| left_empty(r) && right(r).starts_with("set aside here)"));
     assert!(own_row, "the supposed side is a row taller: {rows:#?}");
     let below = rows.iter().find(|r| r.starts_with("The income"));
     let below = right(below.expect("The income"));

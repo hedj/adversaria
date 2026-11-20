@@ -1510,6 +1510,18 @@ where the review held.
    rather than "Super (Suppose)", and for "the actual world": taken.
    Not taken: an example built from the item's own conflict, which
    needs facts said back in controlled English.
+10. The supposed world showed only the rows that state facts, with no
+   headings or notes around them; a fact set aside said only "(fact set
+   aside here)"; and the worlds counted different things ("0
+   violations, 1 disagreement" against "0 violations · 1.1 set aside
+   here"). Now both show the whole outline, set in by level; a fact set
+   aside is struck through and gives its place; a changed row is bold
+   and underlined; both give both counts, coloured above zero. The
+   review found the constraint line wrapped mid-phrase and broke the
+   rows apart, "1.1" pointed at nothing on screen, a changed count was
+   unmarked, and the struck text was too dim: all taken (name, counts
+   and what was set aside on rows of their own). Not taken yet: a row
+   for the supposition itself in the supposed world.
 
 ## 4. Where it stands
 
