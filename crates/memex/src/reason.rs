@@ -48,6 +48,8 @@ pub type Sourced<'a> = (&'a Prov, &'a Term);
 /// A finding of a constraint: its name, the solution, and whether it is
 /// a violation (else sources disagree).
 pub struct Finding<'a> {
+    /// The entry that made the constraint.
+    pub seq: u64,
     pub name: &'a str,
     pub sol: &'a Solution,
     pub violation: bool,
@@ -117,9 +119,10 @@ impl ConstraintEval {
 
     /// Its findings: the violations, then the disagreements.
     pub fn findings(&self) -> impl Iterator<Item = Finding<'_>> {
-        let name = self.constraint.name.as_str();
+        let (seq, name) = (self.seq, self.constraint.name.as_str());
         let found = |violation| {
             move |sol| Finding {
+                seq,
                 name,
                 sol,
                 violation,
@@ -176,6 +179,11 @@ impl WorldEval {
     /// A constraint, as reasoning found it, by its name.
     pub fn constraint_named(&self, name: &str) -> Option<&ConstraintEval> {
         self.constraints.iter().find(|c| c.constraint.name == name)
+    }
+
+    /// A constraint's evaluation, by the entry that made it.
+    pub fn constraint_of(&self, entry: u64) -> Option<&ConstraintEval> {
+        self.constraints.iter().find(|c| c.seq == entry)
     }
 
     /// The entries whose facts are in violations: what rests on them is

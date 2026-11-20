@@ -43,9 +43,12 @@ pub fn disagreement() -> Style {
 
 /// A mark's line under its item: ‼ for a violation, ? for a
 /// disagreement, each in its colour.
-fn mark_line(indent: &str, (loud, m): (bool, String)) -> Line<'static> {
-    let sign = if loud { "‼" } else { "?" };
-    Line::styled(format!("{indent}  {sign} {m}"), finding_style(loud))
+fn mark_line(indent: &str, m: &MarkLine) -> Line<'static> {
+    let sign = if m.loud { "‼" } else { "?" };
+    Line::styled(
+        format!("{indent}  {sign} {}", m.text),
+        finding_style(m.loud),
+    )
 }
 
 /// A finding's style, by whether it is a violation.
@@ -317,8 +320,7 @@ fn screen_areas(area: Rect, edges: &Edges) -> [Rect; 4] {
 /// The body: the two worlds while a supposition is open, else the panes.
 fn draw_body(f: &mut Frame, app: &App, area: Rect) -> Presentations {
     if app.reason.supposition.is_some() {
-        draw_worlds(f, app, area);
-        return Presentations::default();
+        return draw_worlds(f, app, area);
     }
     draw_panes(f, app, area)
 }
@@ -434,15 +436,35 @@ fn top_right(app: &App) -> Line<'static> {
     }
 }
 
-/// The right pane for a view: its layers, each with its goal and how many
-/// marks it gives, and the view's notes.
-fn view_panel(app: &App, id: u64, layers: &[Layer]) -> Vec<Line<'static>> {
-    let mut lines = vec![layers_heading(layers), Line::raw("")];
-    lines.extend(layers.iter().flat_map(|l| layer_lines(app, l)));
-    lines.extend(view_notes(app, id));
-    let hint = "a click on a mark goes to the item that states its fact";
-    lines.extend([Line::raw(""), Line::styled(hint, dim())]);
+/// A view's panel: its layers, each presenting itself, with its entry and
+/// how many marks it gives; what was not drawn; and what a click does.
+fn view_panel(app: &App, id: u64, layers: &[Layer]) -> Vec<Presented> {
+    let mut lines = layers_head(layers);
+    lines.extend(layers.iter().flat_map(|l| presented_layer(app, l, id)));
+    lines.extend(plain(view_notes(app, id)));
+    lines.extend(plain(view_hint()));
     lines
+}
+
+/// The view panel's heading, and a blank line under it.
+fn layers_head(layers: &[Layer]) -> Vec<Presented> {
+    plain(vec![layers_heading(layers), Line::raw("")])
+}
+
+/// What a click on a view's mark does, under its layers.
+fn view_hint() -> Vec<Line<'static>> {
+    let hint = "a click on a mark goes to the item that states its fact";
+    vec![Line::raw(""), Line::styled(hint, dim())]
+}
+
+/// A layer's lines, each presenting the layer of its view.
+fn presented_layer(app: &App, layer: &Layer, view: u64) -> Vec<Presented> {
+    let presented = Presentation::Layer {
+        entry: layer.seq,
+        view,
+    };
+    let lines = layer_lines(app, layer).into_iter();
+    lines.map(|l| (l, Some(presented.clone()))).collect()
 }
 
 /// The view panel's heading: how many layers the view has.
@@ -694,7 +716,7 @@ impl<'a> OutlinePane<'a> {
         drawn.push_lines(self.answer_line(id, depth), set_in + 2);
         drawn.push_lines(self.prose_line(id, depth), set_in);
         drawn.push_lines(self.unmade_line(id, depth), set_in);
-        drawn.push_lines(self.mark_lines(id, depth), set_in + 2);
+        self.push_marks(drawn, id, depth);
         if self.outline().views.contains_key(&id) {
             self.view_lines(drawn, id, 2 * depth + 2);
         }
@@ -841,16 +863,43 @@ impl<'a> OutlinePane<'a> {
         self.app.session.prose_hint(id).filter(|_| here)
     }
 
-    /// An item's marks, each under it, set in: bold if loud, else dim.
-    fn mark_lines(&self, id: u64, depth: usize) -> Vec<Line<'static>> {
+    /// An item's marks, each under it, set in, loud or not; each that is
+    /// a finding of a constraint presents the constraint.
+    fn push_marks(&self, drawn: &mut Drawn, id: u64, depth: usize) {
         let indent = "  ".repeat(depth + 1);
-        let line = |mark| mark_line(&indent, mark);
-        self.marks_of(id).into_iter().map(line).collect()
+        for m in self.marks_of(id) {
+            drawn.places.extend(self.mark_place(drawn.lines.len(), &m));
+            drawn.push(mark_line(&indent, &m), 2 * depth + 6);
+        }
+    }
+
+    /// Where a mark presents its constraint: all its line, if it is a
+    /// finding of one.
+    fn mark_place(&self, line: usize, m: &MarkLine) -> Option<Place> {
+        let presented = self.constraint_presented(m.constraint?);
+        Some(Place::of((line, 0, usize::MAX), presented))
+    }
+
+    /// A constraint, presented in this pane, by its entry, with the item
+    /// whose text states it.
+    fn constraint_presented(&self, entry: u64) -> Presentation {
+        let item = self.constraint_item(entry);
+        Presentation::Constraint {
+            pane: self.pane,
+            entry,
+            item,
+        }
+    }
+
+    /// The item whose text states a constraint, by its entry, if one does.
+    fn constraint_item(&self, entry: u64) -> Option<u64> {
+        let eval = self.app.reason.eval[0].as_ref()?;
+        stating_rule(self.outline(), &eval.constraint_of(entry)?.constraint.name)
     }
 
     /// An item's marks: each finding on its facts, then, if its inputs
     /// changed since it was made, which.
-    fn marks_of(&self, id: u64) -> Vec<(bool, String)> {
+    fn marks_of(&self, id: u64) -> Vec<MarkLine> {
         let found = self.app.reason.eval[0].as_ref();
         let mut marks = found
             .map(|e| item_marks(e, self.outline(), id))
@@ -861,9 +910,14 @@ impl<'a> OutlinePane<'a> {
 
     /// The loud mark of an item whose input files changed since it was
     /// made: which.
-    fn stale_mark(&self, id: u64) -> Option<(bool, String)> {
+    fn stale_mark(&self, id: u64) -> Option<MarkLine> {
         let files = self.app.session.stale().get(&id)?.join(", ");
-        Some((true, format!("input changed since: {files}")))
+        let text = format!("input changed since: {files}");
+        Some(MarkLine {
+            loud: true,
+            text,
+            constraint: None,
+        })
     }
 
     /// A view, drawn under its item, set in; a click on a mark goes to the
@@ -888,17 +942,23 @@ impl<'a> OutlinePane<'a> {
         places.flatten().collect()
     }
 
-    /// A mark of a view a click, on each of its lines, if an item states
-    /// its fact.
+    /// A mark of a view, presenting its fact on each of its lines, if an
+    /// item states the fact.
     fn hit_places(&self, hit: &view::Hit, at: (usize, usize)) -> Option<Vec<Place>> {
-        let click = self.click(hit_item(self.app, hit)?);
-        let lines = hit.area.lines_at(at);
-        Some(
-            lines
-                .into_iter()
-                .map(|l| Place::of(l, click.clone()))
-                .collect(),
-        )
+        let click = self.fact_presented(hit)?;
+        let lines = hit.area.lines_at(at).into_iter();
+        Some(lines.map(|l| Place::of(l, click.clone())).collect())
+    }
+
+    /// The fact a mark of a view presents, in this pane, if an item
+    /// states it.
+    fn fact_presented(&self, hit: &view::Hit) -> Option<Presentation> {
+        let (entry, item) = hit_fact(self.app, hit)?;
+        Some(Presentation::Fact {
+            pane: self.pane,
+            entry,
+            item,
+        })
     }
 
     /// A click that selects an item in this pane.
@@ -1420,15 +1480,15 @@ fn ink_style(ink: view::Ink) -> Style {
     }
 }
 
-/// The item a click on a mark goes to: the item stating the first fact
-/// the mark rests on.
-fn hit_item(app: &App, hit: &view::Hit) -> Option<u64> {
+/// The fact a mark presents: the first it rests on that an item states,
+/// by its entry, with that item.
+fn hit_fact(app: &App, hit: &view::Hit) -> Option<(u64, u64)> {
     hit.prov.iter().find_map(|s| {
         // A fact from the outline itself rests on the item's own entry.
         if app.notebook.outline.items.contains_key(s) {
-            Some(*s)
+            Some((*s, *s))
         } else {
-            app.notebook.outline.fact_item.get(s).copied()
+            app.notebook.outline.fact_item.get(s).map(|i| (*s, *i))
         }
     })
 }
@@ -1449,15 +1509,41 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect) -> Presentations {
     if let Some(item) = app.session.view.interrogate {
         return draw_interrogation(f, app, item, inner);
     }
-    f.render_widget(right_panel(app, app.session.view.selected()), inner);
-    Presentations::default()
+    draw_presented(f, selected_panel(app), inner)
+}
+
+/// What the selected item needs.
+fn selected_panel(app: &App) -> Vec<Presented> {
+    right_panel(app, app.session.view.selected())
+}
+
+/// A line, and the object it presents, if it presents one.
+type Presented = (Line<'static>, Option<Presentation>);
+
+/// Lines that present nothing.
+fn plain(lines: Vec<Line<'static>>) -> Vec<Presented> {
+    lines.into_iter().map(|l| (l, None)).collect()
+}
+
+/// Lines drawn hung in an area, each that presents an object recorded
+/// where it is drawn, all its rows.
+fn draw_presented(f: &mut Frame, lines: Vec<Presented>, area: Rect) -> Presentations {
+    let mut column = Column::new(area);
+    for (line, presented) in lines {
+        match presented {
+            Some(p) => column.clickable(vec![line], p),
+            None => column.lines.push(line),
+        }
+    }
+    f.render_widget(Hung(column.lines), area);
+    column.hits
 }
 
 /// What the selected item needs: its view's layers, the constraints its
 /// marks come from, or its links.
-fn right_panel(app: &App, id: u64) -> Hung {
+fn right_panel(app: &App, id: u64) -> Vec<Presented> {
     if let Some(layers) = app.notebook.outline.views.get(&id) {
-        return Hung(view_panel(app, id, layers));
+        return view_panel(app, id, layers);
     }
     let mut lines = match app.reason.eval[0].as_ref() {
         Some(e) if !item_marks(e, &app.notebook.outline, id).is_empty() => {
@@ -1466,8 +1552,8 @@ fn right_panel(app: &App, id: u64) -> Hung {
         }
         _ => links_lines(&app.notebook.outline, id),
     };
-    lines.extend(read_as_lines(&app.notebook.outline, id));
-    Hung(lines)
+    lines.extend(plain(read_as_lines(&app.notebook.outline, id)));
+    lines
 }
 
 /// What an item's text, as it is now, was read as, in Prolog: each
@@ -1594,19 +1680,22 @@ impl Along {
 /// The links pane's list: the item, its links from it and into it, each
 /// kind once and each link numbered as follow numbers it, and where its
 /// text is shown in place.
-fn links_lines(outline: &Outline, id: u64) -> Vec<Line<'static>> {
-    let mut lines = vec![
-        Line::styled("LINKS OF THE SELECTED ITEM", dim()),
-        Line::raw(""),
-    ];
+fn links_lines(outline: &Outline, id: u64) -> Vec<Presented> {
+    let heading = Line::styled("LINKS OF THE SELECTED ITEM", dim());
+    let mut lines = plain(vec![heading, Line::raw("")]);
     if id == TOP {
-        lines.push(nothing_selected());
+        lines.push((nothing_selected(), None));
         return lines;
     }
-    lines.extend([Line::raw(outline.text(id)), Line::raw("")]);
+    lines.extend(plain(vec![Line::raw(outline.text(id)), Line::raw("")]));
     lines.extend(link_lines(outline, id));
     lines.extend(transclusion_lines(outline, id));
     lines
+}
+
+/// An item, presented in the outline pane, where a click puts the cursor.
+fn item_presented(id: u64) -> Option<Presentation> {
+    Some(Presentation::Item { pane: 0, id })
 }
 
 /// What the links pane says with no item selected.
@@ -1615,26 +1704,33 @@ fn nothing_selected() -> Line<'static> {
 }
 
 /// An item's links, under a heading for each kind, numbered in order.
-fn link_lines(outline: &Outline, id: u64) -> Vec<Line<'static>> {
+fn link_lines(outline: &Outline, id: u64) -> Vec<Presented> {
     let rows = numbered_links(outline, id);
     let groups = rows.chunk_by(|a, b| a.0 == b.0);
     groups.flat_map(kind_lines).collect()
 }
 
-/// A heading of a kind of link, and its links.
-fn kind_lines(group: &[(String, String)]) -> Vec<Line<'static>> {
-    let heading = Line::styled(group[0].0.clone(), dim());
-    let links = group.iter().map(|(_, link)| Line::raw(link.clone()));
-    std::iter::once(heading).chain(links).collect()
+/// A heading of a kind of link, and its links, each presenting the item
+/// at its other end.
+fn kind_lines(group: &[(String, String, u64)]) -> Vec<Presented> {
+    let heading = (Line::styled(group[0].0.clone(), dim()), None);
+    std::iter::once(heading)
+        .chain(group.iter().map(link_line))
+        .collect()
 }
 
-/// Each of an item's links: its kind's heading, and the item at its other
-/// end with its number for follow.
-fn numbered_links(outline: &Outline, id: u64) -> Vec<(String, String)> {
+/// A link's line, presenting the item at its other end.
+fn link_line((_, text, end): &(String, String, u64)) -> Presented {
+    (Line::raw(text.clone()), item_presented(*end))
+}
+
+/// Each of an item's links: its kind's heading, the item at its other
+/// end with its number for follow, and that item.
+fn numbered_links(outline: &Outline, id: u64) -> Vec<(String, String, u64)> {
     let numbered = link_ends(outline, id).into_iter().enumerate();
     let line = |n: usize, end| format!("{}  {}", labelled_end(outline, end), n + 1);
     numbered
-        .map(|(n, (kind, end))| (kind, line(n, end)))
+        .map(|(n, (kind, end))| (kind, line(n, end), end))
         .collect()
 }
 
@@ -1662,18 +1758,20 @@ fn labelled_end(outline: &Outline, id: u64) -> String {
 }
 
 /// Where an item's text is shown in place: each item that transcludes it,
-/// under the item that holds it.
-fn transclusion_lines(outline: &Outline, id: u64) -> Vec<Line<'static>> {
+/// under the item that holds it, each presented.
+fn transclusion_lines(outline: &Outline, id: u64) -> Vec<Presented> {
     let shown_in = outline.transcluded_in(id);
     if shown_in.is_empty() {
         return vec![];
     }
-    let places = shown_in
-        .into_iter()
-        .map(|t| Line::raw(transcluded_at(outline, t)));
-    std::iter::once(Line::styled("transcluded in ←", dim()))
-        .chain(places)
-        .collect()
+    let heading = (Line::styled("transcluded in ←", dim()), None);
+    let places = shown_in.into_iter().map(|t| transcluded_line(outline, t));
+    std::iter::once(heading).chain(places).collect()
+}
+
+/// Where an item is transcluded, presenting the item that shows it.
+fn transcluded_line(outline: &Outline, t: u64) -> Presented {
+    (Line::raw(transcluded_at(outline, t)), item_presented(t))
 }
 
 /// An item that transcludes another, by the item that holds it, else its
@@ -2058,7 +2156,7 @@ fn place(outline: &Outline, seq: u64) -> String {
 
 /// The marks under an item: (is a violation, text) for each constraint
 /// solution that rests on one of its facts.
-pub fn item_marks(e: &WorldEval, outline: &Outline, item: u64) -> Vec<(bool, String)> {
+pub fn item_marks(e: &WorldEval, outline: &Outline, item: u64) -> Vec<MarkLine> {
     let findings: Vec<Finding> = e
         .constraints
         .iter()
@@ -2076,6 +2174,16 @@ struct Mark {
     loud: bool,
     head: String,
     rest: Vec<String>,
+    constraint: u64,
+}
+
+/// A mark under an item, as drawn: whether it is loud, its text, and the
+/// entry of the constraint it is a finding of, if it is one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MarkLine {
+    pub loud: bool,
+    pub text: String,
+    pub constraint: Option<u64>,
 }
 
 impl Mark {
@@ -2095,13 +2203,16 @@ impl Mark {
     }
 
     /// Its text: what it says of the item, then the other facts.
-    fn text(self) -> (bool, String) {
-        match self.rest.is_empty() {
-            true => (self.loud, self.head),
-            false => (
-                self.loud,
-                format!("{}; {}", self.head, self.rest.join("; ")),
-            ),
+    fn text(self) -> MarkLine {
+        let text = match self.rest.is_empty() {
+            true => self.head,
+            false => format!("{}; {}", self.head, self.rest.join("; ")),
+        };
+        let (loud, constraint) = (self.loud, Some(self.constraint));
+        MarkLine {
+            loud,
+            text,
+            constraint,
         }
     }
 }
@@ -2109,7 +2220,7 @@ impl Mark {
 /// Marks that say the same of the item, one each: the facts they are
 /// against, in order, each once. So a rule the item breaks with others
 /// is one mark, not one for each other fact or each solution.
-fn merged(marks: Vec<Mark>) -> Vec<(bool, String)> {
+fn merged(marks: Vec<Mark>) -> Vec<MarkLine> {
     let mut out: Vec<Mark> = Vec::new();
     for m in marks {
         match out.iter_mut().find(|o| o.says_same(&m)) {
@@ -2169,6 +2280,7 @@ impl<'a> Marking<'a> {
             loud: self.f.violation,
             head,
             rest,
+            constraint: self.f.seq,
         }
     }
 }
@@ -2186,12 +2298,16 @@ fn finding_kind(f: &Finding, outline: &Outline) -> String {
 /// text is the rule's name), else by its name: short, as each mark under
 /// each item names it.
 fn rule_named(outline: &Outline, name: &str) -> String {
-    let states = |i: &u64| outline.text(*i).trim_end_matches('.') == name;
-    let item = outline.in_order().into_iter().find(states);
-    item.map_or_else(
+    stating_rule(outline, name).map_or_else(
         || format!("“{name}”"),
         |i| format!("constraint {}", outline.number(i)),
     )
+}
+
+/// The item whose text states a rule of a name, if one does.
+fn stating_rule(outline: &Outline, name: &str) -> Option<u64> {
+    let states = |i: &u64| outline.text(*i).trim_end_matches('.') == name;
+    outline.in_order().into_iter().find(states)
 }
 
 /// A fact of an item against another fact of a finding that rests on both.
@@ -2375,7 +2491,7 @@ struct ConstraintPane<'a> {
 impl ConstraintPane<'_> {
     /// The right pane for an item with marks: each constraint with a
     /// finding that rests on one of its facts.
-    fn of(&self, item: u64) -> Vec<Line<'static>> {
+    fn of(&self, item: u64) -> Vec<Presented> {
         let touching = self.e.constraints.iter().filter(|c| self.touches(c, item));
         touching.flat_map(|c| self.constraint(c)).collect()
     }
@@ -2390,9 +2506,21 @@ impl ConstraintPane<'_> {
 
     /// A constraint: its heading and rule, its findings, and what depends
     /// on the facts it reads.
-    fn constraint(&self, c: &ConstraintEval) -> Vec<Line<'static>> {
-        let found = self.found(c);
-        [constraint_head(c), found, self.dependents(c)].concat()
+    fn constraint(&self, c: &ConstraintEval) -> Vec<Presented> {
+        let mut head = plain(constraint_head(c));
+        head[0].1 = Some(self.presented(c));
+        [head, plain(self.found(c)), plain(self.dependents(c))].concat()
+    }
+
+    /// A constraint, presented in the outline pane, with the item whose
+    /// text states it.
+    fn presented(&self, c: &ConstraintEval) -> Presentation {
+        let item = stating_rule(self.outline, &c.constraint.name);
+        Presentation::Constraint {
+            pane: 0,
+            entry: c.seq,
+            item,
+        }
     }
 
     /// A constraint's violations, loud, then its disagreements.
@@ -2790,13 +2918,16 @@ fn hint(app: &App) -> Option<(String, String)> {
 
 /// A supposition: the actual world and the supposed one side by side, row
 /// for row; or a revision, as its own pane draws it.
-fn draw_worlds(f: &mut Frame, app: &App, area: Rect) {
+fn draw_worlds(f: &mut Frame, app: &App, area: Rect) -> Presentations {
     let Some(sup) = &app.reason.supposition else {
-        return;
+        return Presentations::default();
     };
     match sup.name.starts_with("revision of ") {
         true => draw_revision(f, app, area),
-        false => draw_sides(f, app, area),
+        false => {
+            draw_sides(f, app, area);
+            Presentations::default()
+        }
     }
 }
 
@@ -3340,10 +3471,7 @@ fn suggestion_lines(app: &App, mut column: Column) -> Column {
 fn suggestion_block(i: usize, s: &Suggestion) -> (Vec<Line<'static>>, Presentation) {
     let title = Line::raw(format!("{}. {}", i + 1, s.describe()));
     let why = Line::styled(format!("   {}", s.evidence), dim());
-    (
-        vec![title, why],
-        Presentation::Command(format!("accept {}", i + 1)),
-    )
+    (vec![title, why], Presentation::Suggestion(i + 1))
 }
 
 /// The lines of a pane, wrapped in its area, and what a click on them
@@ -3391,43 +3519,41 @@ fn wrapped_height(lines: &[Line<'static>], width: u16) -> u16 {
 
 /// A document revision's world: each change, one entry each, to keep or
 /// retract (retract N) before the world is committed or closed.
-fn draw_revision(f: &mut Frame, app: &App, area: Rect) {
+fn draw_revision(f: &mut Frame, app: &App, area: Rect) -> Presentations {
     let Some(lines) = revision_panel(app) else {
-        return;
+        return Presentations::default();
     };
-    f.render_widget(Hung(lines), area);
+    draw_presented(f, lines, area)
 }
 
 /// The panel of the world a supposition opened, if one is open.
-fn revision_panel(app: &App) -> Option<Vec<Line<'static>>> {
+fn revision_panel(app: &App) -> Option<Vec<Presented>> {
     let sup = app.reason.supposition.as_ref()?;
     Some(revision_lines(&sup.name, &app.revision_changes()))
 }
 
 /// The lines of a revision's panel: its name, each change, and how to
 /// keep or undo them.
-fn revision_lines(name: &str, changes: &[(u64, String, bool)]) -> Vec<Line<'static>> {
-    let mut lines = vec![
-        Line::styled(format!("WORLD · {}", name.to_uppercase()), dim()),
-        Line::raw(""),
-    ];
+fn revision_lines(name: &str, changes: &[(u64, String, bool)]) -> Vec<Presented> {
+    let heading = Line::styled(format!("WORLD · {}", name.to_uppercase()), dim());
+    let mut lines = plain(vec![heading, Line::raw("")]);
     lines.extend(changes.iter().map(change_line));
     if changes.is_empty() {
-        lines.push(Line::styled("no changes", dim()));
+        lines.push((Line::styled("no changes", dim()), None));
     }
-    lines.push(Line::raw(""));
-    lines.push(Line::styled("retract N undoes one change here · commit makes the rest real · close leaves the actual world as it was", dim()));
+    let how = "retract N undoes one change here · commit makes the rest real · close leaves the actual world as it was";
+    lines.extend(plain(vec![Line::raw(""), Line::styled(how, dim())]));
     lines
 }
 
 /// One change of a revision: its entry and what it does, dim if retracted.
-fn change_line((seq, what, retracted): &(u64, String, bool)) -> Line<'static> {
+fn change_line((seq, what, retracted): &(u64, String, bool)) -> Presented {
     let line = format!("#{seq}  {what}");
-    if *retracted {
-        Line::styled(format!("{line}  (retracted)"), dim())
-    } else {
-        Line::raw(line)
-    }
+    let line = match retracted {
+        true => Line::styled(format!("{line}  (retracted)"), dim()),
+        false => Line::raw(line),
+    };
+    (line, Some(Presentation::Change(*seq)))
 }
 
 /// The keys an empty notebook names, each by the key configured for it.

@@ -24,7 +24,7 @@ fn first_marks(room: &Room) -> Vec<String> {
     let outline = &room.app.notebook.outline;
     let eval = room.app.reason.eval[0].as_ref().unwrap();
     let marks = memex::ui::item_marks(eval, outline, outline.in_order()[0]);
-    marks.into_iter().map(|(_, text)| text).collect()
+    marks.into_iter().map(|m| m.text).collect()
 }
 
 #[test]

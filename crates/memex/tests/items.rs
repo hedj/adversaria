@@ -171,16 +171,28 @@ fn a_view_under_its_item_is_as_wide_as_the_pane_leaves_it() {
 }
 
 #[test]
-fn each_cell_of_a_mark_in_a_view_is_a_click_on_its_facts_item() {
-    // Catches a view's places not moved by the view's indent.
+fn each_cell_of_a_mark_in_a_view_presents_its_fact() {
+    // Catches a view's places not moved by the view's indent, or a mark
+    // presenting its item rather than the fact the item states.
     let r = charted("view-hits");
     let rent = r.app.notebook.outline.in_order()[0];
-    let rent = memex::present::Presentation::Item { pane: 0, id: rent };
+    let entry = fact_on(&r, rent);
+    let fact = memex::present::Presentation::Fact {
+        pane: 0,
+        entry: entry.expect("rent's fact"),
+        item: rent,
+    };
     let (bar, hits) = (bar_cells(&r), r.hits());
     assert!(
-        bar.iter().all(|(x, y)| hits.at(*x, *y) == Some(&rent)),
+        bar.iter().all(|(x, y)| hits.at(*x, *y) == Some(&fact)),
         "{bar:?}"
     );
+}
+
+/// The entry of a fact an item states, if it states one.
+fn fact_on(r: &Room, item: u64) -> Option<u64> {
+    let stated = r.outline().fact_item.iter().find(|(_, i)| **i == item);
+    stated.map(|(entry, _)| *entry)
 }
 
 /// Where a bar is drawn on a wide screen: each cell of its top row.

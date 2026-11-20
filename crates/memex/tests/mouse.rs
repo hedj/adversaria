@@ -103,8 +103,16 @@ fn a_click_on_an_item_moves_the_cursor_there() {
     assert_eq!(app.cursor(), talk);
     click_on(&mut app, "Buran flew");
     assert_eq!(app.here(), "Buran flew once, in 1988.");
-    // A click on the mark line itself acts on nothing.
-    assert_eq!(hit_on(&app, "? sources disagree under"), None);
+    // The mark line presents its constraint. This one a command made, so
+    // no item states it, and a click on it leaves the cursor where it is.
+    let mark = hit_on(&app, "? sources disagree under");
+    assert!(
+        matches!(mark, Some(Presentation::Constraint { item: None, .. })),
+        "{mark:?}"
+    );
+    let here = app.cursor();
+    click_on(&mut app, "? sources disagree under");
+    assert_eq!(app.cursor(), here);
     // Typing after a click goes into the clicked item.
     typ(&mut app, " Once.");
     app.flush();
@@ -142,7 +150,7 @@ fn a_click_on_a_suggestion_accepts_it() {
     let mut app = buran_with_suggestions("mouse-suggestion");
     let shown = shown_suggestions(&app);
     assert!(shown.len() >= 2, "{shown:?}");
-    let accept_2 = Presentation::Command("accept 2".into());
+    let accept_2 = Presentation::Suggestion(2);
     // Click the second suggestion's last line: its evidence, not its title.
     the_second_spans_its_evidence(&app, &shown[1], &accept_2);
     app.click(&accept_2);
