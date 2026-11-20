@@ -38,7 +38,7 @@ impl App {
             return;
         }
         self.session.message.clear();
-        self.session.mode = Mode::Menu(Menu::new(offers, at));
+        self.session.mode = Mode::Menu(Menu::new(text, offers, at));
     }
 
     /// Do what the menu answers: keep it, close it, or run an offer as a

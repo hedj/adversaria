@@ -1522,6 +1522,18 @@ where the review held.
    unmarked, and the struck text was too dim: all taken (name, counts
    and what was set aside on rows of their own). Not taken yet: a row
    for the supposition itself in the supposed world.
+11. The right-click menu had no ground of its own, so the outline showed
+   through to its edge, and its title, "act on", did not say on what.
+   Now the box has a lighter ground and its title names the text, "act
+   on “flight”". The review found the title filled the top edge, the
+   text under the box ran into its border, the chosen entry's bar
+   stopped short, and the ground was a small step: all taken (a rule
+   each side of the title, a cell of paper round the box, entries filled
+   to the border, the ground lightened to #34343c). It also said the box
+   covered the word clicked; it did not (the word was on the row above),
+   but the paper added round the box then did, so the box now leaves a
+   row between itself and its cell. Not taken: the subject in the foot's
+   "ACT ON" label.
 
 ## 4. Where it stands
 

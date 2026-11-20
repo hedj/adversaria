@@ -37,6 +37,8 @@ pub struct Session {
 /// and the cell, column and row, where the menu opens.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Menu {
+    /// The text the menu acts on.
+    pub text: String,
     pub offers: Vec<Offer>,
     pub chosen: usize,
     pub at: (u16, u16),
@@ -50,9 +52,10 @@ pub enum Answer {
 }
 
 impl Menu {
-    /// A menu of offers, the first chosen, at a cell.
-    pub fn new(offers: Vec<Offer>, at: (u16, u16)) -> Menu {
+    /// A menu of offers for a text, the first chosen, at a cell.
+    pub fn new(text: &str, offers: Vec<Offer>, at: (u16, u16)) -> Menu {
         Menu {
+            text: text.trim().to_string(),
             offers,
             chosen: 0,
             at,

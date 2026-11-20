@@ -266,8 +266,9 @@ clears it.
 that can act on the text selected or, with none selected, on the word
 under the pointer (without the punctuation around it). With nothing
 selected, it first puts the cursor on the item there, so the commands
-act on that item. The offers appear in a menu, `act on`, at the pointer:
-Up and Down choose, Enter or a number runs one, Esc closes it; a click on
+act on that item. The offers appear in a menu titled with the text, such
+as `act on “flight”`, just below the pointer (above it near the foot), so
+the row clicked stays in view. Up and Down choose, Enter or a number runs one, Esc closes it; a click on
 an offer runs it, and a click anywhere else closes the menu. If nothing
 can act on the text, the foot says so.
 

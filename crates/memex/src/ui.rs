@@ -13,7 +13,7 @@ use crate::reason::{
 use crate::view;
 use format::terms::Term;
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout, Position, Rect};
+use ratatui::layout::{Alignment, Constraint, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
@@ -100,6 +100,7 @@ pub fn draw_hits(f: &mut Frame, app: &App) -> Hits {
 /// What a right-click offers, as drawn at its cell: each entry's line,
 /// whether it is the one chosen, and what a click on it runs.
 struct MenuBox {
+    title: String,
     entries: Vec<(String, bool, Click)>,
     at: (u16, u16),
 }
@@ -112,25 +113,48 @@ impl MenuBox {
         };
         let entry = |(text, chosen, line)| (text, chosen, Click::Command(line));
         let entries = m.entries().into_iter().map(entry).collect();
-        Some(MenuBox { entries, at: m.at })
+        let title = format!(" act on “{}” ", shortened(&m.text, 40));
+        Some(MenuBox {
+            title,
+            entries,
+            at: m.at,
+        })
     }
 
     /// The menu in a box below its cell, or above it where there is no
-    /// room below, inside the screen; its entries are clicked first.
+    /// room below, inside the screen, with a cell of paper round it so
+    /// the text under it does not run into its edge; its entries are
+    /// clicked first.
     fn draw(&self, f: &mut Frame, under: Hits) -> Hits {
         let area = placed(f.area(), self.at, self.size(f.area()));
-        f.render_widget(Clear, area);
-        let block = Block::default().borders(Borders::ALL).title(" act on ");
-        f.render_widget(Paragraph::new(self.lines()).block(block), area);
+        clear_round(f, area);
+        f.render_widget(self.widget(), area);
         let mut hits = self.hits(area);
         hits.0.extend(under.outside(area).0);
         hits
     }
 
-    /// Each entry's line, cut to 60 characters, the chosen one reversed.
+    /// The box: its entries in its border, on a ground of its own.
+    fn widget(&self) -> Paragraph<'static> {
+        Paragraph::new(self.lines())
+            .block(self.frame())
+            .style(raised())
+    }
+
+    /// The box's border, its title in the middle of the top edge.
+    fn frame(&self) -> Block<'static> {
+        Block::default()
+            .borders(Borders::ALL)
+            .title(self.title.clone())
+            .title_alignment(Alignment::Center)
+    }
+
+    /// Each entry's line, cut to 60 characters and filled to the box's
+    /// width, the chosen one reversed.
     fn lines(&self) -> Vec<Line<'static>> {
+        let inner = self.inner_width();
         let line = |(text, chosen, _): &(String, bool, Click)| {
-            let shown = format!(" {} ", shortened(text, 62));
+            let shown = format!(" {:<w$}", shortened(text, 62), w = inner - 1);
             let style = if *chosen {
                 reversed()
             } else {
@@ -141,10 +165,17 @@ impl MenuBox {
         self.entries.iter().map(line).collect()
     }
 
+    /// The width inside the border: the widest entry with a space each
+    /// side, or the title with a rule and a space each side.
+    fn inner_width(&self) -> usize {
+        let entry = |(text, _, _): &(String, bool, Click)| shortened(text, 62).chars().count() + 2;
+        let widest = self.entries.iter().map(entry).max().unwrap_or(0);
+        widest.max(self.title.chars().count() + 2)
+    }
+
     /// The box's width and height, with its border, within the screen.
     fn size(&self, screen: Rect) -> (u16, u16) {
-        let widest = self.lines().iter().map(Line::width).max().unwrap_or(0);
-        let w = (widest as u16 + 2).min(screen.width);
+        let w = (self.inner_width() as u16 + 2).min(screen.width);
         (w, (self.entries.len() as u16 + 2).min(screen.height))
     }
 
@@ -157,6 +188,12 @@ impl MenuBox {
                 .collect(),
         )
     }
+}
+
+/// Clear an area and a cell of paper round it, within the screen.
+fn clear_round(f: &mut Frame, area: Rect) {
+    let round = area.outer(ratatui::layout::Margin::new(1, 1));
+    f.render_widget(Clear, round.intersection(f.area()));
 }
 
 /// The row of a box's entry, inside its border.
@@ -180,12 +217,13 @@ fn placed(screen: Rect, at: (u16, u16), (w, h): (u16, u16)) -> Rect {
 }
 
 /// A box's top row: below its cell, or above it where there is no room
-/// below.
+/// below, with a row between them, which the paper round the box takes,
+/// so the box never covers its cell's row.
 fn top_of(height: u16, y: u16, h: u16) -> u16 {
-    if y + 1 + h <= height {
-        y + 1
+    if y + 2 + h <= height {
+        y + 2
     } else {
-        y.saturating_sub(h)
+        y.saturating_sub(h + 1)
     }
 }
 
@@ -1767,6 +1805,12 @@ fn match_lines(app: &App, a: &Active, ids: &[u64]) -> Vec<Line<'static>> {
     let lines = ids.iter().map(|id| match_line(outline, *id, &a.input));
     let first = |(k, l): (usize, Line<'static>)| if k == 0 { l.style(reversed()) } else { l };
     lines.enumerate().map(first).collect()
+}
+
+/// The ground of a box drawn over the screen, a step lighter than the
+/// paper, so it stands apart from what is under it.
+fn raised() -> Style {
+    Style::default().bg(Color::Rgb(0x34, 0x34, 0x3c))
 }
 
 fn reversed() -> Style {

@@ -4,6 +4,7 @@
 mod support;
 use memex::app::{Click, Key, Mode};
 use memex::config::Config;
+use ratatui::style::Color;
 use support::Room;
 
 /// Three items, and a right-click on "2".
@@ -28,7 +29,11 @@ fn a_menu_offers_what_matches_and_enter_runs_the_first() {
     // the one chosen.
     let mut r = menu_on_two("menu-enter");
     assert_eq!(offered(&r), ["go 2", "link to 2"]);
-    assert!(r.shows("act on"), "{:#?}", r.lines());
+    assert!(
+        r.shows("act on “2”"),
+        "the title names the text: {:#?}",
+        r.lines()
+    );
     assert!(r.shows(" 1 go to 2 "), "{:#?}", r.lines());
     r.tap(&[Key::Enter]);
     assert_eq!(r.app.session.mode, Mode::Normal);
@@ -96,6 +101,42 @@ fn nothing_offered_says_so_and_a_retract_still_asks() {
         r.app.session.mode,
         Mode::ConfirmRetract { target: 2, .. }
     ));
+}
+
+#[test]
+fn the_menu_has_a_ground_of_its_own() {
+    // Catches the menu drawn on the paper, so that the screen under it
+    // shows through and its edge is lost.
+    let r = menu_on_two("menu-ground");
+    let ground = r.style_of("2 link here to 2").bg;
+    assert!(matches!(ground, Some(Color::Rgb(..))), "{ground:?}");
+    let paper = r.style_of("notebook").bg;
+    assert_ne!(ground, paper, "the menu stands apart from the paper");
+    let lines = r.lines();
+    let top = lines.iter().find(|l| l.contains("act on “2”")).unwrap();
+    assert!(
+        top.contains("─ act on “2” ─"),
+        "a rule each side of the title: {top}"
+    );
+    let row = lines.iter().find(|l| l.contains("1 go to 2")).unwrap();
+    let inside = row.split('│').nth(1).unwrap_or("");
+    assert!(
+        inside.ends_with("  "),
+        "the entry is filled to the border: {row}"
+    );
+}
+
+#[test]
+fn the_menu_leaves_its_row_in_view() {
+    // Catches the menu, or the paper round it, drawn over the row that
+    // was right-clicked, so the text it acts on is hidden.
+    let mut r = Room::new("menu-row");
+    r.items(&["Buran flight", "Energia launch", "Notes"]);
+    let (x, y) = r.find("Energia launch");
+    let row = r.lines()[y as usize].clone();
+    r.app.plumb("Energia", (x, y));
+    assert_eq!(r.lines()[y as usize], row, "{:#?}", r.lines());
+    assert!(r.shows("act on “Energia”"));
 }
 
 /// A room whose configuration has one plumbing rule.
