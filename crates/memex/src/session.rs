@@ -148,6 +148,14 @@ fn observed_of(b: &Value) -> Observed {
 /// Keys bound to command lines, from the configuration.
 pub struct Keys(pub Vec<(Key, String)>);
 
+impl Keys {
+    /// The name of the first key bound to a command line, if one is.
+    pub fn bound_to(&self, line: &str) -> Option<String> {
+        let bound = self.0.iter().find(|(_, l)| l == line);
+        bound.map(|(k, _)| crate::config::key_name(*k))
+    }
+}
+
 /// What the session knows that the journal does not hold.
 struct Outside {
     /// Where the source check asks Crossref: its works API, unless a test

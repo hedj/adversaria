@@ -616,13 +616,92 @@ pub(crate) fn complete_command(input: &str) -> String {
     }
 }
 
-/// What may come next in a command line, for `?`.
-pub fn command_help(input: &str) -> Vec<String> {
+/// The commands in groups, in the order the guide lists them (§ 2.4):
+/// each group's heading and its commands' names.
+pub const GROUPS: &[(&str, &[&str])] = &[
+    (
+        "EDITING THE OUTLINE",
+        &[
+            "new",
+            "delete",
+            "indent",
+            "outdent",
+            "make",
+            "move",
+            "copy",
+            "split",
+            "transclude",
+            "link",
+            "name",
+            "go",
+            "follow",
+            "fold",
+            "unfold",
+            "pane",
+            "switch",
+            "help",
+            "quit",
+        ],
+    ),
+    (
+        "FACTS AND DEFINITIONS",
+        &[
+            "fact",
+            "claim",
+            "rule",
+            "ace",
+            "set",
+            "constraint",
+            "derive",
+            "layer",
+            "check",
+        ],
+    ),
+    (
+        "CLAIMS AND SUGGESTIONS",
+        &[
+            "adopt",
+            "unadopt",
+            "interrogate",
+            "accept",
+            "dismiss",
+            "import",
+            "export",
+        ],
+    ),
+    (
+        "WORLDS AND HISTORY",
+        &[
+            "suppose", "close", "commit", "undo", "query", "redo", "retract",
+        ],
+    ),
+];
+
+/// A group of commands: its heading, and those of its commands listed.
+pub type Group = (&'static str, Vec<&'static Command>);
+
+/// When a command line names its command and goes on: the command's
+/// slots and what it does, for `?`.
+pub fn command_usage(input: &str) -> Option<String> {
     let first = input.split_whitespace().next().unwrap_or("");
-    match find_command(first).filter(|_| input.contains(' ')) {
-        Some(c) => vec![usage(c)],
-        None => commands_starting(&first.to_lowercase()),
-    }
+    find_command(first)
+        .filter(|_| input.contains(' '))
+        .map(usage)
+}
+
+/// The commands whose names start as a command line does, in their
+/// groups; a group with none is left out.
+pub fn command_groups(input: &str) -> Vec<Group> {
+    let prefix = input.split_whitespace().next().unwrap_or("").to_lowercase();
+    let named = |n: &&str| COMMANDS.iter().find(|c| c.name == *n);
+    let starting = |names: &[&str]| -> Vec<&'static Command> {
+        let names = names.iter().filter(|n| n.starts_with(&prefix));
+        names.filter_map(named).collect()
+    };
+    let groups = GROUPS
+        .iter()
+        .map(|(heading, names)| (*heading, starting(names)));
+    groups.filter(|(_, cs)| !cs.is_empty()).collect()
 }
 
 /// A command's slots, each with its guide word, and what it does.
@@ -631,11 +710,19 @@ fn usage(c: &Command) -> String {
     format!("{} {} — {}", c.name, slots.join(" "), c.help)
 }
 
-/// The commands whose names start so, each with what it does, briefly.
-fn commands_starting(prefix: &str) -> Vec<String> {
-    COMMANDS
-        .iter()
-        .filter(|c| c.name.starts_with(prefix))
-        .map(|c| format!("{} — {}", c.name, c.brief))
-        .collect()
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_command_is_in_one_group() {
+        // Catches a command added to the table but to no group, so the
+        // list of commands would never show it, or put in two.
+        for c in COMMANDS {
+            let groups = GROUPS.iter().filter(|(_, ns)| ns.contains(&c.name)).count();
+            assert_eq!(groups, 1, "{} is in {groups} groups", c.name);
+        }
+        let listed: usize = GROUPS.iter().map(|(_, ns)| ns.len()).sum();
+        assert_eq!(listed, COMMANDS.len(), "a group names no command");
+    }
 }

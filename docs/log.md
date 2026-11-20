@@ -1546,6 +1546,19 @@ where the review held.
    said "recomputed at journal 31" had gone missing; finding 8 removed
    it on purpose. Not taken: breaking code at "where" or a comma before
    any space.
+13. The list of commands was one run, not quite alphabetical, too long
+   for its box (the last three were cut), and silent about keys. It is
+   now grouped under the guide's four headings, each command with its
+   key if one is bound; where the described list does not fit, each
+   group's names alone are listed, so none is cut, with how to see what
+   one does. The review found the headings dim like the hints, the keys
+   in a ragged column, and the narrowed list in guide order where a
+   reader who has typed the start scans by name: all taken (bold
+   headings, keys at the right edge, by name within a group). Also
+   taken: "no command starts with “zz”" in place of an empty box. Not
+   taken: the foot's "? lists what may come next" while the list is
+   open; and rewording `accept`'s "adopt the nth suggestion", which is
+   what accepting does.
 
 ## 4. Where it stands
 

@@ -2,9 +2,9 @@
 //! story, scene 1). Drawing reads the state and changes nothing, so the same
 //! state always draws the same screen.
 
+mod commands;
 mod wrap;
 
-use crate::actions::command_help;
 use crate::app::{Active, App, Click, Mode, PaneKind, Quasi, ScopeLevel, View};
 use crate::outline::{Layer, Link, Outline, Run, TOP};
 use crate::reason::{
@@ -1700,7 +1700,7 @@ fn boxed(lines: Vec<Line<'static>>) -> Paragraph<'static> {
 /// What a quasimode's list shows in its box at the foot of an area: as
 /// much of the list as fits.
 fn list_shown(app: &App, a: &Active, area: Rect) -> Vec<Line<'static>> {
-    fitted(list_lines(app, a), area)
+    fitted(list_lines(app, a, list_inside(area)), area)
 }
 
 /// The width and height inside a list's box at the foot of an area: less
@@ -1758,9 +1758,9 @@ fn foot_box(area: Rect, lines: &[Line<'static>]) -> Rect {
 
 /// What a quasimode lists: the commands a Command may be, or a Leap's
 /// matches.
-fn list_lines(app: &App, a: &Active) -> Vec<Line<'static>> {
+fn list_lines(app: &App, a: &Active, inside: (u16, u16)) -> Vec<Line<'static>> {
     match a.q() {
-        Quasi::Command => command_help(&a.input).into_iter().map(Line::raw).collect(),
+        Quasi::Command => commands::command_lines(app, &a.input, inside),
         Quasi::Suppose => suppose_lines(a),
         q => leap_lines(app, a, q == Quasi::LeapForward),
     }

@@ -205,6 +205,11 @@ Within a quasimode:
   typed straight after a word it ends a question ("Does John wait?").
   `?` again hides the list; what you typed stays. In Command, `?` inside
   quotes is typed; in Leap, `?` always lists, so Leap cannot search for it.
+  Command lists the commands under the four headings of § 2.4, by name
+  within each, with what each does and, at the right, its key, if one is
+  bound to it (F3 for `adopt`). Where they do not all fit, it lists each
+  group's names alone, with their keys; typing a command's first letters
+  narrows the list to those it fits.
 - **Repeat a Leap:** a second tap of a latched, empty Leap, or Enter on
   it, repeats the last pattern.
 - **Leap or make:** in Leap, Enter goes to the match, as release does; if

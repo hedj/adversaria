@@ -212,15 +212,88 @@ fn the_commands_listed_are_shown_whole_at_80_columns() {
 }
 
 #[test]
-fn a_list_too_long_for_its_box_says_how_many_more() {
-    // Catches commands dropped from the foot of the box without a word.
-    let mut room = Room::new("screen-more");
+fn the_whole_list_names_every_command_under_its_group() {
+    // Catches commands dropped from the foot of a list too long for its
+    // box (as three were, without their group), or a group's heading or a
+    // bound key missing (UX audit, finding 13).
+    let mut room = Room::new("screen-index");
     room.hold(Quasi::Command, "?");
     let shown = listed(&room);
-    let commands = shown.iter().filter(|l| l.contains(" — ")).count();
-    let more = memex::actions::COMMANDS.len() - commands;
-    let last = format!("… and {more} more: type more to narrow the list");
-    assert_eq!(shown.last(), Some(&last), "{shown:#?}");
+    let words: Vec<&str> = shown.iter().flat_map(|l| l.split_whitespace()).collect();
+    for c in memex::actions::COMMANDS {
+        assert!(
+            words.contains(&c.name),
+            "{} not named in {shown:#?}",
+            c.name
+        );
+    }
+    for (heading, _) in memex::actions::GROUPS {
+        assert!(
+            shown.contains(&heading.to_string()),
+            "{heading} in {shown:#?}"
+        );
+    }
+    assert!(shown.iter().any(|l| l.contains("adopt F3")), "{shown:#?}");
+    let how = "type a command's first letters to see what it does";
+    assert!(shown.join(" ").ends_with(how), "{shown:#?}");
+}
+
+#[test]
+fn a_list_that_fits_says_what_each_does_under_its_group() {
+    // Catches the described list not grouped, not in the order of the
+    // names within a group, or a bound key not at the box's right edge.
+    let mut room = Room::new("screen-described");
+    room.hold(Quasi::Command, "a");
+    let shown = listed(&room);
+    let at = |l: &str| shown.iter().position(|s| s.starts_with(l));
+    let facts = at("FACTS AND DEFINITIONS").expect("its heading");
+    let claims = at("CLAIMS AND SUGGESTIONS").expect("its heading");
+    assert_eq!(
+        at("ace — what APE makes of a sentence"),
+        Some(facts + 1),
+        "{shown:#?}"
+    );
+    assert_eq!(at("accept — "), Some(claims + 1), "by name: {shown:#?}");
+    let adopt = &shown[at("adopt — make the target's claims beliefs").expect("adopt")];
+    let rows = room.lines_at(80, 30);
+    let edge = rows
+        .iter()
+        .find(|r| r.starts_with('┌'))
+        .and_then(|r| r.chars().position(|c| c == '┐'))
+        .map(|i| i + 1);
+    let inner = edge.expect("the box's top") - 2;
+    assert!(adopt.ends_with(" F3"), "{adopt:?}");
+    assert_eq!(
+        adopt.chars().count(),
+        inner,
+        "the key at the right edge: {adopt:?}"
+    );
+}
+
+#[test]
+fn a_start_no_command_has_says_so() {
+    // Catches an empty box for letters that start no command's name.
+    let mut room = Room::new("screen-no-command");
+    room.hold(Quasi::Command, "zz");
+    assert_eq!(listed(&room), ["no command starts with “zz”"]);
+}
+
+#[test]
+fn a_list_too_long_for_its_box_says_how_many_more() {
+    // Catches rows dropped from the foot of the box without a word, when
+    // even the names alone do not fit.
+    let mut room = Room::new("screen-more");
+    room.hold(Quasi::Command, "?");
+    let rows = room.lines_at(80, 14);
+    let inside: Vec<&str> = rows.iter().filter_map(|l| l.strip_prefix('│')).collect();
+    let last = inside.iter().rev().find(|l| !l.trim().is_empty());
+    let last = last.map(|l| l.split('│').next().unwrap_or("").trim_end());
+    assert!(
+        last.is_some_and(
+            |l| l.starts_with("… and ") && l.ends_with(" more: type more to narrow the list")
+        ),
+        "{rows:#?}"
+    );
 }
 
 #[test]
