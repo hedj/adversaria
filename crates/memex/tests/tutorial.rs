@@ -145,6 +145,30 @@ impl T {
     fn here(&self) -> String {
         self.app.notebook.outline.text(self.app.cursor())
     }
+    /// The mouse pointer over where a text is first drawn.
+    fn point_at(&mut self, text: &str) {
+        self.app.session.pointer = Some(self.place_of(text));
+    }
+    /// A right-click where a text is first drawn, on the word there.
+    fn right_click_on(&mut self, text: &str) {
+        let (at, hits) = (self.place_of(text), self.presented());
+        self.app.right_click(&hits, at, text, false);
+    }
+    /// What the screen presents, and where.
+    fn presented(&self) -> memex::ui::Presentations {
+        let mut term = Terminal::new(TestBackend::new(200, 45)).unwrap();
+        let mut hits = memex::ui::Presentations::default();
+        term.draw(|f| hits = memex::ui::draw_hits(f, &self.app))
+            .unwrap();
+        hits
+    }
+    /// Where a text is first drawn on the screen: its column and row.
+    fn place_of(&self, text: &str) -> (u16, u16) {
+        let lines = self.screen();
+        let y = lines.iter().position(|l| l.contains(text)).expect(text);
+        let before = lines[y].split(text).next().unwrap_or_default();
+        (before.chars().count() as u16, y as u16)
+    }
     fn look(&self, at: &str) {
         if self.dump {
             println!(
@@ -257,6 +281,9 @@ fn a_claim_and_a_rule(t: &mut T) {
 
 /// Step 4: the claim questioned, adopted, and the adoption taken back.
 fn the_claim_questioned(t: &mut T) {
+    t.point_at("Talk-notes says");
+    t.shows("click: go to 1.3 · right-click: question its claim, adopt its claims");
+    t.app.session.pointer = None;
     t.tap(Key::Up);
     assert!(t.here().starts_with("Talk-notes"));
     t.key(Key::F(2));
@@ -325,6 +352,9 @@ fn a_revision_taken_in(t: &mut T) {
     t.shows("WORLD · REVISION OF ESSAY.MD");
     t.shows("#53  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”");
     t.shows("#54  added: “Each team wrote its findings in the DRAKON language.”");
+    t.right_click_on("#53");
+    t.shows("reject this change");
+    t.key(Key::Escape);
     t.command("retract 53");
     t.shows("nothing depends on it · Enter retracts · Esc keeps it");
     t.key(Key::Enter);

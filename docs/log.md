@@ -1571,6 +1571,40 @@ where the review held.
    bright heading already shows (finding 8); narrower margins in a
    narrow window; a bar down a view's rows.
 
+### Presentations, after Dynamic Windows (20 November 2026)
+
+The author chose Genera's Dynamic Windows over Model-View-Presenter's
+passive view (docs/design.md, Presentations), and asked for it to be
+built all the way through. In six steps, each a commit:
+
+1. The places drawn for clicks became presentations, of the object each
+   stands for (331c9e9).
+2. The model's objects on the screen were presented: a mark's
+   constraint, a view's fact, a link's item, a layer, a revision's
+   change, a suggestion (b4691ff).
+3. A right-click offers the commands for what it is on, by type and as
+   it is now, before plumbing's (c2a49d1).
+4. A command's slots got types, and a click on a presentation of the
+   type a waiting slot takes types it in; the presentation under the
+   pointer is underlined when a click would act (e0ce2bf).
+5. The foot says what each button does over what is under the pointer
+   (2c2ed82); and three faults that screenshots in a window showed were
+   fixed: jargon in a menu's title, words of a mark plumbed, and "link
+   (to) to" (7bc33ce).
+6. The guide, the tutorial and this log.
+
+Faults found on the way: while a quasimode's list was shown, every
+presentation in the left pane was dropped, not only those under the
+list's box (fixed in step 4; a test had asserted the fault); the slots'
+kinds were declared and never used.
+
+Not done: output recording for incremental redisplay. Measured over
+the gate and reported, not reworded: the guide's "Plumbing" (15) and
+"Pointing at an argument" (8) sections, each naming the commands it
+lists. One window test (under Wayland at a scale of 2, a click on the
+first item) failed once in four runs, then passed three times; not
+explained.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

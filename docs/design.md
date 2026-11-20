@@ -718,23 +718,33 @@ Sources: [The Humane Interface](https://en.wikipedia.org/wiki/The_Humane_Interfa
 
 The screen is a record of presented objects, as in Genera's Dynamic
 Windows (Genera 7, 1986) and its successor CLIM: whatever the drawing
-code writes that stands for an object of the model (an item, a fact, a
-claim, a constraint, an entry, a chart's mark) is recorded with that
+code writes that stands for an object of the model is recorded with that
 object and the place it was drawn (crate::present; crate::ui::Presentations).
 The drawing code reads the model as it presents it; there is no separate
 description of the screen, unlike Model-View-Presenter's passive view.
 
-What the record is for:
+As built (20 November 2026), each presentation has a type: an item, a
+fact a view's mark draws, a constraint a mark names, a layer, a
+revision's change, a suggestion, or a hint's command. The record is
+used four ways:
 
-- A gesture on a presentation acts on its object. A click does its
-  default; a right-click offers the commands that take an object of its
-  type (CLIM's presentation translators). Plumbing (above) offers
-  commands for plain text; the two are one menu.
-- A command's argument can be typed or pointed at (CLIM's `accept`):
-  while a command line waits for an argument of a type, the presentations
-  of that type are highlighted, and a click on one supplies it.
-- The foot says what each button does over the presentation under the
-  pointer (Genera's mouse documentation line).
+1. A click does its type's default: put the cursor on an item (the item,
+   or the item that states the fact, the rule or the view), or run a
+   command (accept a suggestion, a hint's command); a change has none
+   (Presentation::clicked).
+2. A right-click offers the commands that apply to the object as it is
+   now, by its type (CLIM's presentation translators; crate::translators),
+   then plumbing's offers for the word or the selection (above), which
+   apply to the user's text: an item's, or text that presents nothing.
+   One menu, the object's commands first.
+3. A command's argument can be typed or pointed at (CLIM's `accept`): a
+   command's slots say what they take (actions::Slot: an item, an entry,
+   a suggestion, a word, text), and while the Command line waits for a
+   slot, a click on a presentation of its type types the argument in.
+4. The presentation under the pointer is underlined when a click on it
+   would do something now, and the foot says what each button does
+   there (Genera's mouse documentation line), on a row cut to its width,
+   so the layout does not move with the pointer.
 
 Not adopted: output recording for redisplay. The screen is drawn whole
 from the model on each change, which has been fast enough (an
@@ -742,7 +752,8 @@ impression, not measured).
 
 Sources: Symbolics, *Programming the User Interface* (Genera 8);
 LispWorks, *CLIM 2.0 User Guide*, ch. 6, Presentation Types; E.
-Ciccarelli, *Presentation Based User Interfaces*, MIT AI-TR-794 (1984).
+Ciccarelli, *Presentation Based User Interfaces*, MIT AI-TR-794 (1984),
+cited, not read.
 
 ### Views
 

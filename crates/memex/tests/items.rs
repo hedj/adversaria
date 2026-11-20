@@ -256,11 +256,14 @@ fn an_empty_notebook_says_how_to_begin() {
         r.shows("tap Left Ctrl (Command), type a command, press Enter to run it · F1 lists them")
     );
     assert!(r.shows("(the selected item and its links appear here)"));
-    assert!(r.shows("right-click a word for what can act on it"));
+    assert!(r.shows("right-click anything for what can act on it"));
     r.bind("F1 = \"\"\nF12 = \"palette\"");
     assert!(r.shows("· F12 lists them"), "{:#?}", r.lines());
     r.items(&["first"]);
-    assert!(!r.shows("right-click a word"), "gone once there is an item");
+    assert!(
+        !r.shows("right-click anything"),
+        "gone once there is an item"
+    );
 }
 
 #[test]

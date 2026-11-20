@@ -158,8 +158,15 @@ those you add later and those that arrive from documents and sources.
 *Why: before you rely on a claim, you want to know who else makes it,
 and what it would break.*
 
-Press Up to put the cursor on the claim, and press **F2** to question it.
-The right pane answers five questions:
+Move the mouse pointer over the claim. It is underlined, and the foot
+says what the mouse does there:
+
+    click: go to 1.3 · right-click: question its claim, adopt its claims
+
+What the screen shows stands for your notes themselves, so the mouse
+acts on them: a right-click offers what can be done with this claim.
+The keys do the same. Press Up to put the cursor on the claim, and press
+**F2** to question it. The right pane answers five questions:
 
     INTERROGATE · WHAT IS CLAIMED HERE
 
@@ -272,8 +279,9 @@ changes in a world of their own, one entry each:
     #53  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”
     #54  added: “Each team wrote its findings in the DRAKON language.”
 
-Say your own sources name two teams. Reject that change by its number:
-run `retract 53`. The foot of the screen says
+Say your own sources name two teams. Reject that change: right-click it,
+and the menu offers `reject this change`; or run, by its number,
+`retract 53`. The foot of the screen says
 `nothing depends on it · Enter retracts · Esc keeps it`; press Enter.
 Then run `commit` to accept the rest. The essay keeps
 `Two teams reviewed the flight software.` and gains

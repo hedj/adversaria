@@ -266,34 +266,71 @@ The mouse is on unless you turn it off, with `enabled = false` in the
 configuration (§ 4.3), or with `--no-mouse` for one run; `--mouse` turns
 it on for one run whatever the file says. Giving both flags is an error.
 
-A left click:
+What the screen draws that stands for something of yours is a
+*presentation* of it, after the Symbolics Lisp machine's Dynamic Windows
+(docs/design.md, Presentations): the mouse acts on the thing itself, not
+on the characters. Presented are:
 
-- on an item's line in an outline pane moves the cursor there (and focus
-  to that pane), as the arrow keys would;
-- on `F3 adopts` or `F4 retracts an adoption` under an interrogation runs
-  `adopt` or `unadopt` (the hint names whichever keys you have bound);
-- on a suggestion, anywhere in its lines, runs `accept` for it;
-- on a mark of a view, goes to the item that states its fact (§ 3.3).
+| What is drawn | Presents | A click |
+| --- | --- | --- |
+| an item's line in an outline pane; a link in the links pane | the item | moves the cursor to it, in the outline pane it is drawn in (the left one, for a link), and focus there, as the arrow keys would |
+| a mark under an item (`‼ breaks …`, `? sources disagree …`), and the heading of the constraint pane | the constraint | goes to the item that states the rule, if one does |
+| a mark of a view: a bar, a point, a box | the fact it draws | goes to the item that states the fact (§ 3.3) |
+| a layer, in a view's right pane | the layer | goes to its view |
+| a change, in a revision's pane | the change | nothing: a right-click offers what to do |
+| a suggestion, anywhere in its lines | the suggestion | runs `accept` for it |
+| `F3 adopts` or `F4 retracts an adoption` under an interrogation | the command | runs `adopt` or `unadopt` (the hint names whichever keys you have bound) |
+
+**Pointing.** The presentation under the pointer is underlined, all its
+rows, when a click or a right-click on it would do something now; and the foot says what
+each button does there (`click: go to 2 · right-click: question its
+claim, adopt its claims`), on its first row, so the message stays.
 
 **Selecting.** Drag with the left button to select text: it is drawn
 reversed, from where the button went down to where it is, in reading
 order, within the pane where the drag began. A click without a drag
 clears it.
 
-**Right-click: what can act on this?** A right-click offers the commands
-that can act on the text selected or, with none selected, on the word
-under the pointer (without the punctuation around it). With nothing
-selected, it first puts the cursor on the item there, so the commands
-act on that item. The offers appear in a menu titled with the text, such
-as `act on “flight”`, just below the pointer (above it near the foot), so
-the row clicked stays in view. Up and Down choose, Enter or a number runs one, Esc closes it; a click on
-an offer runs it, and a click anywhere else closes the menu. If nothing
-can act on the text, the foot says so. Which commands are offered is
-set by rules, below.
+#### Right-click: what can act on this?
+
+A right-click on a presentation
+offers the commands that apply to what it presents, as it is now:
+
+| Right-click on | Offers |
+| --- | --- |
+| an item (the cursor goes to it first) | question its claim and adopt its claims, if it states any; take back its adoption, if it has one; split it, if it has two sentences or more; hide or show its branch, if it has one |
+| a mark under an item | go to the item that states the rule; retract the constraint |
+| a mark of a view | go to the item that states its fact |
+| a layer | retract it; go to its view |
+| a revision's change | reject it (`retract`, which asks first); keep the rest (`commit`) |
+| a suggestion | accept it; dismiss it |
+
+After them come the commands plumbing offers (below) for the word under
+the pointer (without the punctuation around it), if it is in an item or
+in text that presents nothing, or for the text selected, whatever is
+under it. The offers appear in a
+menu titled with what it acts on, such as `act on “flight”` or the
+item's text, just below the pointer (above it near the foot), so the
+row clicked stays in view. Up and Down choose, Enter or a number runs
+one, Esc closes it; a click on an offer runs it, and a click anywhere
+else closes the menu. If nothing can act on it, the foot says so.
+
+#### Pointing at an argument
+
+While Command waits for an argument (its
+line ends in a space), a click on a presentation of the kind the
+argument takes types it in for you, with a space after, and only those
+are underlined: an item, by its address, for `link`, `copy`, `move`,
+`transclude` and `go` (a link, a fact, a rule or a view stands for its
+item); an entry, by its number, for `retract` (a layer, a change, a
+constraint or a fact); a suggestion, by its number, for `accept` and
+`dismiss`. Tap Left Ctrl, type `link to `, and click the item to link
+to: the line reads `link (to) 2`, and Enter runs it. The foot says what
+a click would type (`click: type “2” into the line`).
 
 #### Plumbing
 
-The menu a right-click opens is plumbing, after Plan 9's plumber (Rob Pike, "Plumbing and Other
+What a right-click offers for text is plumbing, after Plan 9's plumber (Rob Pike, "Plumbing and Other
 Utilities"). Rules say what can act on a text: each has a regular
 expression that the whole text must match, and a command line to offer.
 Plan 9 runs the first rule that matches; here every rule that matches is

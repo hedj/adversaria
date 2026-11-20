@@ -3633,7 +3633,7 @@ fn first_steps_said(app: &App) -> [String; 6] {
         "Enter makes a new item · Tab puts it under the one above".to_string(),
         command_step(app),
         leap_step(app),
-        "right-click a word for what can act on it".into(),
+        "right-click anything for what can act on it".into(),
         undo_step(app),
         "docs/introduction.md says what this is for · docs/tutorial.md is a first session".into(),
     ]
