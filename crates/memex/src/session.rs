@@ -2,7 +2,7 @@
 //! user sees and is in the middle of, how the session is set up, and what
 //! it has noticed outside the journal (docs/structure.md § The code's structure).
 
-use crate::app::{Active, Click, Event, Key, Mode, PendingText, Press, View};
+use crate::app::{Active, Click, Event, Key, Mode, PendingText, Press, Quasi, View};
 use crate::notebook::strings;
 use crate::plumb::Offer;
 use format::record::Entry;
@@ -145,13 +145,31 @@ fn observed_of(b: &Value) -> Observed {
     (strings(&b["violations"]), strings(&b["disagreements"]))
 }
 
-/// Keys bound to command lines, from the configuration.
-pub struct Keys(pub Vec<(Key, String)>);
+/// The keys of the configuration, as the screen names them: those bound
+/// to command lines, and each quasimode's key, by the name its hints use.
+pub struct Keys {
+    bindings: Vec<(Key, String)>,
+    quasimodes: Vec<(Quasi, String)>,
+}
 
 impl Keys {
+    /// Keys bound to command lines, and each quasimode's key by name.
+    pub fn new(bindings: Vec<(Key, String)>, quasimodes: Vec<(Quasi, String)>) -> Keys {
+        Keys {
+            bindings,
+            quasimodes,
+        }
+    }
+
+    /// The name of a quasimode's key, as its hints say it.
+    pub fn quasi_key(&self, q: Quasi) -> String {
+        let named = self.quasimodes.iter().find(|(x, _)| *x == q);
+        named.map_or_else(|| q.label().to_string(), |(_, name)| name.clone())
+    }
+
     /// The name of the first key bound to a command line, if one is.
     pub fn bound_to(&self, line: &str) -> Option<String> {
-        let bound = self.0.iter().find(|(_, l)| l == line);
+        let bound = self.bindings.iter().find(|(_, l)| l == line);
         bound.map(|(k, _)| crate::config::key_name(*k))
     }
 }
@@ -193,7 +211,7 @@ impl Default for Keys {
 impl Keys {
     /// How to run a command by key: its bound key, else by name.
     pub fn key_for(&self, command: &str) -> String {
-        match self.0.iter().find(|(_, c)| c == command) {
+        match self.bindings.iter().find(|(_, c)| c == command) {
             Some((k, _)) => crate::config::key_name(*k),
             None => format!("command {command}"),
         }
@@ -201,7 +219,7 @@ impl Keys {
 
     /// The command line a key is bound to, if it is bound.
     pub(crate) fn command_for(&self, key: Key) -> Option<String> {
-        let bound = self.0.iter().find(|(k, _)| *k == key);
+        let bound = self.bindings.iter().find(|(k, _)| *k == key);
         bound.map(|(_, line)| line.clone())
     }
 }

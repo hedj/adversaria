@@ -654,15 +654,7 @@ impl<'a> OutlinePane<'a> {
     /// What an empty notebook shows: the first thing to do, plainly, and
     /// the keys to know, dim, each key first.
     fn first_steps(&self) -> Vec<Line<'static>> {
-        let palette = self.app.session.keys.key_for("palette");
-        let steps = [
-            "Enter makes a new item · Tab puts it under the one above".to_string(),
-            format!("hold Left Ctrl (Command), type a command, release to run it · {palette} lists them"),
-            "hold Right Alt (Leap) and type, to jump to an item with that text · Left Alt jumps back".into(),
-            "right-click a word for what can act on it".into(),
-            "a mistake? hold Left Ctrl, type undo, release · nothing is ever lost".into(),
-            "docs/introduction.md says what this is for · docs/tutorial.md is a first session".into(),
-        ];
+        let steps = first_steps_said(self.app);
         let step = |s: String| Line::styled(format!("  {s}"), dim());
         std::iter::once(Line::raw("Type to write the first item."))
             .chain([Line::raw("")])
@@ -2768,8 +2760,11 @@ fn hint(app: &App) -> Option<(String, String)> {
     if used >= 4 {
         return None;
     }
-    let try_it = "Try a what-if: hold Super to suppose a statement, then release. The actual world stays as it is.";
-    Some((try_it.into(), String::new()))
+    let key = app.session.keys.quasi_key(Quasi::Suppose);
+    let try_it = format!(
+        "Try a what-if: hold {key} to suppose a statement, then release. The actual world stays as it is."
+    );
+    Some((try_it, String::new()))
 }
 
 /// A supposition: the actual world and the supposed one side by side, row
@@ -3414,6 +3409,40 @@ fn change_line((seq, what, retracted): &(u64, String, bool)) -> Line<'static> {
     }
 }
 
+/// The keys an empty notebook names, each by the key configured for it.
+fn first_steps_said(app: &App) -> [String; 6] {
+    [
+        "Enter makes a new item · Tab puts it under the one above".to_string(),
+        command_step(app),
+        leap_step(app),
+        "right-click a word for what can act on it".into(),
+        undo_step(app),
+        "docs/introduction.md says what this is for · docs/tutorial.md is a first session".into(),
+    ]
+}
+
+/// How to run a command, and the key that lists them.
+fn command_step(app: &App) -> String {
+    let command = app.session.keys.quasi_key(Quasi::Command);
+    let palette = app.session.keys.key_for("palette");
+    format!("hold {command} (Command), type a command, release to run it · {palette} lists them")
+}
+
+/// How to leap to an item, and back.
+fn leap_step(app: &App) -> String {
+    let keys = &app.session.keys;
+    let (leap, back) = (
+        keys.quasi_key(Quasi::LeapForward),
+        keys.quasi_key(Quasi::LeapBack),
+    );
+    format!("hold {leap} (Leap) and type, to jump to an item with that text · {back} jumps back")
+}
+
+/// How to undo a mistake.
+fn undo_step(app: &App) -> String {
+    let command = app.session.keys.quasi_key(Quasi::Command);
+    format!("a mistake? hold {command}, type undo, release · nothing is ever lost")
+}
 #[cfg(test)]
 mod tests {
     use super::*;

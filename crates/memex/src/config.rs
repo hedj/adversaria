@@ -158,6 +158,48 @@ fn bound_key(name: &str) -> Result<Key, String> {
     Err(format!("no key is called {name}"))
 }
 
+/// A quasimode's keys as a hint names them: its first key, as it is
+/// printed on a keyboard ("Left Ctrl", "AltGr"); a modifier listed for
+/// both hands, by its name alone ("Super").
+fn spoken(keys: &[QuasiKey]) -> String {
+    let names: Vec<String> = keys.iter().map(quasi_key_name).collect();
+    let first = names.first().cloned().unwrap_or_default();
+    let family = first
+        .trim_start_matches("Left ")
+        .trim_start_matches("Right ");
+    let both = ["Left ", "Right "].map(|side| names.contains(&format!("{side}{family}")));
+    if both == [true, true] {
+        family.to_string()
+    } else {
+        first
+    }
+}
+
+/// A quasimode's key, as it is printed on a keyboard.
+fn quasi_key_name(k: &QuasiKey) -> String {
+    match k {
+        QuasiKey::Modifier(m) => printed(m),
+        QuasiKey::Key(k) => key_name(*k),
+    }
+}
+
+/// A modifier's name in the configuration, as a keyboard prints it.
+fn printed(modifier: &str) -> String {
+    let (side, family) = match modifier.strip_prefix("Left") {
+        Some(rest) => ("Left ", rest),
+        None => modifier
+            .strip_prefix("Right")
+            .map_or(("", modifier), |r| ("Right ", r)),
+    };
+    let family = match family {
+        "Control" => "Ctrl",
+        "IsoLevel3Shift" => "AltGr",
+        "IsoLevel5Shift" => "Level 5 Shift",
+        other => other,
+    };
+    format!("{side}{family}")
+}
+
 /// A key's name, as the configuration writes it.
 pub fn key_name(k: Key) -> String {
     match k {
@@ -281,9 +323,11 @@ impl Config {
         crate::plumb::Plumber::new(&self.plumb)
     }
 
-    /// The keys it binds, for a session.
+    /// The keys it binds, and each quasimode's key by name, for a
+    /// session.
     pub fn keys(&self) -> Keys {
-        Keys(self.bindings.clone())
+        let spoken = self.quasimodes.iter().map(|(q, ks)| (*q, spoken(ks)));
+        Keys::new(self.bindings.clone(), spoken.collect())
     }
 
     /// Read a configuration over the defaults: a quasimode or key named
@@ -477,6 +521,28 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_quasimodes_key_is_named_as_a_keyboard_prints_it() {
+        // Catches a hint naming a key as the file writes it
+        // ("LeftControl"), or "Left Super" for a key that either Super
+        // works for.
+        let defaults = Config::default().keys();
+        assert_eq!(defaults.quasi_key(Quasi::Command), "Left Ctrl");
+        assert_eq!(defaults.quasi_key(Quasi::LeapForward), "Right Alt");
+        assert_eq!(defaults.quasi_key(Quasi::Suppose), "Super");
+        let toml = "[quasimodes]\nsuppose = [\"RightAlt\", \"IsoLevel3Shift\"]\nleap_forward = [\"RightControl\"]\nscope = [\"Menu\"]\n";
+        let moved = Config::parse(toml).unwrap().keys();
+        assert_eq!(moved.quasi_key(Quasi::Suppose), "Right Alt");
+        assert_eq!(moved.quasi_key(Quasi::LeapForward), "Right Ctrl");
+        assert_eq!(moved.quasi_key(Quasi::Scope), "Menu");
+        let altgr = Config::parse(
+            "[quasimodes]\nleap_forward = [\"IsoLevel3Shift\"]\nsuppose = [\"RightSuper\"]\n",
+        );
+        let altgr = altgr.unwrap().keys();
+        assert_eq!(altgr.quasi_key(Quasi::LeapForward), "AltGr");
+        assert_eq!(altgr.quasi_key(Quasi::Suppose), "Right Super");
+    }
 
     /// The quasimode a key is held for, by the key's name.
     fn quasi(c: &Config, key: &str) -> Option<Quasi> {

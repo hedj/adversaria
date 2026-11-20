@@ -250,6 +250,31 @@ fn an_empty_notebook_says_how_to_begin() {
 }
 
 #[test]
+fn the_first_steps_name_the_keys_configured() {
+    // Catches the hints naming the default keys after the configuration
+    // moved them: here Suppose to Right Alt, Leap to Right Ctrl and Scope
+    // to Menu, and Command to F11.
+    let mut r = Room::new("first-steps-keys");
+    let toml = "[quasimodes]\nsuppose = [\"RightAlt\", \"IsoLevel3Shift\"]\nleap_forward = [\"RightControl\"]\nscope = [\"Menu\"]\ncommand = [\"F11\"]\n";
+    r.app.session.keys = memex::config::Config::parse(toml).unwrap().keys();
+    assert!(
+        r.shows("hold F11 (Command), type a command"),
+        "{:#?}",
+        r.lines()
+    );
+    assert!(
+        r.shows("hold Right Ctrl (Leap) and type"),
+        "{:#?}",
+        r.lines()
+    );
+    assert!(
+        r.shows("a mistake? hold F11, type undo"),
+        "{:#?}",
+        r.lines()
+    );
+}
+
+#[test]
 fn a_heading_has_no_prose_hint_and_a_sentence_has_one() {
     // Catches "prose: not ACE" under every heading and name, which said
     // nothing worth a row, or under no sentence.
