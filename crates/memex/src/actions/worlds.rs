@@ -48,12 +48,13 @@ impl App {
         self.session.mode = Mode::ConfirmRetract { target, dependents };
     }
 
+    /// Suppose a statement as the Suppose key does (App::suppose_text).
     pub(crate) fn cmd_suppose(&mut self, words: &[&str], _: u64) -> Result<String, String> {
-        let n = words.join(" ");
-        if n.is_empty() {
-            return Err("suppose (that) a name for the world".into());
+        let text = words.join(" ");
+        if text.is_empty() {
+            return Err("suppose (that) a statement, or a name for the world".into());
         }
-        self.write_here("suppose", json!({"name": n}))?;
+        self.session.mode = self.suppose_text(text, None);
         Ok(String::new())
     }
 

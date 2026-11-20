@@ -431,7 +431,7 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 
 | Command | Form | Does |
 | --- | --- | --- |
-| `suppose` | `suppose NAME` | starts a named world with nothing supposed in it (the Suppose quasimode is the usual way, § 3.2) |
+| `suppose` | `suppose [that] STATEMENT` | supposes STATEMENT as the Suppose key does (§ 3.2): asks which of its readings against the facts you mean, or, with none, starts a world of that name with nothing supposed |
 | `close` | `close` | closes the supposition and returns to the actual world; it stays in the journal |
 | `commit` | `commit` | makes the supposed world the actual one |
 | `undo` | `undo` | undoes the last change on this branch |
@@ -631,7 +631,8 @@ the start, or after a space): the notebook's words, each kind of word
 with what it is (`a name — one thing by its name: John, buran_flight`),
 and the words of ACE. A fact written as
 Prolog, such as `cell(fuel, 80)`, is read exactly as you wrote it, even
-for something the memex has no facts about. If there is no reading,
+for something the memex has no facts about. The command `suppose
+STATEMENT` does the same as the key. If there is no reading,
 releasing starts a named world with nothing supposed; if what you typed
 is believed already, it starts one with nothing changed, and says so.
 

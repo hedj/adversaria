@@ -315,8 +315,8 @@ pub const COMMANDS: &[Command] = &[
         run: App::cmd_suppose,
         target: false,
         slots: &[("that", Slot::Text)],
-        help: "start a named world with nothing supposed; hold Suppose to suppose a statement",
-        brief: "start a named world",
+        help: "suppose a statement, as the Suppose key does: its readings against the facts are offered; with none, a world of that name opens with nothing supposed",
+        brief: "suppose a statement",
     },
     Command {
         name: "switch",

@@ -3,7 +3,7 @@
 
 mod support;
 
-use memex::app::{Key, Quasi};
+use memex::app::{Key, Mode, Quasi};
 use ratatui::style::Modifier;
 use support::Room;
 
@@ -13,6 +13,36 @@ fn suppose(r: &mut Room, text: &str) {
     r.hold(Quasi::Suppose, text);
     r.release(Quasi::Suppose);
     r.tap(&[Key::Enter]);
+}
+
+/// A room with an ant dated 1, and a sentence supposed in it by a way
+/// given: what it asked before Enter, what it said after, and the facts
+/// of the world it opened.
+fn supposed_by(name: &str, by: impl Fn(&mut Room)) -> (bool, String, Vec<String>) {
+    let mut r = Room::new(name);
+    r.items(&["ants"]);
+    r.command("fact date(ant, 1)");
+    by(&mut r);
+    let asked = matches!(r.app.session.mode, Mode::ConfirmSuppose { .. });
+    r.tap(&[Key::Enter]);
+    r.app.evaluate().unwrap();
+    (asked, r.app.session.message.clone(), supposed_facts(&r))
+}
+
+#[test]
+fn the_suppose_command_does_what_the_suppose_key_does() {
+    // Catches the command opening an empty world named by the sentence,
+    // where the key reads the sentence against the facts and asks which
+    // reading is meant.
+    let key = supposed_by("suppose-by-key", |r| {
+        r.hold(Quasi::Suppose, "the ant 2");
+        r.release(Quasi::Suppose);
+    });
+    assert!(key.0, "the key asks");
+    let command = supposed_by("suppose-by-command", |r| r.command("suppose the ant 2"));
+    assert_eq!(command, key);
+    let that = supposed_by("suppose-by-that", |r| r.command("suppose that the ant 2"));
+    assert_eq!(that, key, "the guide word that is no part of the sentence");
 }
 
 #[test]

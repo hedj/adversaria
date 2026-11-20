@@ -305,6 +305,24 @@ impl App {
 
     /// A statement with no reading, or one believed already: a world of
     /// that name, with nothing supposed in it (guide § 3.2), and say which.
+    /// Suppose a text, by the Suppose key or the suppose command alike:
+    /// ask which of its readings against the facts is meant; or, if it
+    /// has none, open a world of that name with nothing supposed.
+    pub(crate) fn suppose_text(&mut self, text: String, english: Option<String>) -> Mode {
+        let facts = self.notebook.facts_now().unwrap_or_default();
+        let readings = self.suppose_readings(&facts, &text);
+        if readings.is_empty() {
+            self.suppose_named(&text, english);
+            return Mode::Normal;
+        }
+        Mode::ConfirmSuppose {
+            text,
+            readings,
+            at: 0,
+            english,
+        }
+    }
+
     fn suppose_named(&mut self, text: &str, english: Option<String>) {
         self.session.message = self.nothing_to_suppose(text);
         let written = self.write_here("suppose", supposed_body(text, english, None));
@@ -381,19 +399,8 @@ impl App {
                 if text.is_empty() {
                     return Mode::Normal;
                 }
-                let facts = self.notebook.facts_now().unwrap_or_default();
-                let readings = self.suppose_readings(&facts, &text);
                 let english = self.confirmed_english(&a, &text);
-                if readings.is_empty() {
-                    self.suppose_named(&text, english);
-                } else {
-                    return Mode::ConfirmSuppose {
-                        text,
-                        readings,
-                        at: 0,
-                        english,
-                    };
-                }
+                return self.suppose_text(text, english);
             }
             Quasi::Command => return self.run_command(&a.input),
         }
