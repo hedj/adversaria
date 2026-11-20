@@ -688,8 +688,10 @@ cursor on it, the right pane lists its layers, with how many marks each
 draws. A mark that rests on a fact in a violation is drawn red; a bar
 keeps its plain fill, and its value above it is red, since each number
 may be right where only their sum breaks a rule (a grid box gains `!`).
-A bar as tall as the chart has no row above it, so its value is not
-drawn; the axis gives the top. With the mouse on (§ 2.3), a click on a mark goes to the
+A chart keeps room for its bars' values: a row above the tallest
+upright bar, and columns after the longest bar that lies across. A
+chart whose plotting area is under six rows high keeps no such row, since giving one up would draw bars of different values the
+same height; there the tallest bar's value is not drawn. With the mouse on (§ 2.3), a click on a mark goes to the
 item that states its fact. In a supposition, each world draws its own
 copy of every view, side by side. `retract` removes a layer, by its entry
 number, shown in the right pane. A layer whose goal raises an error is

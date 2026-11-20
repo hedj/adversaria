@@ -404,10 +404,9 @@ docs/guide.md, § 3.3 has recipes to copy for line charts, tables, Gantt
 charts and flowcharts.
 
 Leap to `food is 5` and make it `900.` again. The food bar rises, and
-the values above the food and rent bars, `900` and `1200`, turn red:
+the values above the three bars, `900`, `2000` and `1200`, turn red:
 the cost rule's violation rests on the income, rent and food, and so
-does every bar. (The income bar reaches the income line, so there is no
-row above it for its value; the axis says `2000`.) Leap to `food is 9` and
+does every bar. Leap to `food is 9` and
 make it `500.` to put it back.
 
 ### 15. A sentence, a query and a timeline

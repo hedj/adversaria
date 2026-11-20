@@ -901,6 +901,60 @@ fn plot(ms: &[M], space: (usize, usize)) -> Figure {
     p.cv.finish(p.notes)
 }
 
+/// The fewest rows a number scale keeps for its values once a row is
+/// kept above them: a smaller plot keeps none, since a row given up there
+/// would draw bars of different values the same height.
+const MIN_VALUE_ROWS: usize = 5;
+
+/// The columns kept at the right of a plot whose bars lie along the x
+/// axis, so the value after the longest bar fits: the widest value, and
+/// a space before it; none for upright bars.
+fn room_after_bars(ms: &[M]) -> usize {
+    if !horizontal_bars(ms) {
+        return 0;
+    }
+    let widest = ms.iter().filter(|m| m.is_bar()).map(value_width).max();
+    widest.map_or(0, |w| w + 1)
+}
+
+/// How wide a bar's value is, as drawn after it.
+fn value_width(m: &M) -> usize {
+    m.get("x").map_or(0, |x| width(&bar_label(m, x)))
+}
+
+/// The scale that holds the marks' x values, from zero for bars across.
+fn x_scale(ms: &[M]) -> Scale {
+    Scale::of(ms, &["x", "x1", "x2"], zero_axes(ms).0)
+}
+
+/// The scale that holds the marks' y values, from zero for bars up.
+fn y_scale(ms: &[M]) -> Scale {
+    Scale::of(ms, &["y"], zero_axes(ms).1)
+}
+
+/// The margin that holds a y scale's labels, and the plotting area's
+/// size beside it in a space, less the room kept after any bars that
+/// lie across.
+fn beside(ys: &Scale, ms: &[M], space: (usize, usize)) -> (usize, (usize, usize)) {
+    let left = margin(ys);
+    (left, plotting_size(space, left + 1 + room_after_bars(ms)))
+}
+
+/// The plotting area's width and height in a space, less the columns
+/// taken beside it and the two rows of its x axis and labels.
+fn plotting_size(space: (usize, usize), beside: usize) -> (usize, usize) {
+    (
+        space.0.saturating_sub(beside).max(2),
+        space.1.saturating_sub(2).max(2),
+    )
+}
+
+/// The rows a scale keeps at the top of a plotting area so many rows
+/// high: one on a number scale, if enough are left for the values.
+fn headroom(ys: &Scale, rows: usize) -> usize {
+    usize::from(!ys.is_band() && rows > MIN_VALUE_ROWS)
+}
+
 /// Whether a plot's bars lie along the x axis: all have a category for y.
 fn horizontal_bars(ms: &[M]) -> bool {
     let mut bars = ms.iter().filter(|m| m.is_bar()).peekable();
@@ -937,15 +991,16 @@ impl Frame {
     /// The scales that hold the marks' values, and the area left for them
     /// in a space of a width and a height.
     fn train(ms: &[M], space: (usize, usize)) -> Frame {
-        let (x_zero, y_zero) = zero_axes(ms);
-        let xs = Scale::of(ms, &["x", "x1", "x2"], x_zero);
-        let ys = Scale::of(ms, &["y"], y_zero);
-        let left = margin(&ys);
-        let size = (
-            space.0.saturating_sub(left + 1).max(2),
-            space.1.saturating_sub(2).max(2),
-        );
+        let ys = y_scale(ms);
+        let (left, size) = beside(&ys, ms, space);
+        let xs = x_scale(ms);
         Frame { xs, ys, left, size }
+    }
+
+    /// The rows kept at the top of the plotting area, so that a value
+    /// drawn above its bar has a row even for the tallest bar.
+    fn top(&self) -> usize {
+        headroom(&self.ys, self.size.1)
     }
 
     /// The first column of the plotting area.
@@ -966,12 +1021,18 @@ impl Frame {
     /// The rows a value takes. Numbers rise up the page; categories read
     /// down it, first at the top.
     fn row(&self, v: &V) -> Option<Run> {
-        let run = self.ys.place(v, self.size.1)?;
-        Some(if self.ys.is_band() {
-            run
-        } else {
-            run.flip(self.size.1)
-        })
+        if self.ys.is_band() {
+            return self.ys.place(v, self.size.1);
+        }
+        self.number_row(v)
+    }
+
+    /// The rows a number takes, rising up the page from the bottom to
+    /// the row below those kept at the top.
+    fn number_row(&self, v: &V) -> Option<Run> {
+        let (top, rows) = (self.top(), self.size.1 - self.top());
+        let run = self.ys.place(v, rows)?;
+        Some(run.flip(rows).shift(top))
     }
 
     /// The middle row of a value's rows.
@@ -1035,7 +1096,7 @@ impl Frame {
             Scale::Line { lo, hi, .. } => {
                 let bottom = self.size.1 - 1;
                 vec![
-                    (self.ys.tick_text(*hi), 0),
+                    (self.ys.tick_text(*hi), self.top()),
                     (self.ys.tick_text(*lo), bottom),
                 ]
             }
@@ -3043,11 +3104,11 @@ mod tests {
 
     #[test]
     fn a_rule_at_an_x_runs_down_the_plot() {
-        // Catches a rule given an x not drawn, or drawn across. The picture is what the
-        // code drew before plot was restructured.
+        // Catches a rule given an x not drawn, or drawn across. The top
+        // row is kept, so the dots' scale starts on the second.
         let want = [
-            "10 │          │        ●",
             "   │          │",
+            "10 │          │        ●",
             "   │          │",
             "   │          │",
             "   │          │",
@@ -3158,14 +3219,14 @@ mod tests {
 
     #[test]
     fn a_line_is_not_drawn_over_a_bar() {
-        // Catches the dots joining a line drawn over a bar already there. The picture is what the
-        // code drew before plot was restructured.
+        // Catches the dots joining a line drawn over a bar already there.
+        // The top row is kept for the bar's value.
         let want = [
+            "   │       10",
             "10 │        █     ·●",
-            "   │        █  ···",
-            "   │        █··",
-            "   │     ···█",
-            "   │  ···   █",
+            "   │        █ ····",
+            "   │      ··█·",
+            "   │  ····  █",
             " 0 │●·      █",
             "   └────────────────",
             "    0             10",
@@ -3741,7 +3802,8 @@ mod tests {
     #[test]
     fn a_bar_up_is_at_most_eight_wide_and_found_where_it_is_drawn() {
         // Catches a bar wider than 8, a row short, or found elsewhere.
-        // There is no room above it for its label. The picture is what
+        // A plot this low keeps no row above its bars (MIN_VALUE_ROWS), so
+        // there is no room above it for its label. The picture is what
         // the code drew before the bars were given rectangles.
         let want = [
             "3 │              ████████",
@@ -3761,25 +3823,24 @@ mod tests {
     #[test]
     fn a_bar_across_runs_from_zero_with_its_label_after_it() {
         // Catches a bar a column short, its label in the wrong place, or
-        // found elsewhere. The label of the longest bar has no room. The
-        // picture is what the code drew before the bars were given
-        // rectangles.
+        // found elsewhere; or no room kept after the longest bar for its
+        // label, which it once lacked.
         let want = [
-            "a │███████████████████████████",
-            "b │██████████ 1",
-            "  └───────────────────────────",
-            "   0                         3",
+            "a │█████████████████████████ 3",
+            "b │█████████ 1",
+            "  └─────────────────────────",
+            "   0                       3",
         ];
         let (rows, hits) = drawn_and_found(&["bar y:a x:3", "bar y:b x:1"], 30, 0);
-        let places = vec![found(3, 0, 27, 1), found(3, 1, 10, 1)];
+        let places = vec![found(3, 0, 25, 1), found(3, 1, 9, 1)];
         assert_eq!((rows, hits), (want.map(String::from).to_vec(), places));
     }
 
     #[test]
     fn each_point_is_found_where_it_is_drawn() {
         // Catches a dot, a text, or a tick found elsewhere: a tick on the
-        // axis is found at its label and down its stem. The places are
-        // what the code gave before the bars were given rectangles.
+        // axis is found at its label and down its stem. The top row is
+        // kept, so the text at the top of the scale is on the second.
         let specs = [
             "dot x:1 y:1",
             "text x:2 y:2 text:hello",
@@ -3788,7 +3849,7 @@ mod tests {
         ];
         let places = vec![
             found(3, 5, 1, 1),
-            found(16, 0, 5, 1),
+            found(16, 1, 5, 1),
             found(16, 5, 4, 2),
             found(29, 5, 1, 1),
         ];
@@ -3798,7 +3859,8 @@ mod tests {
     #[test]
     fn a_bars_label_is_centred_above_it() {
         // Catches a bar's label moved off its centre, or drawn over the
-        // bar. The taller bar has no room for its label. The picture is
+        // bar. The plot is too low to keep a row above its bars, so the
+        // taller bar has no room for its label. The picture is
         // what the code drew before the bars were given rectangles.
         let want = [
             "3 │                ████████",
@@ -3809,6 +3871,20 @@ mod tests {
             "         a            b",
         ];
         assert_eq!(draw(&["bar x:a y:1", "bar x:b y:3"], 30, 6), want);
+    }
+
+    #[test]
+    fn a_plot_with_room_keeps_a_row_for_the_tallest_bars_value() {
+        // Catches the tallest bar drawn on the plot's first row, with no
+        // row above it for its value, in a plot high enough to keep one;
+        // or a plot too low to keep one giving up a row that would draw
+        // bars of different values the same height.
+        let tall = draw(&["bar x:a y:3", "bar x:b y:1"], 30, 9);
+        assert!(tall[0].contains('3') && !tall[0].contains('█'), "{tall:#?}");
+        let low = draw(&["bar x:a y:3", "bar x:b y:2"], 30, 5);
+        let heights =
+            [10, 20].map(|x| low.iter().filter(|l| l.chars().nth(x) == Some('█')).count());
+        assert_ne!(heights[0], heights[1], "{low:#?}");
     }
 
     #[test]

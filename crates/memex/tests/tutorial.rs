@@ -475,15 +475,18 @@ fn loud_while_over_income(t: &mut T, chart: u64) {
     let fig = view_of(t, chart);
     assert_eq!(loud_runs(&fig), 3, "income, rent and food bars bold");
     assert!(loud_cells(&fig) > 0);
-    // As drawn: the values above the food and rent bars red, and none
-    // above the income bar, which reaches the income line.
-    in_tutorial("`900` and `1200`, turn red");
-    in_tutorial("the axis says `2000`");
+    // As drawn: the value above each of the three bars, red; the chart
+    // keeps a row above its bars, so the income bar's value has room.
+    in_tutorial("`900`, `2000` and `1200`, turn red");
     let mut red = chart_labels(t);
-    red.sort_by_key(|(v, _)| v.len());
+    red.sort_by_key(|(v, _)| v.parse::<i64>().unwrap_or(i64::MIN));
     assert_eq!(
         red,
-        [("900".to_string(), true), ("1200".to_string(), true)],
+        [
+            ("900".to_string(), true),
+            ("1200".to_string(), true),
+            ("2000".to_string(), true)
+        ],
         "{red:?}"
     );
     t.retype_end("food is 9", 4, "500.");
