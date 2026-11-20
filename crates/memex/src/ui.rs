@@ -73,6 +73,11 @@ impl Presentations {
             .find(|(r, _)| r.contains(Position { x, y }))
             .map(|(_, c)| c)
     }
+    /// Each place a presentation is drawn in.
+    pub fn places_of<'a>(&'a self, p: &'a Presentation) -> impl Iterator<Item = Rect> + 'a {
+        self.0.iter().filter(move |(_, q)| q == p).map(|(r, _)| *r)
+    }
+
     /// The clicks outside an area.
     fn outside(mut self, area: Rect) -> Presentations {
         self.0.retain(|(r, _)| r.intersection(area).is_empty());
@@ -95,9 +100,38 @@ pub fn draw(f: &mut Frame, app: &App) {
 pub fn draw_hits(f: &mut Frame, app: &App) -> Presentations {
     let body = draw_edges(f, app);
     let hits = draw_body(f, app, body);
-    match MenuBox::open(app) {
+    let hits = match MenuBox::open(app) {
         Some(menu) => menu.draw(f, hits),
         None => hits,
+    };
+    show_pointed(f, app, &hits);
+    hits
+}
+
+/// The presentation under the pointer, if a click on it does something
+/// now: its text underlined, on every row it is drawn on.
+fn show_pointed(f: &mut Frame, app: &App, hits: &Presentations) {
+    if let Some(p) = pointed_sensitive(app, hits) {
+        for area in hits.places_of(p) {
+            underline_text(f.buffer_mut(), area);
+        }
+    }
+}
+
+/// The presentation under the pointer, if a click on it does something
+/// now.
+fn pointed_sensitive<'a>(app: &App, hits: &'a Presentations) -> Option<&'a Presentation> {
+    let p = app.session.pointer.and_then(|(x, y)| hits.at(x, y))?;
+    app.sensitive(p).then_some(p)
+}
+
+/// The cells of an area that hold text, underlined.
+fn underline_text(buf: &mut ratatui::buffer::Buffer, area: Rect) {
+    for at in area.intersection(buf.area).positions() {
+        let cell = &mut buf[at];
+        if !cell.symbol().trim().is_empty() {
+            cell.modifier.insert(Modifier::UNDERLINED);
+        }
     }
 }
 
@@ -326,15 +360,21 @@ fn draw_body(f: &mut Frame, app: &App, area: Rect) -> Presentations {
 }
 
 /// The two panes, and a quasimode's list over the left one: no click
-/// lands on what it covers.
+/// lands on what its box covers.
 fn draw_panes(f: &mut Frame, app: &App, area: Rect) -> Presentations {
     let [left, right] = pane_areas(area);
     let mut hits = draw_pane(f, app, 1, right);
     hits.0.extend(draw_pane(f, app, 0, left).0);
     focus_heading(f, app, [left, right]);
+    hits.outside(list_box(f, app, left))
+}
+
+/// A quasimode's list over the foot of an area, if one is shown: the
+/// box it takes; else none.
+fn list_box(f: &mut Frame, app: &App, area: Rect) -> Rect {
     match app.session.listed() {
-        Some(a) => cover(f, app, a, left, hits),
-        None => hits,
+        Some(a) => draw_list(f, app, a, area),
+        None => Rect::default(),
     }
 }
 
@@ -365,12 +405,6 @@ fn draw_pane(f: &mut Frame, app: &App, i: usize, area: Rect) -> Presentations {
         PaneKind::Links => draw_links(f, app, area),
         PaneKind::Suggestions => draw_suggestions(f, app, area),
     }
-}
-
-/// A quasimode's list over an area, and the clicks outside it.
-fn cover(f: &mut Frame, app: &App, a: &Active, area: Rect, hits: Presentations) -> Presentations {
-    draw_list(f, app, a, area);
-    hits.outside(area)
 }
 
 /// The top bar: on the left the room, its world and the journal; on the
@@ -1785,11 +1819,12 @@ fn transcluded_at(outline: &Outline, t: u64) -> String {
 
 /// The matches of a Leap, or the commands a Command may be, in a box at the
 /// foot of the outline pane.
-fn draw_list(f: &mut Frame, app: &App, a: &Active, area: Rect) {
+fn draw_list(f: &mut Frame, app: &App, a: &Active, area: Rect) -> Rect {
     let lines = list_shown(app, a, area);
     let r = foot_box(area, &lines);
     f.render_widget(Clear, r);
     f.render_widget(boxed(lines), r);
+    r
 }
 
 /// Lines wrapped in a box with borders all round.

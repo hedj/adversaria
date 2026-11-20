@@ -28,15 +28,19 @@ fn either_leap_lists_its_matches_over_the_outline() {
 
 #[test]
 fn no_click_lands_on_the_outline_under_a_list() {
+    // Catches a click on the list's box landing on an item drawn under
+    // it, or the whole pane made unclickable when only the box covers it,
+    // so that an item above the box cannot be pointed at.
     let mut room = Room::new("screen-covered");
-    room.items(&["Alpha", "Beta"]);
-    let (x, y) = room.find("Alpha");
-    assert!(
-        room.hits().at(x, y).is_some(),
-        "an item's line is clickable"
-    );
+    let texts: Vec<String> = (1..=40).map(|n| format!("Item {n}")).collect();
+    room.items(&texts.iter().map(String::as_str).collect::<Vec<_>>());
+    room.put_cursor(room.outline().in_order()[0]);
     room.hold(Quasi::Command, "?");
-    assert!(room.hits().at(x, y).is_none());
+    let (bx, by) = room.find("EDITING THE OUTLINE");
+    assert!(room.hits().at(bx, by).is_none(), "under the box");
+    let (x, y) = room.find("Item 1");
+    assert!(y < by, "above the box");
+    assert!(room.hits().at(x, y).is_some(), "above the box, clickable");
 }
 
 #[test]

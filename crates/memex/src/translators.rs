@@ -1,9 +1,11 @@
 //! Presentation translators, after CLIM: what a right-click on a
 //! presented object offers, by its type, and only what applies to the
-//! object as it is now (docs/design.md, Presentations). Each offer is a
-//! command line, run as a bound key runs it.
+//! object as it is now; and what it supplies to a command's slot that
+//! takes its type, when a command line waits for one (docs/design.md,
+//! Presentations). Each offer is a command line, run as a bound key runs
+//! it.
 
-use crate::actions::sentences;
+use crate::actions::{Slot, sentences};
 use crate::app::App;
 use crate::plumb::Offer;
 use crate::present::Presentation;
@@ -20,6 +22,34 @@ impl App {
             P::Change(entry) => change_offers(*entry),
             P::Suggestion(n) => suggestion_offers(*n),
             P::Command(line) => vec![offer(&format!("run {line}"), line)],
+        }
+    }
+
+    /// What a presentation supplies to a slot, if the slot takes its
+    /// type: an item's address, an entry's number, a suggestion's number.
+    pub(crate) fn supplied(&self, p: &Presentation, slot: Slot) -> Option<String> {
+        match slot {
+            Slot::Item => self.address_of(p),
+            Slot::Entry => entry_of(p).map(|e| e.to_string()),
+            Slot::Suggestion => suggestion_of(p).map(|n| n.to_string()),
+            Slot::Word | Slot::Text => None,
+        }
+    }
+
+    /// The address of the item a presentation stands for or rests on.
+    fn address_of(&self, p: &Presentation) -> Option<String> {
+        Some(self.notebook.outline.number(self.item_of(p)?))
+    }
+
+    /// The item a presentation stands for or rests on, if one.
+    fn item_of(&self, p: &Presentation) -> Option<u64> {
+        use Presentation as P;
+        match p {
+            P::Item { id, .. } => Some(*id),
+            P::Fact { item, .. } => Some(*item),
+            P::Constraint { item, .. } => *item,
+            P::Layer { view, .. } => Some(*view),
+            _ => None,
         }
     }
 
@@ -105,6 +135,25 @@ impl App {
             || format!("fact of entry {entry}"),
             |(_, t)| crate::reason::show(t),
         )
+    }
+}
+
+/// The journal entry a presentation stands for, if one: a layer, a
+/// change, a constraint or a fact, each by the entry that made it.
+fn entry_of(p: &Presentation) -> Option<u64> {
+    use Presentation as P;
+    match p {
+        P::Layer { entry, .. } | P::Change(entry) => Some(*entry),
+        P::Constraint { entry, .. } | P::Fact { entry, .. } => Some(*entry),
+        _ => None,
+    }
+}
+
+/// The number of the suggestion a presentation stands for, if one.
+fn suggestion_of(p: &Presentation) -> Option<usize> {
+    match p {
+        Presentation::Suggestion(n) => Some(*n),
+        _ => None,
     }
 }
 

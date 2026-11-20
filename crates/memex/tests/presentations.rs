@@ -193,3 +193,78 @@ fn a_selection_is_plumbed_whatever_is_presented_under_it() {
     r.app.right_click(&hits, at, "1989", true);
     assert_eq!(offered(&r), ["go 1989"]);
 }
+
+/// Command on, latched, with a line typed.
+fn command_line(r: &mut Room, line: &str) {
+    r.tap(&[memex::app::Key::Quasi(memex::app::Quasi::Command)]);
+    r.typ(line);
+}
+
+/// The Command line typed so far, if Command is on.
+fn line_now(r: &Room) -> String {
+    match &r.app.session.mode {
+        memex::app::Mode::Quasi(a) => a.input.clone(),
+        other => format!("{other:?}"),
+    }
+}
+
+#[test]
+fn pointing_at_an_item_supplies_it_to_the_line() {
+    // Catches a click while a line waits for an item doing nothing, or
+    // moving the cursor, rather than typing the item's address.
+    let mut r = Room::new("accept-item");
+    r.items(&["Buran", "Energia"]);
+    let items = r.outline().in_order();
+    r.put_cursor(items[0]);
+    command_line(&mut r, "link to ");
+    click_on(&mut r, "Energia");
+    assert_eq!(line_now(&r), "link to 2 ");
+    assert_eq!(r.app.cursor(), items[0], "the cursor stays");
+    r.tap(&[memex::app::Key::Enter]);
+    assert_eq!(r.outline().links_of(items[0]).0.len(), 1);
+}
+
+#[test]
+fn pointing_at_a_layer_supplies_its_entry_and_another_type_nothing() {
+    // Catches an entry slot filled from a presentation of another type,
+    // or not filled from a layer.
+    let mut r = Room::new("accept-entry");
+    r.items(&["chart"]);
+    r.command("fact cell(rent, 1200)");
+    r.command("layer bar(x(C), y(V)) where cell(C, V)");
+    r.app.evaluate().unwrap();
+    let view = r.outline().in_order()[0];
+    let layer = r.outline().views[&view][0].seq;
+    command_line(&mut r, "retract ");
+    click_on(&mut r, "chart");
+    assert_eq!(line_now(&r), "retract ", "an item is no entry");
+    click_on(&mut r, "layer bar(x(C), y(V))");
+    assert_eq!(line_now(&r), format!("retract {layer} "));
+}
+
+#[test]
+fn the_pointer_shows_what_a_click_would_act_on_now() {
+    // Catches the presentation under the pointer not shown, or shown
+    // where a click would do nothing: an item, while the line waits for
+    // an entry.
+    let mut r = Room::new("pointed");
+    r.items(&["Buran", "Energia"]);
+    let underlined = |r: &Room, text: &str| {
+        let (x, y) = r.find(text);
+        let buf = r.screen(160, 40);
+        buf[(x, y)]
+            .modifier
+            .contains(ratatui::style::Modifier::UNDERLINED)
+    };
+    r.app.session.pointer = Some(r.find("2. Energia"));
+    assert!(underlined(&r, "2. Energia"));
+    assert!(
+        !underlined(&r, "1. Buran"),
+        "only what is under the pointer"
+    );
+    command_line(&mut r, "retract ");
+    assert!(!underlined(&r, "2. Energia"), "an item supplies no entry");
+    r.app.session.pointer = None;
+    r.tap(&[memex::app::Key::Escape, memex::app::Key::Escape]);
+    assert!(!underlined(&r, "2. Energia"));
+}

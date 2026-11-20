@@ -4,6 +4,7 @@
 //! The screen's drawing records each presentation where it draws it
 //! (crate::ui::Presentations); a gesture on one acts on its object.
 
+use crate::actions::awaited;
 use crate::app::{App, Mode};
 use crate::plumb::Offer;
 use crate::session::Menu;
@@ -66,6 +67,10 @@ impl App {
         if let Mode::Menu(m) = &self.session.mode {
             let answer = m.clicked(c);
             self.session.mode = self.answered(answer);
+            return;
+        }
+        if let Some(arg) = self.argument_from(c) {
+            self.session.mode.type_in(&arg);
             return;
         }
         if self.session.mode != Mode::Normal {
@@ -166,6 +171,28 @@ fn add_new(offers: &mut Vec<Offer>, more: Vec<Offer>) {
     for o in more {
         if !offers.iter().any(|f| f.line == o.line) {
             offers.push(o);
+        }
+    }
+}
+
+impl App {
+    /// What a presentation supplies to the Command line, if the line
+    /// waits for a slot that takes its type: the argument, and a space,
+    /// so the next slot can wait in turn.
+    fn argument_from(&self, p: &Presentation) -> Option<String> {
+        let slot = awaited(self.session.mode.command_line()?)?;
+        Some(format!("{} ", self.supplied(p, slot)?))
+    }
+
+    /// Whether a click on a presentation does something now, so the
+    /// pointer over it shows it, as Genera showed its mouse-sensitive
+    /// presentations: any, with nothing open; a menu's offer, while a menu
+    /// is open; one that supplies the slot a Command line waits for.
+    pub fn sensitive(&self, p: &Presentation) -> bool {
+        match &self.session.mode {
+            Mode::Normal => true,
+            Mode::Menu(_) => matches!(p, Presentation::Command(_)),
+            _ => self.argument_from(p).is_some(),
         }
     }
 }

@@ -496,6 +496,23 @@ pub enum Mode {
     Menu(crate::session::Menu),
 }
 
+impl Mode {
+    /// The Command line typed so far, if Command is on.
+    pub(crate) fn command_line(&self) -> Option<&str> {
+        match self {
+            Mode::Quasi(a) if a.q() == Quasi::Command => Some(&a.input),
+            _ => None,
+        }
+    }
+
+    /// Text added to a quasimode's line, as if typed, if one is on.
+    pub(crate) fn type_in(&mut self, text: &str) {
+        if let Mode::Quasi(a) = self {
+            a.input.push_str(text);
+        }
+    }
+}
+
 /// Text typed into an item but not yet written.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PendingText {

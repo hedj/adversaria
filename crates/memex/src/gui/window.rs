@@ -254,14 +254,23 @@ impl Memex {
         self.input.pointer.map(|at| self.screen.cell_at(at))
     }
 
-    /// The pointer moved: noted in points, as the cells are measured.
+    /// The pointer moved: noted in points, as the cells are measured, and
+    /// its cell told to the app (crate::present).
     fn pointer_moved(&mut self, at: winit::dpi::PhysicalPosition<f64>) {
         let scale = self.window.gfx().map_or(1.0, |g| g.window.scale_factor());
         let at = at.to_logical::<f32>(scale);
         self.input.pointer = Some(Vec2::new(at.x, at.y));
+        self.tell_pointer();
         if let Some(to) = self.pointed() {
             self.screen.mouse.drag.moved(to);
         }
+    }
+
+    /// The cell under the pointer, told to the app if the mouse is taken,
+    /// so that it shows what is under it.
+    fn tell_pointer(&mut self) {
+        let taken = self.input.config.mouse;
+        self.app.session.pointer = self.pointed().filter(|_| taken);
     }
 
     /// Lay the screen out in cells as many as the window holds, and paint
@@ -385,6 +394,7 @@ impl ApplicationHandler for Memex {
             // needs nothing: winit reports the modifiers cleared.
             WindowEvent::Focused(false) => self.app.focus_lost(),
             WindowEvent::CursorMoved { position, .. } => self.pointer_moved(position),
+            WindowEvent::CursorLeft { .. } => self.app.session.pointer = None,
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: MouseButton::Left,

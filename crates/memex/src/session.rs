@@ -31,6 +31,8 @@ pub struct Session {
     /// The plumbing rules a right-click asks (crate::plumb).
     pub plumber: crate::plumb::Plumber,
     pub quit: bool,
+    /// The cell under the mouse pointer, if it is over the window.
+    pub pointer: Option<(u16, u16)>,
     outside: Outside,
 }
 

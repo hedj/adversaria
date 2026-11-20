@@ -4,10 +4,20 @@
 use crate::app::{App, Mode, ScopeLevel};
 use crate::outline::TOP;
 
-#[derive(Debug, Clone, Copy)]
-enum Slot {
-    Addr,
+/// What a command's slot takes: what may be typed in it, and what may be
+/// pointed at to fill it (docs/design.md, Presentations).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Slot {
+    /// An item: its address, typed, or any presentation of it.
+    Item,
+    /// A journal entry, by its number: typed, or a presented layer,
+    /// change, constraint or fact.
+    Entry,
+    /// A suggestion shown, by its number: typed, or the suggestion.
+    Suggestion,
+    /// A word.
     Word,
+    /// Text.
     Text,
 }
 
@@ -34,7 +44,7 @@ pub const COMMANDS: &[Command] = &[
         name: "accept",
         run: App::cmd_accept,
         target: false,
-        slots: &[("suggestion", Slot::Word)],
+        slots: &[("suggestion", Slot::Suggestion)],
         help: "adopt the nth suggestion shown, with its evidence",
         brief: "adopt the nth suggestion shown",
     },
@@ -90,7 +100,7 @@ pub const COMMANDS: &[Command] = &[
         name: "copy",
         run: App::cmd_copy,
         target: true,
-        slots: &[("after", Slot::Addr)],
+        slots: &[("after", Slot::Item)],
         help: "copy the target's text to a new item after an item",
         brief: "copy the target's text",
     },
@@ -114,7 +124,7 @@ pub const COMMANDS: &[Command] = &[
         name: "dismiss",
         run: App::cmd_dismiss,
         target: false,
-        slots: &[("suggestion", Slot::Word)],
+        slots: &[("suggestion", Slot::Suggestion)],
         help: "dismiss the nth suggestion shown; it returns only if its evidence changes",
         brief: "dismiss the nth suggestion",
     },
@@ -154,7 +164,7 @@ pub const COMMANDS: &[Command] = &[
         name: "go",
         run: App::cmd_go,
         target: false,
-        slots: &[("text", Slot::Text)],
+        slots: &[("text", Slot::Item)],
         help: "go to the item an address names, else to the next that holds the text",
         brief: "go to an address or a text",
     },
@@ -202,7 +212,7 @@ pub const COMMANDS: &[Command] = &[
         name: "link",
         run: App::cmd_link,
         target: true,
-        slots: &[("from", Slot::Addr), ("to", Slot::Addr), ("as", Slot::Word)],
+        slots: &[("from", Slot::Item), ("to", Slot::Item), ("as", Slot::Word)],
         help: "link one item to another; the type defaults to link",
         brief: "link one item to another",
     },
@@ -218,7 +228,7 @@ pub const COMMANDS: &[Command] = &[
         name: "move",
         run: App::cmd_move,
         target: true,
-        slots: &[("after", Slot::Addr)],
+        slots: &[("after", Slot::Item)],
         help: "move the target's branch to follow an item",
         brief: "move the target's branch",
     },
@@ -306,7 +316,7 @@ pub const COMMANDS: &[Command] = &[
         name: "retract",
         run: App::cmd_retract,
         target: false,
-        slots: &[("entry", Slot::Word)],
+        slots: &[("entry", Slot::Entry)],
         help: "reverse one earlier entry, keeping later work; lists what depends on it first",
         brief: "reverse one earlier entry",
     },
@@ -338,7 +348,7 @@ pub const COMMANDS: &[Command] = &[
         name: "transclude",
         run: App::cmd_transclude,
         target: true,
-        slots: &[("from", Slot::Addr)],
+        slots: &[("from", Slot::Item)],
         help: "show an item's text in place, in a new item after the target",
         brief: "show an item's text in place",
     },
@@ -574,6 +584,32 @@ fn parse_line(line: &str) -> Result<Option<(&'static Command, Vec<&str>)>, Strin
     Ok(Some((cmd, words)))
 }
 
+/// The slot a command line waits for, if it ends in a space: the slot of
+/// the guide word typed last, else its command's next slot, the words
+/// typed so far filling its slots in order.
+pub fn awaited(input: &str) -> Option<Slot> {
+    if !input.ends_with(' ') {
+        return None;
+    }
+    let (cmd, words) = parse_line(input).ok()??;
+    let last_guide = words.last().and_then(|w| guide_slot(cmd, w));
+    last_guide.or_else(|| next_slot(cmd, &words))
+}
+
+/// The slot a guide word of a command names, if the word is one.
+fn guide_slot(cmd: &Command, word: &str) -> Option<Slot> {
+    cmd.slots.iter().find(|(g, _)| *g == word).map(|(_, s)| *s)
+}
+
+/// A command's slot after those its words fill, guide words not counted.
+fn next_slot(cmd: &Command, words: &[&str]) -> Option<Slot> {
+    let filled = words
+        .iter()
+        .filter(|w| guide_slot(cmd, w).is_none())
+        .count();
+    cmd.slots.get(filled).map(|(_, s)| *s)
+}
+
 /// Whether a command line ends inside a quoted string ("…" or '…'), so a
 /// ? typed now is part of the string, not a request for help.
 pub(crate) fn in_quotes(input: &str) -> bool {
@@ -713,6 +749,29 @@ fn usage(c: &Command) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_line_waits_for_the_slot_after_what_was_typed() {
+        // Catches a line waiting before its command is ended by a space,
+        // a slot counted wrongly past a guide word, or the slot's type lost.
+        let cases = [
+            ("go", None),
+            ("go ", Some(Slot::Item)),
+            ("go 3", None),
+            ("link ", Some(Slot::Item)),
+            ("link to ", Some(Slot::Item)),
+            ("link 3 ", Some(Slot::Item)),
+            ("link 3 to 5 as ", Some(Slot::Word)),
+            ("retract ", Some(Slot::Entry)),
+            ("accept ", Some(Slot::Suggestion)),
+            ("query ", Some(Slot::Text)),
+            ("adopt ", None),
+            ("nosuch ", None),
+        ];
+        for (line, want) in cases {
+            assert_eq!(awaited(line), want, "{line:?}");
+        }
+    }
 
     #[test]
     fn each_command_is_in_one_group() {

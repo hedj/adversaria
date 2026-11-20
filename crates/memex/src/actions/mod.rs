@@ -9,6 +9,8 @@ mod reading;
 mod split;
 mod worlds;
 
-pub use dispatch::{COMMANDS, Command, GROUPS, Group, command_groups, command_usage};
+pub use dispatch::{
+    COMMANDS, Command, GROUPS, Group, Slot, awaited, command_groups, command_usage,
+};
 pub(crate) use inline::bracketed;
 pub(crate) use split::sentences;
