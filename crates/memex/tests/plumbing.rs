@@ -28,7 +28,7 @@ fn a_menu_offers_what_matches_and_enter_runs_the_first() {
     // Catches a menu not opened, an offer missing, or Enter not running
     // the one chosen.
     let mut r = menu_on_two("menu-enter");
-    assert_eq!(offered(&r), ["go 2", "link to 2"]);
+    assert_eq!(offered(&r), ["go 2", "link to 2", "transclude from 2"]);
     assert!(
         r.shows("act on “2”"),
         "the title names the text: {:#?}",
@@ -51,8 +51,8 @@ fn keys_choose_a_number_runs_and_esc_closes() {
     assert!(matches!(&r.app.session.mode, Mode::Menu(m) if m.chosen == 0));
     r.tap(&[Key::Up]);
     assert!(
-        matches!(&r.app.session.mode, Mode::Menu(m) if m.chosen == 1),
-        "round from the top"
+        matches!(&r.app.session.mode, Mode::Menu(m) if m.chosen == m.offers.len() - 1),
+        "round from the top to the last"
     );
     r.tap(&[Key::Escape]);
     assert_eq!(r.app.session.mode, Mode::Normal);
@@ -153,5 +153,5 @@ fn the_users_rules_are_offered_first() {
     let rule = "[[plumb]]\nname = \"query $0\"\nmatch = 'Q\\d+'\nrun = \"query wd('$0', P, V)\"\n";
     let mut r = with_rule("menu-user", rule);
     r.app.plumb("Q2548", (0, 0));
-    assert_eq!(offered(&r), ["query wd('Q2548', P, V)", "go Q2548"]);
+    assert_eq!(offered(&r)[0], "query wd('Q2548', P, V)");
 }

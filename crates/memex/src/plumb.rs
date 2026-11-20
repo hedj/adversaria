@@ -94,15 +94,36 @@ match = '[a-z]\w*\(.*\)'
 run = "fact $0"
 
 [[plumb]]
+name = "state $0 here, setting aside what it contradicts"
+match = '[a-z]\w*\(.*\)'
+run = "set $0"
+
+[[plumb]]
+name = "suppose $0"
+match = '[a-z]\w*\(.*\)|[^\s()]+(?:\s+[^\s()]+)+'
+run = "suppose $0"
+
+[[plumb]]
 name = "read $0 as ACE"
 match = '[^\s()]+(?:\s+[^\s()]+)+'
 run = "ace $0"
+
+[[plumb]]
+name = "name this item $0"
+match = '[\p{L}_][\p{L}\p{N}_-]*'
+run = "name $0"
 
 [[plumb]]
 name = "link here to $0"
 match = '\S.*'
 if = "item"
 run = "link to $0"
+
+[[plumb]]
+name = "show $0 here, in place"
+match = '\S.*'
+if = "item"
+run = "transclude from $0"
 
 [[plumb]]
 name = "find $0"
@@ -237,14 +258,27 @@ mod tests {
         // order lost, or one command line offered twice ("go 1.3" by the
         // address and by "find").
         let p = Plumber::new(&[]).unwrap();
-        assert_eq!(lines(&p, "1.3", &["1.3"]), ["go 1.3", "link to 1.3"]);
+        assert_eq!(
+            lines(&p, "1.3", &["1.3"]),
+            ["go 1.3", "link to 1.3", "transclude from 1.3"]
+        );
         assert_eq!(
             lines(&p, "date(E, Y)", &[]),
-            ["query date(E, Y)", "fact date(E, Y)", "go date(E, Y)"]
+            [
+                "query date(E, Y)",
+                "fact date(E, Y)",
+                "set date(E, Y)",
+                "suppose date(E, Y)",
+                "go date(E, Y)"
+            ]
         );
         assert_eq!(
             lines(&p, "Nemo is a fish.", &[]),
-            ["ace Nemo is a fish.", "go Nemo is a fish."]
+            [
+                "suppose Nemo is a fish.",
+                "ace Nemo is a fish.",
+                "go Nemo is a fish."
+            ]
         );
     }
 
@@ -258,22 +292,36 @@ mod tests {
         let p = Plumber::new(&[]).unwrap();
         let long =
             "Talk-notes says that the date of Buran-flight is 1989. And it was the only flight.";
-        assert_eq!(
-            lines(&p, long, &[long]),
-            [
-                format!("ace {long}"),
-                format!("link to {long}"),
-                format!("go {long}")
-            ]
+        let offered = lines(&p, long, &[long]);
+        for c in ["ace", "link to", "go"] {
+            assert!(offered.contains(&format!("{c} {long}")), "{c}: {offered:?}");
+        }
+        assert!(lines(&p, "rent is 1200", &[]).contains(&"ace rent is 1200".to_string()));
+        let one = lines(&p, "rent", &[]);
+        assert!(
+            !one.iter().any(|o| o.starts_with("ace")),
+            "one word is no sentence: {one:?}"
         );
-        assert_eq!(
-            lines(&p, "rent is 1200", &[]),
-            ["ace rent is 1200", "go rent is 1200"]
+    }
+
+    #[test]
+    fn each_command_that_takes_text_is_offered_for_text_it_takes() {
+        // Catches a command that acts on text offered for none: suppose a
+        // statement or a fact, set a fact, name the item by a word, show
+        // an item here in place.
+        let p = Plumber::new(&[]).unwrap();
+        let offers = |text: &str, items: &[&str]| lines(&p, text, items);
+        assert!(
+            offers("the flight was in 1989", &[])
+                .contains(&"suppose the flight was in 1989".into())
         );
-        assert_eq!(
-            lines(&p, "rent", &[]),
-            ["go rent"],
-            "one word is no sentence"
+        assert!(offers("cell(rent, 1600)", &[]).contains(&"suppose cell(rent, 1600)".into()));
+        assert!(offers("cell(rent, 1600)", &[]).contains(&"set cell(rent, 1600)".into()));
+        assert_eq!(offers("rent", &[]), ["name rent", "go rent"]);
+        assert!(offers("1.2", &["1.2"]).contains(&"transclude from 1.2".into()));
+        assert!(
+            !offers("1.2", &[]).iter().any(|o| o.starts_with("name")),
+            "a number names nothing"
         );
     }
 

@@ -302,10 +302,16 @@ first:
 | an address that names an item: `1.3`, `#28` | `go` to it |
 | `#` and a number | `retract` that entry |
 | the path of a file that exists, ending in `.md`, `.docx`, `.odt`, `.tex`, `.html` (and others Pandoc reads), `.json` or `.pl` | `import document`, `import results` or `import wikidata` |
-| a Prolog goal, such as `date(E, Y)` | `query` it, or state it as a `fact` here |
+| a Prolog goal, such as `date(E, Y)` | `query` it, state it as a `fact` here, or `set` it (stating it and setting aside what it contradicts) |
+| a Prolog fact, or two or more words without brackets | `suppose` it, as the Suppose key does |
 | two or more words, without brackets | read them with `ace`, which says why if it cannot |
-| text that names an item | `link to` it from here |
+| one word, not a number | `name` this item by it |
+| text that names an item | `link to` it from here, or `transclude` it: show its text here, in place |
 | any text | `go` to the next item holding it (find) |
+
+The other commands act on the item, not on text (`adopt`, `interrogate`,
+`split`, `delete` and the rest), so the menu does not offer them; run
+them with Command, or the keys bound to them.
 
 Add your own with `[[plumb]]` in the configuration (§ 4.3); yours are
 offered before the built-in ones. Each has a `name` (the menu's words), a
