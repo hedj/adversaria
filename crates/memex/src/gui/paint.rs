@@ -127,13 +127,22 @@ fn paint_cell(p: &Painter, cell: &Cell, mut brush: Brush) {
 }
 
 /// A cell's text: a box-drawing or block character as shapes that fill
-/// the cell (crate::gui::boxes), anything else in the font.
+/// the cell (crate::gui::boxes), anything else in the font. A blank
+/// under a line (underlined, struck through) is laid out like a letter,
+/// so the line runs through it unbroken.
 fn paint_text(p: &Painter, cell: &Cell, brush: &Brush) {
-    if let Some(shapes) = drawn(cell.symbol(), brush) {
+    if let Some(shapes) = drawn(cell.symbol(), brush).filter(|_| !lined(cell)) {
         return p.extend(shapes);
     }
     let job = LayoutJob::single_section(cell.symbol().to_string(), format(cell, brush.ink));
     p.galley(brush.cell.min, p.layout_job(job), brush.ink);
+}
+
+/// Whether a cell is a blank that a line runs through: underlined or
+/// struck through.
+fn lined(cell: &Cell) -> bool {
+    let lines = Modifier::UNDERLINED | Modifier::CROSSED_OUT;
+    cell.symbol().trim().is_empty() && cell.modifier.intersects(lines)
 }
 
 /// A cell's symbol as shapes: no shapes for a blank, the shapes of a
@@ -299,6 +308,20 @@ mod tests {
             Color32::from_rgb(0xf1, 0x4c, 0x4c)
         );
         assert_eq!(colour(Color::Rgb(1, 2, 3), INK), Color32::from_rgb(1, 2, 3));
+    }
+
+    #[test]
+    fn a_blank_under_a_line_is_laid_out_so_the_line_runs_through() {
+        // Catches an underline or a strike broken at every space: a blank
+        // cell was painted as no shapes, its line with it.
+        let mut cell = Cell::new(" ");
+        assert!(!lined(&cell), "a plain blank is skipped");
+        cell.modifier = Modifier::UNDERLINED;
+        assert!(lined(&cell));
+        cell.modifier = Modifier::CROSSED_OUT;
+        assert!(lined(&cell));
+        cell.set_symbol("a");
+        assert!(!lined(&cell), "a letter is laid out anyway");
     }
 
     #[test]
