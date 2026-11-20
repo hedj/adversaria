@@ -1,5 +1,5 @@
 //! Plumbing: a right-click on a text opens a menu of the commands its
-//! rules offer (docs/guide.md § 2.3, The mouse; crate::plumb).
+//! rules offer (docs/guide.md § 2.3, The mouse and Plumbing; crate::plumb).
 
 mod support;
 use memex::app::{Click, Key, Mode};

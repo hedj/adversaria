@@ -288,9 +288,12 @@ act on that item. The offers appear in a menu titled with the text, such
 as `act on “flight”`, just below the pointer (above it near the foot), so
 the row clicked stays in view. Up and Down choose, Enter or a number runs one, Esc closes it; a click on
 an offer runs it, and a click anywhere else closes the menu. If nothing
-can act on the text, the foot says so.
+can act on the text, the foot says so. Which commands are offered is
+set by rules, below.
 
-This is plumbing, after Plan 9's plumber (Rob Pike, "Plumbing and Other
+#### Plumbing
+
+The menu a right-click opens is plumbing, after Plan 9's plumber (Rob Pike, "Plumbing and Other
 Utilities"). Rules say what can act on a text: each has a regular
 expression that the whole text must match, and a command line to offer.
 Plan 9 runs the first rule that matches; here every rule that matches is
@@ -1030,7 +1033,7 @@ Command, such as `"pane suggestions"` or `"export draft.md"`; or to
 See § 2.3, The mouse.
 
 **`[[plumb]]`** adds a plumbing rule, offered on a right-click before the
-built-in ones; there may be any number, in order. See § 2.3, The mouse.
+built-in ones; there may be any number, in order. See § 2.3, Plumbing.
 
 **Key names:**
 

@@ -2,7 +2,7 @@
 //! Utilities"): rules that say which commands can act on a piece of text.
 //! Plan 9 runs the first rule that matches; here every rule that matches
 //! is offered, in order, in the menu a right-click opens
-//! (docs/guide.md § 2.3, The mouse).
+//! (docs/guide.md § 2.3, Plumbing).
 //!
 //! A rule's pattern must match the whole text. Its command line is typed
 //! as in the Command quasimode, with `$0` for the whole text and `$1` to
