@@ -520,3 +520,19 @@ fn find(app: &App, text: &str) -> u64 {
         .find(|i| outline.text(*i) == text)
         .unwrap_or_else(|| panic!("no item {text:?}"))
 }
+
+#[test]
+fn the_configuration_for_a_desktop_that_takes_super_is_accepted() {
+    // Catches the tutorial's configuration refused at start (a key given
+    // two jobs, a name misspelt), or not moving Suppose off Super.
+    let blocks: Vec<&str> = TUTORIAL.split("```toml\n").skip(1).collect();
+    assert_eq!(blocks.len(), 1, "one configuration in the tutorial");
+    let block = blocks[0].split("```").next().unwrap();
+    let config = memex::config::Config::parse(block).unwrap_or_else(|e| panic!("{e}: {block}"));
+    let suppose = config.quasimodes.iter().find(|(q, _)| *q == Quasi::Suppose);
+    let keys = format!("{:?}", suppose.map(|(_, k)| k));
+    assert!(
+        keys.contains("RightControl") && !keys.contains("Super"),
+        "{keys}"
+    );
+}

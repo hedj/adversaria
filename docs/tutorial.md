@@ -19,8 +19,8 @@ for; this is the same, done.
 
 The notes are about the Soviet Buran space shuttle, after the design's
 user story (docs/design.md, § A user story). The key names are the
-defaults; if you have changed them (docs/guide.md, § Configuration), use
-yours.
+defaults; if you have changed them (docs/guide.md, § 4.3 Configuration),
+use yours.
 
 ## A. A claim, checked
 
@@ -40,6 +40,32 @@ make run JOURNAL=$HOME/adversaria-tutorial KEY=$HOME/.adversaria-tutorial.key
 The first run makes a signing key and a new journal. The journal is
 permanent: nothing you do is ever erased from it. That is why this tutorial
 uses its own journal, which you can delete when you are done.
+
+**If your desktop takes Super.** You will hold keys while you type:
+Left Ctrl for a command, Alt to leap, and Super (the Windows or Command
+key) to suppose. Many desktops open a launcher or an overview when Super
+is pressed, and then the notebook never sees it. Before you start, press
+Super once: if anything happens outside the window, give Suppose another
+key. Quit the notebook (F10), make the directory for its configuration,
+
+```bash
+mkdir -p ~/.config/adversaria
+```
+
+and put these lines in `~/.config/adversaria/config.toml`:
+
+```toml
+[quasimodes]
+suppose = ["RightControl"]
+scope = ["Menu"]
+```
+
+Right Ctrl is Scope's key by default, so the second line gives Scope the
+Menu key instead; a key may have only one job. Start the notebook again,
+and hold **Right Ctrl** wherever this tutorial says Super. (If you set
+`XDG_CONFIG_HOME`, the file goes there instead; docs/guide.md,
+§ 4.3 Configuration, says where else it may be, and lists every key
+name.)
 
 The window is the memex, the notebook. It has a top bar, your outline on
 the left, and a second pane on the right. The outline says:
@@ -158,7 +184,8 @@ both stay in the journal.
 *Why: when you do not yet know which source is right, try each without
 changing what you believe.*
 
-Hold **Super** (the Windows or Command key). Holding a key while you
+Hold **Super** (the Windows or Command key; if your desktop takes it,
+see "If your desktop takes Super" in step 1). Holding a key while you
 type is how the notebook takes a command of one kind: here, a
 supposition. The foot of the screen says `SUPPOSE`, and under it what
 to do:
@@ -453,5 +480,5 @@ tutorial does not, that test fails. Limits of this tutorial:
   images.
 - The `check` command above is not performed by the tutorial test; the
   acceptance tests check journals made by the memex.
-- Holding Super may be taken by your desktop. If it is, give Suppose
-  another key (docs/guide.md, § Configuration).
+- The tutorial test does not run on a desktop, so it cannot tell whether
+  yours takes Super; step 1 says how to tell, and what to do.
