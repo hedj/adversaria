@@ -1534,6 +1534,18 @@ where the review held.
    but the paper added round the box then did, so the box now leaves a
    row between itself and its cell. Not taken: the subject in the foot's
    "ACT ON" label.
+12. In the right pane a long line wrapped back to the pane's margin, so
+   its second row read as a line of its own ("… recomputed at journal" /
+   "31"). Now every panel there wraps as the outline does: a line of
+   content (code, values, claims) has its later rows set in by four, and
+   a heading or note, drawn wholly dim, wraps flush to its own indent.
+   The first version set every line in by two; the review found that put
+   a wrapped layer's "where cell(C, V)" level with its "entry 93" line
+   under it, made a wrapped note look like a list, and ran a wrapped
+   heading into the code under it: all taken, by the rule above. It also
+   said "recomputed at journal 31" had gone missing; finding 8 removed
+   it on purpose. Not taken: breaking code at "where" or a comma before
+   any space.
 
 ## 4. Where it stands
 

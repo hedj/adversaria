@@ -3,8 +3,11 @@
 //! The rows remember where in the line each starts, so a column of the
 //! line (the text cursor's, a click's place) can be found on its row.
 
-use ratatui::style::Style;
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
+use ratatui::widgets::{Paragraph, Widget};
 use unicode_width::UnicodeWidthChar;
 
 /// A line wrapped: its rows, the column of the line at which each row
@@ -38,6 +41,51 @@ pub fn wrap(line: &Line<'static>, width: usize, hang: usize) -> Wrapped {
         starts: starts(&cut),
         hang,
         width,
+    }
+}
+
+/// Lines wrapped to a width, so a wrapped line reads as one. A line of
+/// content (code, values, claims) has its later rows set in four cells
+/// past its own indent, clear of the lines set in two under it as its
+/// parts. A heading or a note, drawn wholly dim, wraps flush to its own
+/// indent, as prose does, so it does not look like a list.
+pub fn hung(lines: &[Line<'static>], width: usize) -> Vec<Line<'static>> {
+    lines.iter().flat_map(|l| hung_line(l, width)).collect()
+}
+
+/// A line's rows, its later rows set in past its indent (above).
+fn hung_line(line: &Line<'static>, width: usize) -> Vec<Line<'static>> {
+    let past = if is_note(line) { 0 } else { 4 };
+    wrap(line, width, indent_of(line) + past).rows
+}
+
+/// Whether a line is a heading or a note: all its text drawn dim.
+fn is_note(line: &Line<'static>) -> bool {
+    let dim = |s: &Span| {
+        line.style
+            .patch(s.style)
+            .add_modifier
+            .contains(Modifier::DIM)
+    };
+    let words = line.spans.iter().filter(|s| !s.content.trim().is_empty());
+    words.clone().count() > 0 && words.into_iter().all(dim)
+}
+
+/// The spaces a line starts with.
+fn indent_of(line: &Line<'static>) -> usize {
+    let text = line.spans.iter().map(|s| s.content.as_ref());
+    text.collect::<String>()
+        .chars()
+        .take_while(|c| *c == ' ')
+        .count()
+}
+
+/// Lines drawn hung (above) to the width of the area they are drawn in.
+pub struct Hung(pub Vec<Line<'static>>);
+
+impl Widget for Hung {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        Paragraph::new(hung(&self.0, area.width as usize)).render(area, buf);
     }
 }
 

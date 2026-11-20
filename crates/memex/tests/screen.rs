@@ -475,3 +475,43 @@ fn a_row_one_world_wraps_further_keeps_the_next_rows_together() {
     let below = right(below.expect("The income"));
     assert!(below.starts_with("The income"), "{rows:#?}");
 }
+
+#[test]
+fn a_line_wrapped_in_the_right_pane_hangs_under_its_text() {
+    // Catches a wrapped line of content in the right pane starting again
+    // at its margin, where it reads as a line of its own, or at the indent
+    // of the lines under it (UX audit, finding 12); and a heading hung, so
+    // that it runs into the code under it.
+    let mut r = Room::new("screen-right-hang");
+    r.items(&[
+        "The date of Buran-flight is 1988.",
+        "Talk-notes says that the date of Buran-flight is 1989.",
+        "Nothing has more than 1 date.",
+    ]);
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    r.tap(&[Key::Up]);
+    let rows = r.lines_at(90, 24);
+    let right: Vec<String> = rows
+        .iter()
+        .map(|l| l.split('│').nth(1).unwrap_or("").trim_end().to_string())
+        .collect();
+    let after = |head: &str| {
+        let i = right.iter().position(|l| l.trim_start().starts_with(head));
+        let i = i.unwrap_or_else(|| panic!("no {head}: {right:#?}"));
+        (right[i].clone(), right[i + 1].clone())
+    };
+    let set_in = |l: &str| l.len() - l.trim_start().len();
+    let (heading, more) = after("CONSTRAINT · NOTHING");
+    assert_eq!(
+        set_in(&more),
+        set_in(&heading),
+        "a heading wraps flush: {right:#?}"
+    );
+    let (claim, prolog) = after("claim of Talk-notes");
+    assert_eq!(
+        set_in(&prolog),
+        set_in(&claim) + 4,
+        "content hangs: {right:#?}"
+    );
+}

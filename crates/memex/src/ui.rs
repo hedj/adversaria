@@ -18,7 +18,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use std::collections::BTreeMap;
-use wrap::{Wrapped, wrap};
+use wrap::{Hung, Wrapped, hung, wrap};
 
 fn dim() -> Style {
     Style::default().add_modifier(Modifier::DIM)
@@ -1456,9 +1456,9 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect) -> Hits {
 
 /// What the selected item needs: its view's layers, the constraints its
 /// marks come from, or its links.
-fn right_panel(app: &App, id: u64) -> Paragraph<'static> {
+fn right_panel(app: &App, id: u64) -> Hung {
     if let Some(layers) = app.notebook.outline.views.get(&id) {
-        return wrapped(view_panel(app, id, layers));
+        return Hung(view_panel(app, id, layers));
     }
     let mut lines = match app.reason.eval[0].as_ref() {
         Some(e) if !item_marks(e, &app.notebook.outline, id).is_empty() => {
@@ -1468,7 +1468,7 @@ fn right_panel(app: &App, id: u64) -> Paragraph<'static> {
         _ => links_lines(&app.notebook.outline, id),
     };
     lines.extend(read_as_lines(&app.notebook.outline, id));
-    wrapped(lines)
+    Hung(lines)
 }
 
 /// What an item's text, as it is now, was read as, in Prolog: each
@@ -1515,8 +1515,8 @@ fn wrapped(lines: Vec<Line<'static>>) -> Paragraph<'static> {
 /// an adoption back, each part a click on its command.
 fn draw_interrogation(f: &mut Frame, app: &App, item: u64, inner: Rect) -> Hits {
     let lines = interrogation(app, item);
-    let used = wrapped_height(&lines, inner.width);
-    f.render_widget(wrapped(lines), inner);
+    let used = hung(&lines, inner.width as usize).len() as u16;
+    f.render_widget(Hung(lines), inner);
     draw_adopt_hint(f, app, row_below(inner, used))
 }
 
@@ -3287,10 +3287,7 @@ fn inset(area: Rect) -> Rect {
 fn draw_suggestions(f: &mut Frame, app: &App, area: Rect) -> Hits {
     let inner = inset(area);
     let column = suggestion_lines(app, Column::new(inner));
-    f.render_widget(
-        Paragraph::new(column.lines).wrap(Wrap { trim: false }),
-        inner,
-    );
+    f.render_widget(Hung(column.lines), inner);
     column.hits
 }
 
@@ -3359,8 +3356,9 @@ impl Column {
 
     /// The rows that lines would take after those already added.
     fn rows_of(&self, block: &[Line<'static>]) -> Rect {
-        let top = wrapped_height(&self.lines, self.area.width);
-        let height = wrapped_height(block, self.area.width);
+        let width = self.area.width as usize;
+        let top = hung(&self.lines, width).len() as u16;
+        let height = hung(block, width).len() as u16;
         Rect {
             y: self.area.y.saturating_add(top),
             height,
@@ -3381,7 +3379,7 @@ fn draw_revision(f: &mut Frame, app: &App, area: Rect) {
     let Some(lines) = revision_panel(app) else {
         return;
     };
-    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
+    f.render_widget(Hung(lines), area);
 }
 
 /// The panel of the world a supposition opened, if one is open.
