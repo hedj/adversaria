@@ -240,7 +240,9 @@ fn an_empty_notebook_says_how_to_begin() {
     // default key when the configuration moved it.
     let mut r = Room::new("first-steps");
     assert!(r.shows("Type to write the first item."));
-    assert!(r.shows("hold Left Ctrl (Command), type a command, release to run it · F1 lists them"));
+    assert!(
+        r.shows("tap Left Ctrl (Command), type a command, press Enter to run it · F1 lists them")
+    );
     assert!(r.shows("(the selected item and its links appear here)"));
     assert!(r.shows("right-click a word for what can act on it"));
     r.bind("F1 = \"\"\nF12 = \"palette\"");
@@ -258,7 +260,7 @@ fn the_first_steps_name_the_keys_configured() {
     let toml = "[quasimodes]\nsuppose = [\"RightAlt\", \"IsoLevel3Shift\"]\nleap_forward = [\"RightControl\"]\nscope = [\"Menu\"]\ncommand = [\"F11\"]\n";
     r.app.session.keys = memex::config::Config::parse(toml).unwrap().keys();
     assert!(
-        r.shows("hold F11 (Command), type a command"),
+        r.shows("tap F11 (Command), type a command"),
         "{:#?}",
         r.lines()
     );
@@ -267,11 +269,7 @@ fn the_first_steps_name_the_keys_configured() {
         "{:#?}",
         r.lines()
     );
-    assert!(
-        r.shows("a mistake? hold F11, type undo"),
-        "{:#?}",
-        r.lines()
-    );
+    assert!(r.shows("a mistake? tap F11, type undo"), "{:#?}", r.lines());
 }
 
 #[test]

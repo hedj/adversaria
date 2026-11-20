@@ -113,7 +113,7 @@ fn a_message_takes_the_place_of_the_fading_hint() {
     room.app.evaluate().unwrap();
     room.app.session.message.clear();
     assert!(
-        foot(&room)[0].starts_with("Try a what-if: hold Super to suppose"),
+        foot(&room)[0].starts_with("Try a what-if: tap Super to suppose"),
         "{:?}",
         foot(&room)
     );
@@ -587,4 +587,22 @@ fn a_line_wrapped_in_the_right_pane_hangs_under_its_text() {
         set_in(&claim) + 4,
         "content hangs: {right:#?}"
     );
+}
+
+#[test]
+fn a_quasimode_held_with_nothing_typed_says_a_release_keeps_it_on() {
+    // Catches the foot telling a holder only that releasing runs, when a
+    // release with nothing typed latches it; or the note left once there
+    // is text, when releasing does run, or once it is latched.
+    let note = "release now to type without holding";
+    let mut room = Room::new("screen-held-note");
+    room.hold(Quasi::Command, "");
+    assert!(room.shows(note), "{:#?}", room.lines());
+    room.typ("un");
+    assert!(!room.shows(note), "typed: {:#?}", room.lines());
+    room.tap(&[Key::Escape]);
+    room.release(Quasi::Command);
+    room.tap(&[Key::Quasi(Quasi::Command)]);
+    assert!(room.shows("COMMAND (latched)"), "{:#?}", room.lines());
+    assert!(!room.shows(note), "latched: {:#?}", room.lines());
 }

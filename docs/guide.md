@@ -158,7 +158,7 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   typed and what releasing will do.
 
 With the cursor on an item with marks, the foot suggests a what-if
-(`Try a what-if: hold Super to suppose a statement, …`), dim, until you have used Suppose
+(`Try a what-if: tap Super to suppose a statement, …`), dim, until you have used Suppose
 four times.
 
 ### 2.3 Keys and quasimodes
@@ -179,12 +179,23 @@ The defaults are below. All of them can be changed (§ 4.3).
 
 #### Quasimodes
 
-A quasimode is a state that lasts only while you hold a key: hold the
-Command key, type a command, and release to run it. You cannot forget
-you are in one, as you can with a mode. Each is also a gesture of its
-own: searching, commanding and supposing each have a key.
+A quasimode is a kind of input that a key starts: searching,
+commanding and supposing each have one. Use it either way:
 
-| Quasimode | Default keys | While held | On release |
+- **Tap, type, Enter.** Tap the key (press and let go, with nothing
+  typed between), type, and press Enter. The foot names the quasimode,
+  `(latched)`, until Enter ends it. This suits a command line or a
+  sentence, typed with both hands free.
+- **Hold, type, let go.** Hold the key while you type, and let go to
+  finish. This suits a few letters, such as a Leap. You cannot forget
+  you are in a quasimode while you hold its key, as you can with a mode.
+  While it is held with nothing typed, the foot says `release now to
+  type without holding`.
+
+The table says what each does while it is on, held or latched, and
+when it ends.
+
+| Quasimode | Default keys | While on | When it ends |
 | --- | --- | --- | --- |
 | Leap forward | Right Alt (AltGr) | type a pattern | the cursor goes to the next item holding it |
 | Leap back | Left Alt | type a pattern | the cursor goes to the previous item holding it |

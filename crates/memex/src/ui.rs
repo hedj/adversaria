@@ -1904,8 +1904,19 @@ fn quasi_name(a: &Active) -> Span<'static> {
     Span::styled(format!(" {}{latched} ", a.q().label()), reversed())
 }
 
-/// What a held quasimode does, and how it ends.
+/// What a held quasimode does, and how it ends; and, while it is held
+/// with nothing typed, that releasing it keeps it on, so the rest can be
+/// typed without holding.
 fn quasi_guide(a: &Active) -> String {
+    let guide = quasi_doing(a);
+    match a.latched() || !a.input.is_empty() {
+        true => guide,
+        false => format!("release now to type without holding · {guide}"),
+    }
+}
+
+/// What a quasimode does, and how it ends.
+fn quasi_doing(a: &Active) -> String {
     let end = release_text(a);
     match a.q() {
         Quasi::LeapForward | Quasi::LeapBack => format!(
@@ -2762,7 +2773,7 @@ fn hint(app: &App) -> Option<(String, String)> {
     }
     let key = app.session.keys.quasi_key(Quasi::Suppose);
     let try_it = format!(
-        "Try a what-if: hold {key} to suppose a statement, then release. The actual world stays as it is."
+        "Try a what-if: tap {key} to suppose a statement, type it, and press Enter. The actual world stays as it is."
     );
     Some((try_it, String::new()))
 }
@@ -3425,7 +3436,7 @@ fn first_steps_said(app: &App) -> [String; 6] {
 fn command_step(app: &App) -> String {
     let command = app.session.keys.quasi_key(Quasi::Command);
     let palette = app.session.keys.key_for("palette");
-    format!("hold {command} (Command), type a command, release to run it · {palette} lists them")
+    format!("tap {command} (Command), type a command, press Enter to run it · {palette} lists them")
 }
 
 /// How to leap to an item, and back.
@@ -3441,7 +3452,7 @@ fn leap_step(app: &App) -> String {
 /// How to undo a mistake.
 fn undo_step(app: &App) -> String {
     let command = app.session.keys.quasi_key(Quasi::Command);
-    format!("a mistake? hold {command}, type undo, release · nothing is ever lost")
+    format!("a mistake? tap {command}, type undo, press Enter · nothing is ever lost")
 }
 #[cfg(test)]
 mod tests {

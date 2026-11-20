@@ -173,7 +173,7 @@ fn scene_two_as_written() {
     s.assert("depends on these facts");
     s.assert("1.3 The flight came a year after");
     s.assert("    3 1987 Energia's first launch ── 1988 Bura …");
-    s.assert("Try a what-if: hold Super to suppose a statement, then release. The actual world stays as it is.");
+    s.assert("Try a what-if: tap Super to suppose a statement, type it, and press Enter. The actual world stays as it is.");
 }
 
 #[test]

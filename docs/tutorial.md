@@ -41,9 +41,9 @@ The first run makes a signing key and a new journal. The journal is
 permanent: nothing you do is ever erased from it. That is why this tutorial
 uses its own journal, which you can delete when you are done.
 
-**If your desktop takes Super.** You will hold keys while you type:
-Left Ctrl for a command, Alt to leap, and Super (the Windows or Command
-key) to suppose. Many desktops open a launcher or an overview when Super
+**If your desktop takes Super.** Some keys start a kind of input:
+Left Ctrl a command, Alt a leap, and Super (the Windows or Command key)
+a supposition. Many desktops open a launcher or an overview when Super
 is pressed, and then the notebook never sees it. Before you start, press
 Super once: if anything happens outside the window, give Suppose another
 key. Quit the notebook (F10), make the directory for its configuration,
@@ -62,7 +62,7 @@ scope = ["Menu"]
 
 Right Ctrl is Scope's key by default, so the second line gives Scope the
 Menu key instead; a key may have only one job. Start the notebook again,
-and hold **Right Ctrl** wherever this tutorial says Super. (If you set
+and use **Right Ctrl** wherever this tutorial says Super. (If you set
 `XDG_CONFIG_HOME`, the file goes there instead; docs/guide.md,
 § 4.3 Configuration, says where else it may be, and lists every key
 name.)
@@ -184,22 +184,22 @@ both stay in the journal.
 *Why: when you do not yet know which source is right, try each without
 changing what you believe.*
 
-Hold **Super** (the Windows or Command key; if your desktop takes it,
-see "If your desktop takes Super" in step 1). Holding a key while you
-type is how the notebook takes a command of one kind: here, a
-supposition. The foot of the screen says `SUPPOSE`, and under it what
-to do:
+Tap **Super** (the Windows or Command key; if your desktop takes it,
+see "If your desktop takes Super" in step 1): press it and let go, with
+nothing typed between. A tap starts a kind of input, here a
+supposition, which stays on until you press Enter. The foot of the
+screen says `SUPPOSE (latched)`, and under it what to do:
 
-    type a statement · ? lists what may come next · release Suppose offers its readings, or a world of that name if none
+    type a statement · ? lists what may come next · Enter, or tap again, offers its readings, or a world of that name if none
 
-Still holding Super, type `the flight was in 1989`. The foot now says:
+Type `the flight was in 1989`. The foot now says:
 
-    not ACE: the flight <> was in 1989. · Esc: was → is (or was → wags, was → wars) · release Suppose offers its readings
+    not ACE: the flight <> was in 1989. · Esc: was → is (or was → wags, was → wars) · Enter, or tap again, offers its readings
 
 That is not a mistake. `not ACE` means the sentence is not in the
 controlled English the notebook reads exactly, which has no past
 tense; Esc would mend it by changing a word. Leave it as it is, and
-release Super. The notebook reads your sentence against the facts
+press Enter. The notebook reads your sentence against the facts
 instead, finds the date it is about, and asks:
 
     Do you mean: Suppose that the date of Buran's flight is 1989.  Enter: yes · Esc: no
@@ -220,16 +220,19 @@ bold and underlined. Your actual world is
 untouched. In part D you will compute a sentence from the dates, which
 each world would show its own way.
 
-Now run a command. Hold **Left Ctrl**, type `close`, and release: what
-you type while Left Ctrl is held is a command, shown at the foot of the
+Now run a command. Tap **Left Ctrl**, type `close`, and press Enter:
+what you type after the tap is a command, shown at the foot of the
 screen. You are back in the actual world. The supposition stays in the
 journal; the notebook says so: `it stays in the journal`. (`commit`
 would instead make the supposed world the actual one.)
 
-While Left Ctrl is held, `?` lists the commands that match what you have
-typed, and Esc completes a command's name. A tap of Left Ctrl (press and
-release with nothing typed) keeps it on without holding; Enter runs the
-command.
+While Command is on, `?` lists the commands that match what you have
+typed, and Esc completes a command's name; Backspace on an empty line
+leaves without running anything. For a few letters you may instead
+hold the key while you type and let go to finish. The foot says which you are in: `COMMAND (latched)`
+after a tap, and while you hold the key with nothing typed,
+`release now to type without holding`. Every "run the command" below
+means either way.
 
 ## B. Your documents
 
@@ -363,7 +366,7 @@ same way make it `500.` Now `→ 300`, and the violation is gone.
 
 ### 13. What if
 
-Hold Super, type `rent is 1600`, and release. The notebook asks:
+Tap Super, type `rent is 1600`, and press Enter. The notebook asks:
 
     Do you mean: Suppose that the cell of rent is 1600.  Enter: yes · Esc: no
 

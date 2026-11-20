@@ -48,8 +48,19 @@ impl T {
         self.app.handle(Event::up(Key::Quasi(q)));
         self.app.evaluate().unwrap(); // as the terminal loop does
     }
+    /// Tap a quasimode's key, type, and press Enter, as the tutorial
+    /// teaches.
+    fn tapped(&mut self, q: Quasi, s: &str) {
+        in_tutorial(s);
+        self.tap(Key::Quasi(q));
+        for c in s.chars() {
+            self.tap(Key::Char(c));
+        }
+        self.tap(Key::Enter);
+        self.app.evaluate().unwrap(); // as the terminal loop does
+    }
     fn command(&mut self, line: &str) {
-        self.hold(Quasi::Command, line);
+        self.tapped(Quasi::Command, line);
         assert!(
             !self.app.session.message.starts_with("no command")
                 && !self.app.session.message.starts_with("not a"),
@@ -265,13 +276,15 @@ fn the_claim_supposed(t: &mut T) {
     // Held: the foot names Suppose and says what to do, then, as the
     // sentence is typed, that it is not controlled English, which the
     // tutorial says to let be.
-    t.app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
-    t.shows("type a statement · ? lists what may come next");
+    t.tap(Key::Quasi(Quasi::Suppose));
+    t.shows("SUPPOSE (latched)");
+    t.shows(
+        "type a statement · ? lists what may come next · Enter, or tap again, offers its readings",
+    );
     t.typ("the flight was in 1989");
     t.shows("not ACE: the flight <> was in 1989.");
-    t.shows("release Suppose offers its readings");
-    t.app.handle(Event::up(Key::Quasi(Quasi::Suppose)));
-    t.app.evaluate().unwrap();
+    t.shows("Enter, or tap again, offers its readings");
+    t.key(Key::Enter);
     assert!(matches!(t.app.session.mode, Mode::ConfirmSuppose { .. }));
     t.shows("Do you mean: Suppose that the date of Buran's flight is 1989.  Enter: yes · Esc: no");
     t.key(Key::Enter);
@@ -398,7 +411,7 @@ fn a_value_changed(t: &mut T) {
 
 /// Step 13: what if the rent rose.
 fn a_what_if(t: &mut T) {
-    t.hold(Quasi::Suppose, "rent is 1600");
+    t.tapped(Quasi::Suppose, "rent is 1600");
     t.look("suppose rent?");
     t.shows("Do you mean: Suppose that the cell of rent is 1600.  Enter: yes · Esc: no");
     t.key(Key::Enter);
