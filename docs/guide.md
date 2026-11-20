@@ -132,8 +132,8 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   The cursor's item is tinted blue-grey across the pane, with a brighter
   blue bar beside it in the margin. `▼` marks an item with items under it, `▶` a
   folded one (followed by how many items it hides), `•` an item with none.
-  Top-level items show their number. Under an item, `‼` lines are its
-  marks: one for each constraint its facts break or disagree under,
+  Top-level items show their number. Under an item, `‼` and `?` lines
+  are its marks: one for each constraint its facts break or disagree under,
   naming the constraint (`constraint 1.4` when an item states it, else its
   name in quotes), the item's own fact, and each other fact in the
   conflict with where it is: `‼ breaks constraint 2.7: income 2000 here; rent
@@ -154,8 +154,8 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   `READ AS` shows what the item's text was read as, in Prolog, and its tags
   (§ 3.1). After `interrogate`, the pane shows the interrogation. `pane`
   sets it to the outline, links or suggestions.
-- **Foot:** the message line, and, while a quasimode is held, what you have
-  typed and what releasing will do.
+- **Foot:** the message line, and, while a quasimode is on (held or
+  latched), what you have typed and how it ends.
 
 With the cursor on an item with marks, the foot suggests a what-if
 (`Try a what-if: tap Super to suppose a statement, …`), dim, until you have used Suppose
@@ -599,8 +599,8 @@ When you do not yet know which source is right, or what a change would
 do, suppose it: the notebook shows what follows beside what you believe,
 and changes nothing you believe.
 
-Hold Suppose and type a statement in your own words, such as `the flight
-was in 1989`. The memex reads it against the facts it knows and offers each
+Tap Suppose (or hold it), type a statement in your own words, such as
+`the flight was in 1989`, and press Enter (or let go). The memex reads it against the facts it knows and offers each
 reading: `Do you mean: Suppose that the date of Buran's flight is 1989.`
 Enter accepts; Tab shows the next reading; Esc cancels. A reading is a
 fact of the world with one whole number changed to a number you typed,
@@ -638,8 +638,8 @@ with what it is (`a name — one thing by its name: John, buran_flight`),
 and the words of ACE. A fact written as
 Prolog, such as `cell(fuel, 80)`, is read exactly as you wrote it, even
 for something the memex has no facts about. The command `suppose
-STATEMENT` does the same as the key. If there is no reading,
-releasing starts a named world with nothing supposed; if what you typed
+STATEMENT` does the same as the key. If there is no reading, ending
+the quasimode starts a named world with nothing supposed; if what you typed
 is believed already, it starts one with nothing changed, and says so.
 
 In the supposed world, each belief the supposition directly contradicts
@@ -664,7 +664,7 @@ journal. `commit` makes the supposed world the actual one.
 ### 3.3 Views
 
 A view draws your facts, and changes as they do; it draws only beliefs,
-never a claim you have not adopted, and shows in bold what breaks a
+never a claim you have not adopted, and shows in red what breaks a
 constraint.
 
 A view is an item that draws something: a chart, a timeline, a grid, a
@@ -684,7 +684,9 @@ The view is drawn under its item and changes as the facts do. With the
 cursor on it, the right pane lists its layers, with how many marks each
 draws. A mark that rests on a fact in a violation is drawn red; a bar
 keeps its plain fill, and its value above it is red, since each number
-may be right where only their sum breaks a rule (a grid box gains `!`). With the mouse on (§ 2.3), a click on a mark goes to the
+may be right where only their sum breaks a rule (a grid box gains `!`).
+A bar as tall as the chart has no row above it, so its value is not
+drawn; the axis gives the top. With the mouse on (§ 2.3), a click on a mark goes to the
 item that states its fact. In a supposition, each world draws its own
 copy of every view, side by side. `retract` removes a layer, by its entry
 number, shown in the right pane. A layer whose goal raises an error is

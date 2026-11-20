@@ -68,8 +68,9 @@ does not change.
 
 ## What it is not, yet
 
-It is a keyboard-driven prototype, run so far only in tests (docs/log.md
-says which). The mouse is off by default. Views are drawn in characters,
+It is a prototype, driven mostly from the keyboard, and run so far only
+in tests (docs/log.md says which). The mouse selects text and, with a
+right-click, offers commands that act on it. Views are drawn in characters,
 not images. The words "memex" (the notebook's window, after Vannevar
 Bush's 1945 design for a personal knowledge machine) and Prolog (the
 logic language it reasons in) appear in the other documents; you need

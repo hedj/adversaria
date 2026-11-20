@@ -418,6 +418,8 @@ fn a_what_if(t: &mut T) {
     t.look("supposed rent");
     t.says("set aside in this world: 2.2; left for you: 1 violation of It is false that the cost is greater than the income");
     t.shows("→ -100");
+    t.shows("(2.2 set aside here)");
+    t.shows("1 violation");
     t.command("close");
     t.shows("→ 300");
 }
@@ -473,8 +475,75 @@ fn loud_while_over_income(t: &mut T, chart: u64) {
     let fig = view_of(t, chart);
     assert_eq!(loud_runs(&fig), 3, "income, rent and food bars bold");
     assert!(loud_cells(&fig) > 0);
+    // As drawn: the values above the food and rent bars red, and none
+    // above the income bar, which reaches the income line.
+    in_tutorial("`900` and `1200`, turn red");
+    in_tutorial("the axis says `2000`");
+    let mut red = chart_labels(t);
+    red.sort_by_key(|(v, _)| v.len());
+    assert_eq!(
+        red,
+        [("900".to_string(), true), ("1200".to_string(), true)],
+        "{red:?}"
+    );
     t.retype_end("food is 9", 4, "500.");
     assert_eq!(loud_cells(&view_of(t, chart)), 0);
+}
+
+/// The values drawn in a chart's rows on screen, in order, each with
+/// whether it is drawn red; the axis's numbers, left of its line, are
+/// not values.
+fn chart_labels(t: &T) -> Vec<(String, bool)> {
+    let buf = t.buffer();
+    let red = memex::ui::violation().fg;
+    let red_at = |x: u16, y: u16| Some(buf[(x, y)].fg) == red;
+    let labels = chart_rows(&t.screen()).into_iter().flat_map(numbers_in);
+    labels.map(|(x, y, v)| (v, red_at(x, y))).collect()
+}
+
+/// The rows of a chart on screen: each row's number, the column after
+/// its axis, and the text after it.
+fn chart_rows(lines: &[String]) -> Vec<(u16, usize, String)> {
+    let axis = |l: &String| {
+        let i = l.find('│')?;
+        let left = l[..i].trim();
+        left.chars().all(|c| c.is_ascii_digit()).then_some(i)
+    };
+    let row = |(y, l): (usize, &String)| {
+        let i = axis(l)?;
+        let after = l[i + '│'.len_utf8()..].to_string();
+        Some((y as u16, l[..i].chars().count() + 1, after))
+    };
+    lines.iter().enumerate().filter_map(row).collect()
+}
+
+/// The numbers in a chart's row, each with its column and row.
+fn numbers_in((y, start, text): (u16, usize, String)) -> Vec<(u16, u16, String)> {
+    let words = words_at(&text, start).into_iter();
+    words
+        .filter(|(_, w)| is_number(w))
+        .map(|(x, w)| (x as u16, y, w))
+        .collect()
+}
+
+/// Whether a word is a whole number.
+fn is_number(word: &str) -> bool {
+    word.chars().all(|c| c.is_ascii_digit() || c == '-')
+}
+
+/// The words of a text that starts at a column, each with its column.
+fn words_at(text: &str, from: usize) -> Vec<(usize, String)> {
+    let mut words = Vec::new();
+    let mut current: Option<(usize, String)> = None;
+    for (i, c) in text.chars().enumerate() {
+        match (c == ' ', current.as_mut()) {
+            (false, Some((_, w))) => w.push(c),
+            (false, None) => current = Some((from + i, c.to_string())),
+            (true, _) => words.extend(current.take()),
+        }
+    }
+    words.extend(current);
+    words
 }
 
 /// The view at an item, as the outline draws it, 100 wide.

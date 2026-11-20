@@ -371,8 +371,9 @@ Tap Super, type `rent is 1600`, and press Enter. The notebook asks:
     Do you mean: Suppose that the cell of rent is 1600.  Enter: yes · Esc: no
 
 (`cell` is how the notebook keeps a box.) Press Enter. The two worlds are
-shown side by side, box for box; in the supposed one the answer is
-`→ -100`. The notebook says:
+shown side by side, row for row. In the supposed one the old rent is
+struck through and marked `(2.2 set aside here)`, the answer is
+`→ -100`, and the cost rule counts `1 violation`. The notebook says:
 
     supposed; set aside in this world: 2.2; left for you: 1 violation of It is false that the cost is greater than the income
 
@@ -403,8 +404,10 @@ docs/guide.md, § 3.3 has recipes to copy for line charts, tables, Gantt
 charts and flowcharts.
 
 Leap to `food is 5` and make it `900.` again. The food bar rises, and
-the values above all three bars turn red: the cost rule's violation
-rests on the income, rent and food, and so does every bar. Leap to `food is 9` and
+the values above the food and rent bars, `900` and `1200`, turn red:
+the cost rule's violation rests on the income, rent and food, and so
+does every bar. (The income bar reaches the income line, so there is no
+row above it for its value; the axis says `2000`.) Leap to `food is 9` and
 make it `500.` to put it back.
 
 ### 15. A sentence, a query and a timeline
