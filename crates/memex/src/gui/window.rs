@@ -156,6 +156,12 @@ impl Screen {
     fn plumbed(&self, cell: (u16, u16)) -> String {
         self.mouse.drag.text_at(&self.cells.backend().buffer, cell)
     }
+
+    /// A right-click at a cell, on the text selected or the word there.
+    fn right_click(&self, app: &mut App, cell: (u16, u16)) {
+        let selected = self.mouse.drag.selection.is_some();
+        app.right_click(&self.mouse.hits, cell, &self.plumbed(cell), selected);
+    }
 }
 
 /// What draws: the window, egui's view of it, and the painter.
@@ -234,22 +240,13 @@ impl Memex {
         self.screen.mouse.drag.press(start);
     }
 
-    /// A right-click: plumb the text selected, or else the word under the
-    /// pointer, after a click on the item there (crate::plumb).
+    /// A right-click: a menu of what the object presented under the
+    /// pointer offers, and what plumbing offers for the text selected, or
+    /// else the word there (crate::present, crate::plumb).
     fn plumb(&mut self) {
-        let Some(cell) = self.pointed().filter(|_| self.input.config.mouse) else {
-            return;
-        };
-        let text = self.screen.plumbed(cell);
-        if self.screen.mouse.drag.selection.is_none() {
-            self.click_item(cell);
+        if let Some(cell) = self.pointed().filter(|_| self.input.config.mouse) {
+            self.screen.right_click(&mut self.app, cell);
         }
-        self.app.plumb(&text, cell);
-    }
-
-    /// A click on the item drawn at a cell, if one is.
-    fn click_item(&mut self, cell: (u16, u16)) {
-        self.app.click_item_at(&self.screen.mouse.hits, cell);
     }
 
     /// The cell under the pointer, by column and row.

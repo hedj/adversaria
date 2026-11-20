@@ -93,7 +93,7 @@ impl App {
 
     /// An item's last adoption on this branch that can still be retracted:
     /// one already retracted is passed over, for the one before it.
-    fn last_adoption(&self, item: u64) -> Option<u64> {
+    pub(crate) fn last_adoption(&self, item: u64) -> Option<u64> {
         let path = self.notebook.path(self.notebook.tip);
         let adoptions = path.iter().rev().filter(|e| adopts(e, item));
         adoptions

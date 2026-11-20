@@ -5,6 +5,7 @@
 //! (crate::ui::Presentations); a gesture on one acts on its object.
 
 use crate::app::{App, Mode};
+use crate::plumb::Offer;
 use crate::session::Menu;
 use crate::ui::Presentations;
 use serde_json::json;
@@ -100,14 +101,56 @@ impl App {
     /// Plumb a text: open a menu of the commands its rules offer, at a
     /// cell; or, if none matches, say so.
     pub fn plumb(&mut self, text: &str, at: (u16, u16)) {
+        let offers = self.plumbed(text);
+        self.offer_menu(text, offers, at);
+    }
+
+    /// A right-click at a cell, on the text there (the text selected, or
+    /// the word under the pointer): a menu of what the object presented
+    /// there offers, then what plumbing offers for the text. With nothing
+    /// selected, the cursor first goes to the item presented there, so
+    /// that what the menu runs acts on it.
+    pub fn right_click(
+        &mut self,
+        presented: &Presentations,
+        at: (u16, u16),
+        text: &str,
+        selected: bool,
+    ) {
+        let p = presented.at(at.0, at.1).cloned().filter(|_| !selected);
+        if let Some(item @ Presentation::Item { .. }) = &p {
+            self.click(item);
+        }
+        let mut offers = p.as_ref().map(|p| self.translators(p)).unwrap_or_default();
+        add_new(&mut offers, self.plumbed_words(text));
+        let title = p.map_or_else(|| text.to_string(), |p| self.presented_name(&p));
+        self.offer_menu(&title, offers, at);
+    }
+
+    /// What plumbing offers for a text.
+    fn plumbed(&self, text: &str) -> Vec<Offer> {
         let names_item = |t: &str| self.resolve(t).is_some();
-        let offers = self.session.plumber.offers(text, &names_item);
+        self.session.plumber.offers(text, &names_item)
+    }
+
+    /// What plumbing offers for a text that has a word in it, a letter or
+    /// a digit: a view's block of a bar has none.
+    fn plumbed_words(&self, text: &str) -> Vec<Offer> {
+        match text.chars().any(char::is_alphanumeric) {
+            true => self.plumbed(text),
+            false => vec![],
+        }
+    }
+
+    /// Open a menu of offers about a text at a cell; or, with none, say
+    /// that nothing acts on it.
+    fn offer_menu(&mut self, about: &str, offers: Vec<Offer>, at: (u16, u16)) {
         if offers.is_empty() {
-            self.session.message = format!("nothing acts on “{}”", text.trim());
+            self.session.message = format!("nothing acts on “{}”", about.trim());
             return;
         }
         self.session.message.clear();
-        self.session.mode = Mode::Menu(Menu::new(text, offers, at));
+        self.session.mode = Mode::Menu(Menu::new(about, offers, at));
     }
 
     /// A click at a cell: on what is presented there, if anything.
@@ -116,12 +159,13 @@ impl App {
             self.click(&p);
         }
     }
+}
 
-    /// A click at a cell, if an item is presented there: the cursor goes
-    /// to it, as a right-click does before it plumbs.
-    pub fn click_item_at(&mut self, presented: &Presentations, (x, y): (u16, u16)) {
-        if let Some(p @ Presentation::Item { .. }) = presented.at(x, y).cloned() {
-            self.click(&p);
+/// Offers added after others, each command line once.
+fn add_new(offers: &mut Vec<Offer>, more: Vec<Offer>) {
+    for o in more {
+        if !offers.iter().any(|f| f.line == o.line) {
+            offers.push(o);
         }
     }
 }

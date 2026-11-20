@@ -26,6 +26,7 @@ pub mod results;
 pub mod session;
 mod spare;
 pub mod store;
+mod translators;
 pub mod ui;
 pub mod view;
 pub mod world;
