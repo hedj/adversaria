@@ -304,9 +304,14 @@ your screen.
 remember, not by arrowing.*
 
 Hold **Right Alt** (Leap forward), type `fully automatic`, and release.
-The cursor goes to the next item holding that text, past the end and
-round to the top: the chief designer's words. Left Alt leaps backward;
-`?` while holding lists every match.
+As you type, the cursor goes to the next item holding what you have
+typed so far, past the end and round to the top, and stays when you
+let go: on the chief designer's words. Left Alt leaps backward; `?`
+while holding lists every match, and `pane matches` keeps that list in
+the right pane, numbered, with where the cursor is among them. If no
+item holds what you typed, Enter makes an item of it; when an item holds
+something a letter or two away, the first Enter only warns, and names
+it.
 
 ### 9. A quotation checked
 

@@ -263,8 +263,9 @@ command that runs; a refused command leaves it as it was.
 
 F1 opens the command palette: Command, latched, with the list of
 commands open. F10 runs `quit`. F2, F3 and F4 question a claim, adopt it
-and take the adoption back, and F6 switches panes; each runs the command
-of that name (§ 2.4), and § 4.3 lists every default.
+and take the adoption back, F6 switches panes, and F7 and F8 go back and
+forward along the trail of jumps; each runs the command of that name
+(§ 2.4), and § 4.3 lists every default.
 
 **Confirmations.** Two commands ask before acting, at the foot of the
 screen:
@@ -287,7 +288,8 @@ on the characters. Presented are:
 
 | What is drawn | Presents | A click |
 | --- | --- | --- |
-| an item's line in an outline pane; a link in the links pane | the item | moves the cursor to it, in the outline pane it is drawn in (the left one, for a link), and focus there, as the arrow keys would |
+| an item's line in an outline pane | the item | moves the cursor to it, in the outline pane it is drawn in, and focus there, as the arrow keys would |
+| a link, a mention or a match, in the right pane | the item at its other end | jumps to it in the left pane (§ 2.4) |
 | a mark under an item (`‼ breaks …`, `? sources disagree …`), and the heading of the constraint pane | the constraint | goes to the item that states the rule, if one does |
 | a mark of a view: a bar, a point, a box | the fact it draws | goes to the item that states the fact (§ 3.3) |
 | a layer, in a view's right pane | the layer | goes to its view |
@@ -440,7 +442,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | `last` | `last` | goes to the last item at the target's level |
 | `parent` | `parent` | goes to the item the target is under |
 | `child` | `child` | goes to the first item under the target, showing it if folded |
-| `back` | `back` (F7, or the mouse's back button) | goes back to where the last jump came from: `follow`, Leap, `go`, or a click on a link. Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over |
+| `back` | `back` (F7, or the mouse's back button, when no quasimode, menu or question is open) | goes back to where the last jump came from: `follow`, Leap, `go`, or a click on a link, a mention or a match in the right pane (the foot says `click: follow to 2`). Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over |
 | `forward` | `forward` (F8, or the mouse's forward button) | goes forward again to where `back` came from; a new jump empties the way forward, as in a browser |
 | `fold` | `fold` | hides the target's branch |
 | `unfold` | `unfold` | shows the target's branch |
@@ -1217,5 +1219,11 @@ This is a prototype, built for a one-month trial. Known limits:
 - Integers larger than 2^53 − 1 are refused in the journal.
 - Only the Wikidata subset tool exists; the full subset is not built.
 - Scope affects only `delete`.
+- A mouse's back and forward buttons are not driven by the window test;
+  `back` and `forward`, and F7 and F8, are.
+- The links pane looks for an item's unlinked mentions in every item's
+  text each time it is drawn: on the 10,000-item timing test this added
+  about 1–2 ms a keystroke, measured on items whose text is too long to
+  be a name; on an item whose text is a name it was not timed alone.
 
 docs/log.md records every result and fault found so far.
