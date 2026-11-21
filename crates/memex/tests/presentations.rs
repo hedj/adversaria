@@ -133,21 +133,19 @@ fn offered(r: &Room) -> Vec<String> {
 #[test]
 fn a_claim_offers_what_applies_to_it_first() {
     // Catches an item's commands not offered, offered where they do not
-    // apply (unadopt with no adoption), or after plumbing's.
+    // apply (taking back an adoption it does not have), or after plumbing's.
     let mut r = dated("translate-claim");
     let offers = right_click_on(&mut r, "Talk-notes says");
     assert_eq!(offers[..2], ["interrogate", "adopt"], "{offers:?}");
-    assert!(!offers.contains(&"unadopt".to_string()), "{offers:?}");
+    let takes_back = |o: &Vec<String>| o.iter().any(|l| l.starts_with("retract "));
+    assert!(!takes_back(&offers), "{offers:?}");
     assert_eq!(
         r.here(),
         "Talk-notes says that the date of Buran-flight is 1989."
     );
     r.tap(&[memex::app::Key::Char('2')]);
     let offers = right_click_on(&mut r, "Talk-notes says");
-    assert!(
-        offers.contains(&"unadopt".to_string()),
-        "adopted: {offers:?}"
-    );
+    assert!(takes_back(&offers), "adopted: {offers:?}");
 }
 
 #[test]

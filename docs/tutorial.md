@@ -179,8 +179,10 @@ The top bar says `1 constraint violation`, and the mark is loud:
 
     ‼ breaks constraint 1.4: 1988 here; 1989 in 1.3
 
-Two beliefs now conflict. Press **F4** to take the adoption back. The
-notebook says the adoption is retracted, and the violation is gone.
+Two beliefs now conflict. Press **F4** to take the adoption back:
+`retract`, the item's last entry. The foot asks first,
+`Enter retracts · Esc keeps it`; press Enter. The notebook says the
+adoption is retracted, and the violation is gone.
 Because the source is kept with every adoption, you can take back what
 rests on a source if it proves wrong; the adoption and its retraction
 both stay in the journal.

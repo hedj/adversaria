@@ -205,6 +205,7 @@ fn adopting_turns_a_disagreement_into_a_violation_and_back() {
         "a violation is shown as one, red"
     );
     tap(&mut app, Key::F(4));
+    tap(&mut app, Key::Enter);
     app.evaluate().unwrap();
     let s = screen(&app);
     s.assert("1 disagreement between sources");
@@ -231,7 +232,7 @@ fn interrogation_answers_its_five_questions() {
     s.assert("the source's record");
     s.assert("0 of its claims adopted, 0 of them retracted since");
     s.assert("adopting it would raise 1 violation of one date per event");
-    s.assert("F3 adopts · F4 retracts an adoption");
+    s.assert("F3 adopts · F4 retracts");
     assert_eq!(
         app.journal().entries().last().unwrap().body().unwrap()["op"],
         "interrogate",
@@ -248,7 +249,7 @@ fn the_interrogation_hint_follows_the_configured_keys() {
     app.evaluate().unwrap();
     let config = Config::parse("[keys]\nF3 = \"\"\nInsert = \"adopt\"\nF4 = \"\"\n");
     app.session.keys = config.unwrap().keys();
-    screen(&app).assert("Insert adopts · command unadopt retracts an adoption");
+    screen(&app).assert("Insert adopts · command retract retracts");
 }
 
 /// The scene, with a second source that claims what the talk notes claim.
@@ -554,10 +555,18 @@ fn a_second_adoption_is_the_one_retracted() {
     leap(&mut app, "talk notes");
     tap(&mut app, Key::F(3));
     tap(&mut app, Key::F(4));
+    tap(&mut app, Key::Enter);
     tap(&mut app, Key::F(3));
     let second = app.journal().entries().last().unwrap().seq;
     tap(&mut app, Key::F(4));
-    assert_eq!(app.session.message, format!("adoption {second} retracted"));
+    tap(&mut app, Key::Enter);
+    assert!(
+        app.session
+            .message
+            .starts_with(&format!("entry {second} retracted")),
+        "{}",
+        app.session.message
+    );
 }
 
 #[test]
@@ -599,6 +608,7 @@ fn interrogate_adopt_retract_suppose(app: &mut App) {
     tap(app, Key::F(2));
     tap(app, Key::F(3));
     tap(app, Key::F(4));
+    tap(app, Key::Enter);
     app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
     typ(app, "the flight was in 1989");
     app.handle(Event::up(Key::Quasi(Quasi::Suppose)));

@@ -340,6 +340,22 @@ impl Outline {
         self.fact_item.get(&seq) == Some(&item)
     }
 
+    /// Whether an item states an entry's fact and its text was not read
+    /// as it: a fact given it by `fact` or `claim`.
+    pub fn states_own(&self, item: u64, seq: u64) -> bool {
+        let read = self
+            .readings
+            .get(&item)
+            .is_some_and(|r| r.entries.contains(&seq));
+        self.states(item, seq) && !read
+    }
+
+    /// Whether an entry made a layer of an item's view.
+    pub fn is_layer_of(&self, item: u64, seq: u64) -> bool {
+        let layers = self.views.get(&item);
+        layers.is_some_and(|ls| ls.iter().any(|l| l.seq == seq))
+    }
+
     pub fn contains(&self, id: u64) -> bool {
         id == TOP || self.items.contains_key(&id)
     }

@@ -294,6 +294,8 @@ fn the_claim_questioned(t: &mut T) {
     t.shows("1 constraint violation");
     t.shows("‼ breaks constraint 1.4: 1988 here; 1989 in 1.3");
     t.key(Key::F(4));
+    t.shows("Enter retracts · Esc keeps it");
+    t.key(Key::Enter);
     t.says("retracted");
     t.lacks("constraint violation");
 }

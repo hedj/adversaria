@@ -35,12 +35,38 @@ impl App {
         Ok(format!("redid entry {t}"))
     }
 
-    /// Ask before retracting an entry, listing what depends on it.
+    /// Ask before retracting an entry, listing what depends on it: the
+    /// entry named, or, with none named, the target's own last entry that
+    /// can still be retracted (an adoption, a fact or a layer of it).
     pub(crate) fn cmd_retract(&mut self, words: &[&str], _: u64) -> Result<String, String> {
-        let t = entry_number(words).ok_or("retract (entry) seq")?;
+        let t = match words.is_empty() {
+            true => self.targets_last().ok_or(
+                "the target has nothing to retract: no adoption, fact or layer of its own",
+            )?,
+            false => entry_number(words)
+                .ok_or("retract (entry) seq, or retract alone for the target's last")?,
+        };
         let dependents = self.retractable(t)?;
         self.ask_retract(t, dependents);
         Ok(String::new())
+    }
+
+    /// The target's own last entry on this branch that can still be
+    /// retracted: an adoption of its claims, a fact stated on it (not one
+    /// its text was read as, which its text keeps), or a layer of its view.
+    fn targets_last(&self) -> Option<u64> {
+        let item = self.cursor();
+        let path = self.notebook.path(self.notebook.tip);
+        let own = path.iter().rev().filter(|e| self.owns(item, e));
+        own.map(|e| e.seq).find(|s| self.retractable(*s).is_ok())
+    }
+
+    /// Whether an entry is an item's own: an adoption of its claims, a
+    /// fact stated on it and not read from its text, or a layer of it.
+    fn owns(&self, item: u64, e: &format::record::Entry) -> bool {
+        let outline = &self.notebook.outline;
+        let own = outline.states_own(item, e.seq) || outline.is_layer_of(item, e.seq);
+        own || crate::actions::adopts(e, item)
     }
 
     fn ask_retract(&mut self, target: u64, dependents: Vec<u64>) {

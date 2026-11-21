@@ -265,7 +265,8 @@ at either end of the outline. It unfolds a folded branch to reach a match.
 
 F1 opens the command palette: Command, latched, with the list of
 commands open. F10 runs `quit`. F2, F3 and F4 question a claim, adopt it
-and take the adoption back, F6 switches panes, and F7 and F8 go back and
+and take back the target's last entry (`retract`: its last adoption,
+first), F6 switches panes, and F7 and F8 go back and
 forward along the trail of jumps; each runs the command of that name
 (§ 2.4), and § 4.3 lists every default.
 
@@ -297,7 +298,7 @@ on the characters. Presented are:
 | a layer, in a view's right pane | the layer | goes to its view |
 | a change, in a revision's pane | the change | nothing: a right-click offers what to do |
 | a suggestion, anywhere in its lines | the suggestion | runs `accept` for it |
-| `F3 adopts` or `F4 retracts an adoption` under an interrogation | the command | runs `adopt` or `unadopt` (the hint names whichever keys you have bound) |
+| `F3 adopts` or `F4 retracts` under an interrogation | the command | runs `adopt` or `retract` (the hint names whichever keys you have bound) |
 
 **Pointing.** The presentation under the pointer is underlined, all its
 rows, when a click or a right-click on it would do something now; and the foot says what
@@ -499,7 +500,6 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 | Command | Form | Does |
 | --- | --- | --- |
 | `adopt` | `adopt` | makes the target's claims beliefs, keeping their source |
-| `unadopt` | `unadopt` | retracts the target's last adoption. `adopt` writes one adoption for each claim, so an item with two claims needs two |
 | `interrogate` | `interrogate` | asks of the target's claim: who else claims it, who claims the contrary, its source, the source's record, and what adopting it would do |
 | `accept` | `accept N` | adopts the Nth suggestion shown, with its evidence |
 | `dismiss` | `dismiss N` | dismisses the Nth suggestion shown; it returns only if its evidence changes |
@@ -516,7 +516,7 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 | `undo` | `undo` | undoes the last change on this branch |
 | `query` | `query GOAL` | runs a Prolog goal over this world's beliefs, through rules, as derived text does: `query animal(X)` says `2 answers: X = nemo · X = dory`; a goal without variables is answered `yes` or `no`. At most 20 answers are shown. The goal may only read facts, compare and compute, as a definition may; a query writes nothing to the journal |
 | `redo` | `redo` | redoes what undo undid, along the current branch |
-| `retract` | `retract ENTRY` | reverses one earlier entry, by its number (`12` or `#12`), keeping later work; lists what depends on it first |
+| `retract` | `retract [ENTRY]` (F4) | reverses one earlier entry, by its number (`12` or `#12`), keeping later work; lists what depends on it first, and Enter retracts. With no number, the target's own last entry that can be retracted: an adoption of its claims, a fact given it by `fact` or `claim` (not one its text was read as, which its text keeps), or a layer of its view. `adopt` writes one adoption for each claim, so an item with two claims needs two |
 
 **Undo and retract.** `undo` and `redo` move along the current branch of
 the journal, as in any editor; undoing and then editing starts a new
@@ -1098,7 +1098,7 @@ suppose = ["LeftSuper", "RightSuper"]
 F1 = "palette"
 F2 = "interrogate"
 F3 = "adopt"
-F4 = "unadopt"
+F4 = "retract"
 F6 = "switch"
 F7 = "back"
 F8 = "forward"

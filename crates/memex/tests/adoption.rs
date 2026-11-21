@@ -2,6 +2,7 @@
 //! the adoptions back (docs/guide.md § 1.3, § 2.4).
 
 mod support;
+use memex::app::Key;
 use support::Room;
 
 /// An item stating two claims of a date, from two sources.
@@ -36,37 +37,77 @@ fn adopting_claims_again_adds_no_belief_twice() {
     assert_eq!(dates(&mut r), 2);
 }
 
+/// `retract` alone, confirmed with Enter: what it retracted.
+fn retract_last(r: &mut Room) -> String {
+    r.command("retract");
+    r.tap(&[Key::Enter]);
+    r.app.session.message.clone()
+}
+
 #[test]
-fn unadopt_takes_back_each_adoption_in_turn() {
-    // Catches unadopt stopping at the last adopt entry once it is
-    // retracted, so that an adoption before it could never be taken back.
+fn retract_alone_takes_back_each_adoption_in_turn() {
+    // Catches `retract` alone stopping at the last adopt entry once it is
+    // retracted, so that an adoption before it could never be taken back;
+    // after the adoptions it offers the item's own last claim.
     let mut r = two_claims("unadopt-each");
+    let claims = seqs(&r, |e| {
+        e.kind() == "edit" && e.body().is_some_and(|b| b["source"].is_string())
+    });
     r.command("adopt");
-    for _ in 0..2 {
-        r.command("unadopt");
-        assert!(
-            r.app.session.message.ends_with("retracted"),
-            "{}",
-            r.app.session.message
-        );
+    let adoptions = seqs(&r, |e| e.kind() == "adopt");
+    assert_eq!(adoptions.len(), 2, "one adoption a claim");
+    for a in adoptions.iter().rev() {
+        let said = retract_last(&mut r);
+        assert!(said.starts_with(&format!("entry {a} retracted")), "{said}");
     }
-    r.command("unadopt");
-    assert_eq!(
-        r.app.session.message,
-        "the target has no adoption to retract"
+    assert_eq!(dates(&mut r), 0, "both adoptions taken back");
+    r.command("retract");
+    let asks = |t: u64| matches!(r.app.session.mode, memex::app::Mode::ConfirmRetract { target, .. } if target == t);
+    assert!(
+        asks(claims[1]),
+        "then the item's last claim: {:?}",
+        r.app.session.mode
     );
-    assert_eq!(dates(&mut r), 0);
+}
+
+/// The entries of the room's journal that pass a test, by seq.
+fn seqs(r: &Room, test: impl Fn(&format::record::Entry) -> bool) -> Vec<u64> {
+    let entries = r.app.journal().entries();
+    entries.iter().filter(|e| test(e)).map(|e| e.seq).collect()
 }
 
 #[test]
 fn a_claim_taken_back_can_be_adopted_again() {
     let mut r = two_claims("adopt-again");
     r.command("adopt");
-    r.command("unadopt");
+    retract_last(&mut r);
     r.command("adopt");
     assert_eq!(
         r.app.session.message,
         "adopted: a belief now, with its source kept"
     );
     assert_eq!(dates(&mut r), 2);
+}
+
+#[test]
+fn a_fact_read_from_the_text_is_not_offered_but_a_layer_is() {
+    // Catches `retract` alone taking back a statement its item's text was
+    // read as, which the text would no longer say; and missing a view's
+    // layer, an entry of the item's own.
+    let mut r = Room::new("retract-own");
+    r.items(&["The date of Buran-flight is 1988.", "chart"]);
+    r.app.idle();
+    let order = r.outline().in_order();
+    r.put_cursor(order[0]);
+    r.command("retract");
+    assert_eq!(
+        r.app.session.message,
+        "the target has nothing to retract: no adoption, fact or layer of its own"
+    );
+    r.put_cursor(order[1]);
+    r.command("layer bar(x(C), y(V)) where cell(C, V)");
+    let layer = r.outline().views[&order[1]][0].seq;
+    r.command("retract");
+    let asks = matches!(r.app.session.mode, memex::app::Mode::ConfirmRetract { target, .. } if target == layer);
+    assert!(asks, "{:?} (layer {layer})", r.app.session.mode);
 }

@@ -76,8 +76,8 @@ impl App {
             offers.push(offer("question its claim", "interrogate"));
             offers.push(offer("adopt its claims", "adopt"));
         }
-        if self.last_adoption(id).is_some() {
-            offers.push(offer("take back its adoption", "unadopt"));
+        if let Some(last) = self.last_adoption(id) {
+            offers.push(offer("take back its adoption", &format!("retract {last}")));
         }
         offers
     }

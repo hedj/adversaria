@@ -381,8 +381,8 @@ pub const COMMANDS: &[Command] = &[
         run: App::cmd_retract,
         target: false,
         slots: &[("entry", Slot::Entry)],
-        help: "reverse one earlier entry, keeping later work; lists what depends on it first",
-        brief: "reverse one earlier entry",
+        help: "reverse one earlier entry, keeping later work; lists what depends on it first; with no entry, the target's last adoption, fact or layer",
+        brief: "reverse an earlier entry (F4)",
     },
     Command {
         name: "suppose",
@@ -415,14 +415,6 @@ pub const COMMANDS: &[Command] = &[
         slots: &[("from", Slot::Item)],
         help: "show an item's text in place, in a new item after the target",
         brief: "show an item's text in place",
-    },
-    Command {
-        name: "unadopt",
-        run: App::cmd_unadopt,
-        target: true,
-        slots: &[],
-        help: "retract the target's last adoption",
-        brief: "retract the last adoption",
     },
     Command {
         name: "undo",
@@ -772,7 +764,6 @@ pub const GROUPS: &[(&str, &[&str])] = &[
         "CLAIMS AND SUGGESTIONS",
         &[
             "adopt",
-            "unadopt",
             "interrogate",
             "accept",
             "dismiss",

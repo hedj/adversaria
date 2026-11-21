@@ -106,10 +106,10 @@ fn interrogated(name: &str) -> Room {
 fn each_part_of_the_hint_under_an_interrogation_is_a_click_on_its_command() {
     // Catches the second part's click set off from its text.
     let room = interrogated("hint-parts");
-    let (x, y) = room.find("F4 retracts an adoption");
+    let (x, y) = room.find("F4 retracts");
     let hits = room.hits();
-    let unadopt = Some(memex::present::Presentation::Command("unadopt".into()));
-    assert_eq!(hits.at(x, y).cloned(), unadopt, "its first cell");
+    let retract = Some(memex::present::Presentation::Command("retract".into()));
+    assert_eq!(hits.at(x, y).cloned(), retract, "its first cell");
     assert_eq!(hits.at(x - 1, y), None, "the gap before it");
 }
 

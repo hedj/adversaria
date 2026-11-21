@@ -83,14 +83,6 @@ impl App {
         Ok(())
     }
 
-    pub(crate) fn cmd_unadopt(&mut self, _: &[&str], target: u64) -> Result<String, String> {
-        let last = self
-            .last_adoption(target)
-            .ok_or("the target has no adoption to retract")?;
-        self.write_here("retract", json!({"target": last}))?;
-        Ok(format!("adoption {last} retracted"))
-    }
-
     /// An item's last adoption on this branch that can still be retracted:
     /// one already retracted is passed over, for the one before it.
     pub(crate) fn last_adoption(&self, item: u64) -> Option<u64> {
@@ -166,7 +158,7 @@ fn adopted_claim(e: &Entry) -> Option<u64> {
     body["claim"].as_u64()
 }
 
-fn adopts(e: &Entry, item: u64) -> bool {
+pub(crate) fn adopts(e: &Entry, item: u64) -> bool {
     e.kind() == "adopt" && e.body().and_then(|b| b["item"].as_u64()) == Some(item)
 }
 

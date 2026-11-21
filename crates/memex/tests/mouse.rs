@@ -134,8 +134,9 @@ fn a_click_on_the_hint_adopts_and_retracts() {
     assert_eq!(click_on(&mut app, "F3 adopts"), adopt);
     assert_eq!(last_kind(&app), "adopt");
     assert!(app.shows("1 constraint violation"));
-    let unadopt = Presentation::Command("unadopt".into());
-    assert_eq!(click_on(&mut app, "F4 retracts an adoption"), unadopt);
+    let retract = Presentation::Command("retract".into());
+    assert_eq!(click_on(&mut app, "F4 retracts"), retract);
+    app.handle(memex::app::Event::down(memex::app::Key::Enter));
     assert_eq!(last_kind(&app), "retract");
     // The " · " between them does nothing.
     let (x, y) = app.find("F3 adopts");

@@ -1730,11 +1730,11 @@ fn row_below(area: Rect, used: u16) -> Rect {
     Rect { y, height, ..area }
 }
 
-/// The hint "F3 adopts · F4 retracts an adoption", by the keys bound,
+/// The hint "F3 adopts · F4 retracts", by the keys bound,
 /// each part a click on its command.
 fn draw_adopt_hint(f: &mut Frame, app: &App, row: Rect) -> Presentations {
     let adopt = hint_part(app, "adopt", "adopts");
-    let parts = [adopt, hint_part(app, "unadopt", "retracts an adoption")];
+    let parts = [adopt, hint_part(app, "retract", "retracts")];
     f.render_widget(dim_text(joined(&parts)), row);
     let mut along = Along::new(row);
     parts
