@@ -1605,6 +1605,59 @@ lists. One window test (under Wayland at a scale of 2, a click on the
 first item) failed once in four runs, then passed three times; not
 explained.
 
+### The second UX review, fixed (21 November 2026)
+
+At the author's request a UX reviewer went over the build with
+Dynamic Windows' presentations, from screenshots of the real window.
+Each finding was checked against the screenshots and the code before
+anything changed. Fixed, each in its own commit with a test that fails
+without it:
+
+1. Addresses such as 1.3 were quoted by the foot, the menus and the
+   commands but shown only for top-level items: every item now shows
+   its address (b961577), as the guide and tutorial say (a512b35).
+2. A supposed world struck through all of item 1.1 when only its date
+   was set aside, not its label: a row is struck only when all it
+   states is set aside, and else names the facts (6ee95a9). It now
+   shows first what it supposes, as read (959b912).
+3. The foot read "right-click: ..." as one action and ran offers
+   together with commas: "right-click for: A; B" (bf8840d).
+4. The links pane named no item and was blank with no links: "LINKS
+   OF 2", "READ AS · 2", "no links" (8521ca5).
+5. A right-click on a mark under a claim offered only the rule: it
+   now acts on the item it is under first (f3bdd98); and a menu names
+   each offer's bound key, "(F2)" (a217eb3).
+6. The pointer underlined every place a presentation was drawn: one
+   place (06aa940).
+7. A Command just entered said both that a release latches and that it
+   runs (0d44f3f).
+8. Bars were drawn in whole cells, a zero taking one: an upright bar
+   from zero is drawn to the eighth of a cell (be80de5).
+9. `link (to) 1` did not say where the link starts: `link (from 2)
+   (to) 1` (e702510).
+10. A supposition gave no word of how to leave it: the foot says
+    "close returns to the actual world · commit makes this world the
+    actual one" (98905ba).
+11. The index's group headings were not bold, though 7c0d833 said so
+    (aa887aa).
+
+Found while checking the docs against the screens: the worlds' rows,
+which replace the outline in a supposition, showed no addresses
+either, though their notes named them (336e73e).
+
+Not changed, and why: Esc completing a command's name is TOPS-20's
+design, kept (its spelling offers, "wags" and "wars" for "was", are
+noise from the dictionary); an F-key read as Alt+F-key in one
+screenshot came from xdotool, not the memex; "target" stays, as the
+guide defines it; the jargon the reviewer named, "mark" for two
+things, the grouping of the command index and the right pane folding
+away at narrow widths are naming and layout choices for the author.
+
+Measured over the referent gate and reported, not reworded, as before:
+the guide's "Plumbing" (15) and "Pointing at an argument" (8). The
+Wayland scale-2 click test failed once more (2 of 7 runs counted this
+session), on a change that does not touch the mouse; not explained.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
