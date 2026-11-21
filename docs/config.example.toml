@@ -6,7 +6,8 @@
 #   IsoLevel5Shift, F1 to F35, Insert PageUp PageDown Menu Pause ScrollLock
 #   PrintScreen CapsLock NumLock.
 # Bound keys: F1 to F35, Insert PageUp PageDown Menu Pause ScrollLock
-#   PrintScreen CapsLock NumLock.
+#   PrintScreen CapsLock NumLock, and ShiftUp ShiftDown ShiftLeft ShiftRight
+#   ShiftHome ShiftEnd (an arrow, Home or End with Shift held).
 # Reserved, for editing, and refused: Enter Tab Backspace Delete Esc, the
 #   arrows, Home End, Shift, and any printable character.
 
@@ -30,6 +31,12 @@ F6 = "switch"
 F7 = "back"
 F8 = "forward"
 F10 = "quit"
+ShiftUp = "previous"
+ShiftDown = "next"
+ShiftLeft = "parent"
+ShiftRight = "child"
+ShiftHome = "first"
+ShiftEnd = "last"
 
 # The mouse. A click on an item moves the cursor there, a click on a hint
 # such as "F3 adopts" runs its command, and a click on a suggestion accepts

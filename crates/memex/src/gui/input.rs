@@ -114,8 +114,12 @@ fn character(text: Option<&str>, layout: &str) -> Option<Key> {
     text.and_then(one).or_else(|| one(layout)).map(Key::Char)
 }
 
-/// The memex's key for a named key; Tab with Shift is BackTab.
+/// The memex's key for a named key; Tab with Shift is BackTab, and an
+/// arrow, Home or End with Shift is a key free to bind.
 fn named(n: NamedKey, shift: bool) -> Option<Key> {
+    if shift && let Some(s) = shifted(n) {
+        return Some(Key::Special(s));
+    }
     Some(match n {
         NamedKey::Tab if shift => Key::BackTab,
         NamedKey::Space => Key::Char(' '),
@@ -146,6 +150,19 @@ fn editing(n: NamedKey) -> Option<Key> {
         NamedKey::ArrowRight => Key::Right,
         NamedKey::Home => Key::Home,
         NamedKey::End => Key::End,
+        _ => return None,
+    })
+}
+
+/// An arrow, Home or End, as it is with Shift held.
+fn shifted(n: NamedKey) -> Option<Special> {
+    Some(match n {
+        NamedKey::ArrowUp => Special::ShiftUp,
+        NamedKey::ArrowDown => Special::ShiftDown,
+        NamedKey::ArrowLeft => Special::ShiftLeft,
+        NamedKey::ArrowRight => Special::ShiftRight,
+        NamedKey::Home => Special::ShiftHome,
+        NamedKey::End => Special::ShiftEnd,
         _ => return None,
     })
 }
@@ -470,6 +487,33 @@ mod tests {
         assert_eq!(map_key(&tab, true, &c).unwrap().key, Key::BackTab);
         assert_eq!(map_key(&tab, false, &c).unwrap().key, Key::Tab);
         assert_eq!(map_key(&space, false, &c).unwrap().key, Key::Char(' '));
+    }
+
+    #[test]
+    fn shift_with_an_arrow_is_its_own_key() {
+        // Catches Shift ignored on the arrows, so Shift+Down moved a line
+        // rather than to the next item at the cursor's level.
+        let down = named_key(KeyCode::ArrowDown, NamedKey::ArrowDown);
+        let key = map_key(&down, true, &Config::default()).unwrap().key;
+        assert_eq!(key, Key::Special(Special::ShiftDown));
+    }
+
+    #[test]
+    fn shift_with_home_or_end_is_its_own_key() {
+        // Catches Shift ignored on Home and End, so Shift+End moved within
+        // the text rather than to the last item at the cursor's level.
+        let end = named_key(KeyCode::End, NamedKey::End);
+        let key = map_key(&end, true, &Config::default()).unwrap().key;
+        assert_eq!(key, Key::Special(Special::ShiftEnd));
+    }
+
+    #[test]
+    fn an_arrow_without_shift_is_still_an_arrow() {
+        // Catches every arrow taken as shifted, so Down no longer moved a
+        // line.
+        let down = named_key(KeyCode::ArrowDown, NamedKey::ArrowDown);
+        let key = map_key(&down, false, &Config::default()).unwrap().key;
+        assert_eq!(key, Key::Down);
     }
 
     #[test]

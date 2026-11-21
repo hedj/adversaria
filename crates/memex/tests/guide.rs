@@ -62,6 +62,7 @@ fn every_key_name_is_listed() {
         .split("The editing keys")
         .next()
         .unwrap();
+    let (section, bindings_only) = section.split_once("- for bindings only:").unwrap();
     let names: Vec<&str> = section.split('`').skip(1).step_by(2).collect();
     assert!(names.len() >= 20, "{names:?}");
     // The default file's header lists every key the configuration knows.
@@ -91,6 +92,15 @@ fn every_key_name_is_listed() {
             r.is_ok(),
             "the guide lists {n}, which the configuration refuses: {r:?}"
         );
+    }
+    let only: Vec<&str> = bindings_only.split('`').skip(1).step_by(2).collect();
+    assert_eq!(only.len(), 6, "{only:?}");
+    for n in only {
+        let bound = Config::parse(&format!("[keys]\n{n} = \"back\"\n"));
+        assert!(bound.is_ok(), "the guide binds {n}, refused: {bound:?}");
+        let held = Config::parse(&format!("[quasimodes]\ncommand = [\"{n}\"]\n{clear}"));
+        let two_keys = held.is_err_and(|e| e.contains("is two keys"));
+        assert!(two_keys, "the guide says {n} holds no quasimode");
     }
 }
 

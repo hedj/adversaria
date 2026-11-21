@@ -24,7 +24,8 @@ pub const DEFAULT_TOML: &str = r#"# Adversaria: key configuration. Copy to ~/.co
 #   IsoLevel5Shift, F1 to F35, Insert PageUp PageDown Menu Pause ScrollLock
 #   PrintScreen CapsLock NumLock.
 # Bound keys: F1 to F35, Insert PageUp PageDown Menu Pause ScrollLock
-#   PrintScreen CapsLock NumLock.
+#   PrintScreen CapsLock NumLock, and ShiftUp ShiftDown ShiftLeft ShiftRight
+#   ShiftHome ShiftEnd (an arrow, Home or End with Shift held).
 # Reserved, for editing, and refused: Enter Tab Backspace Delete Esc, the
 #   arrows, Home End, Shift, and any printable character.
 
@@ -48,6 +49,12 @@ F6 = "switch"
 F7 = "back"
 F8 = "forward"
 F10 = "quit"
+ShiftUp = "previous"
+ShiftDown = "next"
+ShiftLeft = "parent"
+ShiftRight = "child"
+ShiftHome = "first"
+ShiftEnd = "last"
 
 # The mouse. A click on an item moves the cursor there, a click on a hint
 # such as "F3 adopts" runs its command, and a click on a suggestion accepts
@@ -112,7 +119,7 @@ const MODIFIERS: [&str; 12] = [
     "IsoLevel5Shift",
 ];
 
-const SPECIALS: [(&str, Special); 9] = [
+const SPECIALS: [(&str, Special); 15] = [
     ("Insert", Special::Insert),
     ("PageUp", Special::PageUp),
     ("PageDown", Special::PageDown),
@@ -122,6 +129,12 @@ const SPECIALS: [(&str, Special); 9] = [
     ("PrintScreen", Special::PrintScreen),
     ("CapsLock", Special::CapsLock),
     ("NumLock", Special::NumLock),
+    ("ShiftUp", Special::ShiftUp),
+    ("ShiftDown", Special::ShiftDown),
+    ("ShiftLeft", Special::ShiftLeft),
+    ("ShiftRight", Special::ShiftRight),
+    ("ShiftHome", Special::ShiftHome),
+    ("ShiftEnd", Special::ShiftEnd),
 ];
 
 const RESERVED: [&str; 14] = [
@@ -217,6 +230,11 @@ pub fn key_name(k: Key) -> String {
 fn quasi_key(name: &str) -> Result<QuasiKey, String> {
     if let Some(m) = MODIFIERS.iter().find(|m| **m == name) {
         return Ok(QuasiKey::Modifier(m));
+    }
+    // Shift may be let go before the arrow, whose release would then be
+    // the plain arrow's, and the quasimode would stay held.
+    if name.starts_with("Shift") {
+        return Err(format!("{name} is two keys, and a quasimode holds one"));
     }
     bound_key(name).map(QuasiKey::Key)
 }
@@ -574,9 +592,9 @@ mod tests {
     }
 
     #[test]
-    fn eight_default_bindings() {
+    fn fourteen_default_bindings() {
         // Catches a default binding added or lost unnoticed.
-        assert_eq!(Config::default().bindings.len(), 8);
+        assert_eq!(Config::default().bindings.len(), 14);
     }
 
     #[test]
@@ -593,7 +611,7 @@ mod tests {
     #[test]
     fn key_names_read_back() {
         // Catches a key shown to the user under a name the file would refuse.
-        for name in ["F1", "F35", "Insert", "NumLock"] {
+        for name in ["F1", "F35", "Insert", "NumLock", "ShiftUp", "ShiftEnd"] {
             let k = bound_key(name).unwrap();
             assert_eq!(key_name(k), name);
         }
@@ -615,6 +633,16 @@ mod tests {
             "the others keep their defaults"
         );
         assert_eq!(bound(&c, "Insert"), Some("pane suggestions"));
+    }
+
+    #[test]
+    fn a_shifted_key_is_bound_but_holds_no_quasimode() {
+        // Catches a quasimode held on Shift+Up: Shift let go first, the
+        // release would be plain Up's, and the quasimode would stay held.
+        let err = Config::parse("[quasimodes]\nleap_back = \"ShiftUp\"\n").unwrap_err();
+        assert!(err.contains("ShiftUp is two keys"), "{err}");
+        let c = Config::parse("[keys]\nShiftUp = \"back\"\n").unwrap();
+        assert_eq!(bound(&c, "ShiftUp"), Some("back"));
     }
 
     #[test]

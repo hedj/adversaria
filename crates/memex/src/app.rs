@@ -86,6 +86,14 @@ pub enum Special {
     PrintScreen,
     CapsLock,
     NumLock,
+    /// An arrow, Home or End with Shift held: by default, the structural
+    /// moves (docs/guide.md § 2.4).
+    ShiftUp,
+    ShiftDown,
+    ShiftLeft,
+    ShiftRight,
+    ShiftHome,
+    ShiftEnd,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

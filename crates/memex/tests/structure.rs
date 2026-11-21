@@ -1,6 +1,8 @@
 //! Moving by the outline's structure (docs/design.md, N4): next,
 //! previous, first, last, parent and child.
 
+use memex::app::{Key, Special};
+
 mod support;
 use support::Room;
 
@@ -85,4 +87,23 @@ fn a_structural_move_is_not_a_jump() {
     assert_eq!(at(&r), "B2");
     r.command("back");
     assert_eq!(at(&r), "B3", "back to where go came from, not next");
+}
+
+#[test]
+fn shift_and_an_arrow_home_or_end_make_the_six_moves() {
+    // Catches the moves with no key, so each had to be typed: the fourth
+    // UX review's finding. From B2, by default bindings alone.
+    let mut r = tree("structure-keys");
+    let press = |r: &mut Room, s| r.tap(&[Key::Special(s)]);
+    for (key, lands) in [
+        (Special::ShiftDown, "B3"),
+        (Special::ShiftUp, "B2"),
+        (Special::ShiftHome, "B1"),
+        (Special::ShiftEnd, "B3"),
+        (Special::ShiftLeft, "A"),
+        (Special::ShiftRight, "B1"),
+    ] {
+        press(&mut r, key);
+        assert_eq!(at(&r), lands, "{key:?}");
+    }
 }

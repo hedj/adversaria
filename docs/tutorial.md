@@ -519,7 +519,8 @@ When you are done, delete `$HOME/adversaria-tutorial` and
 docs/guide.md describes every command, the files the notebook keeps, the
 tools around it, and how to change the keys. Things this tutorial did not
 show: links made by command, with a type (`link to 2 as supports`),
-moving by the outline's structure (`next`, `parent`), the list of a
+moving by the outline's structure (Shift with an arrow: `next`,
+`parent`), the list of a
 Leap's matches (`pane matches`), `#tags`, splitting an item into
 sentences, Wikidata as a public source to check dates against, and
 results from a Python analysis, which are marked when their input data

@@ -185,6 +185,18 @@ The defaults are below. All of them can be changed (§ 4.3).
 | Up, Down | move to the item above or below |
 | Left, Right, Home, End | move within the item's text |
 
+#### Moving by structure
+
+Shift with an arrow, Home or End moves by the outline's structure, as
+the commands of § 2.4, Moving, do: over the items under one, not line by
+line.
+
+| Key | Does |
+| --- | --- |
+| Shift with Up, Down | move to the previous or next item at the cursor's level (`previous`, `next`) |
+| Shift with Left, Right | move to the item the cursor's is under, or the first under it (`parent`, `child`) |
+| Shift with Home, End | move to the first or last item at the cursor's level (`first`, `last`) |
+
 #### Quasimodes
 
 A quasimode is a kind of input that a key starts: searching,
@@ -451,7 +463,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | `follow` | `follow [N]` | goes to the other end of the target's Nth link (default 1) |
 | `back` | `back` (F7, or the mouse's back button, when no quasimode, menu or question is open) | goes back to where the last jump came from: `follow`, Leap, `go`, or a click on a link, a mention or a match in the right pane (the foot says `click: follow to 2`). Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over |
 | `forward` | `forward` (F8, or the mouse's forward button) | goes forward again to where `back` came from; a new jump empties the way forward, as in a browser |
-| `next` | `next` | goes to the next item at the target's level, over the items under it, after NLS: a move, as an arrow key is, not a jump. None of these six moves is bound to a key; bind them in `[keys]` (§ 4.3), or type a prefix (`par`) |
+| `next` | `next` | goes to the next item at the target's level, over the items under it, after NLS: a move, as an arrow key is, not a jump. Shift with an arrow, Home or End makes these six moves (§ 2.3) |
 | `previous` | `previous` | goes to the previous item at the target's level |
 | `first` | `first` | goes to the first item at the target's level |
 | `last` | `last` | goes to the last item at the target's level |
@@ -1107,6 +1119,12 @@ F6 = "switch"
 F7 = "back"
 F8 = "forward"
 F10 = "quit"
+ShiftUp = "previous"
+ShiftDown = "next"
+ShiftLeft = "parent"
+ShiftRight = "child"
+ShiftHome = "first"
+ShiftEnd = "last"
 
 [mouse]
 enabled = true
@@ -1134,10 +1152,15 @@ built-in ones; there may be any number, in order. See § 2.3, Plumbing.
   `IsoLevel5Shift`;
 - for quasimodes or bindings: `F1` to `F35`, `Insert`, `PageUp`,
   `PageDown`, `Menu`, `Pause`, `ScrollLock`, `PrintScreen`, `CapsLock`,
-  `NumLock`.
+  `NumLock`;
+- for bindings only: `ShiftUp`, `ShiftDown`, `ShiftLeft`, `ShiftRight`,
+  `ShiftHome`, `ShiftEnd`, an arrow, Home or End with Shift held. A
+  quasimode cannot use one: it is two keys, and if Shift is let go first,
+  the quasimode would not see its key's release. Unbound, one does
+  nothing.
 
 The editing keys (Enter, Tab, Backspace, Delete, Esc, the arrows, Home,
-End), Shift and printable characters cannot be configured.
+End), Shift alone and printable characters cannot be configured.
 
 The memex refuses to start on a file it would have to guess at, and says
 which file and why: a section, quasimode, key or command it does not know,

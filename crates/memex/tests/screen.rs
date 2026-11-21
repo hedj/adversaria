@@ -226,7 +226,9 @@ fn the_commands_listed_are_shown_whole_at_80_columns() {
         .filter(|c| c.name.starts_with('c'));
     for c in starting {
         let line = format!("{} — {}", c.name, c.brief);
-        assert!(shown.contains(&line), "{line:?} not whole in {shown:#?}");
+        // A bound command's key follows, after a gap (ShiftRight for child).
+        let whole = |s: &String| *s == line || s.starts_with(&format!("{line}  "));
+        assert!(shown.iter().any(whole), "{line:?} not whole in {shown:#?}");
     }
 }
 
