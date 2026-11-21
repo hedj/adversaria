@@ -451,7 +451,7 @@ fn going_on(o: &Opening) -> String {
         .as_deref()
         .and_then(|c| c.split_whitespace().last())
     {
-        Some(word) => format!("{next} · Esc: {word}"),
+        Some(word) => format!("{next} · Tab: {word}"),
         None => next,
     }
 }
@@ -530,7 +530,7 @@ fn mend_or_why(f: &Failure) -> String {
     } else {
         format!(" (or {others})")
     };
-    format!("Esc: {} → {}{also}", first.from, first.to)
+    format!("Tab: {} → {}{also}", first.from, first.to)
 }
 
 /// The words APE does not know, said so; else that no one-word edit
@@ -874,10 +874,10 @@ mod tests {
         let one = failure(vec![mend("was", "is")], vec![]);
         assert_eq!(
             hint(&one),
-            "not ACE: The flight <> was in 1989. · Esc: was → is"
+            "not ACE: The flight <> was in 1989. · Tab: was → is"
         );
         let two = failure(vec![mend("was", "is"), mend("was", "has")], vec![]);
-        assert!(hint(&two).ends_with("Esc: was → is (or was → has)"));
+        assert!(hint(&two).ends_with("Tab: was → is (or was → has)"));
         assert_eq!(hint(&Check::Ace("John waits.".into())), "ACE: John waits.");
     }
 
@@ -910,7 +910,7 @@ mod tests {
         let o = opened(words, Some("The date of buran_flight "));
         assert_eq!(
             hint(&o),
-            "next: buran_flight, an adverb · Esc: buran_flight"
+            "next: buran_flight, an adverb · Tab: buran_flight"
         );
         assert_eq!(o.mended().as_deref(), Some("The date of buran_flight "));
         let many = (0..13).map(|i| Next::Word(format!("w{i}"))).collect();

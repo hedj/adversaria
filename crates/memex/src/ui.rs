@@ -1821,7 +1821,7 @@ fn links_lines(outline: &Outline, id: u64) -> Vec<Presented> {
 fn completions_said(typed: &str, found: &[String]) -> String {
     match found.len() {
         0 => format!("[[ no item is named “{typed}…”; make makes one once the link is closed"),
-        _ => format!("[[ {} · Esc completes", listed_names(found)),
+        _ => format!("[[ {} · Tab completes", listed_names(found)),
     }
 }
 
@@ -2227,10 +2227,12 @@ fn quasi_doing(a: &Active) -> String {
     let end = release_text(a);
     match a.q() {
         Quasi::LeapForward | Quasi::LeapBack => format!(
-            "{end} to go to the first match · Esc completes · ? lists every match · Leap again repeats"
+            "{end} to go to the first match · Tab completes · Esc cancels · ? lists every match · Leap again repeats"
         ),
         Quasi::Command => {
-            format!("{end} to run on the target · Esc completes · ? lists what may come next")
+            format!(
+                "{end} to run on the target · Tab completes · Esc cancels · ? lists what may come next"
+            )
         }
         Quasi::Suppose => match a.hint().and_then(|h| h.said.as_ref()) {
             None => format!(

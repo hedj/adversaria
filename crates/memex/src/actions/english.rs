@@ -137,10 +137,10 @@ fn keep_fullest(english: &mut Option<String>, text: &str) {
     }
 }
 
-/// A hint with a sentence recalled from an earlier pair first, which Esc
+/// A hint with a sentence recalled from an earlier pair first, which Tab
 /// puts in place.
 fn as_before(h: Hint, ace: String) -> Hint {
-    let said = h.said.map(|s| format!("as before: {ace} · Esc · {s}"));
+    let said = h.said.map(|s| format!("as before: {ace} · Tab · {s}"));
     Hint {
         said,
         mended: Some(ace),

@@ -18,7 +18,7 @@ fn room(name: &str) -> Room {
 /// What recognition makes of a pattern typed into a leap.
 fn recognised(r: &mut Room, pattern: &str) -> String {
     r.hold(Quasi::LeapForward, pattern);
-    r.tap(&[Key::Escape]);
+    r.tap(&[Key::Tab]);
     match &r.app.session.mode {
         Mode::Quasi(a) => a.input.clone(),
         m => panic!("{m:?}"),
@@ -147,9 +147,14 @@ fn a_match_is_listed_under_the_items_above_it_from_the_top() {
 
 #[test]
 fn a_leaps_list_sits_at_the_foot_of_the_outline() {
-    let rows = box_rows(&listing("leap-foot"));
+    // The foot is as many rows as its guide wraps to, so the outline's
+    // last row is the one above the foot's first, " LEAP ".
+    let r = listing("leap-foot");
+    let rows = box_rows(&r);
     let bottom = rows.last().unwrap().0 + 1;
-    assert_eq!(bottom, 30 - 3, "its border on the outline's last row");
+    let lines = r.lines_at(100, 30);
+    let foot = lines.iter().position(|l| l.starts_with(" LEAP ")).unwrap() as u16;
+    assert_eq!(bottom, foot - 1, "its border on the outline's last row");
 }
 
 /// Items Alpha, "Ener a" and "Ener b", the cursor on Alpha.

@@ -112,11 +112,11 @@ impl App {
             Key::Backspace => self.erase(true),
             Key::Delete => self.erase(false),
             Key::Enter => self.enter_item(),
+            Key::Tab if self.link_completions().is_some() => self.complete_link(),
             Key::Tab => self.run_simple("indent"),
             Key::BackTab => self.run_simple("outdent"),
             Key::Up | Key::Down => self.move_line(key == Key::Up),
             Key::Left | Key::Right | Key::Home | Key::End => self.move_in_text(key),
-            Key::Escape => self.complete_link(),
             _ => {}
         }
     }
@@ -225,11 +225,18 @@ impl App {
                     return self.leave(a);
                 }
             }
-            Key::Escape => match a.q() {
+            Key::Tab => match a.q() {
                 Quasi::LeapForward | Quasi::LeapBack => a.input = self.leap_complete(&a),
                 Quasi::Command => a.input = complete_command(&a.input),
                 _ => a.apply_repair(),
             },
+            Key::Escape => {
+                // Esc cancels, as everywhere: nothing acts, and a Leap puts
+                // the cursor back where it began.
+                self.leap_return(&a);
+                self.session.message.clear();
+                return self.leave(a);
+            }
             Key::Enter if matches!(a.q(), Quasi::LeapForward | Quasi::LeapBack) => {
                 return self.leap_or_create(a);
             }

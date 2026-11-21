@@ -342,14 +342,14 @@ fn part_b(t: &mut T) {
 }
 
 /// Step 10: a note linked to the essay's heading by a [[link]] completed
-/// with Esc; the links pane; follow, and back.
+/// with Tab; the links pane; follow, and back.
 fn a_note_linked(t: &mut T) {
     t.tap(Key::End);
     t.tap(Key::Enter);
     t.typ("Check this against [[How");
     t.look("completion");
-    t.shows("[[ How Buran’s flight software was reviewed · Esc completes");
-    t.key(Key::Escape);
+    t.shows("[[ How Buran’s flight software was reviewed · Tab completes");
+    t.key(Key::Tab);
     t.pause();
     t.look("linked");
     t.shows("LINKS OF 2.1.3");

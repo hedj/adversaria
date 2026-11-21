@@ -159,6 +159,7 @@ The core is a store of items with permanent addresses, typed links and named tra
 | No modes: quasimodes (Leap, Command, Suppose) choose the target, then a command acts on it | a held key cannot be forgotten, so mode errors cannot occur; after Raskin |
 | Scope removed: `delete word` deletes the word at the cursor, and Right Ctrl is free | the author's decision (21 November 2026), after a review of what a learner must hold: Scope took a quasimode and a key for one command, `delete`, at three levels that acted as two (statement and branch deleted alike); NLS's editing by entity (N7) can return with a command that needs it |
 | Add TOPS-20's recognition on Escape, guide words, and help on "?" to the outline model's aids | they teach commands and argument order in place; guide words name the slots of the verb frames |
+| Recognition is on Tab, not Escape; Esc cancels everywhere | the author's decision (21 November 2026), after a review of what a learner must hold: Esc completed in Command, Leap, Suppose and `[[`, but cancelled in menus and confirmations, while in shells, editors and every desktop program Tab completes and Esc cancels |
 | Adopt N1, N4 and N7 as the outline model, with onscreen aids to learning | NLS's structure gave experts speed; the aids address its known difficulty of learning |
 | Adopt views, references and anchors (merging N3, N5, N6, X1, X2, X5, J3); merge executable content (J1, J2, J6) into reactive documents; drop N9, N10, X6; J7 is implicit | each group did one job in several systems; the dropped ones concern practice, collaboration or licensing, not mechanism |
 | Keys are configured in a TOML file; a name given replaces its default, and a file the memex would have to guess at is refused | the author asked to adjust key bindings (12 November 2026); TOML is a standard format with a maintained Rust parser, and refusing a wrong file is safer than starting with keys the user did not choose |
@@ -673,7 +674,7 @@ The store is an explicit outline that the user moves through and edits by its pa
 Onscreen aids to learning (this design's own proposals, not tested):
 
 1. Visible structure: indentation and level marks always shown, with names and statement boundaries on request, as a view.
-2. Recognition, after TOPS-20: Escape completes a command or name as far as it is unambiguous, so "DW" becomes "Delete Word" on screen; full names are accepted too.
+2. Recognition, after TOPS-20: Escape (Tab, as built since 21 November 2026) completes a command or name as far as it is unambiguous, so "DW" becomes "Delete Word" on screen; full names are accepted too.
 3. A command bar for the current selection, listing the operations valid for its kind of entity, each with its short form, so the bar teaches the shortcuts.
 4. No modes at all, only quasimodes (below): the selected target and any command in progress are always on screen.
 5. A preview before every operation: its target is highlighted, and a Move or Copy shows its destination.
@@ -784,7 +785,7 @@ The memex supports diagrams first-rate, with the keyboard and mouse and no pen: 
 
 1. **A diagram is a view.** Its nodes are items and its edges are links, held as facts, so one structure shows as an outline or as a diagram, and queries, constraints and the dataflow graph see it unchanged. There is no separate drawing format.
 2. **The memex lays it out.** Layered layout for directed graphs, trees for hierarchies, and charts for data. The user pins a node by dragging it with the mouse; the pin is a fact in the journal, and layout keeps every pinned node (see Requirements and mechanisms below).
-3. **Editing is ordinary editing.** A new node is a new item, typed; a new edge is a link, made with the Command quasimode and recognition on Escape. Each edit is a journal entry, so undo, versions and side-by-side comparison of two versions apply to diagrams as to text.
+3. **Editing is ordinary editing.** A new node is a new item, typed; a new edge is a link, made with the Command quasimode and recognition on Tab. Each edit is a journal entry, so undo, versions and side-by-side comparison of two versions apply to diagrams as to text.
 4. **Diagrams are live.** A diagram over a query redraws when the facts change, and each constraint's violations show on the nodes they name.
 
 As built (12 November 2026): diagrams are views (§ Views): node and edge marks over the user's facts, laid out in layers. The five diagram kinds in the table below are not built as kinds; a flowchart, tree or argument map is node and edge layers over the facts that hold its steps or links. Adjacency matrices are cell marks. The layout follows the table's first rows (fewest crossings, straight paths); pins, size limits and splitting into linked diagrams are not built.

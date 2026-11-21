@@ -80,27 +80,27 @@ fn a_supposition_being_typed_is_checked_as_it_is_typed() {
 }
 
 #[test]
-fn a_supposition_not_ace_shows_where_and_esc_mends_it() {
-    // Catches the failure's place or the repair left unsaid, Esc doing
+fn a_supposition_not_ace_shows_where_and_tab_mends_it() {
+    // Catches the failure's place or the repair left unsaid, Tab doing
     // nothing in Suppose, or the hint not following what is typed.
     let mut r = Room::new("english-suppose-mend");
     r.hold(Quasi::Suppose, "The flight was in 1989");
     let hint = line_with(&r, "not ACE: The flight <> was in 1989.");
-    assert!(hint.is_some_and(|l| l.contains("Esc: was → is")));
-    r.tap(&[Key::Escape]);
+    assert!(hint.is_some_and(|l| l.contains("Tab: was → is")));
+    r.tap(&[Key::Tab]);
     assert_eq!(typed(&r), "The flight is in 1989");
     assert!(line_with(&r, "ACE: There is a flight X1. The flight X1 is in 1989.").is_some());
 }
 
 #[test]
 fn a_supposition_with_no_repair_names_the_words_ace_does_not_know() {
-    // Catches a failure with no repair and no reason, and Esc changing
+    // Catches a failure with no repair and no reason, and Tab changing
     // the text when there is nothing to apply. APE takes the capitalised
     // Qzx for a proper name, so only vbn is unknown.
     let mut r = Room::new("english-suppose-unknown");
     r.hold(Quasi::Suppose, "Qzx vbn.");
     assert!(line_with(&r, "not ACE: Qzx <> vbn. · words ACE does not know: vbn").is_some());
-    r.tap(&[Key::Escape]);
+    r.tap(&[Key::Tab]);
     assert_eq!(typed(&r), "Qzx vbn.");
 }
 
@@ -123,12 +123,12 @@ fn a_supposition_still_being_typed_shows_what_may_come_next() {
 }
 
 #[test]
-fn esc_completes_the_word_being_typed_when_one_alone_fits() {
-    // Catches the completion unsaid, or Esc leaving the word as typed.
+fn tab_completes_the_word_being_typed_when_one_alone_fits() {
+    // Catches the completion unsaid, or Tab leaving the word as typed.
     let mut r = buran("english-complete");
     r.hold(Quasi::Suppose, "The date of bur");
-    assert!(line_with(&r, "Esc: buran_flight").is_some());
-    r.tap(&[Key::Escape]);
+    assert!(line_with(&r, "Tab: buran_flight").is_some());
+    r.tap(&[Key::Tab]);
     assert_eq!(typed(&r), "The date of buran_flight ");
     assert!(line_with(&r, "next: ").is_some());
 }
@@ -172,11 +172,11 @@ fn question_mark_after_a_word_ends_a_question() {
     assert!(line_with(&r, "ACE: (APE does not restate this sentence.)").is_some());
 }
 
-/// Type free English in Suppose, mend it with Esc, release, and accept the
+/// Type free English in Suppose, mend it with Tab, release, and accept the
 /// first reading if one is offered: the pair is confirmed.
 fn mend_and_suppose(r: &mut Room, free: &str) {
     r.hold(Quasi::Suppose, free);
-    r.tap(&[Key::Escape]);
+    r.tap(&[Key::Tab]);
     r.release(Quasi::Suppose);
     if matches!(r.app.session.mode, Mode::ConfirmSuppose { .. }) {
         r.tap(&[Key::Enter]);
@@ -228,14 +228,14 @@ fn a_supposition_typed_in_ace_from_the_start_keeps_no_pair() {
 
 #[test]
 fn a_text_like_an_earlier_pairs_is_offered_its_ace_adapted() {
-    // Catches the memory not consulted, its ACE offered unadapted, or Esc
+    // Catches the memory not consulted, its ACE offered unadapted, or Tab
     // not putting it in place; and the pairs lost on reopening.
     let mut r = buran("pairs-recalled");
     mend_and_suppose(&mut r, "the flight was in 1989");
     r.command("close");
     r.hold(Quasi::Suppose, "the flight was in 1990");
-    assert!(line_with(&r, "as before: the flight is in 1990 · Esc").is_some());
-    r.tap(&[Key::Escape]);
+    assert!(line_with(&r, "as before: the flight is in 1990 · Tab").is_some());
+    r.tap(&[Key::Tab]);
     assert_eq!(typed(&r), "the flight is in 1990");
     let again = replayed(&r.dir);
     let pairs = memex::pairs::pairs_of(again.journal().entries());

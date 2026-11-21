@@ -217,9 +217,11 @@ Within a quasimode:
 - **Tap to latch.** Press and release the key with nothing typed between,
   and the quasimode stays on without holding. Enter, or a second tap, ends
   it. Backspace on an empty latched quasimode leaves it without acting.
-- **Esc completes:** a command name in Command, a pattern in Leap. In
+- **Tab completes:** a command name in Command, a pattern in Leap. In
   Suppose it completes the word being typed when one word alone fits, or
   mends: it puts the repair the line below offers first in place.
+- **Esc cancels,** as everywhere: the quasimode ends and nothing acts; a
+  Leap puts the cursor back where it began.
 - **`?` lists** the commands that match (Command; once a command's name
   and a space are typed, its form and help instead), every match (Leap), or
   everything that may come next, each kind of word with a line of help
@@ -463,9 +465,9 @@ address's `/#anchor` are not tags.
 at the pause, the item links to the item named so, else to the first
 whose text it is (ignoring case). While the text cursor is after an open
 `[[`, a dim line under the item lists the names that fit what you have
-typed (`[[ Energia · Energy launch · Esc completes`): the names `name`
+typed (`[[ Energia · Energy launch · Tab completes`): the names `name`
 gave, and the texts short enough to be names (3 to 60 characters, six
-words at most, not ending in `.`, `?` or `!`). Esc completes as far as
+words at most, not ending in `.`, `?` or `!`). Tab completes as far as
 they agree, and, when one fits, closes the link with `]]`. A link that names no item makes
 nothing: at the cursor a dim line says `not yet items: Buran flight ·
 make makes them`, and `make` makes each at the foot of the top level and
@@ -686,11 +688,11 @@ While you type, the line below checks the statement as controlled English
   your notebook's words first, then kinds of word (`a noun`, `a name`,
   `a verb`, ...), then words such as `the`, `of` and `is`. While you type
   a word, only the words it begins are shown (with the kinds of word), and
-  when one alone fits, Esc completes it (`Esc: buran_flight`);
+  when one alone fits, Tab completes it (`Tab: buran_flight`);
 - `not ACE:` when it cannot go on: the sentence with `<>` where parsing
   stopped, and up to three edits of one word that make it ACE or let it
-  go on, your notebook's words first, such as `Esc: was → is` (ACE has
-  only the present tense). Esc puts the first in place. With no such
+  go on, your notebook's words first, such as `Tab: was → is` (ACE has
+  only the present tense). Tab puts the first in place. With no such
   edit, it names the words ACE does not know.
 
 When you mend free English into ACE and suppose it, the memex keeps the
@@ -698,7 +700,7 @@ pair: what you first typed, and the ACE. Later, when you type something that
 matches an earlier free English word for word but for one or two words,
 fewer than half of them (and the earlier ACE holds those words), the line
 below offers the earlier ACE with your new words in place, `as before: … ·
-Esc`, and Esc puts it in place. The pairs are in the journal, with the
+Tab`, and Tab puts it in place. The pairs are in the journal, with the
 suppositions.
 
 A word is judged only once it ends, with a space or an end mark. To see

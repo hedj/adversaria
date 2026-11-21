@@ -200,11 +200,11 @@ screen says `SUPPOSE (latched)`, and under it what to do:
 
 Type `the flight was in 1989`. The foot now says:
 
-    not ACE: the flight <> was in 1989. · Esc: was → is (or was → wags, was → wars) · Enter, or tap again, offers its readings
+    not ACE: the flight <> was in 1989. · Tab: was → is (or was → wags, was → wars) · Enter, or tap again, offers its readings
 
 That is not a mistake. `not ACE` means the sentence is not in the
 controlled English the notebook reads exactly, which has no past
-tense; Esc would mend it by changing a word. Leave it as it is, and
+tense; Tab would mend it by changing a word. Leave it as it is, and
 press Enter. The notebook reads your sentence against the facts
 instead, finds the date it is about, and asks:
 
@@ -241,8 +241,8 @@ journal; the notebook says so: `it stays in the journal`. (`commit`
 would instead make the supposed world the actual one.)
 
 While Command is on, `?` lists the commands that match what you have
-typed, and Esc completes a command's name; Backspace on an empty line
-leaves without running anything. For a few letters you may instead
+typed, and Tab completes a command's name; Esc, or Backspace on an
+empty line, leaves without running anything. For a few letters you may instead
 hold the key while you type and let go to finish. The foot says which you are in: `COMMAND (latched)`
 after a tap, and while you hold the key before you press another,
 `release now to type without holding`. Every "run the command" below
@@ -341,9 +341,9 @@ for a new item after them, and type `Check this against [[How`. While
 the text cursor is in an open `[[`, a dim line under the item lists the
 items whose names fit what you have typed:
 
-    [[ How Buran’s flight software was reviewed · Esc completes
+    [[ How Buran’s flight software was reviewed · Tab completes
 
-Press Esc: the name is completed, and the link closed with `]]`. At the
+Press Tab: the name is completed, and the link closed with `]]`. At the
 pause the note links to the essay's heading. The right pane shows the
 selected item's links, under its address:
 

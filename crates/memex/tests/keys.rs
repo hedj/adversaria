@@ -305,3 +305,36 @@ fn help_opens_the_list_f1_opens() {
     f1.tap(&[Key::F(1)]);
     assert_eq!(r.app.session.mode, f1.app.session.mode);
 }
+
+#[test]
+fn esc_cancels_a_leap_and_puts_the_cursor_back() {
+    // Catches Esc completing the pattern, as it did, where every other
+    // program cancels: the Leap must end, and act on nothing.
+    let mut r = Room::new("esc-leap");
+    r.items(&["Alpha", "Beta"]);
+    let alpha = r.outline().in_order()[0];
+    r.put_cursor(alpha);
+    r.tap(&[Key::Quasi(Quasi::LeapForward)]);
+    r.typ("Be");
+    r.tap(&[Key::Escape]);
+    assert_eq!(r.app.session.mode, Mode::Normal);
+    assert_eq!(r.app.cursor(), alpha, "back where it began");
+}
+
+#[test]
+fn esc_cancels_a_command_and_tab_completes_it() {
+    let mut r = Room::new("esc-command");
+    r.items(&["Alpha", "Beta"]);
+    r.tap(&[Key::Tab]);
+    r.tap(&[Key::Quasi(Quasi::Command)]);
+    r.typ("outd");
+    r.tap(&[Key::Tab]);
+    assert!(
+        matches!(&r.app.session.mode, Mode::Quasi(a) if a.input == "outdent "),
+        "{:?}",
+        r.app.session.mode
+    );
+    r.tap(&[Key::Escape]);
+    assert_eq!(r.app.session.mode, Mode::Normal);
+    assert_eq!(r.outline().number(r.app.cursor()), "1.1", "nothing ran");
+}

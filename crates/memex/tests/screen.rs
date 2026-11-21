@@ -102,8 +102,7 @@ fn a_latched_quasimode_says_so_and_how_it_ends() {
     let mut room = Room::new("foot-latched");
     room.items(&["rent"]);
     room.tap(&[Key::Quasi(Quasi::Command)]);
-    let ends =
-        "Enter, or tap again, to run on the target · Esc completes · ? lists what may come next";
+    let ends = "Enter, or tap again, to run on the target · Tab completes · Esc cancels · ? lists what may come next";
     assert_eq!(foot(&room), [" COMMAND (latched)", ends]);
 }
 
@@ -440,7 +439,7 @@ fn a_held_quasimodes_guide_is_shown_whole_at_80_columns() {
     assert!(foot(&room).contains(fresh), "{}", foot(&room));
     room.typ("u");
     room.tap(&[Key::Backspace]);
-    let guide = "to run on the target · Esc completes · ? lists what may come next";
+    let guide = "to run on the target · Tab completes · Esc cancels · ? lists what may come next";
     assert!(foot(&room).contains(guide), "{}", foot(&room));
 }
 

@@ -151,7 +151,7 @@ fn leap_held_lists_matches(app: &App, before: usize) {
     assert!(shows(&s, copy), "the transcluded copy matches too");
     assert!(shows(&s, "the drafts of chapter 2"));
     assert!(shows(&s, "LEAP  dra"));
-    let guide = "release Leap to go to the first match · Esc completes · ? lists every match · Leap again repeats";
+    let guide = "release Leap to go to the first match · Tab completes · Esc cancels · ? lists every match · Leap again repeats";
     assert!(shows(&s, guide));
     let written = app.journal().entries().len();
     assert_eq!(written, before, "nothing is written while Leap is held");
@@ -195,12 +195,12 @@ fn the_right_pane_shows_drakons_links(app: &App) {
 
 #[test]
 fn leap_recognition_listing_latching_and_repeat() {
-    // Catches Esc not completing, ? not listing, a tap not latching, or Leap
+    // Catches Tab not completing, ? not listing, a tap not latching, or Leap
     // again not repeating.
     let dir = temp("leap");
     let mut app = essay(&dir);
     hold(&mut app, Quasi::LeapForward, "sour");
-    tap(&mut app, Key::Escape);
+    tap(&mut app, Key::Tab);
     match &app.session.mode {
         Mode::Quasi(a) => assert_eq!(
             a.input, "source",
@@ -248,7 +248,7 @@ fn leap_recognition_listing_latching_and_repeat() {
 
 #[test]
 fn command_guide_words_recognition_and_help() {
-    // Catches guide words not filled in, recognition on Escape not completing,
+    // Catches guide words not filled in, recognition on Tab not completing,
     // or ? not listing what may come next.
     let dir = temp("command");
     let mut app = essay(&dir);
@@ -259,7 +259,7 @@ fn command_guide_words_recognition_and_help() {
     );
     assert_eq!(app.guided("move 3"), "move (after) 3");
     hold(&mut app, Quasi::Command, "li");
-    tap(&mut app, Key::Escape);
+    tap(&mut app, Key::Tab);
     match &app.session.mode {
         Mode::Quasi(a) => assert_eq!(a.input, "link "),
         m => panic!("{m:?}"),

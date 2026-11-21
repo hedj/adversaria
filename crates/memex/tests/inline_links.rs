@@ -226,19 +226,19 @@ fn an_open_link_lists_the_names_that_fit() {
     // typo goes unseen: the third review's fourth finding.
     let r = completing("complete-list", "See [[ener");
     assert!(
-        r.shows("[[ Energia · Energy launch · Esc completes"),
+        r.shows("[[ Energia · Energy launch · Tab completes"),
         "{:#?}",
         r.lines()
     );
 }
 
 #[test]
-fn esc_completes_as_far_as_the_names_agree_then_to_one() {
+fn tab_completes_as_far_as_the_names_agree_then_to_one() {
     let mut r = completing("complete-esc", "See [[ener");
-    r.tap(&[Key::Escape]);
+    r.tap(&[Key::Tab]);
     assert_eq!(r.here(), "See [[Energ");
     r.typ("i");
-    r.tap(&[Key::Escape]);
+    r.tap(&[Key::Tab]);
     assert_eq!(r.here(), "See [[Energia]]", "one name: closed");
 }
 
@@ -252,9 +252,9 @@ fn a_sentence_is_not_offered_as_a_name() {
 #[test]
 fn a_closed_link_offers_nothing() {
     let mut r = completing("complete-closed", "See [[Energia]] ener");
-    r.tap(&[Key::Escape]);
+    r.tap(&[Key::Tab]);
     assert_eq!(r.here(), "See [[Energia]] ener");
-    assert!(!r.shows("Esc completes"), "{:#?}", r.lines());
+    assert!(!r.shows("Tab completes"), "{:#?}", r.lines());
     assert!(!r.shows("[[ no item"), "{:#?}", r.lines());
-    assert_eq!(r.app.session.message, "", "Esc said nothing");
+    assert_eq!(r.app.session.message, "", "Tab said nothing");
 }

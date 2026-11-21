@@ -1,6 +1,6 @@
 //! Completion of a `[[link]]` being typed: while the text cursor is after
 //! an open `[[`, the names and the short texts that what follows it
-//! starts are offered, and Esc completes, as it does in Command and Leap.
+//! starts are offered, and Tab completes, as it does in Command and Leap.
 //! A name is what `name` gave; a short text is one an unlinked mention
 //! would take as a name (guide § 3.4): 3 to 60 characters, six words at
 //! most, not ending in `.`, `?` or `!`.
@@ -20,7 +20,7 @@ impl App {
         Some((typed, found))
     }
 
-    /// Esc in an item's text: complete the open `[[link]]`, to the one name
+    /// Tab in an open `[[link]]`: complete it, to the one name
     /// that fits, closed with `]]`, or as far as every name that fits
     /// agrees; with none, say so.
     pub(crate) fn complete_link(&mut self) {
