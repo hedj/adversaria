@@ -110,7 +110,7 @@ pub const COMMANDS: &[Command] = &[
         target: true,
         slots: &[],
         help: "delete the target and its branch; delete word deletes the word at the text cursor",
-        brief: "delete an item and its branch, or a word",
+        brief: "delete a branch, or a word",
     },
     Command {
         name: "fold",
