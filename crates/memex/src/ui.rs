@@ -1677,7 +1677,8 @@ fn read_as_lines(outline: &Outline, id: u64) -> Vec<Line<'static>> {
     if all.is_empty() {
         return vec![];
     }
-    let heading = [Line::raw(""), Line::styled("READ AS", dim())];
+    let named = format!("READ AS · {}", outline.number(id));
+    let heading = [Line::raw(""), Line::styled(named, dim())];
     heading
         .into_iter()
         .chain(all.into_iter().map(read_as_line))
@@ -1795,15 +1796,19 @@ impl Along {
 /// kind once and each link numbered as follow numbers it, and where its
 /// text is shown in place.
 fn links_lines(outline: &Outline, id: u64) -> Vec<Presented> {
-    let heading = Line::styled("LINKS OF THE SELECTED ITEM", dim());
-    let mut lines = plain(vec![heading, Line::raw("")]);
     if id == TOP {
-        lines.push((nothing_selected(), None));
-        return lines;
+        let heading = Line::styled("LINKS OF THE SELECTED ITEM", dim());
+        return plain(vec![heading, Line::raw(""), nothing_selected()]);
     }
+    let heading = Line::styled(format!("LINKS OF {}", outline.number(id)), dim());
+    let mut lines = plain(vec![heading, Line::raw("")]);
     lines.extend(plain(vec![Line::raw(outline.text(id)), Line::raw("")]));
-    lines.extend(link_lines(outline, id));
-    lines.extend(transclusion_lines(outline, id));
+    let mut found = link_lines(outline, id);
+    found.extend(transclusion_lines(outline, id));
+    if found.is_empty() {
+        found.push((Line::styled("no links", dim()), None));
+    }
+    lines.extend(found);
     lines
 }
 

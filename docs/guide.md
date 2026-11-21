@@ -148,11 +148,12 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   question, `→` gives its answer. Under the item at the cursor, a dim line
   says why its text was not read, or which of its `[[links]]` name no item
   yet (§ 2.4, § 3.1).
-- **Right pane:** what the selected item needs. By default its links; on an
-  item with marks, the constraint, its rule, its solutions and what depends
-  on them; on a view, its layers. Under the links or the constraint,
-  `READ AS` shows what the item's text was read as, in Prolog, and its tags
-  (§ 3.1). After `interrogate`, the pane shows the interrogation. `pane`
+- **Right pane:** what the selected item needs. By default its links,
+  under `LINKS OF` and the item's address, or `no links`; on an item with
+  marks, the constraint, its rule, its solutions and what depends on them;
+  on a view, its layers. Under the links or the constraint, `READ AS` and
+  the address show what the item's text was read as, in Prolog, and its
+  tags (§ 3.1). After `interrogate`, the pane shows the interrogation. `pane`
   sets it to the outline, links or suggestions.
 - **Foot:** the message line, and, while a quasimode is on (held or
   latched), what you have typed and how it ends.

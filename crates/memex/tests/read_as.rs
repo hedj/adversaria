@@ -46,12 +46,25 @@ fn each_statement_is_shown_in_its_prolog_form() {
     for (item, shown) in order.iter().zip(expected) {
         r.put_cursor(*item);
         let pane = right_pane(&r);
-        assert!(pane.iter().any(|l| l == "READ AS"), "{pane:#?}");
+        assert!(pane.iter().any(|l| l.starts_with("READ AS")), "{pane:#?}");
         assert!(
             pane.iter().any(|l| l.starts_with(shown)),
             "{shown}: {pane:#?}"
         );
     }
+}
+
+#[test]
+fn the_reading_is_headed_by_its_items_address() {
+    // Catches a heading that does not say which item was read.
+    let mut r = statements("read-as-heading");
+    let fourth = r.outline().in_order()[3];
+    r.put_cursor(fourth);
+    assert!(
+        right_pane(&r).contains(&"READ AS · 4".to_string()),
+        "{:#?}",
+        right_pane(&r)
+    );
 }
 
 #[test]
@@ -71,7 +84,7 @@ fn prose_and_a_text_not_yet_read_again_show_nothing() {
     let order = r.outline().in_order();
     r.put_cursor(order[6]);
     assert!(
-        !right_pane(&r).iter().any(|l| l == "READ AS"),
+        !right_pane(&r).iter().any(|l| l.starts_with("READ AS")),
         "{:#?}",
         right_pane(&r)
     );

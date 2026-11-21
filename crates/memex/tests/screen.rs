@@ -479,6 +479,23 @@ fn column_words(rows: &[String], right: bool) -> String {
 const LONG: &str = "It is false that the rest is smaller than 0, whatever the rent and the food come to this year.";
 
 #[test]
+fn the_links_pane_names_its_item_and_says_when_it_has_no_links() {
+    // Catches an empty pane under the item's text, which the second
+    // review read as a pane still loading, and a heading that does not
+    // say which item the pane shows.
+    let mut room = Room::new("screen-no-links");
+    room.items(&["rent", "food"]);
+    let right = |room: &Room| column_words(&room.lines_at(160, 40), true);
+    assert!(
+        right(&room).contains("LINKS OF 2 food no links"),
+        "{}",
+        right(&room)
+    );
+    room.command("link to 1");
+    assert!(!right(&room).contains("no links"), "{}", right(&room));
+}
+
+#[test]
 fn the_right_panes_text_and_title_wrap_whole() {
     // Catches the selected item's text, or the pane's title, cut at the
     // screen's edge.
@@ -486,7 +503,7 @@ fn the_right_panes_text_and_title_wrap_whole() {
     room.items(&[LONG]);
     let rows = room.lines_at(60, 24);
     let right = column_words(&rows, true);
-    assert!(right.contains("LINKS OF THE SELECTED ITEM"), "{rows:#?}");
+    assert!(right.contains("LINKS OF 1"), "{rows:#?}");
     assert!(right.contains(LONG), "{rows:#?}");
 }
 

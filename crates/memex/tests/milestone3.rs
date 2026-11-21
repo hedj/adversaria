@@ -178,7 +178,7 @@ fn the_right_pane_shows_drakons_links(app: &App) {
     let s = screen(app, 140, 40);
     let right: Vec<String> = s.iter().map(|l| l.chars().skip(84).collect()).collect();
     for want in [
-        "LINKS OF THE SELECTED ITEM",
+        "LINKS OF 2",
         "supports →",
         "3. How charts were reviewed",
         "cited by ←",

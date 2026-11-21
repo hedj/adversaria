@@ -103,9 +103,9 @@ fn the_pane_with_focus_has_its_heading_bright() {
         let m = r.style_of(text).add_modifier;
         m.contains(Modifier::BOLD) && !m.contains(Modifier::DIM)
     };
-    assert!(lit(&r, "OUTLINE") && !lit(&r, "LINKS OF THE"));
+    assert!(lit(&r, "OUTLINE") && !lit(&r, "LINKS OF 1"));
     r.tap(&[Key::F(6)]);
-    assert!(!lit(&r, "OUTLINE") && lit(&r, "LINKS OF THE"));
+    assert!(!lit(&r, "OUTLINE") && lit(&r, "LINKS OF 1"));
 }
 
 #[test]
