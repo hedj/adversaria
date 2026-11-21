@@ -216,6 +216,8 @@ Press Enter. A second world opens beside the actual one, row for row:
     WORLD · SUPPOSE THE FLIGHT WAS IN 1989
 
 and the top bar says `worlds actual | suppose: the flight was in 1989`.
+The supposed world's first row is what it supposes, as the notebook
+reads it: `supposed: date(buran_flight, 1989)`.
 
 In the supposed world your 1988 fact is set aside, so the rule holds;
 the notebook says `set aside in this world: 1.1`. Item 1.1 also states

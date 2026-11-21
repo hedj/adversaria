@@ -3200,8 +3200,12 @@ impl<'a> Side<'a> {
 
     /// The entries whose facts this world states.
     fn fact_seqs(&self) -> Vec<u64> {
-        let facts = self.eval.map(|e| e.facts.as_slice()).unwrap_or_default();
-        facts.iter().map(|(s, _)| *s).collect()
+        self.facts().iter().map(|(s, _)| *s).collect()
+    }
+
+    /// The facts this world states, each by its entry.
+    fn facts(&self) -> &'a [(u64, Term)] {
+        self.eval.map(|e| e.facts.as_slice()).unwrap_or_default()
     }
 }
 
@@ -3296,14 +3300,43 @@ impl<'a> Sides<'a> {
         lines
     }
 
-    /// A world's title, then its rows, then a blank line.
+    /// A world's title, what the supposed world supposes (blank rows on
+    /// the actual side, to keep the worlds row for row), then its rows,
+    /// then a blank line.
     fn rows_of(&self, k: usize) -> Vec<Line<'static>> {
         let head = [Line::styled(self.side(k).title, dim()), Line::raw("")];
         let rows = self.rows.iter().map(|i| self.row(k, *i));
         head.into_iter()
+            .chain(self.supposed_lines(k))
             .chain(rows)
             .chain([Line::raw("")])
             .collect()
+    }
+
+    /// The rows of what the supposed world supposes, each fact as the
+    /// notebook reads it; on the actual side, as many blank rows.
+    fn supposed_lines(&self, k: usize) -> Vec<Line<'static>> {
+        let facts = self.supposed_facts();
+        match k {
+            0 => vec![Line::raw(""); facts.len()],
+            _ => facts.into_iter().map(supposed_line).collect(),
+        }
+    }
+
+    /// The facts the supposed world states that the actual one does not,
+    /// on no item: what was supposed.
+    fn supposed_facts(&self) -> Vec<String> {
+        let actual = self.side(0).fact_seqs();
+        let facts = self.side(1).facts().iter();
+        let supposed = facts.filter(|(s, _)| self.only_supposed(*s, &actual));
+        supposed.map(|(_, f)| crate::reason::show(f)).collect()
+    }
+
+    /// Whether an entry's fact is the supposed world's alone, and on no
+    /// item: not among the actual world's.
+    fn only_supposed(&self, seq: u64, actual: &[u64]) -> bool {
+        let on_item = self.app.notebook.outline.fact_item.contains_key(&seq);
+        !actual.contains(&seq) && !on_item
     }
 
     fn row(&self, k: usize, i: u64) -> Line<'static> {
@@ -3351,8 +3384,8 @@ impl<'a> Sides<'a> {
 
     /// A note on a row whose facts are set aside, if any are, with the
     /// row's place, so that the constraint which set them aside can name
-    /// it; and, where
-    /// the row states more than is set aside, the facts that are.
+    /// it; and, where the row states more than is set aside, the facts
+    /// that are.
     fn set_aside_note(&self, i: u64, whole: bool, aside: &[u64]) -> Option<Span<'static>> {
         if aside.is_empty() {
             return None;
@@ -3368,12 +3401,8 @@ impl<'a> Sides<'a> {
     /// The facts of entries of the actual world, as Prolog, apart by
     /// semicolons.
     fn facts_shown(&self, entries: &[u64]) -> String {
-        let facts = self
-            .side(0)
-            .eval
-            .map(|e| e.facts.as_slice())
-            .unwrap_or_default();
-        let shown = facts.iter().filter(|(s, _)| entries.contains(s));
+        let facts = self.side(0).facts().iter();
+        let shown = facts.filter(|(s, _)| entries.contains(s));
         let shown: Vec<String> = shown.map(|(_, f)| crate::reason::show(f)).collect();
         shown.join("; ")
     }
@@ -3514,12 +3543,22 @@ fn shared_rows(actual: &Outline, supposed: &Outline) -> Vec<u64> {
 /// How a supposed world's row is drawn: struck through where its
 /// fact is set aside; bold and underlined where its text differs.
 fn changed_style(differs: bool, gone: bool) -> Style {
-    let changed = Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
     match (gone, differs) {
         (true, _) => Style::default().add_modifier(Modifier::CROSSED_OUT),
-        (false, true) => changed,
+        (false, true) => changed(),
         (false, false) => Style::default(),
     }
+}
+
+/// A row of what the supposed world supposes: a fact, marked as differing.
+fn supposed_line(fact: String) -> Line<'static> {
+    let said = Span::styled("supposed: ", dim());
+    Line::from(vec![said, Span::styled(fact, changed())])
+}
+
+/// What differs between the worlds: bold and underlined.
+fn changed() -> Style {
+    Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
 }
 
 /// A constraint's counts, each marked where it differs from the actual

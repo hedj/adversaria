@@ -318,6 +318,7 @@ fn the_claim_supposed(t: &mut T) {
     t.says("set aside in this world: 1.1");
     t.shows("WORLD · SUPPOSE THE FLIGHT WAS IN 1989");
     t.shows("worlds actual | suppose: the flight was in 1989");
+    t.shows("supposed: date(buran_flight, 1989)");
     t.shows("0 violations, 0 disagreements");
     t.shows("(1.1 set aside");
     t.shows("here: date(buran_flight, 1988))"); // the note wraps there

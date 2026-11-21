@@ -241,6 +241,31 @@ fn rent_alone_supposed(name: &str, more: &[&str]) -> Room {
 }
 
 #[test]
+fn the_supposed_world_shows_what_it_supposes_first_with_the_actual_beside_it_blank() {
+    // Catches a supposed world with no row for the supposition itself:
+    // the second review saw the fact set aside, and not the fact supposed
+    // in its place. The actual side keeps a blank row, so the worlds stay
+    // row for row.
+    let r = rent_alone_supposed("worlds-supposed-row", &[]);
+    let (actual, supposed) = (column(&r, 0), column(&r, 1));
+    let at = supposed
+        .iter()
+        .position(|l| l.trim_end() == "supposed: cell(rent, 1300)");
+    let at = at.unwrap_or_else(|| panic!("{supposed:#?}"));
+    assert_eq!(actual[at].trim(), "", "{actual:#?}");
+    assert!(
+        supposed[at + 1].starts_with("rent  (1 set aside here)"),
+        "{supposed:#?}"
+    );
+    let (x, y) = r.find("supposed: cell(rent, 1300)");
+    let style = r.screen(160, 40)[(x + 10, y)].style().add_modifier;
+    assert!(
+        style.contains(Modifier::BOLD | Modifier::UNDERLINED),
+        "{style:?}"
+    );
+}
+
+#[test]
 fn a_row_all_of_whose_facts_are_set_aside_is_struck_through() {
     let r = rent_alone_supposed("worlds-struck-whole", &[]);
     let row = "rent  (1 set aside here)";
