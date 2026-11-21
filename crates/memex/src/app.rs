@@ -30,17 +30,15 @@ pub enum Quasi {
     LeapForward,
     LeapBack,
     Command,
-    Scope,
     Suppose,
 }
 
 impl Quasi {
     /// Every quasimode, in order.
-    pub const ALL: [Quasi; 5] = [
+    pub const ALL: [Quasi; 4] = [
         Quasi::LeapForward,
         Quasi::LeapBack,
         Quasi::Command,
-        Quasi::Scope,
         Quasi::Suppose,
     ];
 
@@ -49,7 +47,6 @@ impl Quasi {
             Quasi::LeapForward => "LEAP",
             Quasi::LeapBack => "LEAP BACK",
             Quasi::Command => "COMMAND",
-            Quasi::Scope => "SCOPE",
             Quasi::Suppose => "SUPPOSE",
         }
     }
@@ -149,14 +146,6 @@ impl PaneKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ScopeLevel {
-    Word,
-    #[default]
-    Statement,
-    Branch,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pane {
     pub kind: PaneKind,
@@ -176,7 +165,6 @@ pub struct View {
     /// Text cursor in the focused item, in characters.
     pub pos: usize,
     pub folded: BTreeSet<u64>,
-    pub scope: ScopeLevel,
     /// The claim item being interrogated, shown in the links pane.
     pub interrogate: Option<u64>,
 }
@@ -279,21 +267,11 @@ impl View {
         self.panes[1].kind = PaneKind::Links;
     }
 
-    /// Whether commands act on the word at the cursor.
-    pub(crate) fn in_word(&self) -> bool {
-        self.scope == ScopeLevel::Word
-    }
-
     pub(crate) fn to_json(&self, op: &str, extra: Value) -> Value {
-        let scope = match self.scope {
-            ScopeLevel::Word => "word",
-            ScopeLevel::Statement => "statement",
-            ScopeLevel::Branch => "branch",
-        };
         let mut v = json!({
             "op": op,
             "panes": self.panes.iter().map(|p| json!({"kind": p.kind.name(), "cursor": p.cursor})).collect::<Vec<_>>(),
-            "focus": self.focus, "pos": self.pos, "folded": self.folded.iter().collect::<Vec<_>>(), "scope": scope, "interrogate": self.interrogate,
+            "focus": self.focus, "pos": self.pos, "folded": self.folded.iter().collect::<Vec<_>>(), "interrogate": self.interrogate,
         });
         if let (Value::Object(m), Value::Object(x)) = (&mut v, extra) {
             m.extend(x);
@@ -320,11 +298,6 @@ impl View {
             .map(|f| f.iter().filter_map(|x| x.as_u64()).collect())
             .unwrap_or_default();
         self.interrogate = b["interrogate"].as_u64();
-        self.scope = match b["scope"].as_str() {
-            Some("word") => ScopeLevel::Word,
-            Some("branch") => ScopeLevel::Branch,
-            _ => ScopeLevel::Statement,
-        };
     }
 }
 
@@ -374,9 +347,6 @@ pub enum Kind {
         near: Option<Near>,
     },
     Command,
-    Scope {
-        found: ScopeLevel,
-    },
     Suppose(English),
 }
 
@@ -388,9 +358,8 @@ impl Kind {
         }
     }
 
-    /// The kind of a quasimode entered while the scope is as given, the
-    /// cursor on an item.
-    pub(crate) fn of(q: Quasi, scope: ScopeLevel, from: u64) -> Kind {
+    /// The kind of a quasimode entered with the cursor on an item.
+    pub(crate) fn of(q: Quasi, from: u64) -> Kind {
         match q {
             Quasi::LeapForward => Kind::Leap {
                 forward: true,
@@ -403,7 +372,6 @@ impl Kind {
                 near: None,
             },
             Quasi::Command => Kind::Command,
-            Quasi::Scope => Kind::Scope { found: scope },
             Quasi::Suppose => Kind::Suppose(English::default()),
         }
     }
@@ -455,7 +423,6 @@ impl Active {
             Kind::Leap { forward: true, .. } => Quasi::LeapForward,
             Kind::Leap { forward: false, .. } => Quasi::LeapBack,
             Kind::Command => Quasi::Command,
-            Kind::Scope { .. } => Quasi::Scope,
             Kind::Suppose(_) => Quasi::Suppose,
         }
     }

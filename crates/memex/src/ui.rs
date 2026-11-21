@@ -6,7 +6,7 @@ mod commands;
 mod matches;
 mod wrap;
 
-use crate::app::{Active, App, Hold, Mode, PaneKind, Quasi, ScopeLevel, View};
+use crate::app::{Active, App, Hold, Mode, PaneKind, Quasi, View};
 use crate::outline::{Layer, Link, Outline, Run, TOP};
 use crate::present::Presentation;
 use crate::reason::{
@@ -626,27 +626,19 @@ fn cites(outline: &Outline, id: u64) -> String {
 
 /// An item as drawn in the outline: its text, then its source and what
 /// it cites, dim.
-fn item_spans(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
-    let mut spans = item_text(app, id, focused);
+fn item_spans(app: &App, id: u64) -> Vec<Span<'static>> {
+    let mut spans = item_text(app, id);
     spans.extend(item_notes(&app.notebook.outline, id));
     spans
 }
 
-/// An item's text as drawn: derived text filled in; else, with focus at
-/// the cursor in word scope, the text underlined as the target; else the
-/// text as typed, if it is not yet written; else its runs.
-fn item_text(app: &App, id: u64, focused: bool) -> Vec<Span<'static>> {
+/// An item's text as drawn: derived text filled in; else the text as
+/// typed, if it is not yet written; else its runs.
+fn item_text(app: &App, id: u64) -> Vec<Span<'static>> {
     if let Some(derived) = derived_spans(app, id) {
         return derived;
     }
-    let target = focused && app.session.view.in_word();
     let typed: String = app.text_of(id).iter().collect();
-    if target {
-        return vec![Span::styled(
-            typed,
-            Style::default().add_modifier(Modifier::UNDERLINED),
-        )];
-    }
     if typed != app.notebook.outline.text(id) {
         return vec![Span::raw(typed)];
     }
@@ -779,12 +771,6 @@ impl<'a> OutlinePane<'a> {
         self.view().focus == self.pane
     }
 
-    /// Whether the pane has the focus, outside a dialogue: the cursor's
-    /// item shows its target.
-    fn focused(&self) -> bool {
-        self.has_focus() && matches!(self.app.session.mode, Mode::Normal | Mode::Quasi(_))
-    }
-
     /// The lines of the items within a screen's height of the cursor's:
     /// each item takes at least a line, so no other can be in the window,
     /// and a long outline is not drawn whole on every keystroke.
@@ -850,11 +836,11 @@ impl<'a> OutlinePane<'a> {
     fn item_line(&self, id: u64, depth: usize) -> Line<'static> {
         let at_cursor = id == self.cursor();
         let mut spans = self.item_head(id, depth);
-        spans.extend(item_spans(self.app, id, at_cursor && self.focused()));
+        spans.extend(item_spans(self.app, id));
         spans.extend(self.folded_count(id));
         let line = Line::from(spans);
         if at_cursor {
-            line.style(self.cursor_style())
+            line.style(cursor())
         } else {
             line
         }
@@ -914,17 +900,6 @@ impl<'a> OutlinePane<'a> {
         let count = || format!(" {}", self.outline().descendants(id));
         let folded = self.view().folded.contains(&id);
         folded.then(|| Span::styled(count(), dim()))
-    }
-
-    /// The cursor's line on a tinted ground, its text in its own colours
-    /// (read, prose, a source dim); bold too in branch scope, with focus.
-    fn cursor_style(&self) -> Style {
-        let branch = self.view().scope == ScopeLevel::Branch;
-        if branch && self.focused() {
-            cursor().add_modifier(Modifier::BOLD)
-        } else {
-            cursor()
-        }
     }
 
     /// Under a question, its answer in the current world, once evaluated.
@@ -2057,7 +2032,7 @@ fn list_lines(app: &App, a: &Active, inside: (u16, u16)) -> Vec<Line<'static>> {
     match a.q() {
         Quasi::Command => commands::command_lines(app, &a.input, inside),
         Quasi::Suppose => suppose_lines(a),
-        Quasi::LeapForward | Quasi::LeapBack | Quasi::Scope => leap_lines(app, a),
+        Quasi::LeapForward | Quasi::LeapBack => leap_lines(app, a),
     }
 }
 
@@ -2240,9 +2215,6 @@ fn quasi_fresh(q: Quasi) -> String {
         Quasi::Command => {
             "or type and release Command to run on the target · ? lists what may come next"
         }
-        Quasi::Scope => {
-            "or press Space to widen the target (word, statement, branch) and release Scope to keep it"
-        }
         Quasi::Suppose => {
             "or type a statement and release Suppose for its readings, or a world of that name if none · ? lists what may come next"
         }
@@ -2259,9 +2231,6 @@ fn quasi_doing(a: &Active) -> String {
         ),
         Quasi::Command => {
             format!("{end} to run on the target · Esc completes · ? lists what may come next")
-        }
-        Quasi::Scope => {
-            format!("Space widens the target: word, statement, branch · {end} keeps it")
         }
         Quasi::Suppose => match a.hint().and_then(|h| h.said.as_ref()) {
             None => format!(
@@ -2280,7 +2249,6 @@ fn release_text(a: &Active) -> String {
     }
     let name = match a.q() {
         Quasi::Command => "Command",
-        Quasi::Scope => "Scope",
         Quasi::Suppose => "Suppose",
         Quasi::LeapForward | Quasi::LeapBack => "Leap",
     };

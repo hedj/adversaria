@@ -34,7 +34,6 @@ pub const DEFAULT_TOML: &str = r#"# Adversaria: key configuration. Copy to ~/.co
 leap_forward = ["RightAlt", "IsoLevel3Shift"]
 leap_back = ["LeftAlt"]
 command = ["LeftControl"]
-scope = ["RightControl"]
 suppose = ["LeftSuper", "RightSuper"]
 
 # A key runs a command line, as typed in the Command quasimode; "palette"
@@ -308,12 +307,20 @@ fn plumb_rule(t: &toml::Table) -> Result<Rule, String> {
     Ok(rule)
 }
 
+/// Why a name in [quasimodes] is refused: Scope's, that it was removed
+/// and what does its work now.
+fn no_quasimode(name: &str) -> String {
+    match name {
+        "scope" => "[quasimodes] has no scope: it was removed; `delete word` deletes the word at the cursor, and Right Ctrl is free".into(),
+        _ => format!("[quasimodes] has no {name}: the quasimodes are leap_forward, leap_back, command, suppose"),
+    }
+}
+
 fn quasi_named(name: &str) -> Option<Quasi> {
     match name {
         "leap_forward" => Some(Quasi::LeapForward),
         "leap_back" => Some(Quasi::LeapBack),
         "command" => Some(Quasi::Command),
-        "scope" => Some(Quasi::Scope),
         "suppose" => Some(Quasi::Suppose),
         _ => None,
     }
@@ -383,9 +390,7 @@ impl Config {
     /// [quasimodes]: each named quasimode's keys replace its defaults.
     fn read_quasimodes(&mut self, t: &toml::Table) -> Result<(), String> {
         for (name, keys) in t {
-            let q = quasi_named(name).ok_or_else(|| {
-                format!("[quasimodes] has no {name}: the quasimodes are leap_forward, leap_back, command, scope, suppose")
-            })?;
+            let q = quasi_named(name).ok_or_else(|| no_quasimode(name))?;
             let keys = key_list(keys).map_err(|e| format!("[quasimodes] {name}: {e}"))?;
             self.quasimodes.push((q, keys));
         }
@@ -469,7 +474,6 @@ impl Config {
             Quasi::LeapForward => "leap_forward",
             Quasi::LeapBack => "leap_back",
             Quasi::Command => "command",
-            Quasi::Scope => "scope",
             Quasi::Suppose => "suppose",
         };
         d["quasimodes"][name]
@@ -533,11 +537,11 @@ mod tests {
         assert_eq!(defaults.quasi_key(Quasi::Command), "Left Ctrl");
         assert_eq!(defaults.quasi_key(Quasi::LeapForward), "Right Alt");
         assert_eq!(defaults.quasi_key(Quasi::Suppose), "Super");
-        let toml = "[quasimodes]\nsuppose = [\"RightAlt\", \"IsoLevel3Shift\"]\nleap_forward = [\"RightControl\"]\nscope = [\"Menu\"]\n";
+        let toml = "[quasimodes]\nsuppose = [\"RightAlt\", \"IsoLevel3Shift\"]\nleap_forward = [\"RightControl\"]\nleap_back = [\"Menu\"]\n";
         let moved = Config::parse(toml).unwrap().keys();
         assert_eq!(moved.quasi_key(Quasi::Suppose), "Right Alt");
         assert_eq!(moved.quasi_key(Quasi::LeapForward), "Right Ctrl");
-        assert_eq!(moved.quasi_key(Quasi::Scope), "Menu");
+        assert_eq!(moved.quasi_key(Quasi::LeapBack), "Menu");
         let altgr = Config::parse(
             "[quasimodes]\nleap_forward = [\"IsoLevel3Shift\"]\nsuppose = [\"RightSuper\"]\n",
         );
@@ -617,9 +621,9 @@ mod tests {
     fn a_binding_replaces_or_unbinds_its_default() {
         // Catches "" not unbinding, an unbound key not free for a
         // quasimode, or a binding added beside its default.
-        let c = Config::parse("[keys]\nF1 = \"\"\n[quasimodes]\nscope = \"F1\"\n").unwrap();
+        let c = Config::parse("[keys]\nF1 = \"\"\n[quasimodes]\nleap_back = \"F1\"\n").unwrap();
         assert_eq!(bound(&c, "F1"), None);
-        assert_eq!(quasi(&c, "F1"), Some(Quasi::Scope));
+        assert_eq!(quasi(&c, "F1"), Some(Quasi::LeapBack));
         let c = Config::parse("[keys]\nF10 = \"export out.md\"\n").unwrap();
         assert_eq!(bound(&c, "F10"), Some("export out.md"), "replaced");
     }
@@ -692,8 +696,12 @@ mod tests {
             ),
             ("[keys]\nF2 = \"frobnicate\"\n", "no command “frobnicate”"),
             ("[keys]\nF2 = 3\n", "a command line"),
-            ("[quasimodes]\nscope = \"F1\"\n", "two jobs"),
-            ("[quasimodes]\nscope = \"LeftAlt\"\n", "two jobs"),
+            ("[quasimodes]\nleap_back = \"F1\"\n", "two jobs"),
+            ("[quasimodes]\nsuppose = \"LeftAlt\"\n", "two jobs"),
+            (
+                "[quasimodes]\nscope = \"Menu\"\n",
+                "`delete word` deletes the word",
+            ),
             ("[colours]\nx = 1\n", "no section [colours]"),
             ("[keys\n", "TOML parse error"),
             ("[quasimodes]\nleap_back = []\n", "at least one key"),

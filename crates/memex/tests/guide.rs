@@ -84,7 +84,7 @@ fn every_key_name_is_listed() {
         );
     }
     // Every other quasimode and binding moved out of the way first.
-    let clear = "leap_forward = [\"F30\"]\nleap_back = [\"F31\"]\nscope = [\"F32\"]\nsuppose = [\"F33\"]\n[keys]\nF1 = \"\"\nF2 = \"\"\nF3 = \"\"\nF4 = \"\"\nF6 = \"\"\nF10 = \"\"\n";
+    let clear = "leap_forward = [\"F30\"]\nleap_back = [\"F31\"]\nsuppose = [\"F33\"]\n[keys]\nF1 = \"\"\nF2 = \"\"\nF3 = \"\"\nF4 = \"\"\nF6 = \"\"\nF10 = \"\"\n";
     for n in names {
         let r = Config::parse(&format!("[quasimodes]\ncommand = [\"{n}\"]\n{clear}"));
         assert!(

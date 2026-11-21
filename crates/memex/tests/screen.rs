@@ -674,7 +674,6 @@ fn a_quasimode_just_entered_says_a_release_runs_only_after_typing() {
             Quasi::LeapForward,
             "or type and release Leap to go to the first match",
         ),
-        (Quasi::Scope, "and release Scope to keep it"),
         (
             Quasi::Suppose,
             "or type a statement and release Suppose for its readings",

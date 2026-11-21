@@ -1,7 +1,7 @@
 //! Milestone 3's acceptance checks (docs/plan.md, Milestone 3): the outline
 //! and the quasimodes, driven by key events and drawn into a test terminal.
 
-use memex::app::{App, Event, Key, Mode, Quasi, ScopeLevel};
+use memex::app::{App, Event, Key, Mode, Quasi};
 use memex::journal::Journal;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -425,14 +425,9 @@ fn every_kind_of_action(app: &mut App) {
     hold(app, Quasi::LeapForward, "open");
     release(app, Quasi::LeapForward);
     command(app, "fold");
-    hold(app, Quasi::Scope, " ");
-    release(app, Quasi::Scope);
     hold(app, Quasi::LeapForward, "energia");
     release(app, Quasi::LeapForward);
-    app.handle(Event::down(Key::Quasi(Quasi::Scope)));
-    release(app, Quasi::Scope);
-    tap(app, Key::Quasi(Quasi::Scope)); // latched, then a second tap ends it at word scope
-    command(app, "delete");
+    command(app, "delete word");
     command(app, &format!("retract {}", last_of_kind(app, "link")));
     tap(app, Key::Enter);
     hold(app, Quasi::Suppose, "the flight was in 1989");
@@ -661,10 +656,7 @@ fn command_steps() -> Vec<Step> {
         Box::new(|a| command(a, "link 1 1.1 as supports")),
         Box::new(|a| command(a, "switch")),
         Box::new(|a| command(a, "switch")),
-        Box::new(|a| {
-            hold(a, Quasi::Scope, " ");
-            release(a, Quasi::Scope)
-        }),
+        Box::new(|a| command(a, "delete word")),
     ]
 }
 
@@ -848,19 +840,6 @@ fn focus_lost_with_a_quasimode_key_alone_held_leaves_it_doing_nothing() {
 }
 
 #[test]
-fn focus_lost_while_scope_is_held_puts_back_the_scope() {
-    // Catches word scope left on after Scope was abandoned, so a command
-    // then acts on a word.
-    let dir = temp("focus-scope");
-    let mut app = essay(&dir);
-    app.handle(Event::down(Key::Quasi(Quasi::Scope)));
-    assert_eq!(app.session.view.scope, ScopeLevel::Word);
-    app.focus_lost();
-    assert_eq!(app.session.view.scope, ScopeLevel::Statement);
-    std::fs::remove_dir_all(&dir).unwrap();
-}
-
-#[test]
 fn focus_lost_after_typing_in_a_quasimode_keeps_it_open_until_enter() {
     // Catches what was typed lost, or the Leap made though its key was
     // never released here.
@@ -876,19 +855,5 @@ fn focus_lost_after_typing_in_a_quasimode_keeps_it_open_until_enter() {
     );
     tap(&mut app, Key::Enter);
     assert_eq!(app.notebook.outline.text(app.cursor()), "DRAKON");
-    std::fs::remove_dir_all(&dir).unwrap();
-}
-
-#[test]
-fn backspace_leaving_a_latched_scope_puts_back_the_scope() {
-    // Catches word scope left on after Scope was left without acting, so
-    // the next command acts on a word.
-    let dir = temp("scope-backspace");
-    let mut app = essay(&dir);
-    tap(&mut app, Key::Quasi(Quasi::Scope));
-    assert_eq!(app.session.view.scope, ScopeLevel::Word);
-    tap(&mut app, Key::Backspace);
-    assert_eq!(app.session.mode, Mode::Normal);
-    assert_eq!(app.session.view.scope, ScopeLevel::Statement);
     std::fs::remove_dir_all(&dir).unwrap();
 }

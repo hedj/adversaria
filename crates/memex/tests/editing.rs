@@ -194,3 +194,67 @@ fn a_name_that_reads_as_an_item_or_an_entry_number_is_refused() {
     }
     assert!(r.app.notebook.outline.names.is_empty());
 }
+
+#[test]
+fn delete_word_deletes_the_word_at_the_text_cursor() {
+    // Catches the word delete lost with the Scope quasimode, which was
+    // its only way: `delete word` does it now.
+    let mut r = Room::new("delete-word");
+    r.items(&["one two three"]);
+    r.tap(&[
+        Key::Left,
+        Key::Left,
+        Key::Left,
+        Key::Left,
+        Key::Left,
+        Key::Left,
+        Key::Left,
+    ]);
+    r.command("delete word");
+    assert_eq!(r.here(), "one three");
+    assert_eq!(r.outline().in_order().len(), 1, "the item stays");
+}
+
+#[test]
+fn delete_without_a_word_deletes_the_item_and_its_branch() {
+    let mut r = Room::new("delete-item");
+    r.items(&["Alpha", "Beta"]);
+    r.tap(&[Key::Tab]);
+    r.tap(&[Key::Up]);
+    r.command("delete");
+    assert!(r.outline().in_order().is_empty(), "{:?}", r.lines());
+}
+
+#[test]
+fn delete_with_another_word_says_what_it_takes() {
+    let mut r = Room::new("delete-other");
+    r.items(&["Alpha"]);
+    r.tap(&[memex::app::Key::Quasi(memex::app::Quasi::Command)]);
+    r.typ("delete it");
+    r.tap(&[Key::Enter]);
+    assert_eq!(r.app.session.message, "delete, or delete word");
+    assert_eq!(r.outline().in_order().len(), 1);
+}
+
+#[test]
+fn an_old_journals_word_scope_is_ignored() {
+    // Catches a journal written before Scope was removed (its view entries
+    // record "scope", and an op "scope") refused, or read so that a plain
+    // `delete` still deletes only a word.
+    let dir = std::env::temp_dir().join(format!("adversaria-old-scope-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut j = memex::journal::Journal::open(&dir).unwrap();
+    j.append("edit", serde_json::json!({"op": "init"})).unwrap();
+    let made = j.append("edit", serde_json::json!({"op": "create", "under": 0, "after": null, "add": "one two", "spans": [[0, 0, 7]]})).unwrap();
+    let panes = serde_json::json!([{"kind": "outline", "cursor": made.seq}, {"kind": "links", "cursor": 0}]);
+    j.append("view", serde_json::json!({"op": "scope", "panes": panes, "focus": 0, "pos": 2, "folded": [], "scope": "word"})).unwrap();
+    drop(j);
+    let mut app = memex::app::App::open(&dir).unwrap();
+    assert_eq!(app.cursor(), made.seq);
+    app.run_command("delete");
+    assert!(
+        app.notebook.outline.in_order().is_empty(),
+        "the item, not a word"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}

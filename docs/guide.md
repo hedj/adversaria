@@ -210,7 +210,6 @@ when it ends.
 | Leap forward | Right Alt (AltGr) | type a pattern: as each letter is typed, the cursor goes to the next item holding it, counted from where the Leap began, and stays at the last match if a letter matches nothing | the cursor stays where it is; back returns to where the Leap began. Erasing the pattern puts the cursor back |
 | Leap back | Left Alt | type a pattern: as Leap forward, to the previous item holding it | as Leap forward |
 | Command | Left Ctrl | type a command line | the command runs on the item under the cursor |
-| Scope | Right Ctrl | Space widens the target: word, statement, branch | the target stays chosen for the next command |
 | Suppose | Super (either) | type a statement; the line below says what may come next in controlled English, whether it is a sentence of it, and if it breaks, where and how to mend it | the memex offers its readings of it (§ 3.2) |
 
 Within a quasimode:
@@ -247,17 +246,11 @@ Within a quasimode:
   as typed text is.
 - **Focus lost while a key is held** (as by Alt+Tab): the release goes to
   another window, so the memex does not wait for it. A quasimode held with
-  nothing typed is left without acting; Scope puts back the target it
-  found. One held after you typed stays open, latched, with what you
+  nothing typed is left without acting. One held after you typed stays open, latched, with what you
   typed, and says so: Enter ends it, or leave it as any latched one.
 
 Leap matches anywhere in an item's text, ignoring case, and wraps round
 at either end of the outline. It unfolds a folded branch to reach a match.
-
-Scope matters only to `delete` in this prototype: with the target at word,
-`delete` removes the word at the cursor; at statement or branch, it deletes
-the item and its branch. The target returns to statement after each
-command that runs; a refused command leaves it as it was.
 
 #### Function keys and confirmations
 
@@ -424,7 +417,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | Command | Form | Does |
 | --- | --- | --- |
 | `new` | `new` | makes a new item after the target |
-| `delete` | `delete` | deletes the target: a word, or an item and its branch (see Scope) |
+| `delete` | `delete`, `delete word` | deletes the target and its branch; `delete word` deletes only the word at the text cursor |
 | `indent` | `indent` | makes the target the last child of the item before it at its own level |
 | `outdent` | `outdent` | makes the target a sibling of its parent |
 | `make` | `make` | makes an item for each of the target's `[[links]]` that names no item, at the foot of the top level, and links it; one `undo` takes it all back |
@@ -1087,7 +1080,6 @@ defaults are below; `[[plumb]]`, which has no defaults here, is in § 2.3.
 leap_forward = ["RightAlt", "IsoLevel3Shift"]
 leap_back = ["LeftAlt"]
 command = ["LeftControl"]
-scope = ["RightControl"]
 suppose = ["LeftSuper", "RightSuper"]
 
 [keys]
@@ -1139,7 +1131,7 @@ from a binding to a quasimode, unbind it as well:
 
 ```toml
 [quasimodes]
-scope = ["F1"]
+leap_back = ["F1"]
 
 [keys]
 F1 = ""
@@ -1148,8 +1140,8 @@ F12 = "palette"
 
 Examples:
 
-- A laptop whose desktop takes Super: `suppose = ["RightControl"]` and
-  `scope = ["Menu"]`.
+- A laptop whose desktop takes Super: `suppose = ["RightControl"]`
+  (Right Ctrl has no job by default).
 - Keys only, no modifiers: `leap_forward = ["F11"]`, `leap_back = ["F12"]`,
   `command = ["Insert"]`. Tap them to latch if holding a function key is
   awkward.
@@ -1218,7 +1210,6 @@ This is a prototype, built for a one-month trial. Known limits:
   before the seal before it.)
 - Integers larger than 2^53 − 1 are refused in the journal.
 - Only the Wikidata subset tool exists; the full subset is not built.
-- Scope affects only `delete`.
 - A mouse's back and forward buttons are not driven by the window test;
   `back` and `forward`, and F7 and F8, are.
 - The links pane looks for an item's unlinked mentions in every item's

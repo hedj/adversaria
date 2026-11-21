@@ -3,17 +3,9 @@
 
 mod support;
 
-use memex::app::{Event, Key, Mode, Quasi, ScopeLevel};
+use memex::app::{Key, Mode, Quasi};
 use ratatui::style::Modifier;
 use support::Room;
-
-#[test]
-fn the_scope_key_starts_at_a_word() {
-    let mut r = Room::new("scope");
-    r.items(&["one two"]);
-    r.app.handle(Event::down(Key::Quasi(Quasi::Scope)));
-    assert_eq!(r.view().scope, ScopeLevel::Word);
-}
 
 #[test]
 fn the_palette_key_opens_the_command_quasimode_latched_and_listing() {

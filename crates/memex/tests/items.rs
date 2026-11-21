@@ -1,5 +1,5 @@
 //! How an item is drawn in the outline: its text as typed, the text it
-//! shows from other items, and the word scope.
+//! shows from other items.
 
 use memex::app::Quasi;
 use ratatui::style::Modifier;
@@ -32,17 +32,6 @@ fn a_transcluded_text_is_marked_with_the_item_it_is_from() {
         Modifier::ITALIC | Modifier::UNDERLINED
     ));
     assert!(drawn(&room, "↖1", Modifier::DIM));
-}
-
-#[test]
-fn holding_scope_underlines_the_items_text_as_its_target() {
-    let mut room = Room::new("item-scope");
-    room.items(&["Alpha", "Beta"]);
-    room.command("pane suggestions"); // the links pane would show Beta too
-    assert!(!drawn(&room, "Beta", Modifier::UNDERLINED));
-    room.hold(Quasi::Scope, "");
-    assert!(drawn(&room, "Beta", Modifier::UNDERLINED), "at the cursor");
-    assert!(!drawn(&room, "Alpha", Modifier::UNDERLINED), "elsewhere");
 }
 
 #[test]
@@ -103,16 +92,6 @@ fn a_folded_item_shows_how_many_items_it_hides() {
     r.leap(Quasi::LeapBack, "Alpha");
     r.command("fold");
     assert!(r.shows("▶ 1. Alpha 2"), "{:?}", r.lines());
-}
-
-#[test]
-fn the_cursors_line_is_bold_too_in_branch_scope() {
-    // Catches the branch scope drawn as the statement scope is.
-    let mut r = Room::new("branch-bold");
-    r.items(&["Alpha"]);
-    assert!(!drawn(&r, "1. Alpha", Modifier::BOLD));
-    r.app.session.view.scope = memex::app::ScopeLevel::Branch;
-    assert!(drawn(&r, "1. Alpha", Modifier::BOLD));
 }
 
 #[test]
@@ -287,10 +266,10 @@ fn an_empty_notebook_says_how_to_begin() {
 #[test]
 fn the_first_steps_name_the_keys_configured() {
     // Catches the hints naming the default keys after the configuration
-    // moved them: here Suppose to Right Alt, Leap to Right Ctrl and Scope
-    // to Menu, and Command to F11.
+    // moved them: here Suppose to Right Alt, Leap to Right Ctrl, and
+    // Command to F11.
     let mut r = Room::new("first-steps-keys");
-    let toml = "[quasimodes]\nsuppose = [\"RightAlt\", \"IsoLevel3Shift\"]\nleap_forward = [\"RightControl\"]\nscope = [\"Menu\"]\ncommand = [\"F11\"]\n";
+    let toml = "[quasimodes]\nsuppose = [\"RightAlt\", \"IsoLevel3Shift\"]\nleap_forward = [\"RightControl\"]\ncommand = [\"F11\"]\n";
     r.app.session.keys = memex::config::Config::parse(toml).unwrap().keys();
     assert!(
         r.shows("tap F11 (Command), type a command"),

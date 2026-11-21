@@ -28,10 +28,11 @@ impl App {
     }
 
     /// Delete the word at the cursor, or the target's branch.
-    pub(crate) fn cmd_delete(&mut self, _: &[&str], target: u64) -> Result<String, String> {
-        if self.session.view.in_word() {
-            self.delete_word(target)?;
-            return Ok(String::new());
+    pub(crate) fn cmd_delete(&mut self, words: &[&str], target: u64) -> Result<String, String> {
+        match words {
+            [] => {}
+            ["word"] => return self.delete_word(target).map(|_| String::new()),
+            _ => return Err("delete, or delete word".into()),
         }
         self.write_here("edit", json!({"op": "delete", "item": target}))?;
         Ok(String::new())

@@ -2,7 +2,7 @@
 //! items by their text (docs/design.md § Quasimodes).
 
 use crate::actions::dispatch::{complete_command, in_quotes};
-use crate::app::{Active, App, Event, Hold, Key, Kind, Mode, PaneKind, Press, Quasi, ScopeLevel};
+use crate::app::{Active, App, Event, Hold, Key, Kind, Mode, PaneKind, Press, Quasi};
 use crate::outline::TOP;
 use crate::reason;
 use crate::session::Answer;
@@ -60,17 +60,7 @@ impl App {
     /// Hold a quasimode's key: the Scope quasimode starts at a word.
     fn enter_quasi(&mut self, q: Quasi) -> Mode {
         self.flush();
-        let a = Active::held(self.kind_of(q));
-        if q == Quasi::Scope {
-            self.session.view.scope = ScopeLevel::Word;
-        }
-        Mode::Quasi(a)
-    }
-
-    /// The kind of a quasimode entered now: with the scope as it is, and
-    /// the cursor's item, where a Leap begins.
-    fn kind_of(&self, q: Quasi) -> Kind {
-        Kind::of(q, self.session.view.scope, self.cursor())
+        Mode::Quasi(Active::held(Kind::of(q, self.cursor())))
     }
 
     /// The window lost the keyboard, so the release of a quasimode's key
@@ -98,12 +88,9 @@ impl App {
         }
     }
 
-    /// Leave a quasimode without acting; Scope puts back the scope it found.
-    /// (A Leap is left only with nothing typed, so its cursor is back.)
-    fn leave(&mut self, a: Active) -> Mode {
-        if let Kind::Scope { found } = a.kind {
-            self.session.view.scope = found;
-        }
+    /// Leave a quasimode without acting. (A Leap is left only with nothing
+    /// typed, so its cursor is back.)
+    fn leave(&mut self, _: Active) -> Mode {
         Mode::Normal
     }
 
@@ -228,13 +215,7 @@ impl App {
         }
         match ev.key {
             Key::Char('?') if asks_help(&a) => a.listing = !a.listing,
-            Key::Char(' ') if a.q() == Quasi::Scope => {
-                self.session.view.scope = match self.session.view.scope {
-                    ScopeLevel::Word => ScopeLevel::Statement,
-                    _ => ScopeLevel::Branch,
-                };
-            }
-            Key::Char(c) if a.q() != Quasi::Scope => a.input.push(c),
+            Key::Char(c) => a.input.push(c),
             Key::Backspace => {
                 // Erase a character; with none left, Backspace leaves a
                 // latched quasimode without acting.
@@ -356,7 +337,6 @@ impl App {
                     }
                 }
             }
-            Quasi::Scope => self.write_view("scope", json!({})),
             Quasi::Suppose => {
                 let text = a.input.trim().to_string();
                 if text.is_empty() {

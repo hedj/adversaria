@@ -437,17 +437,14 @@ mod tests {
     #[test]
     fn left_control_pressed_starts_command() {
         // Catches the modifiers' places confused: Left Ctrl is Command,
-        // Right Ctrl is Scope.
+        // Right Ctrl has no job (Scope, which it held, was removed).
         let left = named_key(KeyCode::ControlLeft, NamedKey::Control);
         let right = named_key(KeyCode::ControlRight, NamedKey::Control);
         assert_eq!(
             pressed(&left, &Config::default()),
             Some(Key::Quasi(Quasi::Command))
         );
-        assert_eq!(
-            pressed(&right, &Config::default()),
-            Some(Key::Quasi(Quasi::Scope))
-        );
+        assert_eq!(pressed(&right, &Config::default()), None);
     }
 
     #[test]

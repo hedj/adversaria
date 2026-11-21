@@ -1,7 +1,7 @@
 //! The command line: the table of commands, finding a command from what
 //! was typed, and running it on the target (docs/guide.md, § 2.4).
 
-use crate::app::{App, Mode, ScopeLevel};
+use crate::app::{App, Mode};
 use crate::outline::TOP;
 
 /// What a command's slot takes: what may be typed in it, and what may be
@@ -109,8 +109,8 @@ pub const COMMANDS: &[Command] = &[
         run: App::cmd_delete,
         target: true,
         slots: &[],
-        help: "delete the target: a word, or an item and its branch",
-        brief: "delete a word, or a branch",
+        help: "delete the target and its branch; delete word deletes the word at the text cursor",
+        brief: "delete an item and its branch, or a word",
     },
     Command {
         name: "fold",
@@ -511,20 +511,9 @@ impl App {
         Ok(target)
     }
 
-    /// The mode a command set, if any, taken out; scope returns to the
-    /// statement unless a question is open.
+    /// The mode a command set, if any, taken out.
     fn next_mode(&mut self) -> Mode {
-        if self.session.mode == Mode::Normal {
-            self.statement_scope();
-        }
         std::mem::replace(&mut self.session.mode, Mode::Normal)
-    }
-
-    fn statement_scope(&mut self) {
-        if self.session.view.scope != ScopeLevel::Statement {
-            self.session.view.scope = ScopeLevel::Statement;
-            self.session.view_dirty = true;
-        }
     }
 
     // Addresses.

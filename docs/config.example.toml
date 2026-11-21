@@ -16,7 +16,6 @@
 leap_forward = ["RightAlt", "IsoLevel3Shift"]
 leap_back = ["LeftAlt"]
 command = ["LeftControl"]
-scope = ["RightControl"]
 suppose = ["LeftSuper", "RightSuper"]
 
 # A key runs a command line, as typed in the Command quasimode; "palette"

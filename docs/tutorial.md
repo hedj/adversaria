@@ -57,11 +57,9 @@ and put these lines in `~/.config/adversaria/config.toml`:
 ```toml
 [quasimodes]
 suppose = ["RightControl"]
-scope = ["Menu"]
 ```
 
-Right Ctrl is Scope's key by default, so the second line gives Scope the
-Menu key instead; a key may have only one job. Start the notebook again,
+Right Ctrl has no other job, so it is free for this. Start the notebook again,
 and use **Right Ctrl** wherever this tutorial says Super. (If you set
 `XDG_CONFIG_HOME`, the file goes there instead; docs/guide.md,
 § 4.3 Configuration, says where else it may be, and lists every key
