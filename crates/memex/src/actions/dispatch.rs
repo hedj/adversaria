@@ -237,8 +237,8 @@ pub const COMMANDS: &[Command] = &[
         run: App::cmd_help,
         target: false,
         slots: &[],
-        help: "list every command",
-        brief: "list every command",
+        help: "open the list of every command, as F1 does",
+        brief: "list every command (F1)",
     },
     Command {
         name: "import",
@@ -443,12 +443,9 @@ pub const COMMANDS: &[Command] = &[
 ];
 
 impl App {
+    /// Open the list of commands, as F1 does: one way to ask for help.
     pub(crate) fn cmd_help(&mut self, _: &[&str], _: u64) -> Result<String, String> {
-        self.session.message = COMMANDS
-            .iter()
-            .map(|c| c.name)
-            .collect::<Vec<_>>()
-            .join(" · ");
+        self.session.mode = Mode::Quasi(crate::app::Active::palette());
         Ok(String::new())
     }
 

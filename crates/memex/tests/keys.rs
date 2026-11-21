@@ -29,7 +29,11 @@ fn a_bound_command_that_asks_keeps_its_question() {
 fn an_editing_key_clears_the_message() {
     let mut r = Room::new("clears");
     r.items(&["one"]);
-    r.command("help");
+    r.command("outdent");
+    assert_eq!(
+        r.app.session.message,
+        "a top-level item cannot be outdented"
+    );
     r.typ("x");
     assert_eq!(r.app.session.message, "");
 }
@@ -285,4 +289,19 @@ fn a_latched_command_still_takes_one_letter() {
     r.typ("o");
     r.tap(&[Key::Enter]);
     assert_eq!(r.outline().number(r.app.cursor()), "2", "outdented");
+}
+
+#[test]
+fn help_opens_the_list_f1_opens() {
+    // Catches two kinds of help: `help` printed names on the message line,
+    // while F1 opened the grouped list with what each does.
+    let mut r = Room::new("help-list");
+    r.items(&["one"]);
+    r.command("help");
+    let listing = matches!(&r.app.session.mode, Mode::Quasi(a) if a.q() == Quasi::Command && a.latched() && a.listing);
+    assert!(listing, "{:?}", r.app.session.mode);
+    let mut f1 = Room::new("help-f1");
+    f1.items(&["one"]);
+    f1.tap(&[Key::F(1)]);
+    assert_eq!(r.app.session.mode, f1.app.session.mode);
 }

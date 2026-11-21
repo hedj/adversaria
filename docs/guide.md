@@ -447,7 +447,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | `unfold` | `unfold` | shows the target's branch |
 | `pane` | `pane outline`, `pane links`, `pane suggestions`, `pane matches` | sets what the other pane shows. `matches` lists every item that holds the last Leap's pattern, in the outline's order, numbered, with where the cursor is among them (`MATCHES OF “ener” · 14 · at 3 of 14`); a click on one jumps to it, so `back` returns, and the list stays as you edit |
 | `switch` | `switch` | moves focus to the other pane |
-| `help` | `help` | lists every command on the message line |
+| `help` | `help` | opens the list of every command, as F1 does |
 | `quit` | `quit` | writes what is pending and leaves |
 
 **Tags.** A `#` at the start of a text or after a space, then a word,
