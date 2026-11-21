@@ -60,6 +60,32 @@ fn bold() -> Style {
     Style::default().add_modifier(Modifier::BOLD)
 }
 
+/// Places grown by each of others that touches one of them, until none
+/// is left that does.
+fn grown(mut found: Vec<Rect>, others: &[Rect]) -> Vec<Rect> {
+    while let Some(next) = next_touching(&found, others) {
+        found.push(next);
+    }
+    found
+}
+
+/// The first of others not yet found that touches one found.
+fn next_touching(found: &[Rect], others: &[Rect]) -> Option<Rect> {
+    others.iter().find(|r| joins(found, r)).copied()
+}
+
+/// Whether a place, not yet found, touches one that is.
+fn joins(found: &[Rect], r: &Rect) -> bool {
+    !found.contains(r) && found.iter().any(|f| touching(f, r))
+}
+
+/// Whether two places touch, one on the row after the other, their
+/// columns overlapping.
+fn touching(a: &Rect, b: &Rect) -> bool {
+    let rows = a.bottom() == b.top() || b.bottom() == a.top();
+    rows && a.left() < b.right() && b.left() < a.right()
+}
+
 /// The presentations of the frame just drawn, each with the place it
 /// was drawn in: where a click lands, and what it stands for.
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -73,9 +99,29 @@ impl Presentations {
             .find(|(r, _)| r.contains(Position { x, y }))
             .map(|(_, c)| c)
     }
+    /// The places of the presentation at a cell that make one occurrence
+    /// of it: the place there, and those of the same presentation that
+    /// touch it, row on row (a wrapped line, a bar), not where the same
+    /// object is drawn again elsewhere.
+    pub fn occurrence_at(&self, x: u16, y: u16) -> Vec<Rect> {
+        let Some(p) = self.at(x, y) else {
+            return vec![];
+        };
+        let same = self.places_of(p);
+        let here = same
+            .iter()
+            .copied()
+            .filter(|r| r.contains(Position { x, y }));
+        grown(here.collect(), &same)
+    }
+
     /// Each place a presentation is drawn in.
-    pub fn places_of<'a>(&'a self, p: &'a Presentation) -> impl Iterator<Item = Rect> + 'a {
-        self.0.iter().filter(move |(_, q)| q == p).map(|(r, _)| *r)
+    fn places_of(&self, p: &Presentation) -> Vec<Rect> {
+        self.0
+            .iter()
+            .filter(|(_, q)| q == p)
+            .map(|(r, _)| *r)
+            .collect()
     }
 
     /// The clicks outside an area.
@@ -132,10 +178,14 @@ fn draw_documentation(f: &mut Frame, said: String, row: Rect) {
 }
 
 /// The presentation under the pointer, if a click on it does something
-/// now: its text underlined, on every row it is drawn on.
+/// now: its text underlined where the pointer is, on every row of that
+/// occurrence, but not where the same object is drawn elsewhere.
 fn show_pointed(f: &mut Frame, app: &App, hits: &Presentations) {
-    if let Some(p) = pointed_sensitive(app, hits) {
-        for area in hits.places_of(p) {
+    let Some((x, y)) = app.session.pointer else {
+        return;
+    };
+    if pointed_sensitive(app, hits).is_some() {
+        for area in hits.occurrence_at(x, y) {
             underline_text(f.buffer_mut(), area);
         }
     }

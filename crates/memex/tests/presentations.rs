@@ -321,3 +321,58 @@ fn in_a_menu_or_a_command_the_foot_says_what_a_click_does_there() {
     r.app.session.pointer = Some(r.find("3. Nothing has"));
     assert_eq!(foot(&r)[1], "click: type “3” into the line");
 }
+
+#[test]
+fn the_pointer_underlines_the_one_place_it_is_on() {
+    // Catches every place an object is drawn underlined at once (both
+    // marks of a constraint, and the pane's heading), or a wrapped line's
+    // later rows left out.
+    let mut r = dated("pointed-once");
+    let first = r.outline().in_order()[0];
+    r.put_cursor(first);
+    r.app.session.pointer = Some(r.find("? sources disagree"));
+    let marks: Vec<(u16, u16)> = {
+        let lines = r.lines_at(160, 40);
+        let rows = lines
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| l.contains("? sources disagree"));
+        rows.map(|(y, l)| {
+            (
+                l.find('?').map_or(0, |b| l[..b].chars().count()) as u16,
+                y as u16,
+            )
+        })
+        .collect()
+    };
+    assert_eq!(marks.len(), 2, "two marks of one constraint");
+    let buf = r.screen(160, 40);
+    let under = |(x, y): (u16, u16)| {
+        buf[(x, y)]
+            .modifier
+            .contains(ratatui::style::Modifier::UNDERLINED)
+    };
+    assert!(under(marks[0]), "the mark pointed at");
+    assert!(!under(marks[1]), "not the other mark");
+    assert!(
+        !under(r.find("CONSTRAINT · NOTHING")),
+        "not the pane's heading"
+    );
+}
+
+#[test]
+fn a_wrapped_line_under_the_pointer_is_underlined_on_every_row() {
+    // Catches only the row under the pointer underlined.
+    let mut r = Room::new("pointed-wrapped");
+    let long = "word ".repeat(40);
+    r.items(&[long.trim(), "Next"]);
+    r.app.session.pointer = Some(r.find("• 1. word"));
+    let (x, y) = r.find("• 1. word");
+    let buf = r.screen(160, 40);
+    let under = |at: (u16, u16)| {
+        buf[at]
+            .modifier
+            .contains(ratatui::style::Modifier::UNDERLINED)
+    };
+    assert!(under((x + 5, y)) && under((x + 5, y + 1)), "both rows");
+}
