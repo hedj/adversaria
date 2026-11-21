@@ -431,7 +431,7 @@ fn failed(messages: &[Message]) -> (String, Vec<&Message>) {
 }
 
 /// A check as a hint while typing: ACE and its paraphrase; or "not ACE",
-/// where, and the first repair, which Esc applies, with the others; or,
+/// where, and the first repair, which Tab applies, with the others; or,
 /// with no repair, why: each word APE does not know.
 pub fn hint(check: &Check) -> String {
     match check {
@@ -441,7 +441,7 @@ pub fn hint(check: &Check) -> String {
     }
 }
 
-/// What may come next, the first twelve, and the word Esc completes.
+/// What may come next, the first twelve, and the word Tab completes.
 fn going_on(o: &Opening) -> String {
     let shown: Vec<String> = o.next.iter().take(12).map(Next::said).collect();
     let more = if o.next.len() > 12 { ", …" } else { "" };

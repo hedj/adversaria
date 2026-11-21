@@ -38,7 +38,7 @@ impl App {
     }
 
     /// What APE makes of what is typed in Suppose, and, if it is not ACE,
-    /// a sentence of ACE recalled from an earlier pair like it, which Esc
+    /// a sentence of ACE recalled from an earlier pair like it, which Tab
     /// puts in place. Keeps the fullest text that was not ACE.
     fn hint_for(&mut self, input: &str, free_english: &mut Option<String>) -> Hint {
         let checked = self.ace_check(input);

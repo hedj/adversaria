@@ -57,7 +57,7 @@ impl App {
         Mode::Normal
     }
 
-    /// Hold a quasimode's key: the Scope quasimode starts at a word.
+    /// Hold a quasimode's key: Suppose's opens Command with `suppose ` typed.
     fn enter_quasi(&mut self, q: Quasi) -> Mode {
         self.flush();
         let typed = if q == Quasi::Suppose { "suppose " } else { "" };

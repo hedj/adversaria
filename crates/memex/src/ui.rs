@@ -944,7 +944,7 @@ impl<'a> OutlinePane<'a> {
     }
 
     /// Under the item at the cursor, while its text cursor is in an open
-    /// `[[`, the names that fit what is typed, and that Esc completes.
+    /// `[[`, the names that fit what is typed, and that Tab completes.
     fn completion_line(&self, id: u64, depth: usize) -> Option<Line<'static>> {
         let here = id == self.cursor() && self.has_focus();
         let (typed, found) = self.app.link_completions().filter(|_| here)?;

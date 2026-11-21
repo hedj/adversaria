@@ -691,7 +691,7 @@ pub(crate) fn find_command(w: &str) -> Option<&'static Command> {
     (hits.len() == 1).then(|| hits[0])
 }
 
-/// Recognition on Escape: complete the command word if it is unambiguous.
+/// Recognition on Tab: complete the command word if it is unambiguous.
 pub(crate) fn complete_command(input: &str) -> String {
     let mut parts = input.splitn(2, ' ');
     let first = parts.next().unwrap_or("");
