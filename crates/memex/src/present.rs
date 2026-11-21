@@ -182,6 +182,8 @@ impl App {
             self.session.message = format!("nothing acts on “{}”", about.trim());
             return;
         }
+        let offers = offers.into_iter().map(|o| self.session.keys.labelled(o));
+        let offers = offers.collect();
         self.session.message.clear();
         self.session.mode = Mode::Menu(Menu::new(about, offers, at));
     }

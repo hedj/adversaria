@@ -314,7 +314,8 @@ in text that presents nothing, or for the text selected, whatever is
 under it. The offers appear in a
 menu titled with what it acts on, such as `act on “flight”` or the
 item's text, just below the pointer (above it near the foot), so the
-row clicked stays in view. Up and Down choose, Enter or a number runs
+row clicked stays in view. An offer that a key runs names the key, as
+`question its claim  (F2)`. Up and Down choose, Enter or a number runs
 one, Esc closes it; a click on an offer runs it, and a click anywhere
 else closes the menu. If nothing can act on it, the foot says so.
 

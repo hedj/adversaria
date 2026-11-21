@@ -170,6 +170,18 @@ impl Keys {
         named.map_or_else(|| q.label().to_string(), |(_, name)| name.clone())
     }
 
+    /// An offer, its label naming the key bound to its line, if one is,
+    /// so a menu teaches the key ("question its claim  (F2)").
+    pub(crate) fn labelled(&self, o: Offer) -> Offer {
+        match self.bound_to(&o.line) {
+            Some(key) => Offer {
+                label: format!("{}  ({key})", o.label),
+                ..o
+            },
+            None => o,
+        }
+    }
+
     /// The name of the first key bound to a command line, if one is.
     pub fn bound_to(&self, line: &str) -> Option<String> {
         let bound = self.bindings.iter().find(|(_, l)| l == line);
@@ -214,10 +226,8 @@ impl Default for Keys {
 impl Keys {
     /// How to run a command by key: its bound key, else by name.
     pub fn key_for(&self, command: &str) -> String {
-        match self.bindings.iter().find(|(_, c)| c == command) {
-            Some((k, _)) => crate::config::key_name(*k),
-            None => format!("command {command}"),
-        }
+        self.bound_to(command)
+            .unwrap_or_else(|| format!("command {command}"))
     }
 
     /// The command line a key is bound to, if it is bound.

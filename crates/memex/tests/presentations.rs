@@ -157,6 +157,28 @@ fn a_claim_offers_what_applies_to_it_first() {
 }
 
 #[test]
+fn a_menu_names_the_key_bound_to_an_offer() {
+    // Catches a menu that runs interrogate without saying F2 does it too,
+    // so the mouse never teaches the keyboard; or a key named for an
+    // offer no key runs.
+    let mut r = dated("menu-keys");
+    right_click_on(&mut r, "Talk-notes says");
+    assert!(
+        r.shows("question its claim  (F2)"),
+        "{:#?}",
+        r.lines_at(160, 40)
+    );
+    assert!(
+        r.shows("adopt its claims  (F3)"),
+        "{:#?}",
+        r.lines_at(160, 40)
+    );
+    let rows = r.lines_at(160, 40);
+    let find = rows.iter().find(|l| l.contains("find Talk-notes")).unwrap();
+    assert!(!find.contains("find Talk-notes  ("), "{find}");
+}
+
+#[test]
 fn a_mark_offers_its_rule_and_retracting_its_constraint() {
     // Catches a constraint's commands missing, or the menu acting on the
     // item the mark is under rather than on the constraint.
