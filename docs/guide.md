@@ -752,7 +752,7 @@ Each mark is written with its channels, `channel(Value)`:
 | Mark | Channels: required; optional | Draws |
 | --- | --- | --- |
 | `dot` | x, y; text | a point, labelled |
-| `bar` | x, y; text | a bar from zero: upright if x is a category, across if y is |
+| `bar` | x, y; text | a bar from zero: upright if x is a category, across if y is. An upright bar of a value not below zero is drawn to the eighth of a cell (`▁` to `▇` at its top), so its height is in proportion; zero draws none |
 | `line` | x, y; series | points joined in order of x, one line and one symbol per series |
 | `rule` | x or y | a line across the plot at that value |
 | `text` | x, y, text | a label at a point |

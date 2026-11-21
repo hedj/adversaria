@@ -312,6 +312,51 @@ impl Run {
     }
 }
 
+/// A bar up from the bottom row, to the eighth of a cell: its columns,
+/// the bottom row, and its height in eighths.
+struct Upright {
+    cols: Run,
+    bottom: usize,
+    eighths: usize,
+}
+
+impl Upright {
+    /// Its full cells, from the bottom row up; none for less than a cell.
+    fn full(&self) -> Rect {
+        let h = self.eighths / 8;
+        Rect::new(self.cols.lo, self.bottom + 1 - h, self.cols.len(), h)
+    }
+
+    /// The row above its full cells and the block that fills it to the
+    /// eighth, if its top falls inside a cell.
+    fn part(&self) -> Option<(usize, char)> {
+        let block = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇'][self.eighths % 8];
+        let row = self.bottom.checked_sub(self.eighths / 8)?;
+        (block != ' ').then_some((row, block))
+    }
+
+    /// The cells it covers, partly or wholly; for zero, the bottom row,
+    /// where its label goes and a click finds it.
+    fn drawn(&self) -> Rect {
+        let rows = self.eighths.div_ceil(8).max(1);
+        Rect::new(self.cols.lo, self.bottom + 1 - rows, self.cols.len(), rows)
+    }
+
+    /// The row of its label: above the cells it covers; for zero, which
+    /// covers none, on the bottom row. None where no row is above.
+    fn label_row(&self) -> Option<usize> {
+        match self.eighths {
+            0 => Some(self.bottom),
+            _ => self.drawn().y.checked_sub(1),
+        }
+    }
+
+    /// Each of its columns.
+    fn columns(&self) -> Vec<usize> {
+        (self.cols.lo..=self.cols.hi).collect()
+    }
+}
+
 /// The cell after a character two columns wide, which that character
 /// covers: nothing is drawn in it. The terminal library drops control
 /// characters such as this one, and gives the wide character both cells.
@@ -1083,6 +1128,31 @@ impl Frame {
         Some(Rect::of(self.cols_from_zero(x)?, row))
     }
 
+    /// A bar up the columns of an x, from zero to a y, in eighths of a
+    /// cell, if the scale starts at zero and the y is not below it.
+    fn upright(&self, x: &V, y: &V) -> Option<Upright> {
+        let eighths = self.eighths_up(y)?;
+        let cols = self.col(x)?.bar();
+        let bottom = self.axis_row() - 1;
+        Some(Upright {
+            cols,
+            bottom,
+            eighths,
+        })
+    }
+
+    /// How many eighths of a cell a y rises from zero, over the rows below
+    /// those kept at the top, if the scale starts at zero and the y is not
+    /// below it.
+    fn eighths_up(&self, y: &V) -> Option<usize> {
+        let Scale::Line { lo, hi, .. } = self.ys else {
+            return None;
+        };
+        let v = y.num().filter(|v| lo == 0.0 && *v >= 0.0)?;
+        let rows = self.size.1 - self.top();
+        Some((v / hi * (rows * 8) as f64).round() as usize)
+    }
+
     /// A bar up the columns of an x, from zero to a y.
     fn bar_up(&self, x: &V, y: &V) -> Option<Rect> {
         Some(Rect::of(self.col(x)?.bar(), self.rows_from_zero(y)?))
@@ -1313,8 +1383,11 @@ impl Plot {
     }
 
     /// A bar up a column, from zero to its y, its label above it if there
-    /// is room.
+    /// is room: to the eighth of a cell where the scale starts at zero.
     fn bar_up(&mut self, m: &M, x: &V, y: &V) {
+        if let Some(bar) = self.frame.upright(x, y) {
+            return self.upright(m, &bar, y);
+        }
         let Some(bar) = self.frame.bar_up(x, y) else {
             return;
         };
@@ -1325,6 +1398,25 @@ impl Plot {
         self.cv.hit(bar, &m.prov);
     }
 
+    /// A bar drawn to the eighth of a cell: its full cells, the block that
+    /// fills its top cell to the eighth, and its label on the row above.
+    fn upright(&mut self, m: &M, bar: &Upright, y: &V) {
+        self.blocks(bar, m.ink());
+        if let Some(row) = bar.label_row() {
+            self.label_over(&bar.drawn(), row, &bar_label(m, y), m.ink());
+        }
+        self.cv.hit(bar.drawn(), &m.prov);
+    }
+
+    /// A bar's blocks: its full cells, then the block that fills its top
+    /// cell to the eighth.
+    fn blocks(&mut self, bar: &Upright, ink: Ink) {
+        self.cv.fill(bar.full(), '█', ink);
+        if let Some((row, block)) = bar.part() {
+            self.cv.put_each(&bar.columns(), row, block, ink);
+        }
+    }
+
     /// A label after a bar, a space from its end.
     fn label_after(&mut self, bar: &Rect, label: &str, ink: Ink) {
         self.cv.text(bar.right() + 1, bar.y, label, ink);
@@ -1332,8 +1424,13 @@ impl Plot {
 
     /// A label centred over a bar, on the row above it.
     fn label_above(&mut self, bar: &Rect, label: &str, ink: Ink) {
+        self.label_over(bar, bar.y - 1, label, ink);
+    }
+
+    /// A label centred on a bar's columns, on a row.
+    fn label_over(&mut self, bar: &Rect, row: usize, label: &str, ink: Ink) {
         let left = bar.mid_x().saturating_sub(width(label) / 2);
-        self.cv.text(left, bar.y - 1, label, ink);
+        self.cv.text(left, row, label, ink);
     }
 
     /// Lines, one for each series, each joining its points in order of x.
@@ -3857,15 +3954,36 @@ mod tests {
     }
 
     #[test]
+    fn a_bars_height_is_its_value_to_the_eighth_of_a_cell() {
+        // Catches bars drawn in whole cells from a cell for zero: the second
+        // review saw 300 drawn two cells high beside 1200 at five, where it
+        // is a quarter of it. Zero draws no block; its label is on the
+        // bottom row.
+        let want = [
+            "     │   1200",
+            "1200 │ ████████",
+            "     │ ████████",
+            "     │ ████████      300",
+            "     │ ████████   ▂▂▂▂▂▂▂▂",
+            "   0 │ ████████   ████████        0",
+            "     └──────────────────────────────────",
+            "           a          b          c",
+        ];
+        let specs = ["bar x:a y:1200", "bar x:b y:300", "bar x:c y:0"];
+        assert_eq!(draw(&specs, 40, 8), want);
+    }
+
+    #[test]
     fn a_bars_label_is_centred_above_it() {
         // Catches a bar's label moved off its centre, or drawn over the
         // bar. The plot is too low to keep a row above its bars, so the
         // taller bar has no room for its label. The picture is
-        // what the code drew before the bars were given rectangles.
+        // what the code drew before the bars were given rectangles, but
+        // for a: 1 of 3 on four rows is a cell and three eighths high.
         let want = [
             "3 │                ████████",
             "  │      1         ████████",
-            "  │  ████████      ████████",
+            "  │  ▃▃▃▃▃▃▃▃      ████████",
             "0 │  ████████      ████████",
             "  └───────────────────────────",
             "         a            b",
@@ -3891,10 +4009,11 @@ mod tests {
     fn a_bar_in_a_narrow_band_keeps_a_column_free_each_side() {
         // Catches a bar as wide as its band, or wider, running into the
         // next. The picture is what the code drew before the plot's places
-        // were given runs.
+        // were given runs, but for c: 1 of 3 on three rows is one row
+        // high, where whole cells from zero drew two.
         let want = [
-            "3 │ ██   2   1   2",
-            "  │ ██  ██  ██  ███",
+            "3 │ ██   2       2",
+            "  │ ██  ██   1  ███",
             "0 │ ██  ██  ██  ███",
             "  └─────────────────",
             "    a   b   c    d",
@@ -3907,10 +4026,10 @@ mod tests {
     fn numbers_come_before_categories_on_an_axis() {
         // Catches a mixed axis sorted by text alone, or categories first.
         // The picture is what the code drew before the plot's places were
-        // given runs.
+        // given runs, but for a: 1 of 2 on three rows is a cell and a half.
         let want = [
             "2 │ ██████     1",
-            "  │ ██████  ███████",
+            "  │ ██████  ▄▄▄▄▄▄▄",
             "0 │ ██████  ███████",
             "  └─────────────────",
             "      2        a",
