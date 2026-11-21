@@ -186,3 +186,19 @@ fn a_click_on_a_mention_jumps_to_it() {
     r.app.click_at(&hits, at);
     assert_eq!(r.app.cursor(), r.outline().in_order()[1]);
 }
+
+#[test]
+fn a_link_of_a_type_of_ones_own_reads_back_as_a_sentence() {
+    // Catches "precedes (from) ←", which the third review found read
+    // poorly: the items listed precede this one.
+    let mut r = Room::new("links-own-type");
+    r.items(&["Launch", "Landing"]);
+    let launch = r.outline().in_order()[0];
+    r.put_cursor(launch);
+    r.command("link to 2 as precedes");
+    let landing = r.outline().in_order()[1];
+    r.put_cursor(landing);
+    let right = right_pane(&r);
+    assert!(right.contains("precedes this ←"), "{right}");
+    assert!(!right.contains("(from)"), "{right}");
+}

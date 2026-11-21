@@ -151,7 +151,9 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   yet (§ 2.4, § 3.1).
 - **Right pane:** what the selected item needs. By default its links,
   under `LINKS OF` and the item's address, or `no links`, each with the
-  text of the item at its other end; then, under `mentioned in, not
+  text of the item at its other end, grouped by kind: those from it as
+  `cites →`, those into it as `cited by ←`, `supported by ←` or `opposed
+  by ←`, and a kind of your own as `precedes this ←`; then, under `mentioned in, not
   linked ←`, the items whose text names this one's as whole words, in any
   case, without linking to it (only a text that reads as a name, as for
   unlinked-mention suggestions, § 3.4), each a click away; on an item with

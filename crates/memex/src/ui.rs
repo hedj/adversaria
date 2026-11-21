@@ -1640,7 +1640,7 @@ fn inverse(kind: &str) -> String {
         "cites" => "cited by".into(),
         "supports" => "supported by".into(),
         "opposes" => "opposed by".into(),
-        k => format!("{k} (from)"),
+        k => format!("{k} this"),
     }
 }
 
