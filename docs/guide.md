@@ -491,7 +491,7 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 | `interrogate` | `interrogate` | asks of the target's claim: who else claims it, who claims the contrary, its source, the source's record, and what adopting it would do |
 | `accept` | `accept N` | adopts the Nth suggestion shown, with its evidence |
 | `dismiss` | `dismiss N` | dismisses the Nth suggestion shown; it returns only if its evidence changes |
-| `import` | `import wikidata FILE`, `import document FILE`, `import results FILE` | imports a Wikidata subset, a document, or an analysis's results (§ 3.4, § 4.1) |
+| `import` | `import wikidata FILE`, `import document FILE [as ADDRESS]`, `import results FILE` | imports a Wikidata subset, a document (with `as`, as a revision of the document the item at ADDRESS came from), or an analysis's results (§ 3.4, § 4.1) |
 | `export` | `export FILE [NUMBER]` | exports the outline, or the section at item NUMBER, as a document |
 
 #### Worlds and history
@@ -930,6 +930,11 @@ hidden.
 
 **Import it again** after a co-author has revised it, under the same file
 name, and the memex compares the new version with what it imported before.
+If the revision has another name, say which document it revises by an
+item of it: `import document essay-v2.md as 2` compares it with the
+imports of the document item 2 came from, and records it as a version of
+that document, so a later import under either name finds the same
+history.
 It opens a supposed world with each change as one entry: changed text,
 added items, deleted items, and items moved under another heading (when a
 heading changes its level, for one). `retract N` drops a change; `commit`

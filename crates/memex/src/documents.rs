@@ -110,9 +110,9 @@ impl App {
         let doc = Document::read(file, &self.notebook)?;
         let earlier = self.notebook.document_imports(&doc.name);
         if !earlier.is_empty() {
-            return self.revise(&doc, &earlier);
+            return self.revise(&doc, &earlier, &doc.name);
         }
-        let import = self.write_document_import(&doc, None)?;
+        let import = self.write_document_import(&doc, None, &doc.name)?;
         self.write_blocks(&doc.blocks, import)?;
         Ok(format!(
             "imported {}: {} items; losses: {}",
@@ -122,14 +122,37 @@ impl App {
         ))
     }
 
-    /// The import entry of a document, and the import it revises, if any.
+    /// Import a file as a revision of the document an item came from,
+    /// whatever the file is called: `import document essay-v2.md as 2`.
+    pub(crate) fn import_revision_of(&mut self, file: &str, at: &str) -> Result<String, String> {
+        let item = self.resolve(at).ok_or(format!("no item is “{at}”"))?;
+        let name = self.imported_name(item)?;
+        let doc = Document::read(file, &self.notebook)?;
+        let earlier = self.notebook.document_imports(&name);
+        self.revise(&doc, &earlier, &name)
+    }
+
+    /// The name of the document an item came from, as its import recorded
+    /// it.
+    fn imported_name(&self, item: u64) -> Result<String, String> {
+        let place = self.notebook.outline.number(item);
+        let not = || format!("{place} did not come from an imported document");
+        let import = self.notebook.outline.origin(item).ok_or_else(not)?;
+        let body = self.notebook.entry(import).and_then(|e| e.body());
+        let name = body.and_then(|b| b["file"].as_str().map(String::from));
+        name.ok_or_else(not)
+    }
+
+    /// The import entry of a document, under the name of the document it
+    /// is a version of, and the import it revises, if any.
     fn write_document_import(
         &mut self,
         doc: &Document,
         revises: Option<u64>,
+        name: &str,
     ) -> Result<u64, String> {
         let prov = json!({"prov:wasDerivedFrom": doc.name, "prov:wasGeneratedBy": "pandoc"});
-        let mut body = json!({"blob": doc.blob, "format": "document", "file": doc.name, "source": doc.name, "losses": doc.losses, "prov": prov});
+        let mut body = json!({"blob": doc.blob, "format": "document", "file": name, "source": doc.name, "losses": doc.losses, "prov": prov});
         if let Some(earlier) = revises {
             body["revises"] = json!(earlier);
         }
@@ -173,23 +196,27 @@ impl App {
     /// A revised document: align its blocks with the items of the earlier
     /// imports, and write the changes in a supposed world, one entry each,
     /// so each can be kept or retracted before the world is committed.
-    fn revise(&mut self, doc: &Document, earlier: &[u64]) -> Result<String, String> {
+    fn revise(&mut self, doc: &Document, earlier: &[u64], name: &str) -> Result<String, String> {
+        if earlier.is_empty() {
+            return Err(format!("no import of {name} to revise"));
+        }
         let revised = self.notebook.outline.revised(earlier, &doc.keys());
-        let import = self.open_revision(doc, earlier)?;
+        let import = self.open_revision(doc, earlier, name)?;
         self.write_revision(&revised, &doc.blocks, import)?;
         Ok(format!(
-            "revision of {}: the changes are in a supposed world; retract any with retract N, then commit or close",
-            doc.name
+            "revision of {name}: the changes are in a supposed world; retract any with retract N, then commit or close"
         ))
     }
 
     /// The supposed world a revision is written in, and its import entry.
-    fn open_revision(&mut self, doc: &Document, earlier: &[u64]) -> Result<u64, String> {
-        self.write_here(
-            "suppose",
-            json!({"name": format!("revision of {}", doc.name)}),
-        )?;
-        self.write_document_import(doc, earlier.last().copied())
+    fn open_revision(
+        &mut self,
+        doc: &Document,
+        earlier: &[u64],
+        name: &str,
+    ) -> Result<u64, String> {
+        self.write_here("suppose", json!({"name": format!("revision of {name}")}))?;
+        self.write_document_import(doc, earlier.last().copied(), name)
     }
 
     /// A revision's changes: the new texts, the new blocks and the moves,

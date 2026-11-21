@@ -351,3 +351,52 @@ fn a_dropped_block_holding_the_users_own_item_stays_with_it() {
     let kept = items(&[("", "T"), ("T", "Gone"), ("Gone", "My own note.")]);
     assert_eq!(after, kept);
 }
+
+#[test]
+fn a_file_renamed_is_imported_as_a_revision_of_the_item_named() {
+    // Catches a co-author's copy saved under another name arriving as a
+    // second document, with no changes shown: the third review's eighth
+    // finding.
+    let mut r = Room::new("doc-as");
+    import(&mut r, "essay.md", "# Essay\n\nOne.\n");
+    let file = r.dir.join("essay-v2.md");
+    std::fs::write(&file, "# Essay\n\nOne, revised.\n").unwrap();
+    r.command(&format!("import document {} as 1", file.display()));
+    assert!(
+        r.app.session.message.starts_with("revision of essay.md:"),
+        "{}",
+        r.app.session.message
+    );
+    assert_eq!(r.app.reason.world(), "revision of essay.md");
+    assert_eq!(pairs(&r)[1], ("Essay".into(), "One, revised.".into()));
+}
+
+#[test]
+fn a_later_revision_under_the_new_name_finds_the_same_document() {
+    // Catches the renamed import recorded under its own name, so that the
+    // next import of essay.md, or of essay-v2.md, finds only half its
+    // history.
+    let mut r = Room::new("doc-as-again");
+    import(&mut r, "essay.md", "# Essay\n\nOne.\n");
+    let file = r.dir.join("essay-v2.md");
+    std::fs::write(&file, "# Essay\n\nOne.\n\nTwo.\n").unwrap();
+    r.command(&format!("import document {} as 1", file.display()));
+    r.command("commit");
+    let said = import(&mut r, "essay.md", "# Essay\n\nOne.\n\nTwo.\n\nThree.\n");
+    assert!(said.starts_with("revision of essay.md:"), "{said}");
+    let texts: Vec<String> = pairs(&r).into_iter().map(|(_, t)| t).collect();
+    assert_eq!(texts, ["Essay", "One.", "Two.", "Three."], "Two. is known");
+}
+
+#[test]
+fn an_item_not_imported_is_no_document_to_revise() {
+    let mut r = Room::new("doc-as-not");
+    r.items(&["Notes"]);
+    let file = r.dir.join("essay.md");
+    std::fs::write(&file, "# Essay\n").unwrap();
+    r.command(&format!("import document {} as 1", file.display()));
+    assert_eq!(
+        r.app.session.message,
+        "1 did not come from an imported document"
+    );
+}

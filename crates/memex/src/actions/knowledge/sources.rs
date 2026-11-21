@@ -12,7 +12,10 @@ impl App {
         let (what, rest) = words.split_first().ok_or(usage)?;
         let file = rest.join(" ");
         match *what {
-            "document" => self.import_document(&file),
+            "document" => match file.rsplit_once(" as ") {
+                Some((file, at)) => self.import_revision_of(file.trim(), at.trim()),
+                None => self.import_document(&file),
+            },
             "results" => self.import_results(&file),
             "wikidata" if !file.is_empty() => self.import_wikidata(&file),
             _ => Err(usage.into()),
