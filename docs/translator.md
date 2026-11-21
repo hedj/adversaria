@@ -116,6 +116,51 @@ These are proposals, not measured; the sources are recalled, not checked.
 
 The model only analyses its input and never reconstructs it, so lifting's exact inverse matters little here; causality and vanishing moments decide. The proposal is to build the pyramid from lifting steps with Haar's predictor, which is cheap and causal, and later try a causal two-sample predictor or a learned one without changing the rest. Reservoir states drift smoothly, and one vanishing moment leaves linear drift in the detail channel, so the test is whether a second vanishing moment improves prediction by enough to pay for its cost.
 
+**Looping changes the context only if each loop reads something new.** A looped readout that sees the same inputs every time gains depth, not context. If each loop reads one more level of the pyramid, the context becomes a pyramid: exact near the present, half the resolution at each step back, spanning about 2ᵏ times the base window after k loops. If each loop queries the copy window again, with a query updated by the previous loop, the context becomes a chain of up to k linked lookups through the text ("X is defined as Y; Y is defined at Z").
+
+### Trial: does looping widen the context?
+
+This trial tests the two shapes above. It sits outside stage A of `docs/plan.md`, which uses no model, and needs a GPU; its cost is not yet estimated.
+
+**Hypotheses.**
+
+* H0, the null: no form of looping lowers prediction loss on long-range text beyond the spread between training seeds, once compute is matched.
+* H1, the pyramid: when each loop reads one more pyramid level, loss falls on bytes whose evidence lies beyond the raw window, and falls more as k grows.
+* H2, multi-hop recall: when each loop re-queries the copy window, accuracy rises on references that need several hops, up to about k hops.
+
+**What varies, and what is held constant.**
+
+| Varies | Values |
+| --- | --- |
+| Form | base (no loop); looped readout on the same inputs; pyramid; multi-hop; pyramid and multi-hop |
+| Loops k | 1, 2, 4, 8 |
+
+Held constant: the training data and its order, the number of bytes seen in training, the optimiser and its schedule, the reservoir's eigenvalues, the raw and copy windows, and the number of learned parameters, since the looped block is weight-tied. Each cell runs with 3 seeds.
+
+**The compute control.** A looped model does k times the arithmetic. To separate "more context" from "more compute", each looped form is compared with an unlooped model whose readout is k times deeper, with untied layers and the same arithmetic per byte. A gain that the deeper model matches is a gain from compute, not from context.
+
+**Test sets.**
+
+1. Held-out text from the training corpora: the general case.
+2. Long-range text: Prolog programs in which a predicate is defined far from its use, and ACE texts in which a pronoun or a definite noun refers far back. Each byte is labelled with its distance to the evidence it needs.
+3. Synthetic chains: "a1 = a2. a2 = a3. … What is a1?", with the number of hops and the distance between links set by the generator, so the answer is known.
+
+**Measures.**
+
+* Bits per byte, overall and by distance bucket (within 8 bytes, within the copy window, beyond it).
+* On the synthetic chains, accuracy by number of hops and by distance.
+* Cost: arithmetic per byte, state carried per byte, and training time, each measured.
+
+**Checks that the trial itself is sound.**
+
+* Causality: changing any later byte must leave every earlier prediction unchanged. A test plants a change and checks.
+* The pyramid is used: replacing its levels with zeros at test time must raise the loss of the pyramid form; if it does not, the form learned to ignore it.
+* A planted fault: a version that leaks one future byte into the pyramid must score much better than it should, and the causality test must catch it.
+
+**Order.** Run a small model first (readout width 128 instead of 512), so a full grid trains quickly, and run the full 9.6M-parameter model only for the forms that beat their compute controls.
+
+**Decision.** Adopt a form only if it lowers bits per byte on the long-range set by more than twice the standard deviation across seeds, beats its compute control, and its cost per byte is acceptable for the "do you mean?" round. Report every cell, including those that show nothing.
+
 ### Training and data
 
 The model stays at 9.6M parameters but does a narrower job: it rewrites free English into the controlled English that a deterministic translator handles. Training costs about $15–50 in GPU time and data. The largest cost is about 1–4 weeks of engineering on the controlled grammar and the verb lexicon (a guess).
