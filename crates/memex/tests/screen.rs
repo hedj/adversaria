@@ -410,18 +410,24 @@ fn the_text_cursor_at_the_end_of_a_long_item_is_on_its_last_row() {
 #[test]
 fn a_held_quasimodes_guide_is_shown_whole_at_80_columns() {
     // Catches the foot's guide cut at the screen's edge.
+    let foot = |room: &Room| {
+        let rows = room.lines_at(80, 30);
+        let words = rows
+            .iter()
+            .rev()
+            .take(3)
+            .rev()
+            .flat_map(|r| r.split_whitespace().map(str::to_string).collect::<Vec<_>>());
+        words.collect::<Vec<_>>().join(" ")
+    };
     let mut room = Room::new("screen-foot-wrap");
     room.hold(Quasi::Command, "");
-    let rows = room.lines_at(80, 30);
-    let words = rows
-        .iter()
-        .rev()
-        .take(3)
-        .rev()
-        .flat_map(|r| r.split_whitespace());
-    let foot = words.collect::<Vec<_>>().join(" ");
+    let fresh = "release now to type without holding · or type and release Command to run on the target · ? lists what may come next";
+    assert!(foot(&room).contains(fresh), "{}", foot(&room));
+    room.typ("u");
+    room.tap(&[Key::Backspace]);
     let guide = "to run on the target · Esc completes · ? lists what may come next";
-    assert!(foot.contains(guide), "{foot}");
+    assert!(foot(&room).contains(guide), "{}", foot(&room));
 }
 
 #[test]
@@ -601,6 +607,36 @@ fn a_line_wrapped_in_the_right_pane_hangs_under_its_text() {
 }
 
 #[test]
+fn a_quasimode_just_entered_says_a_release_runs_only_after_typing() {
+    // Catches the foot of a quasimode just entered saying both that a
+    // release keeps it on and that a release runs it: the second review
+    // read "release now to type without holding · release Command to run
+    // on the target". For each quasimode, a release runs only after keys.
+    for (q, holding) in [
+        (
+            Quasi::Command,
+            "or type and release Command to run on the target",
+        ),
+        (
+            Quasi::LeapForward,
+            "or type and release Leap to go to the first match",
+        ),
+        (Quasi::Scope, "and release Scope to keep it"),
+        (
+            Quasi::Suppose,
+            "or type a statement and release Suppose for its readings",
+        ),
+    ] {
+        let mut room = Room::new("screen-fresh-note");
+        room.hold(q, "");
+        let foot = room.lines().join(" ");
+        let foot = foot.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(foot.contains(holding), "{q:?}: {foot}");
+        assert!(!foot.contains("· release"), "{q:?}: {foot}");
+    }
+}
+
+#[test]
 fn a_quasimode_held_with_nothing_typed_says_a_release_keeps_it_on() {
     // Catches the foot telling a holder only that releasing runs, when a
     // release with nothing typed latches it; or the note left once there
@@ -611,6 +647,8 @@ fn a_quasimode_held_with_nothing_typed_says_a_release_keeps_it_on() {
     assert!(room.shows(note), "{:#?}", room.lines());
     room.typ("un");
     assert!(!room.shows(note), "typed: {:#?}", room.lines());
+    room.tap(&[Key::Backspace, Key::Backspace]);
+    assert!(!room.shows(note), "typed, then erased: {:#?}", room.lines());
     room.tap(&[Key::Escape]);
     room.release(Quasi::Command);
     room.tap(&[Key::Quasi(Quasi::Command)]);

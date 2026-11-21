@@ -5,7 +5,7 @@
 mod commands;
 mod wrap;
 
-use crate::app::{Active, App, Mode, PaneKind, Quasi, ScopeLevel, View};
+use crate::app::{Active, App, Hold, Mode, PaneKind, Quasi, ScopeLevel, View};
 use crate::outline::{Layer, Link, Outline, Run, TOP};
 use crate::present::Presentation;
 use crate::reason::{
@@ -2127,15 +2127,34 @@ fn quasi_name(a: &Active) -> Span<'static> {
     Span::styled(format!(" {}{latched} ", a.q().label()), reversed())
 }
 
-/// What a held quasimode does, and how it ends; and, while it is held
-/// with nothing typed, that releasing it keeps it on, so the rest can be
-/// typed without holding.
+/// What a held quasimode does, and how it ends. While its key is down
+/// with nothing else pressed, a release keeps it on rather than ending
+/// it, so the foot says so, and how to end it by holding.
 fn quasi_guide(a: &Active) -> String {
-    let guide = quasi_doing(a);
-    match a.latched() || !a.input.is_empty() {
-        true => guide,
-        false => format!("release now to type without holding · {guide}"),
+    match a.hold {
+        Hold::Down => quasi_fresh(a.q()),
+        Hold::Used | Hold::Latched => quasi_doing(a),
     }
+}
+
+/// The foot of a quasimode just entered: a release keeps it on, so the
+/// rest can be typed without holding; or what to do while holding.
+fn quasi_fresh(q: Quasi) -> String {
+    let holding = match q {
+        Quasi::LeapForward | Quasi::LeapBack => {
+            "or type and release Leap to go to the first match · ? lists every match · Leap again repeats"
+        }
+        Quasi::Command => {
+            "or type and release Command to run on the target · ? lists what may come next"
+        }
+        Quasi::Scope => {
+            "or press Space to widen the target (word, statement, branch) and release Scope to keep it"
+        }
+        Quasi::Suppose => {
+            "or type a statement and release Suppose for its readings, or a world of that name if none · ? lists what may come next"
+        }
+    };
+    format!("release now to type without holding · {holding}")
 }
 
 /// What a quasimode does, and how it ends.

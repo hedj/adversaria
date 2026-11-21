@@ -189,8 +189,10 @@ commanding and supposing each have one. Use it either way:
 - **Hold, type, let go.** Hold the key while you type, and let go to
   finish. This suits a few letters, such as a Leap. You cannot forget
   you are in a quasimode while you hold its key, as you can with a mode.
-  While it is held with nothing typed, the foot says `release now to
-  type without holding`.
+  Until you press another key, a release latches it, so the foot says
+  `release now to type without holding`, and then what to do while you
+  hold it: for Command, `or type and release Command to run on the
+  target`.
 
 The table says what each does while it is on, held or latched, and
 when it ends.

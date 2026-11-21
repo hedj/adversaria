@@ -123,7 +123,7 @@ fn the_foot_says_what_holding_suppose_does() {
     let mut r = Room::new("suppose-foot");
     r.items(&["Notes"]);
     r.hold(Quasi::Suppose, "");
-    let said = "type a statement · ? lists what may come next · release Suppose offers its readings, or a world of that name if none";
+    let said = "or type a statement and release Suppose for its readings, or a world of that name if none · ? lists what may come next";
     assert!(r.shows(said), "{:?}", r.lines_at(160, 40).last());
 }
 

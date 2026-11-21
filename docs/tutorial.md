@@ -237,7 +237,7 @@ While Command is on, `?` lists the commands that match what you have
 typed, and Esc completes a command's name; Backspace on an empty line
 leaves without running anything. For a few letters you may instead
 hold the key while you type and let go to finish. The foot says which you are in: `COMMAND (latched)`
-after a tap, and while you hold the key with nothing typed,
+after a tap, and while you hold the key before you press another,
 `release now to type without holding`. Every "run the command" below
 means either way.
 
