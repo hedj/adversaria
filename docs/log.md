@@ -1658,6 +1658,47 @@ the guide's "Plumbing" (15) and "Pointing at an argument" (8). The
 Wayland scale-2 click test failed once more (2 of 7 runs counted this
 session), on a change that does not touch the mouse; not explained.
 
+### Navigation, after a third UX review (21 November 2026)
+
+At the author's request a UX reviewer compared the handling of
+documents, links, backlinks, search and navigation with what users of
+Obsidian, Logseq, Roam, Workflowy, Org-mode, browsers and IDEs expect,
+and ranked ten recommendations. The author asked for all ten. Each is
+a commit with tests that fail without it:
+
+1. Back and forward along a trail of jumps (follow, Leap, go, a click on
+   a link), F7 and F8 and the mouse's buttons, kept in the journal so a
+   reopened notebook has it (b333c77; format version 1 revised).
+2. Leap moves the cursor as each letter is typed, as docs/design.md
+   said and the code did not (ef94ac6). It slowed the 10,000-item timing
+   test, once over its 100 ms limit, found when a later change failed
+   it; the preview now stops at the first match (55aa2a4).
+3. Tutorial step 10: a note linked by [[link]], the links pane, follow,
+   back (905fe6e).
+4. An open [[link]] lists the names that fit; Esc completes (7a00763).
+5. `pane matches` keeps a Leap's matches, numbered, with the cursor's
+   place among them (d1069a4; format version 1 revised).
+6. The links pane lists unlinked mentions of its item (a4cc539). The
+   context the review also asked for was there: each link shows the
+   other item's whole text.
+7. Enter on a near miss in Leap warns before it makes an item
+   (42b98c1).
+8. `import document FILE as ADDRESS` takes a renamed revision as a
+   version of an item's document (eac36aa; format version 1 revised).
+9. Structural moves, NLS's N4: next, previous, first, last, parent,
+   child (1596b9d). The marks the review asked for already exist as
+   names, which `go` jumps to; no second kind was added.
+10. A link type of one's own reads back as "precedes this ←" (b5a1cbc).
+
+The guide and tutorial were then checked against the build (cacd0ec).
+
+Measured over the referent gate and reported, not reworded: the
+guide's "The mouse" (7: a row now depends on § 2.4); Plumber::new (7,
+unchanged code: the measure joins two fields named `pattern`).
+Earlier ones stand: "Plumbing" (15), "Pointing at an argument" (8).
+The Wayland scale-2 click test failed once more in this round, then
+passed; not explained.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
