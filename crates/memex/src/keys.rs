@@ -329,19 +329,18 @@ impl App {
                     a.input.clone()
                 };
                 let found = self.leap_matches(&pattern, forward).first().copied();
+                self.session.last_leap = Some((pattern.clone(), forward));
+                let leap = json!({"pattern": pattern, "forward": forward, "found": found});
                 match found {
                     Some(id) => {
-                        self.unfold_to(id);
-                        self.set_cursor(id);
                         self.session.message.clear();
+                        self.jump(id, "leap", leap);
                     }
-                    None => self.session.message = format!("no item holds “{pattern}”"),
+                    None => {
+                        self.session.message = format!("no item holds “{pattern}”");
+                        self.write_view("leap", leap);
+                    }
                 }
-                self.session.last_leap = Some((pattern.clone(), forward));
-                self.write_view(
-                    "leap",
-                    json!({"pattern": pattern, "forward": forward, "found": found}),
-                );
             }
             Quasi::Scope => self.write_view("scope", json!({})),
             Quasi::Suppose => {

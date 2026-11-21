@@ -46,6 +46,8 @@ F2 = "interrogate"
 F3 = "adopt"
 F4 = "unadopt"
 F6 = "switch"
+F7 = "back"
+F8 = "forward"
 F10 = "quit"
 
 # The mouse. A click on an item moves the cursor there, a click on a hint
@@ -568,9 +570,9 @@ mod tests {
     }
 
     #[test]
-    fn six_default_bindings() {
+    fn eight_default_bindings() {
         // Catches a default binding added or lost unnoticed.
-        assert_eq!(Config::default().bindings.len(), 6);
+        assert_eq!(Config::default().bindings.len(), 8);
     }
 
     #[test]

@@ -16,8 +16,11 @@ use serde_json::json;
 /// the cursor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Presentation {
-    /// An item: its line in an outline pane, or a link to it.
+    /// An item: its line in an outline pane.
     Item { pane: usize, id: u64 },
+    /// A link's line in the links pane: the item at its other end, which a
+    /// click jumps to, as follow does.
+    Link { to: u64 },
     /// A hint: the command line it stands for.
     Command(String),
     /// A fact, as a view's mark draws it: the entry that states it, and
@@ -47,6 +50,7 @@ impl Presentation {
         use Presentation as P;
         match self {
             P::Item { .. } => Some(self.clone()),
+            P::Link { to } => Some(P::Item { pane: 0, id: *to }),
             P::Constraint {
                 pane,
                 under: Some(id),
@@ -62,7 +66,7 @@ impl Presentation {
     /// Whether it is the user's own text, an item, whose words plumbing
     /// may act on; the rest (a mark, a chart, a change) is the memex's.
     pub fn is_text(&self) -> bool {
-        matches!(self, Presentation::Item { .. })
+        matches!(self, Presentation::Item { .. } | Presentation::Link { .. })
     }
 
     /// What a click does on it, as one of the two things a click can do:
@@ -71,7 +75,7 @@ impl Presentation {
     fn clicked(&self) -> Option<Presentation> {
         use Presentation as P;
         match self {
-            P::Item { .. } | P::Command(_) => Some(self.clone()),
+            P::Item { .. } | P::Command(_) | P::Link { .. } => Some(self.clone()),
             P::Fact { pane, item, .. } => Some(P::Item {
                 pane: *pane,
                 id: *item,
@@ -85,6 +89,14 @@ impl Presentation {
 }
 
 impl App {
+    /// A command a mouse button runs, as a browser's back and forward
+    /// buttons do: only when no quasimode, menu or question is open.
+    pub fn mouse_command(&mut self, line: &str) {
+        if matches!(self.session.mode, Mode::Normal) {
+            self.session.mode = self.run_command(line);
+        }
+    }
+
     /// A click, from the mouse. It acts only when no quasimode or question
     /// is open, and does what the keyboard would: moving the cursor is a
     /// view change like an arrow key; a command is run as a bound key runs
@@ -104,6 +116,7 @@ impl App {
         }
         match c.clicked() {
             Some(Presentation::Item { pane, id }) => self.go_to_item(pane, id),
+            Some(Presentation::Link { to }) => self.follow_link(to),
             Some(Presentation::Command(line)) => {
                 self.flush();
                 self.session.message.clear();
@@ -111,6 +124,17 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Jump along a link to the item at its other end, as follow does, so
+    /// back returns.
+    fn follow_link(&mut self, to: u64) {
+        if !self.notebook.outline.items.contains_key(&to) {
+            return;
+        }
+        self.flush_text();
+        self.session.message.clear();
+        self.jump(to, "follow", json!({}));
     }
 
     /// Put the cursor on an item of an outline pane, as a click on it
@@ -248,6 +272,10 @@ impl App {
             Presentation::Item { id, .. } => {
                 Some(format!("click: go to {}", self.notebook.outline.number(id)))
             }
+            Presentation::Link { to } => Some(format!(
+                "click: follow to {}",
+                self.notebook.outline.number(to)
+            )),
             Presentation::Command(line) => Some(format!("click: run {line}")),
             _ => None,
         }

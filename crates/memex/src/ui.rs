@@ -1855,7 +1855,10 @@ fn kind_lines(group: &[(String, String, u64)]) -> Vec<Presented> {
 
 /// A link's line, presenting the item at its other end.
 fn link_line((_, text, end): &(String, String, u64)) -> Presented {
-    (Line::raw(text.clone()), item_presented(*end))
+    (
+        Line::raw(text.clone()),
+        Some(Presentation::Link { to: *end }),
+    )
 }
 
 /// Each of an item's links: its kind's heading, the item at its other

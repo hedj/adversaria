@@ -424,6 +424,8 @@ Where a command takes an ADDRESS, any of these name an item:
 | `name` | `name WORD` | names the target, so WORD addresses it; the name `title` also heads the outline |
 | `go` | `go TEXT` | goes to the item TEXT addresses, else to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3) |
 | `follow` | `follow [N]` | goes to the other end of the target's Nth link (default 1) |
+| `back` | `back` (F7, or the mouse's back button) | goes back to where the last jump came from: `follow`, Leap, `go`, or a click on a link. Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over |
+| `forward` | `forward` (F8, or the mouse's forward button) | goes forward again to where `back` came from; a new jump empties the way forward, as in a browser |
 | `fold` | `fold` | hides the target's branch |
 | `unfold` | `unfold` | shows the target's branch |
 | `pane` | `pane outline`, `pane links`, `pane suggestions` | sets what the other pane shows |
@@ -1066,6 +1068,8 @@ F2 = "interrogate"
 F3 = "adopt"
 F4 = "unadopt"
 F6 = "switch"
+F7 = "back"
+F8 = "forward"
 F10 = "quit"
 
 [mouse]

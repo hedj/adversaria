@@ -151,17 +151,50 @@ impl App {
     pub(crate) fn cmd_go(&mut self, words: &[&str], _: u64) -> Result<String, String> {
         let text = words.join(" ");
         if let Some(id) = self.resolve(&text) {
-            self.unfold_to(id);
-            self.go_to(id);
+            self.jump(id, "go", json!({}));
             return Ok(String::new());
         }
         let found = self.leap_matches(&text, true).first().copied();
         let id = found.ok_or(format!("no item is or holds “{text}”"))?;
-        self.unfold_to(id);
-        self.set_cursor(id);
         let leap = json!({"pattern": text, "forward": true, "found": found});
-        self.write_view("leap", leap);
+        self.jump(id, "leap", leap);
         Ok(String::new())
+    }
+
+    /// Jump the cursor to an item, unfolding what hides it, and write the
+    /// view with where it came from and where it went, so back returns.
+    pub(crate) fn jump(&mut self, to: u64, op: &str, mut body: Value) {
+        body["from"] = json!(self.cursor());
+        body["to"] = json!(to);
+        self.unfold_to(to);
+        self.set_cursor(to);
+        self.write_view(op, body);
+    }
+
+    /// Go back to where the last jump came from, passing over items gone.
+    pub(crate) fn cmd_back(&mut self, _: &[&str], _: u64) -> Result<String, String> {
+        let trail = &self.session.trail.back;
+        let to = self.last_present(trail).ok_or("nothing to go back to")?;
+        self.jump(to, "back", json!({}));
+        Ok(String::new())
+    }
+
+    /// Go forward again to where back came from.
+    pub(crate) fn cmd_forward(&mut self, _: &[&str], _: u64) -> Result<String, String> {
+        let trail = &self.session.trail.forward;
+        let to = self.last_present(trail).ok_or("nothing to go forward to")?;
+        self.jump(to, "forward", json!({}));
+        Ok(String::new())
+    }
+
+    /// The last item of a list still in the outline.
+    fn last_present(&self, items: &[u64]) -> Option<u64> {
+        let outline = &self.notebook.outline;
+        items
+            .iter()
+            .rev()
+            .copied()
+            .find(|i| outline.items.contains_key(i))
     }
 
     pub(crate) fn go_to(&mut self, id: u64) {
@@ -234,9 +267,7 @@ impl App {
     }
 
     fn follow_to(&mut self, to: u64) {
-        self.unfold_to(to);
-        self.set_cursor(to);
-        self.write_view("follow", json!({"to": to}));
+        self.jump(to, "follow", json!({}));
     }
 
     // Folds and panes.

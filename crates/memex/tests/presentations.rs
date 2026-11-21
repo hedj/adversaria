@@ -71,13 +71,7 @@ fn a_link_presents_the_item_at_its_other_end() {
     r.put_cursor(buran);
     r.command("link to 2");
     let link = presented_at(&r, "Energia  1");
-    assert_eq!(
-        link,
-        Some(Presentation::Item {
-            pane: 0,
-            id: energia
-        })
-    );
+    assert_eq!(link, Some(Presentation::Link { to: energia }));
     click_on(&mut r, "Energia  1");
     assert_eq!(r.app.cursor(), energia);
 }

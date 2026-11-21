@@ -240,6 +240,14 @@ impl Memex {
         self.screen.mouse.drag.press(start);
     }
 
+    /// A mouse's back or forward button, with the mouse on: back or
+    /// forward along the trail.
+    fn side_button(&mut self, line: &str) {
+        if self.input.config.mouse {
+            self.app.mouse_command(line);
+        }
+    }
+
     /// A right-click: a menu of what the object presented under the
     /// pointer offers, and what plumbing offers for the text selected, or
     /// else the word there (crate::present, crate::plumb).
@@ -410,6 +418,16 @@ impl ApplicationHandler for Memex {
                 button: MouseButton::Right,
                 ..
             } => self.plumb(),
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Back,
+                ..
+            } => self.side_button("back"),
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Forward,
+                ..
+            } => self.side_button("forward"),
             WindowEvent::Resized(s) => self.resized(s),
             _ => return,
         }

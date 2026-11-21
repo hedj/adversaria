@@ -15,7 +15,7 @@ impl App {
     pub(crate) fn translators(&self, p: &Presentation) -> Vec<Offer> {
         use Presentation as P;
         match p {
-            P::Item { id, .. } => self.item_offers(*id),
+            P::Item { id, .. } | P::Link { to: id } => self.item_offers(*id),
             P::Fact { item, .. } => vec![self.go_offer(*item, "the item that states it")],
             P::Constraint {
                 entry, item, under, ..
@@ -47,7 +47,7 @@ impl App {
     fn item_of(&self, p: &Presentation) -> Option<u64> {
         use Presentation as P;
         match p {
-            P::Item { id, .. } => Some(*id),
+            P::Item { id, .. } | P::Link { to: id } => Some(*id),
             P::Fact { item, .. } => Some(*item),
             P::Constraint { item, .. } => *item,
             P::Layer { view, .. } => Some(*view),
@@ -128,7 +128,7 @@ impl App {
         use Presentation as P;
         let outline = &self.notebook.outline;
         match p {
-            P::Item { id, .. } => outline.text(*id),
+            P::Item { id, .. } | P::Link { to: id } => outline.text(*id),
             P::Fact { entry, .. } => self.fact_shown(*entry),
             P::Constraint { entry, .. } => self.constraint_name(*entry),
             P::Layer { entry, .. } => format!("layer of entry {entry}"),

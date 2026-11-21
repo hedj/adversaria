@@ -27,6 +27,8 @@ pub struct Session {
     pub(crate) view_dirty: bool,
     /// The last leap's pattern and direction, for leaping again.
     pub(crate) last_leap: Option<(String, bool)>,
+    /// Where jumps came from, for back and forward.
+    pub trail: Trail,
     pub keys: Keys,
     /// The plumbing rules a right-click asks (crate::plumb).
     pub plumber: crate::plumb::Plumber,
@@ -138,6 +140,47 @@ impl Menu {
 }
 
 /// The pattern and direction of a leap entry.
+/// Where the cursor jumped from, so that back returns there: the items
+/// left by each jump (follow, leap, go), the last on top, and those back
+/// left, for forward. Each jump's view entry records where it came from,
+/// so the trail is the journal's, and a reopened notebook has it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Trail {
+    pub back: Vec<u64>,
+    pub forward: Vec<u64>,
+}
+
+impl Trail {
+    /// Follow a view entry: a jump puts where it came from on the back
+    /// list and empties the forward one; back and forward move between.
+    fn apply(&mut self, b: &Value) {
+        let (Some(from), to) = (b["from"].as_u64(), b["to"].as_u64()) else {
+            return;
+        };
+        match b["op"].as_str() {
+            Some("back") => step(&mut self.back, &mut self.forward, from, to),
+            Some("forward") => step(&mut self.forward, &mut self.back, from, to),
+            _ if to != Some(from) => {
+                self.back.push(from);
+                self.forward.clear();
+            }
+            _ => {}
+        }
+    }
+}
+
+/// A step along the trail from one item to another: the list stepped
+/// along loses the items up to the one reached (those passed over were
+/// gone), and the other gains the one left.
+fn step(along: &mut Vec<u64>, other: &mut Vec<u64>, from: u64, to: Option<u64>) {
+    while let Some(i) = along.pop() {
+        if Some(i) == to {
+            break;
+        }
+    }
+    other.push(from);
+}
+
 fn leap_of(b: &Value) -> Option<(String, bool)> {
     let pattern = b["pattern"].as_str()?;
     Some((pattern.to_string(), b["forward"] != false))
@@ -286,6 +329,7 @@ impl Session {
             return;
         };
         self.view.restore(b);
+        self.trail.apply(b);
         match b["op"].as_str() {
             Some("leap") => self.last_leap = leap_of(b),
             Some("observed") => self.set_observed(observed_of(b)),
