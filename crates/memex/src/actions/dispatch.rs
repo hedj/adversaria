@@ -720,21 +720,18 @@ pub const GROUPS: &[(&str, &[&str])] = &[
             "transclude",
             "link",
             "name",
-            "go",
-            "follow",
-            "back",
-            "forward",
-            "next",
-            "previous",
-            "first",
-            "last",
-            "parent",
-            "child",
             "fold",
             "pane",
             "switch",
             "help",
             "quit",
+        ],
+    ),
+    (
+        "MOVING",
+        &[
+            "go", "follow", "back", "forward", "next", "previous", "first", "last", "parent",
+            "child",
         ],
     ),
     (
@@ -840,5 +837,21 @@ mod tests {
         }
         let listed: usize = GROUPS.iter().map(|(_, ns)| ns.len()).sum();
         assert_eq!(listed, COMMANDS.len(), "a group names no command");
+    }
+
+    #[test]
+    fn the_moves_have_a_group_of_their_own() {
+        // Catches the moves mixed in with the edits again: a reader looking
+        // for how to get somewhere finds every way under one heading.
+        let groups = command_groups("");
+        let (_, moving) = groups.iter().find(|(h, _)| *h == "MOVING").unwrap();
+        let names: Vec<&str> = moving.iter().map(|c| c.name).collect();
+        let moves = [
+            "go", "follow", "back", "forward", "next", "previous", "first", "last", "parent",
+            "child",
+        ];
+        assert_eq!(names, moves);
+        let (_, editing) = &groups[0];
+        assert!(editing.iter().all(|c| !moves.contains(&c.name)));
     }
 }

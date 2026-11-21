@@ -230,7 +230,7 @@ Within a quasimode:
   typed straight after a word it ends a question ("Does John wait?").
   `?` again hides the list; what you typed stays. In Command, `?` inside
   quotes is typed; in Leap, `?` always lists, so Leap cannot search for it.
-  Command lists the commands under the four headings of § 2.4, by name
+  Command lists the commands under the five headings of § 2.4, by name
   within each, with what each does and, at the right, its key, if one is
   bound to it (F3 for `adopt`). Where they do not all fit, it lists each
   group's names alone, with their keys; typing a command's first letters
@@ -437,21 +437,26 @@ Where a command takes an ADDRESS, any of these name an item:
 | `transclude` | `transclude from ADDRESS` | makes a new item after the target that shows ADDRESS's text in place |
 | `link` | `link [FROM] to TO [as TYPE]` | links two items; FROM defaults to the target, TYPE to `link`. `cites`, `supports` and `opposes` read well in the links pane |
 | `name` | `name WORD` | names the target, so WORD addresses it; the name `title` also heads the outline. A name is also a marker, as NLS had: `go WORD` jumps to it from anywhere, and `back` returns |
+| `fold` | `fold` | hides the target's branch, or shows it if it is hidden |
+| `pane` | `pane outline`, `pane links`, `pane suggestions`, `pane matches` | sets what the other pane shows. `matches` lists every item that holds the last Leap's pattern, in the outline's order, numbered, with where the cursor is among them (`MATCHES OF “ener” · 14 · at 3 of 14`); a click on one jumps to it, so `back` returns, and the list stays as you edit |
+| `switch` | `switch` | moves focus to the other pane |
+| `help` | `help` | opens the list of every command, as F1 does |
+| `quit` | `quit` | writes what is pending and leaves |
+
+#### Moving
+
+| Command | Form | Does |
+| --- | --- | --- |
 | `go` | `go TEXT` | goes to the item TEXT addresses, else to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3) |
 | `follow` | `follow [N]` | goes to the other end of the target's Nth link (default 1) |
+| `back` | `back` (F7, or the mouse's back button, when no quasimode, menu or question is open) | goes back to where the last jump came from: `follow`, Leap, `go`, or a click on a link, a mention or a match in the right pane (the foot says `click: follow to 2`). Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over |
+| `forward` | `forward` (F8, or the mouse's forward button) | goes forward again to where `back` came from; a new jump empties the way forward, as in a browser |
 | `next` | `next` | goes to the next item at the target's level, over the items under it, after NLS: a move, as an arrow key is, not a jump. None of these six moves is bound to a key; bind them in `[keys]` (§ 4.3), or type a prefix (`par`) |
 | `previous` | `previous` | goes to the previous item at the target's level |
 | `first` | `first` | goes to the first item at the target's level |
 | `last` | `last` | goes to the last item at the target's level |
 | `parent` | `parent` | goes to the item the target is under |
 | `child` | `child` | goes to the first item under the target, showing it if folded |
-| `back` | `back` (F7, or the mouse's back button, when no quasimode, menu or question is open) | goes back to where the last jump came from: `follow`, Leap, `go`, or a click on a link, a mention or a match in the right pane (the foot says `click: follow to 2`). Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over |
-| `forward` | `forward` (F8, or the mouse's forward button) | goes forward again to where `back` came from; a new jump empties the way forward, as in a browser |
-| `fold` | `fold` | hides the target's branch, or shows it if it is hidden |
-| `pane` | `pane outline`, `pane links`, `pane suggestions`, `pane matches` | sets what the other pane shows. `matches` lists every item that holds the last Leap's pattern, in the outline's order, numbered, with where the cursor is among them (`MATCHES OF “ener” · 14 · at 3 of 14`); a click on one jumps to it, so `back` returns, and the list stays as you edit |
-| `switch` | `switch` | moves focus to the other pane |
-| `help` | `help` | opens the list of every command, as F1 does |
-| `quit` | `quit` | writes what is pending and leaves |
 
 **Tags.** A `#` at the start of a text or after a space, then a word,
 tags the item: `Buran #reusable #Soviet-space` gives `item_tag(Item,
