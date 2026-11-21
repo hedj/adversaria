@@ -489,9 +489,13 @@ def wayland_focus_lost(binary, d, env, keys, check):
           (focused, steps, status, texts(es), leaps(es), err[-200:]))
 
 
-# The first item's row of the outline pane, in the output's own units, and
-# the memex's ink (crate::gui::paint::INK).
-FIRST_ITEM_ROW = (0, FIRST_ITEM[1] - 9, 300, 14)
+# The second item's row of the outline pane, in the output's own units,
+# and the memex's ink (crate::gui::paint::INK). The first item's row will
+# not do: an empty outline's first line, "Type to write the first item.",
+# is drawn there in ink too.
+# FIRST_ITEM is the top edge of the first item's row, of 18 units; the
+# region is inside the row below it, clear of the glyphs above.
+SECOND_ITEM_ROW = (0, FIRST_ITEM[1] + 18 + 2, 300, 14)
 INK = "dcdcdc"
 
 
@@ -520,10 +524,11 @@ def wayland_click(binary, d, check):
         # while after the keys come: sway shows it some 20 ms after it
         # reports it focused, and the keys and a click can all come before
         # its next frame. So the click waits, as a person would, until the
-        # screen shows the first item's row in the memex's ink (its text,
-        # not the dimmed hint of an empty outline). The screen program
-        # counts in pixels, two to a unit at this scale.
-        shown = on_screen(binary, env, p, [n * 2 for n in FIRST_ITEM_ROW], INK)
+        # screen shows the second item's row in the memex's ink: drawn only
+        # once both items are, where an empty outline's row is blank (its
+        # first row is not: "Type to write the first item." is in ink).
+        # The screen program counts in pixels, two to a unit at this scale.
+        shown = on_screen(binary, env, p, [n * 2 for n in SECOND_ITEM_ROW], INK)
         # The output is 800 by 500 in its own units at a scale of 2.
         steps = [typed_in, shown, told(hand, f"move {FIRST_ITEM[0]} {FIRST_ITEM[1]} 800 500", "click"),
                  told(keys, "type Z", f"key {EV_F10}")]
