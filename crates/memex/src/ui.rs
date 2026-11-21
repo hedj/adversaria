@@ -1837,6 +1837,7 @@ fn links_lines(outline: &Outline, id: u64) -> Vec<Presented> {
         found.push((Line::styled("no links", dim()), None));
     }
     lines.extend(found);
+    lines.extend(mention_lines(outline, id));
     lines
 }
 
@@ -1940,6 +1941,26 @@ fn transclusion_lines(outline: &Outline, id: u64) -> Vec<Presented> {
     let heading = (Line::styled("transcluded in ←", dim()), None);
     let places = shown_in.into_iter().map(|t| transcluded_line(outline, t));
     std::iter::once(heading).chain(places).collect()
+}
+
+/// The items that name an item without linking to it, under a heading,
+/// each a click away.
+fn mention_lines(outline: &Outline, id: u64) -> Vec<Presented> {
+    let mentions = outline.mentions_of(id);
+    if mentions.is_empty() {
+        return vec![];
+    }
+    let heading = (Line::styled("mentioned in, not linked ←", dim()), None);
+    let lines = mentions.into_iter().map(|m| mention_line(outline, m));
+    std::iter::once(heading).chain(lines).collect()
+}
+
+/// An item that mentions another: its address and text; a click jumps.
+fn mention_line(outline: &Outline, m: u64) -> Presented {
+    (
+        Line::raw(labelled_end(outline, m)),
+        Some(Presentation::Link { to: m }),
+    )
 }
 
 /// Where an item is transcluded, presenting the item that shows it.

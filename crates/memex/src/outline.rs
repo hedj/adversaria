@@ -824,6 +824,23 @@ impl Outline {
 
     /// The items at the other ends of an item's links: those it links to,
     /// then those that link to it.
+    /// The items whose text names an item's text as whole words, in any
+    /// case, and that do not link to it: its unlinked mentions, in the
+    /// outline's order. Only a text that reads as a name is looked for.
+    pub fn mentions_of(&self, id: u64) -> Vec<u64> {
+        let name = self.text(id).trim().to_lowercase();
+        if !reads_as_name(&name) {
+            return vec![];
+        }
+        let linked: Vec<u64> = self.links_of(id).1.iter().map(|l| l.from).collect();
+        let names = |i: &u64| names_in(&self.text(*i).to_lowercase(), &name);
+        let others = self
+            .in_order()
+            .into_iter()
+            .filter(|i| *i != id && !linked.contains(i));
+        others.filter(names).collect()
+    }
+
     pub fn neighbours(&self, id: u64) -> Vec<u64> {
         let (out, into) = self.links_of(id);
         out.iter()
@@ -1137,6 +1154,25 @@ fn link_of(seq: u64, b: &Body) -> Option<Link> {
         from,
         to,
         kind,
+    })
+}
+
+/// Whether a text reads as a name: 3 to 60 characters, six words at
+/// most, not ending in a sentence's end (guide § 3.4).
+pub fn reads_as_name(text: &str) -> bool {
+    let text = text.trim();
+    let n = text.chars().count();
+    let words = text.split_whitespace().count();
+    (3..=60).contains(&n) && words <= 6 && !text.ends_with(['.', '?', '!'])
+}
+
+/// Whether a text holds a name as whole words: not inside a longer word.
+fn names_in(text: &str, name: &str) -> bool {
+    let word = |c: Option<char>| c.is_some_and(char::is_alphanumeric);
+    text.match_indices(name).any(|(at, _)| {
+        let before = text[..at].chars().next_back();
+        let after = text[at + name.len()..].chars().next();
+        !word(before) && !word(after)
     })
 }
 

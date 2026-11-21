@@ -150,7 +150,11 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   says why its text was not read, or which of its `[[links]]` name no item
   yet (§ 2.4, § 3.1).
 - **Right pane:** what the selected item needs. By default its links,
-  under `LINKS OF` and the item's address, or `no links`; on an item with
+  under `LINKS OF` and the item's address, or `no links`, each with the
+  text of the item at its other end; then, under `mentioned in, not
+  linked ←`, the items whose text names this one's as whole words, in any
+  case, without linking to it (only a text that reads as a name, as for
+  unlinked-mention suggestions, § 3.4), each a click away; on an item with
   marks, the constraint, its rule, its solutions and what depends on them;
   on a view, its layers. Under the links or the constraint, `READ AS` and
   the address show what the item's text was read as, in Prolog, and its

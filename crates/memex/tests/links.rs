@@ -126,3 +126,63 @@ fn a_hint_with_no_room_under_the_interrogation_is_no_click() {
             .any(|(_, c)| format!("{c:?}").contains("adopt"))
     );
 }
+
+/// The right pane's rows, one per line.
+fn right_pane(r: &Room) -> String {
+    let rows = r.lines_at(160, 40);
+    let right = rows.iter().map(|l| l.split('│').nth(1).unwrap_or(""));
+    right.collect::<Vec<_>>().join("\n")
+}
+
+/// Energia, an item that names it, one with it inside a longer word, and
+/// a sentence; the cursor on Energia.
+fn mentioned(name: &str) -> Room {
+    let mut r = Room::new(name);
+    r.items(&[
+        "Energia",
+        "The launch of energia went well.",
+        "Energiamax is another thing.",
+    ]);
+    let first = r.outline().in_order()[0];
+    r.put_cursor(first);
+    r
+}
+
+#[test]
+fn the_links_pane_lists_the_items_that_mention_it_unlinked() {
+    // Catches mentions found only among the five suggestions of the whole
+    // notebook: the third review asked for them by the item.
+    let r = mentioned("links-mentions");
+    let right = right_pane(&r);
+    assert!(right.contains("mentioned in, not linked ←"), "{right}");
+    assert!(
+        right.contains("2. The launch of energia went well."),
+        "{right}"
+    );
+    assert!(
+        !right.contains("3. Energiamax"),
+        "inside a longer word: {right}"
+    );
+    assert!(right.contains("no links"), "{right}");
+}
+
+#[test]
+fn a_mention_linked_is_listed_no_more() {
+    let mut r = mentioned("links-mentions-linked");
+    let second = r.outline().in_order()[1];
+    r.put_cursor(second);
+    r.command("link to 1");
+    let first = r.outline().in_order()[0];
+    r.put_cursor(first);
+    let right = right_pane(&r);
+    assert!(!right.contains("mentioned in, not linked"), "{right}");
+}
+
+#[test]
+fn a_click_on_a_mention_jumps_to_it() {
+    let mut r = mentioned("links-mentions-click");
+    let at = r.find("2. The launch of energia");
+    let hits = r.hits();
+    r.app.click_at(&hits, at);
+    assert_eq!(r.app.cursor(), r.outline().in_order()[1]);
+}

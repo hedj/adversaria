@@ -56,7 +56,9 @@ impl App {
         let outline = &self.notebook.outline;
         let here = self.cursor();
         let texts = outline.in_order().into_iter().filter(|i| *i != here);
-        let texts = texts.map(|i| outline.text(i)).filter(|t| short_text(t));
+        let texts = texts
+            .map(|i| outline.text(i))
+            .filter(|t| crate::outline::reads_as_name(t));
         outline.names.keys().cloned().chain(texts).collect()
     }
 
@@ -67,15 +69,6 @@ impl App {
         let text = self.text_of(item);
         self.session.replace_before(item, text, typed, with);
     }
-}
-
-/// Whether an item's text reads as a name: 3 to 60 characters, six words
-/// at most, not ending in a sentence's end.
-fn short_text(text: &str) -> bool {
-    let text = text.trim();
-    let n = text.chars().count();
-    let words = text.split_whitespace().count();
-    (3..=60).contains(&n) && words <= 6 && !text.ends_with(['.', '?', '!'])
 }
 
 /// The start that names share, ignoring case, in the first's own case.
