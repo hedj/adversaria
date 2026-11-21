@@ -344,6 +344,11 @@ impl Outline {
         id == TOP || self.items.contains_key(&id)
     }
 
+    /// The items at an item's level under its parent, it among them.
+    pub fn siblings(&self, id: u64) -> &[u64] {
+        self.children(self.parent_or_top(id))
+    }
+
     pub fn children(&self, id: u64) -> &[u64] {
         if id == TOP {
             &self.top

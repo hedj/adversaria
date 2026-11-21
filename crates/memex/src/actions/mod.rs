@@ -8,6 +8,7 @@ mod inline;
 mod knowledge;
 mod reading;
 mod split;
+mod structure;
 mod worlds;
 
 pub use dispatch::{

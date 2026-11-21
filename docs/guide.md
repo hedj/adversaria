@@ -429,9 +429,15 @@ Where a command takes an ADDRESS, any of these name an item:
 | `split` | `split` | splits the target's text at each sentence end (`.`, `?` or `!`, a space, then a capital, a digit, a quote or a bracket; never after an abbreviation that comes before what it shortens, such as `e.g.`, `Dr.` or `p.`, or an initial such as `J.`; `etc.`, `et al.`, `Jr.`, `Sr.`, `ed.`, `eds.` and `St.` end one only before a capital letter): the target keeps the first sentence, with its links; each other becomes a new item after it, linked back as `split_from`, its characters kept from the target's text, so their history stays. Each part is read at the pause. One `undo` takes the whole split back |
 | `transclude` | `transclude from ADDRESS` | makes a new item after the target that shows ADDRESS's text in place |
 | `link` | `link [FROM] to TO [as TYPE]` | links two items; FROM defaults to the target, TYPE to `link`. `cites`, `supports` and `opposes` read well in the links pane |
-| `name` | `name WORD` | names the target, so WORD addresses it; the name `title` also heads the outline |
+| `name` | `name WORD` | names the target, so WORD addresses it; the name `title` also heads the outline. A name is also a marker, as NLS had: `go WORD` jumps to it from anywhere, and `back` returns |
 | `go` | `go TEXT` | goes to the item TEXT addresses, else to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3) |
 | `follow` | `follow [N]` | goes to the other end of the target's Nth link (default 1) |
+| `next` | `next` | goes to the next item at the target's level, over the items under it, after NLS: a move, as an arrow key is, not a jump. None of these six moves is bound to a key; bind them in `[keys]` (§ 4.3), or type a prefix (`par`) |
+| `previous` | `previous` | goes to the previous item at the target's level |
+| `first` | `first` | goes to the first item at the target's level |
+| `last` | `last` | goes to the last item at the target's level |
+| `parent` | `parent` | goes to the item the target is under |
+| `child` | `child` | goes to the first item under the target, showing it if folded |
 | `back` | `back` (F7, or the mouse's back button) | goes back to where the last jump came from: `follow`, Leap, `go`, or a click on a link. Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over |
 | `forward` | `forward` (F8, or the mouse's forward button) | goes forward again to where `back` came from; a new jump empties the way forward, as in a browser |
 | `fold` | `fold` | hides the target's branch |
