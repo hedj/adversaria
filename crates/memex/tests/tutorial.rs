@@ -225,7 +225,7 @@ fn the_tutorial_works_as_written() {
     part_c(&mut t);
     part_d(&mut t);
 
-    // Step 16: leave. The journal, opened again, replays to the same budget.
+    // Step 17: leave. The journal, opened again, replays to the same budget.
     t.key(Key::F(10));
     assert!(t.app.session.quit);
     t.app.flush();
@@ -328,8 +328,9 @@ fn the_claim_supposed(t: &mut T) {
     assert_eq!(t.app.reason.world(), "actual");
 }
 
-/// Steps 6 to 9: a draft imported, a co-author's revision taken in,
-/// Leap, and a quotation changed and caught.
+/// Steps 6 to 10: a draft imported, a co-author's revision taken in,
+/// Leap, a quotation changed and caught, and a note linked, followed and
+/// left by back.
 fn part_b(t: &mut T) {
     a_draft_imported(t);
     a_revision_taken_in(t);
@@ -337,6 +338,35 @@ fn part_b(t: &mut T) {
     t.look("leap");
     assert!(t.here().starts_with("The chief designer wrote"));
     a_quotation_checked(t);
+    a_note_linked(t);
+}
+
+/// Step 10: a note linked to the essay's heading by a [[link]] completed
+/// with Esc; the links pane; follow, and back.
+fn a_note_linked(t: &mut T) {
+    t.tap(Key::End);
+    t.tap(Key::Enter);
+    t.typ("Check this against [[How");
+    t.look("completion");
+    t.shows("[[ How Buran’s flight software was reviewed · Esc completes");
+    t.key(Key::Escape);
+    t.pause();
+    t.look("linked");
+    t.shows("LINKS OF 2.1.3");
+    t.shows("link →");
+    t.shows("2. How Buran’s flight software was reviewed  1");
+    t.command("follow 1");
+    t.look("followed");
+    t.shows("link this ←");
+    t.shows("2.1.3. Check this against [[How Buran’s flight software was reviewed]]  1");
+    t.key(Key::F(7));
+    assert!(
+        t.here().starts_with("Check this against"),
+        "back to the note"
+    );
+    t.key(Key::F(8));
+    assert!(t.here().starts_with("How Buran"), "forward again");
+    t.key(Key::F(7));
 }
 
 /// Step 6: a document, imported as items.
@@ -383,7 +413,7 @@ fn a_quotation_checked(t: &mut T) {
     t.says("quote check: quoted");
 }
 
-/// Steps 10 to 13: boxes and rules in sentences, a question, a rule
+/// Steps 11 to 14: boxes and rules in sentences, a question, a rule
 /// between them, a change, and a what-if.
 fn part_c(t: &mut T) {
     boxes_and_rules(t);
@@ -392,7 +422,7 @@ fn part_c(t: &mut T) {
     a_what_if(t);
 }
 
-/// Step 10: boxes, rules over them, and a question answered.
+/// Step 11: boxes, rules over them, and a question answered.
 fn boxes_and_rules(t: &mut T) {
     t.hold(Quasi::LeapForward, "nothing has");
     t.tap(Key::Enter);
@@ -418,7 +448,7 @@ fn boxes_and_rules(t: &mut T) {
     t.shows("→ 400");
 }
 
-/// Step 11: rules between the boxes, both in sentences.
+/// Step 12: rules between the boxes, both in sentences.
 fn rules_between_the_boxes(t: &mut T) {
     t.tap(Key::Enter);
     t.typ("It is false that the cost is greater than the income.");
@@ -431,7 +461,7 @@ fn rules_between_the_boxes(t: &mut T) {
     t.says("constraint Nothing has more than 1 value kept: it fires on a planted violation");
 }
 
-/// Step 12: a value changed, and what follows from it.
+/// Step 13: a value changed, and what follows from it.
 fn a_value_changed(t: &mut T) {
     t.retype_end("food is 4", 4, "900.");
     t.look("food 900");
@@ -442,7 +472,7 @@ fn a_value_changed(t: &mut T) {
     t.lacks("constraint violation");
 }
 
-/// Step 13: what if the rent rose.
+/// Step 14: what if the rent rose.
 fn a_what_if(t: &mut T) {
     t.tapped(Quasi::Suppose, "rent is 1600");
     t.look("suppose rent?");
@@ -457,7 +487,7 @@ fn a_what_if(t: &mut T) {
     t.shows("→ 300");
 }
 
-/// Steps 14 and 15: a chart of the boxes, and text and a timeline
+/// Steps 15 and 16: a chart of the boxes, and text and a timeline
 /// computed from part A's dates.
 fn part_d(t: &mut T) {
     let chart = a_chart_with_a_limit(t);
@@ -466,7 +496,7 @@ fn part_d(t: &mut T) {
     the_dates_as_a_timeline(t);
 }
 
-/// Step 15: a second date, a sentence computed from both, and a query.
+/// Step 16: a second date, a sentence computed from both, and a query.
 fn a_sentence_computed(t: &mut T) {
     t.hold(Quasi::LeapForward, "buran flew once, unmanned");
     t.tap(Key::Enter);
@@ -482,7 +512,7 @@ fn a_sentence_computed(t: &mut T) {
     t.says("2 answers: E = buran_flight, Y = 1988 · E = energia_launch, Y = 1987");
 }
 
-/// Step 14: a chart of the boxes, with a limit: its item.
+/// Step 15: a chart of the boxes, with a limit: its item.
 fn a_chart_with_a_limit(t: &mut T) -> u64 {
     t.hold(Quasi::LeapForward, "what is the rest");
     t.tap(Key::Enter);
@@ -500,7 +530,7 @@ fn a_chart_with_a_limit(t: &mut T) -> u64 {
     chart
 }
 
-/// Step 14: food at 900 breaks "spending within income" with rent and
+/// Step 15: food at 900 breaks "spending within income" with rent and
 /// income, so the three bars are loud; back at 500, none is.
 fn loud_while_over_income(t: &mut T, chart: u64) {
     t.retype_end("food is 5", 4, "900.");
@@ -612,7 +642,7 @@ fn loud_columns(fig: &memex::view::Figure) -> Vec<usize> {
         .collect()
 }
 
-/// Step 15: part A's dates as a timeline; the claimed date is not a
+/// Step 16: part A's dates as a timeline; the claimed date is not a
 /// belief, so not drawn.
 fn the_dates_as_a_timeline(t: &mut T) {
     t.tap(Key::Enter);

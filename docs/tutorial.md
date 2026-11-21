@@ -328,13 +328,43 @@ leap to `landing was automatic`, press End, erase `automatic.` and type
 whether the paper exists, is what you claim, or has been retracted. It
 needs the network, so this tutorial does not run it.)
 
+### 10. A note linked, followed, and back
+
+*Why: a note is worth more beside what it is about, and you want to get
+there and back without losing your place.*
+
+With the cursor on the chief designer's words, press End, then Enter,
+for a new item after them, and type `Check this against [[How`. While
+the text cursor is in an open `[[`, a dim line under the item lists the
+items whose names fit what you have typed:
+
+    [[ How Buran’s flight software was reviewed · Esc completes
+
+Press Esc: the name is completed, and the link closed with `]]`. At the
+pause the note links to the essay's heading. The right pane shows the
+selected item's links, under its address:
+
+    LINKS OF 2.1.3
+    link →
+      2. How Buran’s flight software was reviewed  1
+
+Run `follow 1` (or click that line). The cursor goes to the heading,
+and its pane lists your note among the items that link to it:
+
+    link this ←
+      2.1.3. Check this against [[How Buran’s flight software was reviewed]]  1
+
+Press **F7** (back; a mouse's back button does the same): the cursor
+returns to your note. F8 goes forward again. `follow`, Leap, `go` and a
+click on a link are jumps, which back retraces; arrow keys are not.
+
 ## C. Boxes that compute
 
 *Why: a spreadsheet computes, but does not check itself, and a what-if
 overwrites the real numbers. Here rules are checked every time a number
 changes, and a what-if sits beside the original.*
 
-### 10. Boxes, rules and a question
+### 11. Boxes, rules and a question
 
 Leap to `nothing has` (the rule of part A), press Enter for a new item,
 and Shift-Tab to bring it to the top level. Type `Budget`. Press Enter,
@@ -354,7 +384,7 @@ set; rules compute them. The question is answered on the line under it:
 
     → 400
 
-### 11. Rules between the boxes
+### 12. Rules between the boxes
 
 Spending must not exceed income, and a box holds one value. Press Enter
 and type
@@ -371,7 +401,7 @@ notebook says
 `constraint Nothing has more than 1 value kept: it fires on a planted violation`.
 It says of boxes what step 3 said of dates.
 
-### 12. Change a value
+### 13. Change a value
 
 To change a value, change its sentence. Leap to `food is 4`, press End,
 erase `400.` with Backspace, type `900.`, and stop for a second. The old
@@ -381,7 +411,7 @@ the boxes involved. The notebook does not choose how to repair it (lower
 the rent? the food?); that is yours. Leap to `food is 9`, and in the
 same way make it `500.` Now `→ 300`, and the violation is gone.
 
-### 13. What if
+### 14. What if
 
 Tap Super, type `rent is 1600`, and press Enter. The notebook asks:
 
@@ -405,7 +435,7 @@ Run `close`; the actual budget still says `→ 300`.
 *Why: a chart drawn from your facts changes as they do, shows what
 breaks a rule, and never draws a claim you have not adopted.*
 
-### 14. A chart of the boxes
+### 15. A chart of the boxes
 
 Leap to `what is the rest`, press Enter, and Shift-Tab to the top level.
 Type `Spending chart`. Then run two commands, which draw it in layers, a
@@ -426,7 +456,7 @@ the cost rule's violation rests on the income, rent and food, and so
 does every bar. Leap to `food is 9` and
 make it `500.` to put it back.
 
-### 15. A sentence, a query and a timeline
+### 16. A sentence, a query and a timeline
 
 Leap to `buran flew once, unmanned`, press Enter, and type a second date:
 
@@ -457,7 +487,7 @@ Each event is a tick on a line of years, labelled in words:
 talk notes' 1989 is not drawn: it is a claim, not a belief, and a view
 draws beliefs.
 
-### 16. Leave
+### 17. Leave
 
 Press **F10** to quit. What was pending is written first.
 
@@ -481,7 +511,9 @@ When you are done, delete `$HOME/adversaria-tutorial` and
 
 docs/guide.md describes every command, the files the notebook keeps, the
 tools around it, and how to change the keys. Things this tutorial did not
-show: links typed as `[[Buran flight]]`, `#tags`, splitting an item into
+show: links made by command, with a type (`link to 2 as supports`),
+moving by the outline's structure (`next`, `parent`), the list of a
+Leap's matches (`pane matches`), `#tags`, splitting an item into
 sentences, Wikidata as a public source to check dates against, and
 results from a Python analysis, which are marked when their input data
 changes (§ 4.1).
