@@ -89,6 +89,33 @@ The reservoir's state is updated as s = λ·s + (1 − |λ|)·\[x = v\] for each
 
 The exact context is the 8 raw bytes plus the copy window. Beyond it the reservoir keeps only blurred statistics, out to about 2K bytes at the longest time constant.
 
+### Candidate refinements: loops and wavelets
+
+These are proposals, not measured; the sources are recalled, not checked.
+
+**Loop only around nonlinear parts.** Applying the reservoir's linear step n times equals one step with each eigenvalue raised to the nth power, so looping the linear part adds nothing. Looping helps only around a nonlinearity.
+
+| Idea | Source | Where it fits | Cost |
+| --- | --- | --- | --- |
+| One readout block applied k times instead of k distinct blocks | Universal Transformers (Dehghani et al. 2018); looped transformers (Giannou et al. 2023; Yang et al. 2023) | the KAN mixers: parameters fall about k-fold, and so do the bytes of weights read per step | k times the arithmetic per byte; backpropagation through the loops, which costs more and can be unstable |
+| Adaptive halting: easy bytes take one loop, hard ones several | adaptive computation time (Graves 2016) | the "do you mean?" round has time to spare | harder training |
+| Repeated wavelet and modulus | the scattering transform (Mallat); Glinsky's Heisenberg scattering transform | the reservoir is already complex, so the modulus is natural | a nonlinearity outside the model's linear-dynamics premise |
+
+**A wavelet pyramid over the reservoir states.** A mid/side split of adjacent pairs, mid = (a + b)/√2 and side = (a − b)/√2, is one Haar step; repeating it on the mids gives the Haar pyramid, log₂ n levels over n samples. The split applies to the reservoir states or to embedded vectors, never to raw byte codes, whose averages mean nothing. Level j updates once every 2ʲ bytes, so a streaming pyramid costs O(1) additions per byte, amortised, and keeps O(log n) state: coarse summaries of long context, beside the copy window's exact recall. It stays linear, so it keeps the model's cheap, parallel training.
+
+**Lifting, and Haar as its simplest case.** The lifting scheme (Daubechies and Sweldens 1998) splits samples into even and odd, predicts each odd sample from evens, and updates the evens. Haar is lifting with the simplest predictor: d = odd − even, then s = even + d/2.
+
+| | Haar | CDF 5/3 (JPEG 2000 lossless) | CDF 9/7 (JPEG 2000 lossy) | Learned lifting |
+| --- | --- | --- | --- | --- |
+| Predict and update from | one neighbour | neighbours on both sides | four lifting steps and a scale | small learned steps |
+| Operations per pair of samples | 1 addition, 1 subtraction, 1 shift | about 4 additions, 2 shifts | about 4–6 multiplications and additions | depends on the steps |
+| Vanishing moments (trends the detail channel cancels) | 1: constants only | 2: linear trends too | 4 | learned |
+| Separation of scales | poor: blocky, with leakage | better | good | as trained |
+| Causal, as left-to-right prediction needs | yes, one sample's delay per level | symmetric steps need one or two later samples per level; a causal predictor gives up the symmetry | more delay | causal by construction |
+| Exact inverse | yes | yes, integer to integer with rounding | yes | yes, whatever the predictor |
+
+The model only analyses its input and never reconstructs it, so lifting's exact inverse matters little here; causality and vanishing moments decide. The proposal is to build the pyramid from lifting steps with Haar's predictor, which is cheap and causal, and later try a causal two-sample predictor or a learned one without changing the rest. Reservoir states drift smoothly, and one vanishing moment leaves linear drift in the detail channel, so the test is whether a second vanishing moment improves prediction by enough to pay for its cost.
+
 ### Training and data
 
 The model stays at 9.6M parameters but does a narrower job: it rewrites free English into the controlled English that a deterministic translator handles. Training costs about $15–50 in GPU time and data. The largest cost is about 1–4 weeks of engineering on the controlled grammar and the verb lexicon (a guess).
