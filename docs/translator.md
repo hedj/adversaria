@@ -397,6 +397,53 @@ Three rules keep the suggestions honest. A suggestion enters the journal only wh
 
 The model runs all the time, over whatever the user is working on, and keeps a pane of suggestions up to date. One click adopts a suggestion and another unadopts it: adopting writes an entry to the journal and unadopting retracts it, so both are ordinary edits under universal undo, and the dataflow graph recomputes what depends on them. Pointing at a suggestion previews it in place: the violations it would raise or clear, and the items it would change. The pane follows the rules for a system that offers help unasked, after Horvitz's principles of mixed-initiative interfaces (1999, recalled and not checked): it never takes the keyboard or moves what the user is looking at; it never reorders a suggestion under the pointer; it ranks by evidence and keeps few suggestions in view; and each dismissal is recorded, so a refused suggestion does not come back unless its evidence changes.
 
+### An agent: a general language model with tools
+
+This subplan adds a second, separate model: a general language model, run locally, that reasons in several steps and calls Adversaria's tools. It is a proposal for stage B, built only if stage A's numbers show that suggestions are adopted and kept. The reservoir cannot fill this role: its exact context is a few thousand bytes, and multi-step planning appears in models of billions of parameters (recalled, not checked). Resizing the reservoir does not help either: training an agent-class model from scratch needs about 7 × 10²³ operations, centuries on one consumer GPU (estimate), and the recall over long contexts that an agent needs requires gates that depend on the input, which a fixed reservoir lacks.
+
+**Who does what.**
+
+| Part | Does | Never does |
+| --- | --- | --- |
+| The reservoir | restatements, suggestions from fixed patterns, narrow calls inside a loop Adversaria runs | run a loop of its own |
+| The agent | opens worlds, makes claims in them, runs queries, reads violations and differences, and recommends | write to the actual world, adopt, retract, purge, or hold a key |
+| Prolog | derives results from a world's premises and checks constraints | guess |
+| The user | asks, reviews, adopts or retracts | — |
+
+**Boundaries, kept by structure, not by prompts.** A prompt is a request; these are enforced by what the agent's connection can do.
+
+1. **No path to the actual world.** The agent's connection holds no capability to write the user's working branch, and the tool server offers no adopt, retract or purge. Adoption exists only in the user's interface.
+2. **Its own author.** Every entry the agent causes is authored by the agent, named with its model, version and the hash of its weights, and sealed with a key of its own that the sealer holds. The user's key never signs the agent's work.
+3. **Worlds are kept, not discarded.** A world is a branch of the journal; closing it leaves it in the tree, so the agent's reasoning can be audited later. Only the user can purge.
+4. **Three kinds of statement kept apart.** What the agent supposes (a world's premises), what it claims (`claims(agent, P)`), and what Prolog derives from the premises (checked). Each shows as its kind.
+5. **Sources are checked.** Every source the agent cites goes through the quote and source checks of the design's § Testing claims; a citation that fails is marked, so an invented reference cannot pass as evidence.
+6. **The audit summary comes from the journal.** The memex, not the agent, lists what a session did: worlds opened, entries written, queries run, violations found, recommendations made. The agent may add a commentary, marked as its claim.
+7. **Budgets.** Each session has a limit on entries written, worlds opened, queries run and time; the tool server refuses calls past a limit and says which.
+8. **Local by default.** The agent runs on the user's machine. Connecting a cloud model is the user's explicit choice, shown on screen while it lasts, because a cloud model sees the notebook.
+
+**The API.** A small set of tools with strict JSON schemas, offered as native function calls to a local model and, through the same code, as an MCP server over standard input and output for other clients. Each tool's description is written as carefully as a prompt, and each error says what to do next.
+
+| Tool | Arguments | Returns | Effect on the journal |
+| --- | --- | --- | --- |
+| `open_world` | a name, the world to branch from (default: the user's current world), a reason | the world's identifier | a `suppose` entry, by the agent |
+| `suppose` | world, a premise as a term or controlled English | the premise as stored | an entry in that world |
+| `claim` | world, a statement, its source or sources (each a quote and an identifier) | the claim, with its quote and source rulings | an entry in that world: `claims(agent, P)` with its evidence |
+| `query` | world, a goal, a limit on answers | answers, each with its justification | an entry recording the query and its answer, unless query journalling is switched off |
+| `get_state` | world, an optional item or pattern | the world's premises, claims and derived facts that match | none |
+| `get_violations` | world | constraint violations and disagreements, each with the items it names | none |
+| `get_differences` | two worlds | the A/B difference table | none |
+| `interrogate` | world, a claim | who else claims it and who claims the contrary, its provenance, its source's record, and what follows if it is adopted | none |
+| `recommend` | world, the entries the agent recommends for adoption, a reason for each | an identifier for the recommendation | a claim by the agent, shown to the user in the suggestion pane |
+| `close_world` | world | confirmation | none: the session stops using the world, which stays in the tree, as a closed supposition does |
+
+No tool adopts, retracts, purges, signs, or writes outside the agent's own worlds. The tools use only entry kinds the journal format already has, so the format does not change.
+
+**The loop.** The user asks a question. The memex starts a session with its budgets. The agent opens worlds, supposes, claims, queries and inspects, then recommends. The memex writes the audit summary from the journal and shows the recommendations in the suggestion pane, where the user adopts or rejects each with the usual one click, and can open any of the agent's worlds beside the actual one.
+
+**Model and hardware (estimates).** An open-weights model of about 14B parameters at 4-bit quantisation fits a 16 GB GPU with room for context; one of 32B does not. A model of about 7–8B can be fine-tuned on Adversaria's tool calls with low-rank adapters on 4-bit weights within 16 GB. Speed and the rate of correct tool calls must be measured before the trial below.
+
+**The trial.** One hypothesis: the agent's recommendations are adopted, and kept, at least as often as suggestions made without a model. The journal measures, per source of suggestion, the share offered that are adopted, the share of those later retracted, and the share of the agent's cited sources that fail the checks. A high rate of retraction after adoption means users trust the agent too readily, and counts against it.
+
 ### What-if questions: counterfactual simulation
 
 The chatbot answers "what if" by supposing a condition in a separate world, setting aside the facts that contradict it, and then answering or simulating forward. It can simulate only worlds whose rules of change are written down, by the user in ACE or by an engineer as a library. "What if the reservoir loses 5% a day?" is in scope; "what if Napoleon had won?" is not. This is a design sketch; nothing in it is built or measured.
