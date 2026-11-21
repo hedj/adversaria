@@ -529,14 +529,29 @@ impl App {
         }
     }
 
+    /// The link's two ends: both as typed, or the one typed as its to,
+    /// after the from it takes from the target, in its parentheses since
+    /// it is not typed ("link (from 1) (to) 2").
     fn guided_ends(&self, addr: &[&str], two: bool) -> String {
         if two {
             let k = self.split_point(addr);
-            format!("link {} (to) {}", addr[..k].join(" "), addr[k..].join(" "))
-        } else if addr.is_empty() {
-            "link (to)".to_string()
-        } else {
-            format!("link (to) {}", addr.join(" "))
+            return format!("link {} (to) {}", addr[..k].join(" "), addr[k..].join(" "));
+        }
+        let from = self.default_from();
+        match addr.is_empty() {
+            true => format!("link{from} (to)"),
+            false => format!("link{from} (to) {}", addr.join(" ")),
+        }
+    }
+
+    /// The from that a link with one address takes: the target's address,
+    /// if the cursor is on an item.
+    fn default_from(&self) -> String {
+        let outline = &self.notebook.outline;
+        let target = self.cursor();
+        match outline.items.contains_key(&target) {
+            true => format!(" (from {})", outline.number(target)),
+            false => String::new(),
         }
     }
 

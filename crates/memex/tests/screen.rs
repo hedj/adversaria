@@ -136,7 +136,21 @@ fn a_held_command_shows_its_guide_words() {
     let mut room = Room::new("foot-guided");
     room.items(&["rent"]);
     room.hold(Quasi::Command, "link");
-    assert_eq!(foot(&room)[0], " COMMAND  link (to)");
+    assert_eq!(foot(&room)[0], " COMMAND  link (from 1) (to)");
+}
+
+#[test]
+fn a_link_with_one_address_shows_the_from_it_takes() {
+    // Catches "link (to) 1" with no word of where it links from: the
+    // second review could not tell from the line which item links. With
+    // no item at the cursor there is no from to show.
+    let mut room = Room::new("foot-link-from");
+    room.hold(Quasi::Command, "link ");
+    assert_eq!(foot(&room)[0], " COMMAND  link (to)", "no item");
+    let mut room = Room::new("foot-link-from-2");
+    room.items(&["rent", "food"]);
+    room.hold(Quasi::Command, "link to 1");
+    assert_eq!(foot(&room)[0], " COMMAND  link (from 2) (to) 1");
 }
 
 #[test]

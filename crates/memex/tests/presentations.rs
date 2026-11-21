@@ -226,7 +226,7 @@ fn pointing_at_an_item_supplies_it_to_the_line() {
     command_line(&mut r, "link to ");
     click_on(&mut r, "Energia");
     assert_eq!(line_now(&r), "link to 2 ");
-    assert!(r.shows("link (to) 2"), "the guide word shown once");
+    assert!(r.shows("link (from 1) (to) 2"), "the guide word shown once");
     assert_eq!(r.app.cursor(), items[0], "the cursor stays");
     r.tap(&[memex::app::Key::Enter]);
     assert_eq!(r.outline().links_of(items[0]).0.len(), 1);

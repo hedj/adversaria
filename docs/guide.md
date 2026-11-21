@@ -327,7 +327,8 @@ are underlined: an item, by its address, for `link`, `copy`, `move`,
 item); an entry, by its number, for `retract` (a layer, a change, a
 constraint or a fact); a suggestion, by its number, for `accept` and
 `dismiss`. Tap Left Ctrl, type `link to `, and click the item to link
-to: the line reads `link (to) 2`, and Enter runs it. The foot says what
+to: the line reads `link (from 1) (to) 2`, the from being the target,
+which you did not type, and Enter runs it. The foot says what
 a click would type (`click: type “2” into the line`).
 
 #### Plumbing
