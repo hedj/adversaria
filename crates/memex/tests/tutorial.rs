@@ -282,7 +282,7 @@ fn a_claim_and_a_rule(t: &mut T) {
 /// Step 4: the claim questioned, adopted, and the adoption taken back.
 fn the_claim_questioned(t: &mut T) {
     t.point_at("Talk-notes says");
-    t.shows("click: go to 1.3 · right-click: question its claim, adopt its claims");
+    t.shows("click: go to 1.3 · right-click for: question its claim; adopt its claims");
     t.app.session.pointer = None;
     t.tap(Key::Up);
     assert!(t.here().starts_with("Talk-notes"));

@@ -161,7 +161,7 @@ and what it would break.*
 Move the mouse pointer over the claim. It is underlined, and the foot
 says what the mouse does there:
 
-    click: go to 1.3 · right-click: question its claim, adopt its claims
+    click: go to 1.3 · right-click for: question its claim; adopt its claims
 
 What the screen shows stands for your notes themselves, so the mouse
 acts on them: a right-click offers what can be done with this claim.

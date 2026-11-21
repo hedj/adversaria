@@ -301,7 +301,7 @@ fn the_foot_says_what_the_mouse_does_over_what_is_under_it() {
     let said = foot(&r);
     assert_eq!(
         said[0],
-        "click: go to 2 · right-click: question its claim, adopt its claims"
+        "click: go to 2 · right-click for: question its claim; adopt its claims"
     );
     assert_eq!(said[1], "a message stays");
     r.app.session.pointer = None;
@@ -375,4 +375,17 @@ fn a_wrapped_line_under_the_pointer_is_underlined_on_every_row() {
             .contains(ratatui::style::Modifier::UNDERLINED)
     };
     assert!(under((x + 5, y)) && under((x + 5, y + 1)), "both rows");
+}
+
+#[test]
+fn the_foot_names_a_right_clicks_offers_as_choices() {
+    // Catches the offers run together with commas, so that the address in
+    // "go to the item that states the rule, 3" reads as a third command.
+    let mut r = dated("document-choices");
+    r.app.session.pointer = Some(r.find("? sources disagree"));
+    let said = foot(&r)[0].clone();
+    assert_eq!(
+        said,
+        "click: go to 3 · right-click for: go to the item that states the rule, 3; retract the constraint"
+    );
 }

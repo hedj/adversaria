@@ -232,17 +232,18 @@ impl App {
     }
 }
 
-/// What a right-click on a presentation offers: up to three, then how
-/// many more.
+/// What a right-click on a presentation offers, as the choices of a
+/// menu: up to three, then how many more, apart by semicolons, since an
+/// offer's words may hold a comma ("the rule, 1.3").
 fn offers_documentation(offers: &[Offer]) -> Option<String> {
     let first: Vec<&str> = offers.iter().take(3).map(|o| o.label.as_str()).collect();
     let more = offers.len().saturating_sub(3);
     let more = if more > 0 {
-        format!(", {more} more")
+        format!("; {more} more")
     } else {
         String::new()
     };
-    (!first.is_empty()).then(|| format!("right-click: {}{more}", first.join(", ")))
+    (!first.is_empty()).then(|| format!("right-click for: {}{more}", first.join("; ")))
 }
 
 /// What a click on a menu's offer does: its words.

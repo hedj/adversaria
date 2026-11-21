@@ -283,8 +283,8 @@ on the characters. Presented are:
 
 **Pointing.** The presentation under the pointer is underlined, all its
 rows, when a click or a right-click on it would do something now; and the foot says what
-each button does there (`click: go to 2 · right-click: question its
-claim, adopt its claims`), on its first row, so the message stays.
+each button does there (`click: go to 2 · right-click for: question its
+claim; adopt its claims`), on its first row, so the message stays.
 
 **Selecting.** Drag with the left button to select text: it is drawn
 reversed, from where the button went down to where it is, in reading
