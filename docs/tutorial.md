@@ -192,11 +192,13 @@ changing what you believe.*
 
 Tap **Super** (the Windows or Command key; if your desktop takes it,
 see "If your desktop takes Super" in step 1): press it and let go, with
-nothing typed between. A tap starts a kind of input, here a
-supposition, which stays on until you press Enter. The foot of the
-screen says `SUPPOSE (latched)`, and under it what to do:
+nothing typed between. Super opens a command line with `suppose`
+already typed: a supposition is a command, `suppose`, and the key saves
+you typing it. A tap keeps the line open until you press Enter. The foot
+of the screen says `COMMAND (latched)  suppose (that)`, and under it what
+to do:
 
-    type a statement · ? lists what may come next · Enter, or tap again, offers its readings, or a world of that name if none
+    type a statement · ? lists what may come next · Esc cancels · Enter, or tap again, offers its readings, or a world of that name if none
 
 Type `the flight was in 1989`. The foot now says:
 

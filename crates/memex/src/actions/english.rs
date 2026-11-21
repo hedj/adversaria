@@ -16,16 +16,22 @@ impl App {
         Ok(said(&self.ace_parse(&text)?))
     }
 
-    /// Check again what is typed in Suppose, the one quasimode whose text
-    /// is English, and list what may come next while `?` lists.
+    /// Check again the sentence a Command line holds (`suppose …`,
+    /// `ace …`), the text that is English, and list what may come next
+    /// while `?` lists.
     pub(crate) fn recheck(&mut self, a: &mut Active) {
-        let Kind::Suppose(english) = &mut a.kind else {
+        let sentence = a.sentence().map(str::to_string);
+        let Kind::Command(english) = &mut a.kind else {
             return;
         };
-        let typed = !a.input.trim().is_empty();
-        let mut hint = typed.then(|| self.hint_for(&a.input, &mut english.free));
+        let Some(sentence) = sentence else {
+            english.hint = None;
+            return;
+        };
+        let typed = !sentence.trim().is_empty();
+        let mut hint = typed.then(|| self.hint_for(&sentence, &mut english.free));
         if a.listing {
-            let listed = self.ace_listing(&a.input);
+            let listed = self.ace_listing(&sentence);
             hint.get_or_insert_with(Hint::none).listing = listed;
         }
         english.hint = hint;
@@ -60,7 +66,7 @@ impl App {
     /// is a sentence of ACE: the pair it confirms. (The free English was
     /// not ACE, so it is not the text.)
     pub(crate) fn confirmed_english(&mut self, a: &Active, text: &str) -> Option<String> {
-        let Kind::Suppose(english) = &a.kind else {
+        let Kind::Command(english) = &a.kind else {
             return None;
         };
         let english = english.free.clone()?;

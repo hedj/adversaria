@@ -25,10 +25,11 @@ use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::path::Path;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Quasi {
     LeapForward,
     LeapBack,
+    #[default]
     Command,
     Suppose,
 }
@@ -322,7 +323,7 @@ pub(crate) struct Spot {
 }
 
 /// A quasimode in progress, held or latched.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Active {
     pub kind: Kind,
     pub input: String,
@@ -330,11 +331,14 @@ pub struct Active {
     pub hold: Hold,
     /// `?` was pressed: list everything that may come next.
     pub listing: bool,
+    /// The key that opened it, whose release ends it: Suppose's opens
+    /// Command with `suppose ` typed.
+    pub key: Quasi,
 }
 
-/// Which quasimode, with what only it keeps: Scope, the scope it found,
-/// put back if it is left without acting; Suppose, the one quasimode
-/// whose text is English, what APE makes of it and the free English it
+/// Which quasimode, with what only it keeps: a Leap, where it began and
+/// the near match it warned of; Command, while its line holds a sentence
+/// (`suppose …`, `ace …`), what APE makes of it and the free English it
 /// began as.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
@@ -346,8 +350,13 @@ pub enum Kind {
         from: u64,
         near: Option<Near>,
     },
-    Command,
-    Suppose(English),
+    Command(English),
+}
+
+impl Default for Kind {
+    fn default() -> Kind {
+        Kind::Command(English::default())
+    }
 }
 
 impl Kind {
@@ -371,8 +380,7 @@ impl Kind {
                 from,
                 near: None,
             },
-            Quasi::Command => Kind::Command,
-            Quasi::Suppose => Kind::Suppose(English::default()),
+            Quasi::Command | Quasi::Suppose => Kind::default(),
         }
     }
 }
@@ -409,8 +417,9 @@ pub struct Hint {
 /// down after another key was pressed (its release ends the quasimode);
 /// or latched, tapped rather than held, so it stays until Enter or a
 /// second tap.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Hold {
+    #[default]
     Down,
     Used,
     Latched,
@@ -422,17 +431,30 @@ impl Active {
         match self.kind {
             Kind::Leap { forward: true, .. } => Quasi::LeapForward,
             Kind::Leap { forward: false, .. } => Quasi::LeapBack,
-            Kind::Command => Quasi::Command,
-            Kind::Suppose(_) => Quasi::Suppose,
+            Kind::Command(_) => Quasi::Command,
         }
     }
 
-    /// In Suppose, what APE makes of what is typed.
+    /// The sentence a Command line holds after its verb, `suppose` or
+    /// `ace`, if it holds one: the text that is English.
+    pub fn sentence(&self) -> Option<&str> {
+        let verbs = ["suppose ", "ace "];
+        let command = matches!(self.kind, Kind::Command(_));
+        let rest = verbs.iter().find_map(|v| self.input.strip_prefix(v));
+        rest.filter(|_| command)
+    }
+
+    /// Whether its sentence is a supposition's.
+    pub fn supposes(&self) -> bool {
+        self.sentence().is_some() && self.input.starts_with("suppose ")
+    }
+
+    /// While a sentence is typed, what APE makes of it.
     pub fn hint(&self) -> Option<&Hint> {
-        match &self.kind {
-            Kind::Suppose(english) => english.hint.as_ref(),
-            _ => None,
-        }
+        let Kind::Command(english) = &self.kind else {
+            return None;
+        };
+        self.sentence().and(english.hint.as_ref())
     }
 
     /// In a Leap, the near match it warned of for what is typed now.
@@ -459,9 +481,10 @@ impl Active {
     /// Whether it lists over the outline: a Leap or Command, listing
     /// everything or with something typed.
     pub(crate) fn lists(&self) -> bool {
-        let lister = matches!(self.kind, Kind::Leap { .. } | Kind::Command);
-        let suppose = matches!(self.kind, Kind::Suppose(_)) && self.listing;
-        suppose || lister && (self.listing || !self.input.is_empty())
+        if self.sentence().is_some() {
+            return self.listing;
+        }
+        self.listing || !self.input.is_empty()
     }
 
     /// A quasimode latched, as if its key were tapped, nothing typed yet.
@@ -475,27 +498,41 @@ impl Active {
 
     /// A quasimode whose key is held, nothing typed yet.
     pub(crate) fn held(kind: Kind) -> Active {
+        let key = match kind {
+            Kind::Leap { forward: true, .. } => Quasi::LeapForward,
+            Kind::Leap { forward: false, .. } => Quasi::LeapBack,
+            Kind::Command(_) => Quasi::Command,
+        };
+        Active::held_on(key, kind, "")
+    }
+
+    /// A quasimode a key opened, held, with a text typed in already: the
+    /// Suppose key opens Command with `suppose ` (guide § 2.3).
+    pub(crate) fn held_on(key: Quasi, kind: Kind, typed: &str) -> Active {
+        let input = typed.into();
         Active {
             kind,
-            input: String::new(),
-            hold: Hold::Down,
-            listing: false,
+            input,
+            key,
+            ..Active::default()
         }
     }
 
-    /// Put the first repair of what is typed in its place, if there is
-    /// one (Esc in Suppose).
-    pub(crate) fn apply_repair(&mut self) {
-        let mended = self.hint().and_then(|h| h.mended.clone());
-        if let Some(m) = mended {
-            self.input = m;
-        }
+    /// Put the first repair of the sentence typed in its place, after its
+    /// verb; whether there was one (Tab in a sentence).
+    pub(crate) fn apply_repair(&mut self) -> bool {
+        let Some(mended) = self.hint().and_then(|h| h.mended.clone()) else {
+            return false;
+        };
+        let verb = self.input.split(' ').next().unwrap_or("").to_string();
+        self.input = format!("{verb} {mended}");
+        true
     }
 
     /// The command palette: the Command quasimode, latched, listing what
     /// may come next.
     pub(crate) fn palette() -> Active {
-        let held = Active::held(Kind::Command);
+        let held = Active::held(Kind::default());
         Active {
             hold: Hold::Latched,
             listing: true,

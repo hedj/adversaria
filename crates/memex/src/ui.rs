@@ -2030,8 +2030,8 @@ fn foot_box(area: Rect, lines: &[Line<'static>]) -> Rect {
 /// matches.
 fn list_lines(app: &App, a: &Active, inside: (u16, u16)) -> Vec<Line<'static>> {
     match a.q() {
-        Quasi::Command => commands::command_lines(app, &a.input, inside),
-        Quasi::Suppose => suppose_lines(a),
+        Quasi::Command if a.sentence().is_some() => suppose_lines(a),
+        Quasi::Command | Quasi::Suppose => commands::command_lines(app, &a.input, inside),
         Quasi::LeapForward | Quasi::LeapBack => leap_lines(app, a),
     }
 }
@@ -2190,7 +2190,7 @@ fn quasi_guide(a: &Active) -> String {
         return near_warning(n);
     }
     match a.hold {
-        Hold::Down => quasi_fresh(a.q()),
+        Hold::Down => quasi_fresh(a.key),
         Hold::Used | Hold::Latched => quasi_doing(a),
     }
 }
@@ -2229,17 +2229,28 @@ fn quasi_doing(a: &Active) -> String {
         Quasi::LeapForward | Quasi::LeapBack => format!(
             "{end} to go to the first match · Tab completes · Esc cancels · ? lists every match · Leap again repeats"
         ),
-        Quasi::Command => {
+        _ if a.sentence().is_some() => sentence_doing(a, &end),
+        Quasi::Command | Quasi::Suppose => {
             format!(
                 "{end} to run on the target · Tab completes · Esc cancels · ? lists what may come next"
             )
         }
-        Quasi::Suppose => match a.hint().and_then(|h| h.said.as_ref()) {
-            None => format!(
-                "type a statement · ? lists what may come next · {end} offers its readings, or a world of that name if none"
-            ),
-            Some(said) => format!("{said} · {end} offers its readings"),
-        },
+    }
+}
+
+/// What a Command line holding a sentence does: what APE makes of the
+/// sentence, and what the line ends in, the readings of a supposition or
+/// APE's verdict.
+fn sentence_doing(a: &Active, end: &str) -> String {
+    let (does, or_world) = match a.supposes() {
+        true => ("offers its readings", ", or a world of that name if none"),
+        false => ("says what APE makes of it", ""),
+    };
+    match a.hint().and_then(|h| h.said.as_ref()) {
+        None => format!(
+            "type a statement · ? lists what may come next · Esc cancels · {end} {does}{or_world}"
+        ),
+        Some(said) => format!("{said} · {end} {does}"),
     }
 }
 
@@ -2249,7 +2260,7 @@ fn release_text(a: &Active) -> String {
     if a.latched() {
         return "Enter, or tap again,".into();
     }
-    let name = match a.q() {
+    let name = match a.key {
         Quasi::Command => "Command",
         Quasi::Suppose => "Suppose",
         Quasi::LeapForward | Quasi::LeapBack => "Leap",

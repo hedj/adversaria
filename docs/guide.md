@@ -179,7 +179,7 @@ The defaults are below. All of them can be changed (§ 4.3).
 | --- | --- |
 | a printable character | types into the item under the cursor |
 | Enter | makes a new item after the cursor's item |
-| Tab | makes the item the last child of the item before it at its level (`indent`) |
+| Tab | makes the item the last child of the item before it at its level (`indent`); in an open `[[`, completes the link (§ 2.4) |
 | Shift-Tab | makes the item a sibling of its parent (`outdent`) |
 | Backspace, Delete | erase a character before or after the cursor |
 | Up, Down | move to the item above or below |
@@ -210,22 +210,23 @@ when it ends.
 | Leap forward | Right Alt (AltGr) | type a pattern: as each letter is typed, the cursor goes to the next item holding it, counted from where the Leap began, and stays at the last match if a letter matches nothing | the cursor stays where it is; back returns to where the Leap began. Erasing the pattern puts the cursor back |
 | Leap back | Left Alt | type a pattern: as Leap forward, to the previous item holding it | as Leap forward |
 | Command | Left Ctrl | type a command line | the command runs on the item under the cursor |
-| Suppose | Super (either) | type a statement; the line below says what may come next in controlled English, whether it is a sentence of it, and if it breaks, where and how to mend it | the memex offers its readings of it (§ 3.2) |
+| Suppose | Super (either) | opens Command with `suppose ` typed: type a statement; the line below says what may come next in controlled English, whether it is a sentence of it, and if it breaks, where and how to mend it | the memex offers its readings of it (§ 3.2) |
 
 Within a quasimode:
 
 - **Tap to latch.** Press and release the key with nothing typed between,
   and the quasimode stays on without holding. Enter, or a second tap, ends
   it. Backspace on an empty latched quasimode leaves it without acting.
-- **Tab completes:** a command name in Command, a pattern in Leap. In
-  Suppose it completes the word being typed when one word alone fits, or
-  mends: it puts the repair the line below offers first in place.
+- **Tab completes:** a command name in Command, a pattern in Leap. In a
+  sentence (a Command line that starts `suppose ` or `ace `) it
+  completes the word being typed when one word alone fits, or mends: it
+  puts the repair the line below offers first in place.
 - **Esc cancels,** as everywhere: the quasimode ends and nothing acts; a
   Leap puts the cursor back where it began.
 - **`?` lists** the commands that match (Command; once a command's name
   and a space are typed, its form and help instead), every match (Leap), or
   everything that may come next, each kind of word with a line of help
-  (Suppose). In Suppose, `?` lists only at the start or after a space:
+  (a sentence). In a sentence, `?` lists only at the start or after a space:
   typed straight after a word it ends a question ("Does John wait?").
   `?` again hides the list; what you typed stays. In Command, `?` inside
   quotes is typed; in Leap, `?` always lists, so Leap cannot search for it.
@@ -671,7 +672,9 @@ When you do not yet know which source is right, or what a change would
 do, suppose it: the notebook shows what follows beside what you believe,
 and changes nothing you believe.
 
-Tap Suppose (or hold it), type a statement in your own words, such as
+Tap Suppose (or hold it): it opens Command with `suppose ` typed, so
+`suppose` is the command and the key saves typing it. Type a statement
+in your own words, such as
 `the flight was in 1989`, and press Enter (or let go). The memex reads it against the facts it knows and offers each
 reading: `Do you mean: Suppose that the date of Buran's flight is 1989.`
 Enter accepts; Tab shows the next reading; Esc cancels. A reading is a
@@ -681,7 +684,8 @@ with no number, or about something with no fact yet, has no reading
 unless you type it as Prolog.
 
 While you type, the line below checks the statement as controlled English
-(ACE), with the words of your notebook, as if it ended with a full stop:
+(ACE), with the words of your notebook, as if it ended with a full stop.
+It does the same for any Command line that starts `ace `:
 
 - `ACE:` and how APE, its parser, reads it back, when it is a sentence;
 - `next:` and what may come next, when it is not yet one but can go on:

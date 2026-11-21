@@ -10,7 +10,7 @@ use support::{Room, replayed};
 /// What is typed in the quasimode held, if one is.
 fn typed(r: &Room) -> String {
     match &r.app.session.mode {
-        Mode::Quasi(a) => a.input.clone(),
+        Mode::Quasi(a) => a.sentence().unwrap_or(&a.input).to_string(),
         other => panic!("no quasimode: {other:?}"),
     }
 }
@@ -240,4 +240,56 @@ fn a_text_like_an_earlier_pairs_is_offered_its_ace_adapted() {
     let again = replayed(&r.dir);
     let pairs = memex::pairs::pairs_of(again.journal().entries());
     assert_eq!(pairs[0].english, "the flight was in 1989");
+}
+
+#[test]
+fn the_suppose_key_opens_command_with_suppose_typed() {
+    // Catches Suppose as a quasimode of its own, with keys and a foot of
+    // its own: the fourth review found it one more mode to learn, where it
+    // is the command `suppose` with its name typed for you.
+    let mut r = Room::new("suppose-is-command");
+    r.items(&["Notes"]);
+    r.tap(&[Key::Quasi(Quasi::Suppose)]);
+    let opened = matches!(&r.app.session.mode, Mode::Quasi(a) if a.q() == Quasi::Command && a.input == "suppose ");
+    assert!(opened, "{:?}", r.app.session.mode);
+    assert!(
+        r.shows(" COMMAND (latched)  suppose (that)"),
+        "{:#?}",
+        r.lines()
+    );
+}
+
+#[test]
+fn a_held_suppose_key_still_ends_on_its_own_release() {
+    let mut r = Room::new("suppose-release");
+    r.items(&["ants"]);
+    r.command("fact date(ant, 1)");
+    r.hold(Quasi::Suppose, "w");
+    r.release(Quasi::Suppose);
+    assert!(
+        !matches!(r.app.session.mode, Mode::Quasi(_)),
+        "{:?}",
+        r.app.session.mode
+    );
+    assert_eq!(
+        r.app.reason.supposition.as_ref().map(|s| s.name.as_str()),
+        Some("w")
+    );
+}
+
+#[test]
+fn ace_gets_the_live_sentence_line_suppose_has() {
+    // Catches the line that checks a sentence as it is typed given to
+    // Suppose alone: `ace` takes a sentence too.
+    let mut r = Room::new("ace-live");
+    r.items(&["Notes"]);
+    r.tap(&[Key::Quasi(Quasi::Command)]);
+    r.typ("ace the flight was in 1989");
+    assert!(
+        line_with(&r, "not ACE: the flight <> was in 1989.").is_some(),
+        "{:#?}",
+        r.lines()
+    );
+    r.tap(&[Key::Tab]);
+    assert_eq!(typed(&r), "the flight is in 1989");
 }

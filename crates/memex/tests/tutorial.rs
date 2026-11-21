@@ -304,9 +304,9 @@ fn the_claim_supposed(t: &mut T) {
     // sentence is typed, that it is not controlled English, which the
     // tutorial says to let be.
     t.tap(Key::Quasi(Quasi::Suppose));
-    t.shows("SUPPOSE (latched)");
+    t.shows("COMMAND (latched)  suppose (that)");
     t.shows(
-        "type a statement · ? lists what may come next · Enter, or tap again, offers its readings",
+        "type a statement · ? lists what may come next · Esc cancels · Enter, or tap again, offers its readings",
     );
     t.typ("the flight was in 1989");
     t.shows("not ACE: the flight <> was in 1989.");

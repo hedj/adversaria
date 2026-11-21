@@ -60,7 +60,8 @@ impl App {
     /// Hold a quasimode's key: the Scope quasimode starts at a word.
     fn enter_quasi(&mut self, q: Quasi) -> Mode {
         self.flush();
-        Mode::Quasi(Active::held(Kind::of(q, self.cursor())))
+        let typed = if q == Quasi::Suppose { "suppose " } else { "" };
+        Mode::Quasi(Active::held_on(q, Kind::of(q, self.cursor()), typed))
     }
 
     /// The window lost the keyboard, so the release of a quasimode's key
@@ -192,7 +193,7 @@ impl App {
 
     fn quasi(&mut self, mut a: Active, ev: Event) -> Mode {
         // The quasimode's own key: release ends a held quasimode; a tap latches.
-        if ev.key == Key::Quasi(a.q()) {
+        if ev.key == Key::Quasi(a.key) {
             match ev.press {
                 Press::Up if a.hold == Hold::Down => {
                     a.hold = Hold::Latched;
@@ -227,8 +228,8 @@ impl App {
             }
             Key::Tab => match a.q() {
                 Quasi::LeapForward | Quasi::LeapBack => a.input = self.leap_complete(&a),
-                Quasi::Command => a.input = complete_command(&a.input),
-                _ => a.apply_repair(),
+                _ if a.apply_repair() => {}
+                _ => a.input = complete_command(&a.input),
             },
             Key::Escape => {
                 // Esc cancels, as everywhere: nothing acts, and a Leap puts
@@ -344,8 +345,8 @@ impl App {
                     }
                 }
             }
-            Quasi::Suppose => {
-                let text = a.input.trim().to_string();
+            Quasi::Command if a.supposes() => {
+                let text = a.sentence().unwrap_or("").trim().to_string();
                 if text.is_empty() {
                     return Mode::Normal;
                 }
@@ -355,7 +356,7 @@ impl App {
             Quasi::Command if a.hold == Hold::Used && a.input.chars().count() == 1 => {
                 return self.chord(&a.input);
             }
-            Quasi::Command => return self.run_command(&a.input),
+            Quasi::Command | Quasi::Suppose => return self.run_command(&a.input),
         }
         Mode::Normal
     }
@@ -561,9 +562,11 @@ fn continuation(text: &str, p: &str) -> String {
 /// quotes; in Suppose, only at the start or after a space, since typed
 /// after a word it ends a question of ACE.
 fn asks_help(a: &Active) -> bool {
+    if let Some(sentence) = a.sentence() {
+        return sentence.is_empty() || sentence.ends_with(' ');
+    }
     match a.q() {
         Quasi::Command => !in_quotes(&a.input),
-        Quasi::Suppose => a.input.is_empty() || a.input.ends_with(' '),
         _ => true,
     }
 }
