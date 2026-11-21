@@ -2265,9 +2265,12 @@ fn suppose_guide(app: &App, readings: &[Term], at: usize) -> String {
     format!("Do you mean: Suppose that {r}.  Enter: yes · Esc: no{more}")
 }
 
-/// The foot in normal mode: a hint, while there is no message; else the
-/// message.
+/// The foot in normal mode: in a supposition, how to leave it, above any
+/// message; else a hint, while there is no message; else the message.
 fn normal_foot(app: &App) -> (Line<'static>, String) {
+    if let Some(leave) = leaving_hint(app) {
+        return (Line::styled(leave, dim()), app.session.message.clone());
+    }
     match hint(app) {
         Some((p, g)) if app.session.message.is_empty() => (Line::styled(p, dim()), g),
         _ => (Line::raw(""), app.session.message.clone()),
@@ -3069,6 +3072,14 @@ fn hint(app: &App) -> Option<(String, String)> {
         "Try a what-if: tap {key} to suppose a statement, type it, and press Enter. The actual world stays as it is."
     );
     Some((try_it, String::new()))
+}
+
+/// While a supposition is open, how to leave it: a revision's pane says
+/// its own.
+fn leaving_hint(app: &App) -> Option<String> {
+    let sup = app.reason.supposition.as_ref()?;
+    let leave = "close returns to the actual world · commit makes this world the actual one";
+    (!sup.name.starts_with("revision of ")).then(|| leave.to_string())
 }
 
 /// A supposition: the actual world and the supposed one side by side, row

@@ -231,6 +231,10 @@ bold and underlined. Your actual world is
 untouched. In part D you will compute a sentence from the dates, which
 each world would show its own way.
 
+While a supposition is open, the foot says how to leave it:
+
+    close returns to the actual world · commit makes this world the actual one
+
 Now run a command. Tap **Left Ctrl**, type `close`, and press Enter:
 what you type after the tap is a command, shown at the foot of the
 screen. You are back in the actual world. The supposition stays in the

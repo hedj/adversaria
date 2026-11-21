@@ -266,6 +266,22 @@ fn the_supposed_world_shows_what_it_supposes_first_with_the_actual_beside_it_bla
 }
 
 #[test]
+fn in_a_supposition_the_foot_says_how_to_leave_it_above_the_message() {
+    // Catches a supposed world with no word of how to get out of it: the
+    // second review did not know that close returns and commit keeps.
+    let leave = "close returns to the actual world · commit makes this world the actual one";
+    let mut r = rent_alone_supposed("worlds-leave-hint", &[]);
+    let rows = r.lines_at(160, 40);
+    assert!(rows[38].starts_with(leave), "{rows:#?}");
+    assert!(
+        rows[39].starts_with("supposed;"),
+        "the message stays: {rows:#?}"
+    );
+    r.command("close");
+    assert!(!r.shows(leave), "{:#?}", r.lines_at(160, 40));
+}
+
+#[test]
 fn a_row_all_of_whose_facts_are_set_aside_is_struck_through() {
     let r = rent_alone_supposed("worlds-struck-whole", &[]);
     let row = "rent  (1 set aside here)";

@@ -708,7 +708,8 @@ colour, and in the supposed world a count that differs is bold and
 underlined; under it, what it set aside.
 
 `close` returns to the actual world and keeps the supposition in the
-journal. `commit` makes the supposed world the actual one.
+journal. `commit` makes the supposed world the actual one. While a
+supposition is open, the foot says so, above any message.
 
 ### 3.3 Views
 
