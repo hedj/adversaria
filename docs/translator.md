@@ -417,7 +417,7 @@ This subplan adds a second, separate model: a general language model, run locall
 3. **Worlds are kept, not discarded.** A world is a branch of the journal; closing it leaves it in the tree, so the agent's reasoning can be audited later. Only the user can purge.
 4. **Three kinds of statement kept apart.** What the agent supposes (a world's premises), what it claims (`claims(agent, P)`), and what Prolog derives from the premises (checked). Each shows as its kind.
 5. **Sources are checked.** Every source the agent cites goes through the quote and source checks of the design's § Testing claims; a citation that fails is marked, so an invented reference cannot pass as evidence.
-6. **The audit summary comes from the journal.** The memex, not the agent, lists what a session did: worlds opened, entries written, queries run, violations found, recommendations made. The agent may add a commentary, marked as its claim.
+6. **The agent only makes claims; Adversaria judges them.** The agent cannot be trusted not to invent evidence when it describes what it has done, shown or learned, so it has no channel for free prose about its work: no commentary, no narrated summary, no reasons in its own words. Everything it says is a claim, and every claim is shown beside Adversaria's judgement of it: the quote and source rulings, whether Prolog derives it from the world's premises, the constraints it satisfies or violates, the disagreements it joins, and what interrogation finds. The account of what a session did comes only from the journal, which the memex writes: worlds opened, entries written, queries run with their answers, violations found, recommendations made.
 7. **Budgets.** Each session has a limit on entries written, worlds opened, queries run and time; the tool server refuses calls past a limit and says which.
 8. **Local by default.** The agent runs on the user's machine. Connecting a cloud model is the user's explicit choice, shown on screen while it lasts, because a cloud model sees the notebook.
 
@@ -433,12 +433,12 @@ This subplan adds a second, separate model: a general language model, run locall
 | `get_violations` | world | constraint violations and disagreements, each with the items it names | none |
 | `get_differences` | two worlds | the A/B difference table | none |
 | `interrogate` | world, a claim | who else claims it and who claims the contrary, its provenance, its source's record, and what follows if it is adopted | none |
-| `recommend` | world, the entries the agent recommends for adoption, a reason for each | an identifier for the recommendation | a claim by the agent, shown to the user in the suggestion pane |
+| `recommend` | world, the entries the agent recommends for adoption, and for each the entries in the journal that support it (identifiers only, no prose) | an identifier for the recommendation | a claim by the agent, shown in the suggestion pane with Adversaria's judgement of each recommended entry and of each cited support |
 | `close_world` | world | confirmation | none: the session stops using the world, which stays in the tree, as a closed supposition does |
 
 No tool adopts, retracts, purges, signs, or writes outside the agent's own worlds. The tools use only entry kinds the journal format already has, so the format does not change.
 
-**The loop.** The user asks a question. The memex starts a session with its budgets. The agent opens worlds, supposes, claims, queries and inspects, then recommends. The memex writes the audit summary from the journal and shows the recommendations in the suggestion pane, where the user adopts or rejects each with the usual one click, and can open any of the agent's worlds beside the actual one.
+**The loop.** The user asks a question. The memex starts a session with its budgets. The agent opens worlds, supposes, claims, queries and inspects, then recommends. The memex writes the account of the session from the journal and shows the recommendations in the suggestion pane, each beside Adversaria's judgement of it, where the user adopts or rejects each with the usual one click, and can open any of the agent's worlds beside the actual one.
 
 **Model and hardware (estimates).** An open-weights model of about 14B parameters at 4-bit quantisation fits a 16 GB GPU with room for context; one of 32B does not. A model of about 7–8B can be fine-tuned on Adversaria's tool calls with low-rank adapters on 4-bit weights within 16 GB. Speed and the rate of correct tool calls must be measured before the trial below.
 
