@@ -17,7 +17,9 @@ impl App {
         match p {
             P::Item { id, .. } => self.item_offers(*id),
             P::Fact { item, .. } => vec![self.go_offer(*item, "the item that states it")],
-            P::Constraint { entry, item, .. } => self.constraint_offers(*entry, *item),
+            P::Constraint {
+                entry, item, under, ..
+            } => self.mark_offers(*entry, *item, *under),
             P::Layer { entry, view } => self.layer_offers(*entry, *view),
             P::Change(entry) => change_offers(*entry),
             P::Suggestion(n) => suggestion_offers(*n),
@@ -89,6 +91,15 @@ impl App {
             true => offer("show its branch", "unfold"),
             false => offer("hide its branch", "fold"),
         })
+    }
+
+    /// What a constraint offers: under a mark, first what the item it is
+    /// under offers, since the mark is a finding about that item; then
+    /// the rule's.
+    fn mark_offers(&self, entry: u64, item: Option<u64>, under: Option<u64>) -> Vec<Offer> {
+        let mut offers = under.map(|u| self.item_offers(u)).unwrap_or_default();
+        offers.extend(self.constraint_offers(entry, item));
+        offers
     }
 
     /// What a constraint offers: its rule, if an item states it, and

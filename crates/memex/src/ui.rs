@@ -980,31 +980,38 @@ impl<'a> OutlinePane<'a> {
         self.app.session.prose_hint(id).filter(|_| here)
     }
 
-    /// An item's marks, each under it, set in, loud or not; each that is
-    /// a finding of a constraint presents the constraint.
+    /// An item's marks, each under it, set in.
     fn push_marks(&self, drawn: &mut Drawn, id: u64, depth: usize) {
-        let indent = "  ".repeat(depth + 1);
-        for m in self.marks_of(id) {
-            drawn.places.extend(self.mark_place(drawn.lines.len(), &m));
-            drawn.push(mark_line(&indent, &m), 2 * depth + 6);
+        let hang = 2 * depth + 6;
+        for (line, presented) in self.mark_lines(id, depth) {
+            drawn.push_presenting(line, hang, presented);
         }
     }
 
-    /// Where a mark presents its constraint: all its line, if it is a
-    /// finding of one.
-    fn mark_place(&self, line: usize, m: &MarkLine) -> Option<Place> {
-        let presented = self.constraint_presented(m.constraint?);
-        Some(Place::of((line, 0, usize::MAX), presented))
+    /// An item's marks, loud or not, each with what it presents.
+    fn mark_lines(&self, id: u64, depth: usize) -> Vec<(Line<'static>, Option<Presentation>)> {
+        let indent = "  ".repeat(depth + 1);
+        let marks = self.marks_of(id).into_iter();
+        marks
+            .map(|m| (mark_line(&indent, &m), self.mark_presented(&m, id)))
+            .collect()
     }
 
-    /// A constraint, presented in this pane, by its entry, with the item
-    /// whose text states it.
-    fn constraint_presented(&self, entry: u64) -> Presentation {
+    /// What a mark under an item presents: the constraint, if it is a
+    /// finding of one.
+    fn mark_presented(&self, m: &MarkLine, under: u64) -> Option<Presentation> {
+        m.constraint.map(|c| self.constraint_presented(c, under))
+    }
+
+    /// A constraint, presented in this pane by a mark under an item, by
+    /// its entry, with the item whose text states it.
+    fn constraint_presented(&self, entry: u64, under: u64) -> Presentation {
         let item = self.constraint_item(entry);
         Presentation::Constraint {
             pane: self.pane,
             entry,
             item,
+            under: Some(under),
         }
     }
 
@@ -1381,6 +1388,14 @@ impl Drawn {
             skipped: (range.start, total - range.end),
             ..Drawn::default()
         }
+    }
+
+    /// Add a line that presents an object over all its width, if it
+    /// presents one.
+    fn push_presenting(&mut self, line: Line<'static>, hang: usize, p: Option<Presentation>) {
+        let whole = (self.lines.len(), 0, usize::MAX);
+        self.places.extend(p.map(|p| Place::of(whole, p)));
+        self.push(line, hang);
     }
 
     /// Add a line, whose wrapped rows are set in by a hang.
@@ -2659,6 +2674,7 @@ impl ConstraintPane<'_> {
             pane: 0,
             entry: c.seq,
             item,
+            under: None,
         }
     }
 

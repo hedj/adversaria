@@ -302,7 +302,7 @@ offers the commands that apply to what it presents, as it is now:
 | Right-click on | Offers |
 | --- | --- |
 | an item (the cursor goes to it first) | question its claim and adopt its claims, if it states any; take back its adoption, if it has one; split it, if it has two sentences or more; hide or show its branch, if it has one |
-| a mark under an item | go to the item that states the rule; retract the constraint |
+| a mark under an item (the cursor goes to that item first) | what the item offers, as above, since the mark is a finding about it; then go to the item that states the rule; retract the constraint |
 | a mark of a view | go to the item that states its fact |
 | a layer | retract it; go to its view |
 | a revision's change | reject it (`retract`, which asks first); keep the rest (`commit`) |

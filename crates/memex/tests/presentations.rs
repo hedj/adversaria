@@ -175,6 +175,25 @@ fn a_mark_offers_its_rule_and_retracting_its_constraint() {
 }
 
 #[test]
+fn a_mark_under_a_claim_offers_the_claims_actions_first_on_its_item() {
+    // Catches a mark that offers only its rule, though it is a finding
+    // about the item it is under: the second review right-clicked a
+    // mark under a claim and could not question the claim from it.
+    let mut r = dated("mark-claim-menu");
+    let offers = right_click_on(&mut r, "1989 here");
+    assert_eq!(
+        offers,
+        ["interrogate", "adopt", "go 3", &offers[3]],
+        "the claim's, then the rule's"
+    );
+    assert!(offers[3].starts_with("retract "), "{offers:?}");
+    assert!(
+        r.here().starts_with("Talk-notes says"),
+        "the cursor on the claim"
+    );
+}
+
+#[test]
 fn a_change_offers_rejecting_it_which_asks_first() {
     // Catches a revision's change offering nothing, or rejecting it
     // without the question retract asks.

@@ -24,11 +24,13 @@ pub enum Presentation {
     /// the item whose text states it.
     Fact { pane: usize, entry: u64, item: u64 },
     /// A constraint, as a mark under an item names it: the entry that
-    /// made it, and the item whose text states it, if one does.
+    /// made it, the item whose text states it, if one does, and the item
+    /// the mark is under, if a mark presents it.
     Constraint {
         pane: usize,
         entry: u64,
         item: Option<u64>,
+        under: Option<u64>,
     },
     /// A layer of a view: its entry, and the view's item.
     Layer { entry: u64, view: u64 },
@@ -39,6 +41,24 @@ pub enum Presentation {
 }
 
 impl Presentation {
+    /// Where a right-click on it puts the cursor first, so the item's
+    /// offers act on it: on an item, or the item a mark is under.
+    fn right_clicked(&self) -> Option<Presentation> {
+        use Presentation as P;
+        match self {
+            P::Item { .. } => Some(self.clone()),
+            P::Constraint {
+                pane,
+                under: Some(id),
+                ..
+            } => Some(P::Item {
+                pane: *pane,
+                id: *id,
+            }),
+            _ => None,
+        }
+    }
+
     /// Whether it is the user's own text, an item, whose words plumbing
     /// may act on; the rest (a mark, a chart, a change) is the memex's.
     pub fn is_text(&self) -> bool {
@@ -129,8 +149,8 @@ impl App {
         selected: bool,
     ) {
         let p = presented.at(at.0, at.1).cloned().filter(|_| !selected);
-        if let Some(item @ Presentation::Item { .. }) = &p {
-            self.click(item);
+        if let Some(item) = p.as_ref().and_then(Presentation::right_clicked) {
+            self.click(&item);
         }
         let mut offers = p.as_ref().map(|p| self.translators(p)).unwrap_or_default();
         if p.as_ref().is_none_or(Presentation::is_text) {
