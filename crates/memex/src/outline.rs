@@ -1005,6 +1005,14 @@ impl Outline {
     }
 
     /// The items, of these, whose text holds a pattern, ignoring case.
+    /// The first of these items that holds a pattern, ignoring case.
+    pub fn first_holding(&self, items: Vec<u64>, pattern: &str) -> Option<u64> {
+        let p = pattern.to_lowercase();
+        items
+            .into_iter()
+            .find(|id| self.text(*id).to_lowercase().contains(&p))
+    }
+
     pub fn holding(&self, items: Vec<u64>, pattern: &str) -> Vec<u64> {
         let p = pattern.to_lowercase();
         let holds = |id: &u64| self.text(*id).to_lowercase().contains(&p);

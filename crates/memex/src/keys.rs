@@ -446,6 +446,15 @@ impl App {
         self.leap_matches_from(from, &a.input, a.q() == Quasi::LeapForward)
     }
 
+    /// A Leap's first match of what is typed, counted from where it began:
+    /// the search stops there, as the cursor needs no more.
+    fn leap_first(&self, a: &Active) -> Option<u64> {
+        let from = a.leap_from().unwrap_or(self.cursor());
+        let outline = &self.notebook.outline;
+        let round = outline.round_from(from, a.q() == Quasi::LeapForward);
+        outline.first_holding(round, &a.input)
+    }
+
     /// While a Leap is typed, the cursor goes to its first match, as each
     /// letter is typed (Raskin's LEAP); with nothing typed, back to where
     /// it began; with no match, it stays at the last.
@@ -455,7 +464,7 @@ impl App {
         };
         let to = match a.input.is_empty() {
             true => Some(from),
-            false => self.leap_found(a).first().copied(),
+            false => self.leap_first(a),
         };
         if let Some(to) = to.filter(|t| self.notebook.outline.contains(*t)) {
             self.unfold_to(to);
