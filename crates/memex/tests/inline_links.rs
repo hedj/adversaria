@@ -211,3 +211,50 @@ fn one_undo_takes_a_name_and_its_links_back() {
         "the name is taken back too"
     );
 }
+
+/// Items Energia, "Energy launch" and Buran, the cursor at the end of a
+/// new item with an open link typed.
+fn completing(name: &str, typed: &str) -> Room {
+    let mut r = Room::new(name);
+    r.items(&["Energia", "Energy launch", "Buran flew once.", typed]);
+    r
+}
+
+#[test]
+fn an_open_link_lists_the_names_that_fit() {
+    // Catches a [[link]] typed with nothing to say which names exist, so a
+    // typo goes unseen: the third review's fourth finding.
+    let r = completing("complete-list", "See [[ener");
+    assert!(
+        r.shows("[[ Energia · Energy launch · Esc completes"),
+        "{:#?}",
+        r.lines()
+    );
+}
+
+#[test]
+fn esc_completes_as_far_as_the_names_agree_then_to_one() {
+    let mut r = completing("complete-esc", "See [[ener");
+    r.tap(&[Key::Escape]);
+    assert_eq!(r.here(), "See [[Energ");
+    r.typ("i");
+    r.tap(&[Key::Escape]);
+    assert_eq!(r.here(), "See [[Energia]]", "one name: closed");
+}
+
+#[test]
+fn a_sentence_is_not_offered_as_a_name() {
+    // Catches every item's text offered, a long note among the names.
+    let r = completing("complete-sentence", "See [[bur");
+    assert!(r.shows("[[ no item is named “bur…”"), "{:#?}", r.lines());
+}
+
+#[test]
+fn a_closed_link_offers_nothing() {
+    let mut r = completing("complete-closed", "See [[Energia]] ener");
+    r.tap(&[Key::Escape]);
+    assert_eq!(r.here(), "See [[Energia]] ener");
+    assert!(!r.shows("Esc completes"), "{:#?}", r.lines());
+    assert!(!r.shows("[[ no item"), "{:#?}", r.lines());
+    assert_eq!(r.app.session.message, "", "Esc said nothing");
+}

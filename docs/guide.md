@@ -444,7 +444,12 @@ address's `/#anchor` are not tags.
 
 **Links typed in text.** Write `[[Buran flight]]` in an item's text and,
 at the pause, the item links to the item named so, else to the first
-whose text it is (ignoring case). A link that names no item makes
+whose text it is (ignoring case). While the text cursor is after an open
+`[[`, a dim line under the item lists the names that fit what you have
+typed (`[[ Energia · Energy launch · Esc completes`): the names `name`
+gave, and the texts short enough to be names (3 to 60 characters, six
+words at most, not ending in `.`, `?` or `!`). Esc completes as far as
+they agree, and, when one fits, closes the link with `]]`. A link that names no item makes
 nothing: at the cursor a dim line says `not yet items: Buran flight ·
 make makes them`, and `make` makes each at the foot of the top level and
 links it; one `undo` takes that back. If you make such an item yourself

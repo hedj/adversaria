@@ -836,6 +836,7 @@ impl<'a> OutlinePane<'a> {
         drawn.push_lines(self.answer_line(id, depth), set_in + 2);
         drawn.push_lines(self.prose_line(id, depth), set_in);
         drawn.push_lines(self.unmade_line(id, depth), set_in);
+        drawn.push_lines(self.completion_line(id, depth), set_in);
         self.push_marks(drawn, id, depth);
         if self.outline().views.contains_key(&id) {
             self.view_lines(drawn, id, 2 * depth + 2);
@@ -963,6 +964,16 @@ impl<'a> OutlinePane<'a> {
             names.join(", ")
         );
         Some(Line::styled(hint, dim()))
+    }
+
+    /// Under the item at the cursor, while its text cursor is in an open
+    /// `[[`, the names that fit what is typed, and that Esc completes.
+    fn completion_line(&self, id: u64, depth: usize) -> Option<Line<'static>> {
+        let here = id == self.cursor() && self.has_focus();
+        let (typed, found) = self.app.link_completions().filter(|_| here)?;
+        let indent = "  ".repeat(depth + 1);
+        let said = completions_said(&typed, &found);
+        Some(Line::styled(format!("{indent}  {said}"), dim()))
     }
 
     /// The [[links]] of the item at the cursor that name no item, if it is
@@ -1825,6 +1836,29 @@ fn links_lines(outline: &Outline, id: u64) -> Vec<Presented> {
     }
     lines.extend(found);
     lines
+}
+
+/// What an open [[link]] is offered: the names that fit, or that none
+/// does.
+fn completions_said(typed: &str, found: &[String]) -> String {
+    match found.len() {
+        0 => format!("[[ no item is named “{typed}…”; make makes one once the link is closed"),
+        _ => format!("[[ {} · Esc completes", listed_names(found)),
+    }
+}
+
+/// The first five names, apart by " · ", then how many more.
+fn listed_names(names: &[String]) -> String {
+    let first = names
+        .iter()
+        .take(5)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" · ");
+    match names.len().saturating_sub(5) {
+        0 => first,
+        more => format!("{first} · {more} more"),
+    }
 }
 
 /// An item, presented in the outline pane, where a click puts the cursor.

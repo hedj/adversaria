@@ -129,6 +129,7 @@ impl App {
             Key::BackTab => self.run_simple("outdent"),
             Key::Up | Key::Down => self.move_line(key == Key::Up),
             Key::Left | Key::Right | Key::Home | Key::End => self.move_in_text(key),
+            Key::Escape => self.complete_link(),
             _ => {}
         }
     }

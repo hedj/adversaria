@@ -353,6 +353,16 @@ impl Session {
         self.hold_text(item, text);
     }
 
+    /// Replace the characters typed before the text cursor, in an item
+    /// whose text, as shown, is this, with others, the cursor after them.
+    pub(crate) fn replace_before(&mut self, item: u64, mut text: Vec<char>, n: usize, with: &str) {
+        let pos = self.view.pos.min(text.len());
+        let start = pos.saturating_sub(n);
+        text.splice(start..pos, with.chars());
+        self.view.pos = start + with.chars().count();
+        self.hold_text(item, text);
+    }
+
     /// Erase the character before the text cursor, or the one after it, in
     /// an item whose text, as shown, is this; at the end, nothing.
     pub(crate) fn erase_in(&mut self, item: u64, mut text: Vec<char>, before: bool) {
@@ -369,7 +379,7 @@ impl Session {
     }
 
     /// Keep an item's new text until it is written.
-    fn hold_text(&mut self, item: u64, text: Vec<char>) {
+    pub(crate) fn hold_text(&mut self, item: u64, text: Vec<char>) {
         self.pending_text = Some(PendingText { item, text });
         self.view_dirty = true;
     }
