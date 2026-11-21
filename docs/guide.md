@@ -447,8 +447,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | `child` | `child` | goes to the first item under the target, showing it if folded |
 | `back` | `back` (F7, or the mouse's back button, when no quasimode, menu or question is open) | goes back to where the last jump came from: `follow`, Leap, `go`, or a click on a link, a mention or a match in the right pane (the foot says `click: follow to 2`). Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over |
 | `forward` | `forward` (F8, or the mouse's forward button) | goes forward again to where `back` came from; a new jump empties the way forward, as in a browser |
-| `fold` | `fold` | hides the target's branch |
-| `unfold` | `unfold` | shows the target's branch |
+| `fold` | `fold` | hides the target's branch, or shows it if it is hidden |
 | `pane` | `pane outline`, `pane links`, `pane suggestions`, `pane matches` | sets what the other pane shows. `matches` lists every item that holds the last Leap's pattern, in the outline's order, numbered, with where the cursor is among them (`MATCHES OF “ener” · 14 · at 3 of 14`); a click on one jumps to it, so `back` returns, and the list stays as you edit |
 | `switch` | `switch` | moves focus to the other pane |
 | `help` | `help` | opens the list of every command, as F1 does |

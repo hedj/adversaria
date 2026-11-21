@@ -641,14 +641,14 @@ fn editing_steps() -> Vec<Step> {
     ]
 }
 
-/// Fold, undo, redo, unfold, Leap, a link, a switch of pane and back, and
-/// a scope.
+/// Fold, undo, redo, fold again (showing it), Leap, a link, a switch of
+/// pane and back, and a word deleted.
 fn command_steps() -> Vec<Step> {
     vec![
         Box::new(|a| command(a, "fold")),
         Box::new(|a| command(a, "undo")),
         Box::new(|a| command(a, "redo")),
-        Box::new(|a| command(a, "unfold")),
+        Box::new(|a| command(a, "fold")),
         Box::new(|a| {
             hold(a, Quasi::LeapForward, "sec");
             release(a, Quasi::LeapForward)

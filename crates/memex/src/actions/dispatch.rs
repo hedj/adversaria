@@ -117,8 +117,8 @@ pub const COMMANDS: &[Command] = &[
         run: App::cmd_fold,
         target: true,
         slots: &[],
-        help: "hide the target's branch",
-        brief: "hide the target's branch",
+        help: "hide the target's branch, or show it if it is hidden",
+        brief: "hide or show the branch",
     },
     Command {
         name: "dismiss",
@@ -423,14 +423,6 @@ pub const COMMANDS: &[Command] = &[
         slots: &[],
         help: "undo the last change on this branch",
         brief: "undo the last change",
-    },
-    Command {
-        name: "unfold",
-        run: App::cmd_unfold,
-        target: true,
-        slots: &[],
-        help: "show the target's branch",
-        brief: "show the target's branch",
     },
 ];
 
@@ -739,7 +731,6 @@ pub const GROUPS: &[(&str, &[&str])] = &[
             "parent",
             "child",
             "fold",
-            "unfold",
             "pane",
             "switch",
             "help",

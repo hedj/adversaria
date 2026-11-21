@@ -273,14 +273,13 @@ impl App {
 
     // Folds and panes.
 
+    /// Hide the target's branch, or show it if it is hidden: one toggle,
+    /// as outliners have.
     pub(crate) fn cmd_fold(&mut self, _: &[&str], target: u64) -> Result<String, String> {
-        self.session.view.folded.insert(target);
-        self.write_view("fold", json!({}));
-        Ok(String::new())
-    }
-
-    pub(crate) fn cmd_unfold(&mut self, _: &[&str], target: u64) -> Result<String, String> {
-        self.session.view.folded.remove(&target);
+        let folded = &mut self.session.view.folded;
+        if !folded.remove(&target) {
+            folded.insert(target);
+        }
         self.write_view("fold", json!({}));
         Ok(String::new())
     }

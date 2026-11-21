@@ -258,3 +258,16 @@ fn an_old_journals_word_scope_is_ignored() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn fold_hides_a_branch_and_fold_again_shows_it() {
+    // Catches two commands for one switch: fold hid and unfold showed,
+    // where an outliner has one toggle.
+    let mut r = Room::new("fold-toggle");
+    r.items(&["Alpha", "Beta"]);
+    r.tap(&[Key::Tab, Key::Up]);
+    r.command("fold");
+    assert!(!r.shows("Beta"), "hidden: {:?}", r.lines());
+    r.command("fold");
+    assert!(r.shows("Beta"), "shown again: {:?}", r.lines());
+}

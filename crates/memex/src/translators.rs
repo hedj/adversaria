@@ -88,7 +88,7 @@ impl App {
             return None;
         }
         Some(match self.session.view.folded.contains(&id) {
-            true => offer("show its branch", "unfold"),
+            true => offer("show its branch", "fold"),
             false => offer("hide its branch", "fold"),
         })
     }
