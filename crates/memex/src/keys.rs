@@ -60,11 +60,17 @@ impl App {
     /// Hold a quasimode's key: the Scope quasimode starts at a word.
     fn enter_quasi(&mut self, q: Quasi) -> Mode {
         self.flush();
-        let a = Active::held(Kind::of(q, self.session.view.scope));
+        let a = Active::held(self.kind_of(q));
         if q == Quasi::Scope {
             self.session.view.scope = ScopeLevel::Word;
         }
         Mode::Quasi(a)
+    }
+
+    /// The kind of a quasimode entered now: with the scope as it is, and
+    /// the cursor's item, where a Leap begins.
+    fn kind_of(&self, q: Quasi) -> Kind {
+        Kind::of(q, self.session.view.scope, self.cursor())
     }
 
     /// The window lost the keyboard, so the release of a quasimode's key
@@ -93,6 +99,7 @@ impl App {
     }
 
     /// Leave a quasimode without acting; Scope puts back the scope it found.
+    /// (A Leap is left only with nothing typed, so its cursor is back.)
     fn leave(&mut self, a: Active) -> Mode {
         if let Kind::Scope { found } = a.kind {
             self.session.view.scope = found;
@@ -237,9 +244,7 @@ impl App {
                 }
             }
             Key::Escape => match a.q() {
-                Quasi::LeapForward | Quasi::LeapBack => {
-                    a.input = self.leap_complete(&a.input, a.q() == Quasi::LeapForward)
-                }
+                Quasi::LeapForward | Quasi::LeapBack => a.input = self.leap_complete(&a),
                 Quasi::Command => a.input = complete_command(&a.input),
                 _ => a.apply_repair(),
             },
@@ -250,6 +255,7 @@ impl App {
             _ => {}
         }
         self.recheck(&mut a);
+        self.leap_preview(&a);
         Mode::Quasi(a)
     }
 
@@ -297,6 +303,7 @@ impl App {
     /// read, as typed text does. Releasing Leap on no match only says so,
     /// so a mistyped pattern makes nothing.
     fn leap_or_create(&mut self, a: Active) -> Mode {
+        self.leap_return(&a);
         let pattern = a.input.trim().to_string();
         let found = self.leap_matches(&pattern, a.q() == Quasi::LeapForward);
         if pattern.is_empty() || !found.is_empty() {
@@ -317,6 +324,7 @@ impl App {
 
     /// End a quasimode: do what it was for.
     fn finish(&mut self, a: Active) -> Mode {
+        self.leap_return(&a);
         match a.q() {
             Quasi::LeapForward | Quasi::LeapBack => {
                 let forward = a.q() == Quasi::LeapForward;
@@ -417,18 +425,56 @@ impl App {
     /// Leap's matches for a pattern: items whose text holds it, ignoring
     /// case, in order from the cursor (forward or back), wrapping.
     pub fn leap_matches(&self, pattern: &str, forward: bool) -> Vec<u64> {
+        self.leap_matches_from(self.cursor(), pattern, forward)
+    }
+
+    /// The items that hold a pattern, in order round the outline from an
+    /// item, after it.
+    pub fn leap_matches_from(&self, start: u64, pattern: &str, forward: bool) -> Vec<u64> {
         if pattern.is_empty() {
             return vec![];
         }
         let outline = &self.notebook.outline;
-        let round = outline.round_from(self.cursor(), forward);
+        let round = outline.round_from(start, forward);
         outline.holding(round, pattern)
+    }
+
+    /// A Leap's matches of what is typed, counted from where it began.
+    pub fn leap_found(&self, a: &Active) -> Vec<u64> {
+        let from = a.leap_from().unwrap_or(self.cursor());
+        self.leap_matches_from(from, &a.input, a.q() == Quasi::LeapForward)
+    }
+
+    /// While a Leap is typed, the cursor goes to its first match, as each
+    /// letter is typed (Raskin's LEAP); with nothing typed, back to where
+    /// it began; with no match, it stays at the last.
+    fn leap_preview(&mut self, a: &Active) {
+        let Some(from) = a.leap_from() else {
+            return;
+        };
+        let to = match a.input.is_empty() {
+            true => Some(from),
+            false => self.leap_found(a).first().copied(),
+        };
+        if let Some(to) = to.filter(|t| self.notebook.outline.contains(*t)) {
+            self.unfold_to(to);
+            self.set_cursor(to);
+        }
+    }
+
+    /// Put the cursor back where a Leap began, before it acts.
+    fn leap_return(&mut self, a: &Active) {
+        let from = a.leap_from().filter(|f| self.notebook.outline.contains(*f));
+        if let Some(from) = from {
+            self.set_cursor(from);
+        }
     }
 
     /// Recognition: the pattern, and the longest continuation every match
     /// shares, up to a space.
-    fn leap_complete(&self, pattern: &str, forward: bool) -> String {
-        let matches = self.leap_matches(pattern, forward).into_iter();
+    fn leap_complete(&self, a: &Active) -> String {
+        let pattern = &a.input;
+        let matches = self.leap_found(a).into_iter();
         let texts: Vec<String> = matches.map(|id| self.notebook.outline.text(id)).collect();
         recognised(pattern, &texts)
     }

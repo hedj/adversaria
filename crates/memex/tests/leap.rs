@@ -151,3 +151,55 @@ fn a_leaps_list_sits_at_the_foot_of_the_outline() {
     let bottom = rows.last().unwrap().0 + 1;
     assert_eq!(bottom, 30 - 3, "its border on the outline's last row");
 }
+
+/// Items Alpha, "Ener a" and "Ener b", the cursor on Alpha.
+fn ener(name: &str) -> (Room, [u64; 3]) {
+    let mut r = Room::new(name);
+    r.items(&["Alpha", "Ener a", "Ener b"]);
+    let items = r.outline().in_order();
+    r.put_cursor(items[0]);
+    (r, [items[0], items[1], items[2]])
+}
+
+#[test]
+fn the_cursor_moves_to_the_first_match_as_each_letter_is_typed() {
+    // Catches a Leap that moves only when it ends: the design (Raskin's
+    // LEAP) moves the cursor as each letter is typed.
+    let (mut r, [_, a, _]) = ener("leap-incremental");
+    r.hold(Quasi::LeapForward, "E");
+    assert_eq!(r.app.cursor(), a, "after one letter, still held");
+}
+
+#[test]
+fn each_letter_counts_matches_from_where_the_leap_began() {
+    // Catches a search from the moved cursor: the second letter would
+    // pass over "Ener a", where the cursor already is, to "Ener b".
+    let (mut r, [_, a, _]) = ener("leap-from-start");
+    r.hold(Quasi::LeapForward, "En");
+    assert_eq!(r.app.cursor(), a);
+    r.typ("er b");
+    assert_eq!(r.app.cursor(), r.outline().in_order()[2]);
+    r.release(Quasi::LeapForward);
+    r.command("back");
+    assert_eq!(r.app.cursor(), r.outline().in_order()[0], "back to Alpha");
+}
+
+#[test]
+fn with_no_match_the_cursor_stays_at_the_last() {
+    let (mut r, [_, a, _]) = ener("leap-no-match");
+    r.hold(Quasi::LeapForward, "Enerx");
+    assert_eq!(r.app.cursor(), a);
+}
+
+#[test]
+fn erasing_the_pattern_or_leaving_puts_the_cursor_back() {
+    let (mut r, [alpha, _, _]) = ener("leap-leave");
+    r.tap(&[Key::Quasi(Quasi::LeapForward)]);
+    r.typ("E");
+    r.tap(&[Key::Backspace]);
+    assert_eq!(r.app.cursor(), alpha, "nothing typed");
+    r.typ("E");
+    r.tap(&[Key::Backspace, Key::Backspace]);
+    assert!(matches!(r.app.session.mode, Mode::Normal), "left");
+    assert_eq!(r.app.cursor(), alpha, "left without acting");
+}

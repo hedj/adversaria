@@ -2000,7 +2000,7 @@ fn list_lines(app: &App, a: &Active, inside: (u16, u16)) -> Vec<Line<'static>> {
     match a.q() {
         Quasi::Command => commands::command_lines(app, &a.input, inside),
         Quasi::Suppose => suppose_lines(a),
-        q => leap_lines(app, a, q == Quasi::LeapForward),
+        Quasi::LeapForward | Quasi::LeapBack | Quasi::Scope => leap_lines(app, a),
     }
 }
 
@@ -2020,8 +2020,8 @@ fn suppose_lines(a: &Active) -> Vec<Line<'static>> {
 
 /// A Leap's matches: how many, then the first five, or every one while
 /// listing, the one it goes to first reversed.
-fn leap_lines(app: &App, a: &Active, forward: bool) -> Vec<Line<'static>> {
-    let matches = app.leap_matches(&a.input, forward);
+fn leap_lines(app: &App, a: &Active) -> Vec<Line<'static>> {
+    let matches = app.leap_found(a);
     let mut lines = vec![leap_heading(&matches)];
     let shown = if a.listing {
         matches.len()

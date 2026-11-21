@@ -360,18 +360,32 @@ pub struct Active {
 /// began as.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
-    Leap { forward: bool },
+    /// A Leap: its direction, and the item the cursor was on when it
+    /// began, which its matches are counted from as the cursor moves.
+    Leap {
+        forward: bool,
+        from: u64,
+    },
     Command,
-    Scope { found: ScopeLevel },
+    Scope {
+        found: ScopeLevel,
+    },
     Suppose(English),
 }
 
 impl Kind {
-    /// The kind of a quasimode entered while the scope is as given.
-    pub(crate) fn of(q: Quasi, scope: ScopeLevel) -> Kind {
+    /// The kind of a quasimode entered while the scope is as given, the
+    /// cursor on an item.
+    pub(crate) fn of(q: Quasi, scope: ScopeLevel, from: u64) -> Kind {
         match q {
-            Quasi::LeapForward => Kind::Leap { forward: true },
-            Quasi::LeapBack => Kind::Leap { forward: false },
+            Quasi::LeapForward => Kind::Leap {
+                forward: true,
+                from,
+            },
+            Quasi::LeapBack => Kind::Leap {
+                forward: false,
+                from,
+            },
             Quasi::Command => Kind::Command,
             Quasi::Scope => Kind::Scope { found: scope },
             Quasi::Suppose => Kind::Suppose(English::default()),
@@ -413,8 +427,8 @@ impl Active {
     /// Which quasimode it is.
     pub fn q(&self) -> Quasi {
         match self.kind {
-            Kind::Leap { forward: true } => Quasi::LeapForward,
-            Kind::Leap { forward: false } => Quasi::LeapBack,
+            Kind::Leap { forward: true, .. } => Quasi::LeapForward,
+            Kind::Leap { forward: false, .. } => Quasi::LeapBack,
             Kind::Command => Quasi::Command,
             Kind::Scope { .. } => Quasi::Scope,
             Kind::Suppose(_) => Quasi::Suppose,
@@ -425,6 +439,14 @@ impl Active {
     pub fn hint(&self) -> Option<&Hint> {
         match &self.kind {
             Kind::Suppose(english) => english.hint.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// In a Leap, the item the cursor was on when it began.
+    pub fn leap_from(&self) -> Option<u64> {
+        match self.kind {
+            Kind::Leap { from, .. } => Some(from),
             _ => None,
         }
     }

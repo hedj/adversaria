@@ -201,8 +201,8 @@ when it ends.
 
 | Quasimode | Default keys | While on | When it ends |
 | --- | --- | --- | --- |
-| Leap forward | Right Alt (AltGr) | type a pattern | the cursor goes to the next item holding it |
-| Leap back | Left Alt | type a pattern | the cursor goes to the previous item holding it |
+| Leap forward | Right Alt (AltGr) | type a pattern: as each letter is typed, the cursor goes to the next item holding it, counted from where the Leap began, and stays at the last match if a letter matches nothing | the cursor stays where it is; back returns to where the Leap began. Erasing the pattern puts the cursor back |
+| Leap back | Left Alt | type a pattern: as Leap forward, to the previous item holding it | as Leap forward |
 | Command | Left Ctrl | type a command line | the command runs on the item under the cursor |
 | Scope | Right Ctrl | Space widens the target: word, statement, branch | the target stays chosen for the next command |
 | Suppose | Super (either) | type a statement; the line below says what may come next in controlled English, whether it is a sentence of it, and if it breaks, where and how to mend it | the memex offers its readings of it (§ 3.2) |
