@@ -88,10 +88,10 @@ fn command_index(app: &App, groups: &[Group]) -> Vec<Line<'static>> {
     lines
 }
 
-/// A group's heading, dim, then its commands' names, each with its key.
+/// A group's heading, bold, then its commands' names, each with its key.
 fn indexed(app: &App, (heading, cs): &Group) -> [Line<'static>; 2] {
     [
-        Line::styled(*heading, dim()),
+        Line::styled(*heading, bold()),
         Line::from(named_commands(app, cs)),
     ]
 }

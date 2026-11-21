@@ -4,6 +4,7 @@
 use memex::app::{Key, Quasi};
 use memex::present::Presentation;
 
+use ratatui::style::Modifier;
 mod support;
 use support::{Room, replayed};
 
@@ -223,6 +224,11 @@ fn the_whole_list_names_every_command_under_its_group() {
     // bound key missing (UX audit, finding 13).
     let mut room = Room::new("screen-index");
     room.hold(Quasi::Command, "?");
+    let heading = room.style_of("EDITING THE OUTLINE").add_modifier;
+    assert!(
+        heading.contains(Modifier::BOLD),
+        "headed as the described list is"
+    );
     let shown = listed(&room);
     let words: Vec<&str> = shown.iter().flat_map(|l| l.split_whitespace()).collect();
     for c in memex::actions::COMMANDS {
