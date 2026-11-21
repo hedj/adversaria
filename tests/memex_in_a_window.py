@@ -336,12 +336,26 @@ def started_sway(d, scale, timeout=30):
     # sway writes.
     told = os.open(told_path, os.O_RDONLY | os.O_NONBLOCK)
     keep = os.open(told_path, os.O_WRONLY)
-    sway = subprocess.Popen(["sway", "-c", cfg], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # In a process group of its own: without a session bus, Nix's sway
+    # wrapper runs sway under dbus-run-session, which forks, so killing the
+    # process started here would leave sway, swaybg and a dbus-daemon
+    # running, each sway holding inotify instances (see stopped_sway).
+    sway = subprocess.Popen(["sway", "-c", cfg], env=env, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, start_new_session=True)
     names = os.read(told, 4096).decode().split() if readable(told, sway, time.time() + timeout) else []
     os.close(told)
     os.close(keep)
     env["WAYLAND_DISPLAY"], env["SWAYSOCK"] = (names + ["", ""])[:2]
     return sway, env
+
+
+def stopped_sway(sway):
+    """Stop sway and all it started: its process group."""
+    try:
+        os.killpg(sway.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    sway.wait(timeout=10)
 
 
 def device(binary, name, env):
@@ -470,7 +484,7 @@ def wayland_checks(binary, d, check):
         wayland_focus_lost(binary, d, env, keys, check)
     finally:
         finished(keys)
-        sway.kill()
+        stopped_sway(sway)
 
 
 def wayland_focus_lost(binary, d, env, keys, check):
@@ -543,7 +557,7 @@ def wayland_click(binary, d, check):
     finally:
         finished(keys)
         finished(hand)
-        sway.kill()
+        stopped_sway(sway)
 
 
 def main():
