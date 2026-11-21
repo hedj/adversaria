@@ -303,13 +303,18 @@ impl App {
     /// searching and making a note are one gesture. Its text waits to be
     /// read, as typed text does. Releasing Leap on no match only says so,
     /// so a mistyped pattern makes nothing.
-    fn leap_or_create(&mut self, a: Active) -> Mode {
-        self.leap_return(&a);
+    fn leap_or_create(&mut self, mut a: Active) -> Mode {
         let pattern = a.input.trim().to_string();
-        let found = self.leap_matches(&pattern, a.q() == Quasi::LeapForward);
-        if pattern.is_empty() || !found.is_empty() {
+        if pattern.is_empty() || self.leap_first(&a).is_some() {
             return self.finish(a);
         }
+        if a.near().is_none()
+            && let Some(near) = self.near_match(&a, &pattern)
+        {
+            a.kind.warn(near);
+            return Mode::Quasi(a);
+        }
+        self.leap_return(&a);
         self.flush_text();
         let spans = json!([[0, 0, pattern.chars().count()]]);
         match self.create_after(self.cursor(), &pattern, spans) {
@@ -442,17 +447,23 @@ impl App {
 
     /// A Leap's matches of what is typed, counted from where it began.
     pub fn leap_found(&self, a: &Active) -> Vec<u64> {
+        let round = self.leap_round(a);
+        self.notebook.outline.holding(round, &a.input)
+    }
+
+    /// The items in a Leap's direction round the outline from where it
+    /// began, after that item.
+    pub(crate) fn leap_round(&self, a: &Active) -> Vec<u64> {
         let from = a.leap_from().unwrap_or(self.cursor());
-        self.leap_matches_from(from, &a.input, a.q() == Quasi::LeapForward)
+        let forward = a.q() == Quasi::LeapForward;
+        self.notebook.outline.round_from(from, forward)
     }
 
     /// A Leap's first match of what is typed, counted from where it began:
     /// the search stops there, as the cursor needs no more.
     fn leap_first(&self, a: &Active) -> Option<u64> {
-        let from = a.leap_from().unwrap_or(self.cursor());
-        let outline = &self.notebook.outline;
-        let round = outline.round_from(from, a.q() == Quasi::LeapForward);
-        outline.first_holding(round, &a.input)
+        let round = self.leap_round(a);
+        self.notebook.outline.first_holding(round, &a.input)
     }
 
     /// While a Leap is typed, the cursor goes to its first match, as each

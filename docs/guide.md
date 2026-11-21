@@ -237,7 +237,11 @@ Within a quasimode:
   no item holds the pattern, Enter makes a new item holding it, after the
   cursor's item, and puts the cursor at its end. Searching for a note and
   making one are one gesture. Releasing on no match makes nothing, so a
-  mistyped pattern is only reported. The new item is read at the pause,
+  mistyped pattern is only reported. If an item holds something a few
+  edits from the pattern (one for four to seven letters, two for more;
+  none for fewer), the first Enter makes nothing and warns: `no item
+  holds “Korolov”; 2 holds “Korolev” · Enter again makes “Korolov”, or
+  change the pattern`. The new item is read at the pause,
   as typed text is.
 - **Focus lost while a key is held** (as by Alt+Tab): the release goes to
   another window, so the memex does not wait for it. A quasimode held with

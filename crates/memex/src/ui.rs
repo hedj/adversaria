@@ -2211,10 +2211,23 @@ fn quasi_name(a: &Active) -> Span<'static> {
 /// with nothing else pressed, a release keeps it on rather than ending
 /// it, so the foot says so, and how to end it by holding.
 fn quasi_guide(a: &Active) -> String {
+    if let Some(n) = a.near() {
+        return near_warning(n);
+    }
     match a.hold {
         Hold::Down => quasi_fresh(a.q()),
         Hold::Used | Hold::Latched => quasi_doing(a),
     }
+}
+
+/// Leap's warning before it makes an item: what is near the pattern, and
+/// that Enter again makes it.
+fn near_warning(n: &crate::app::Near) -> String {
+    let p = &n.pattern;
+    format!(
+        "no item holds “{p}”; {} holds “{}” · Enter again makes “{p}”, or change the pattern",
+        n.place, n.found
+    )
 }
 
 /// The foot of a quasimode just entered: a release keeps it on, so the

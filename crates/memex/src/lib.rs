@@ -13,6 +13,7 @@ mod evaluation;
 pub mod gui;
 pub mod journal;
 pub mod keys;
+mod near;
 pub mod notebook;
 pub mod outline;
 pub mod pairs;

@@ -365,11 +365,13 @@ pub struct Active {
 /// began as.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
-    /// A Leap: its direction, and the item the cursor was on when it
-    /// began, which its matches are counted from as the cursor moves.
+    /// A Leap: its direction, the item the cursor was on when it began,
+    /// which its matches are counted from as the cursor moves, and the
+    /// near match it warned of, if Enter found none.
     Leap {
         forward: bool,
         from: u64,
+        near: Option<Near>,
     },
     Command,
     Scope {
@@ -379,6 +381,13 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// A Leap that warned of a near match.
+    pub(crate) fn warn(&mut self, warned: Near) {
+        if let Kind::Leap { near, .. } = self {
+            *near = Some(warned);
+        }
+    }
+
     /// The kind of a quasimode entered while the scope is as given, the
     /// cursor on an item.
     pub(crate) fn of(q: Quasi, scope: ScopeLevel, from: u64) -> Kind {
@@ -386,16 +395,27 @@ impl Kind {
             Quasi::LeapForward => Kind::Leap {
                 forward: true,
                 from,
+                near: None,
             },
             Quasi::LeapBack => Kind::Leap {
                 forward: false,
                 from,
+                near: None,
             },
             Quasi::Command => Kind::Command,
             Quasi::Scope => Kind::Scope { found: scope },
             Quasi::Suppose => Kind::Suppose(English::default()),
         }
     }
+}
+
+/// What Leap warned of when Enter found no match: the pattern, and the
+/// place and words of an item that holds something a few edits from it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Near {
+    pub pattern: String,
+    pub place: String,
+    pub found: String,
 }
 
 /// The English typed in Suppose: what APE makes of it, and the fullest
@@ -444,6 +464,14 @@ impl Active {
     pub fn hint(&self) -> Option<&Hint> {
         match &self.kind {
             Kind::Suppose(english) => english.hint.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// In a Leap, the near match it warned of for what is typed now.
+    pub fn near(&self) -> Option<&Near> {
+        match &self.kind {
+            Kind::Leap { near: Some(n), .. } if n.pattern == self.input.trim() => Some(n),
             _ => None,
         }
     }

@@ -253,3 +253,52 @@ fn a_reopened_notebook_keeps_the_matches_pane() {
         memex::app::PaneKind::Matches
     );
 }
+
+/// Items Alpha and "Korolev's notes", the cursor on Alpha, Leap latched
+/// with a pattern typed.
+fn near(name: &str, pattern: &str) -> Room {
+    let mut r = Room::new(name);
+    r.items(&["Alpha", "Korolev's notes"]);
+    let first = r.outline().in_order()[0];
+    r.put_cursor(first);
+    r.tap(&[Key::Quasi(Quasi::LeapForward)]);
+    r.typ(pattern);
+    r
+}
+
+#[test]
+fn enter_on_a_near_miss_warns_before_it_makes_an_item() {
+    // Catches a mistyped pattern, one letter off, made into a junk item by
+    // one Enter: the third review's seventh finding.
+    let mut r = near("leap-near", "Korolov");
+    r.tap(&[Key::Enter]);
+    assert_eq!(r.outline().in_order().len(), 2, "nothing made yet");
+    let warning = "no item holds “Korolov”; 2 holds “Korolev” · Enter again makes “Korolov”";
+    let foot = r.lines_at(160, 40).join(" ");
+    assert!(foot.contains(warning), "{foot}");
+    r.tap(&[Key::Enter]);
+    assert_eq!(r.outline().in_order().len(), 3, "made on the second Enter");
+    assert_eq!(r.here(), "Korolov");
+}
+
+#[test]
+fn a_changed_pattern_is_checked_again() {
+    let mut r = near("leap-near-changed", "Korolov");
+    r.tap(&[Key::Enter]);
+    r.typ("x");
+    let foot = r.lines_at(160, 40).join(" ");
+    assert!(!foot.contains("Enter again makes"), "{foot}");
+    // Eight letters may be two edits off: Korolovx is still near Korolev,
+    // so Enter warns again, for the new pattern, and makes nothing.
+    r.tap(&[Key::Enter]);
+    assert_eq!(r.outline().in_order().len(), 2);
+    let foot = r.lines_at(160, 40).join(" ");
+    assert!(foot.contains("Enter again makes “Korolovx”"), "{foot}");
+}
+
+#[test]
+fn a_pattern_near_nothing_is_made_at_once() {
+    let mut r = near("leap-near-none", "Polyus");
+    r.tap(&[Key::Enter]);
+    assert_eq!(r.outline().in_order().len(), 3);
+}
