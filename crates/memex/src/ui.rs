@@ -863,15 +863,12 @@ impl<'a> OutlinePane<'a> {
         Line::from(self.item_head(id, depth)).width()
     }
 
-    /// An item's indent and its mark of the tree; at the top level, its
-    /// number.
+    /// An item's indent, its mark of the tree and its address, as the
+    /// foot, the menus and the commands quote it ("1.3").
     fn item_head(&self, id: u64, depth: usize) -> Vec<Span<'static>> {
         let indent = Span::raw("  ".repeat(depth));
-        let mut spans = vec![indent, self.bullet(id)];
-        if depth == 0 {
-            spans.push(Span::raw(format!("{}. ", self.outline().number(id))));
-        }
-        spans
+        let address = Span::raw(format!("{}. ", self.outline().number(id)));
+        vec![indent, self.bullet(id), address]
     }
 
     /// An item's bullet: its tree mark, in its style.
@@ -1105,13 +1102,10 @@ impl<'a> OutlinePane<'a> {
     }
 
     /// The text cursor's column on its line: after its item's indent, tree
-    /// mark and, at the top level, number, and the text before it.
+    /// mark and address, and the text before it.
     fn text_column(&self, depth: usize) -> usize {
-        let number = match depth {
-            0 => self.outline().number(self.cursor()).len() + 2,
-            _ => 0,
-        };
-        2 * depth + 2 + number + self.typed_cells()
+        let address = self.outline().number(self.cursor()).len() + 2;
+        2 * depth + 2 + address + self.typed_cells()
     }
 
     /// How many cells the text before the text cursor takes.

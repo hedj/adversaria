@@ -414,7 +414,7 @@ fn a_changed_input_marks_its_results() {
     std::fs::write(dir.join("data.csv"), "t,delay\n1,1.5\n2,1.9\n").unwrap();
     app.evaluate().unwrap();
     assert_eq!(changed_inputs(&app, result), ["data.csv"]);
-    the_mark_is_under_its_result(&app);
+    the_mark_is_under_its_result(&app, result);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -436,14 +436,15 @@ fn the_result_is_read(app: &App, result: u64) {
 }
 
 /// The mark of a changed input is drawn on the line under its result.
-fn the_mark_is_under_its_result(app: &App) {
+fn the_mark_is_under_its_result(app: &App, result: u64) {
     let shown = screen_text(app, 140, 30);
+    let row = format!(
+        "• {}. mean_delay = 1.55",
+        app.notebook.outline.number(result)
+    );
     assert!(shown.contains("‼ input changed since: data.csv"), "{shown}");
     let lines: Vec<&str> = shown.lines().collect();
-    let at = lines
-        .iter()
-        .position(|l| l.contains("• mean_delay = 1.55"))
-        .unwrap();
+    let at = lines.iter().position(|l| l.contains(&row)).unwrap();
     assert!(
         lines[at + 1].contains("‼ input changed since"),
         "under its result"

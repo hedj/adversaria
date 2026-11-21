@@ -74,6 +74,24 @@ fn the_text_cursor_counts_the_cells_of_wide_characters() {
 }
 
 #[test]
+fn a_nested_item_shows_its_address_and_the_cursor_follows_it() {
+    // Catches an address drawn at the top level only: the foot, the menus
+    // and the commands quote "1.1", which the outline then never showed;
+    // and the text cursor placed as if no address came before the text.
+    use ratatui::{Terminal, backend::Backend, backend::TestBackend};
+    let mut r = Room::new("nested-address");
+    r.items(&["Alpha", "Beta"]);
+    r.leap(Quasi::LeapBack, "Beta");
+    r.tap(&[memex::app::Key::Tab]);
+    assert!(r.shows("• 1.1. Beta"), "{:?}", r.lines());
+    let mut t = Terminal::new(TestBackend::new(160, 40)).unwrap();
+    t.draw(|f| memex::ui::draw(f, &r.app)).unwrap();
+    let at = t.backend_mut().get_cursor_position().unwrap();
+    let (x, y) = r.find("1.1. Beta");
+    assert_eq!((at.x, at.y), (x + 9, y), "after \"1.1. Beta\"");
+}
+
+#[test]
 fn a_folded_item_shows_how_many_items_it_hides() {
     // Catches a folded item drawn as open, or without its count.
     let mut r = Room::new("folded");
