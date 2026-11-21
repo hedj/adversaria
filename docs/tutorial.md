@@ -218,8 +218,10 @@ Press Enter. A second world opens beside the actual one, row for row:
 and the top bar says `worlds actual | suppose: the flight was in 1989`.
 
 In the supposed world your 1988 fact is set aside, so the rule holds;
-the notebook says `set aside in this world: 1.1`. Your fact is struck
-through and marked `(1.1 set aside here)`, and under the rule the
+the notebook says `set aside in this world: 1.1`. Item 1.1 also states
+the flight's label, which stays, so its row is not struck through; it is
+marked `(1.1 set aside here: date(buran_flight, 1988))`, the fact set
+aside, as the notebook reads it. Under the rule the
 supposed world counts `0 violations, 0 disagreements`, then
 `1.1 set aside here`; the actual world, beside it, still counts
 `1 disagreement`. A count or a row that differs between the worlds is

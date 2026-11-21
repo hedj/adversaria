@@ -3325,22 +3325,57 @@ impl<'a> Sides<'a> {
 
     /// A row of the supposed world: the item's text there, set in by its
     /// level; bold and underlined where it differs from the actual world;
-    /// struck through, and said so, where its fact is set aside.
+    /// struck through where all it states is set aside; and a note where
+    /// any of it is.
     fn supposed_row(&self, i: u64) -> Line<'static> {
-        let here = self.side(1).text(i);
-        let gone = self.sets_aside_at(i);
-        let differs = here != self.side(0).text(i);
-        let style = changed_style(differs, gone);
-        let text = Span::styled(format!("{}{here}", self.indent(i)), style);
-        let said = gone.then(|| self.set_aside_note(i));
+        let aside = self.aside_at(i);
+        let whole = !aside.is_empty() && aside.len() == self.stated_at(i);
+        let text = self.supposed_text(i, whole);
+        let said = self.set_aside_note(i, whole, &aside);
         Line::from_iter(std::iter::once(text).chain(said))
     }
 
-    /// A note on a row whose fact is set aside, with the row's place, so
-    /// that the constraint which set it aside can name it.
-    fn set_aside_note(&self, i: u64) -> Span<'static> {
+    /// An item's text in the supposed world, set in by its level, in its
+    /// style there.
+    fn supposed_text(&self, i: u64, whole: bool) -> Span<'static> {
+        let here = format!("{}{}", self.indent(i), self.side(1).text(i));
+        Span::styled(here, self.supposed_style(i, whole))
+    }
+
+    /// How a row of the supposed world is drawn: struck through if all
+    /// it states is set aside, else marked where its text differs.
+    fn supposed_style(&self, i: u64, whole: bool) -> Style {
+        let differs = self.side(1).text(i) != self.side(0).text(i);
+        changed_style(differs, whole)
+    }
+
+    /// A note on a row whose facts are set aside, if any are, with the
+    /// row's place, so that the constraint which set them aside can name
+    /// it; and, where
+    /// the row states more than is set aside, the facts that are.
+    fn set_aside_note(&self, i: u64, whole: bool, aside: &[u64]) -> Option<Span<'static>> {
+        if aside.is_empty() {
+            return None;
+        }
         let place = self.actual.number(i);
-        Span::styled(format!("  ({place} set aside here)"), dim())
+        let note = match whole {
+            true => format!("  ({place} set aside here)"),
+            false => format!("  ({place} set aside here: {})", self.facts_shown(aside)),
+        };
+        Some(Span::styled(note, dim()))
+    }
+
+    /// The facts of entries of the actual world, as Prolog, apart by
+    /// semicolons.
+    fn facts_shown(&self, entries: &[u64]) -> String {
+        let facts = self
+            .side(0)
+            .eval
+            .map(|e| e.facts.as_slice())
+            .unwrap_or_default();
+        let shown = facts.iter().filter(|(s, _)| entries.contains(s));
+        let shown: Vec<String> = shown.map(|(_, f)| crate::reason::show(f)).collect();
+        shown.join("; ")
     }
 
     /// An item's row's indent: two cells for each level below the top.
@@ -3348,11 +3383,18 @@ impl<'a> Sides<'a> {
         "  ".repeat(self.actual.depth_of(i))
     }
 
-    /// Whether the supposed world sets aside a fact of an item of the
-    /// actual world.
-    fn sets_aside_at(&self, i: u64) -> bool {
+    /// The entries the supposed world sets aside whose facts an item of
+    /// the actual world states.
+    fn aside_at(&self, i: u64) -> Vec<u64> {
         let actual = &self.actual;
-        self.aside.entries.iter().any(|s| actual.states(i, *s))
+        let at = self.aside.entries.iter().filter(|s| actual.states(i, **s));
+        at.copied().collect()
+    }
+
+    /// How many facts an item of the actual world states there.
+    fn stated_at(&self, i: u64) -> usize {
+        let at = self.side(0).fact_seqs().into_iter();
+        at.filter(|s| self.actual.states(i, *s)).count()
     }
 
     /// The lines of each constraint of a world: how many violations and

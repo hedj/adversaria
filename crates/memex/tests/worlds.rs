@@ -226,6 +226,49 @@ fn each_fact_set_aside_is_marked_on_its_own_row() {
     assert_eq!(marked, 2, "{}", r.app.session.message);
 }
 
+/// A room where rent is 1200 under "one value", the rent's item stating
+/// these facts too, with 1300 supposed.
+fn rent_alone_supposed(name: &str, more: &[&str]) -> Room {
+    let mut r = Room::new(name);
+    r.items(&["rent"]);
+    r.command("fact cell(rent, 1200)");
+    more.iter().for_each(|f| r.command(&format!("fact {f}")));
+    r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
+    r.app.evaluate().unwrap();
+    suppose(&mut r, "cell(rent, 1300)");
+    r.app.evaluate().unwrap();
+    r
+}
+
+#[test]
+fn a_row_all_of_whose_facts_are_set_aside_is_struck_through() {
+    let r = rent_alone_supposed("worlds-struck-whole", &[]);
+    let row = "rent  (1 set aside here)";
+    assert!(
+        column(&r, 1).iter().any(|l| l.contains(row)),
+        "{:#?}",
+        column(&r, 1)
+    );
+    let struck = r.style_of("rent  (1 set aside here)").add_modifier;
+    assert!(struck.contains(Modifier::CROSSED_OUT), "{struck:?}");
+}
+
+#[test]
+fn a_row_that_keeps_a_fact_names_what_is_set_aside_and_is_not_struck() {
+    // Catches the whole row struck through, though the item states more
+    // than the fact set aside: the second review read the label sentence
+    // of 1.1 as set aside too.
+    let r = rent_alone_supposed("worlds-struck-part", &["due(rent, monthly)"]);
+    let row = "rent  (1 set aside here: cell(rent, 1200))";
+    assert!(
+        column(&r, 1).iter().any(|l| l.contains(row)),
+        "{:#?}",
+        column(&r, 1)
+    );
+    let kept = r.style_of(row).add_modifier;
+    assert!(!kept.contains(Modifier::CROSSED_OUT), "{kept:?}");
+}
+
 #[test]
 fn a_fact_typed_for_an_entity_the_world_lacks_is_supposed_as_typed() {
     // Catches a typed fact read as another entity's: "cell(fuel, 80)",

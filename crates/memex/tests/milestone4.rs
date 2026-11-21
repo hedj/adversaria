@@ -371,12 +371,14 @@ fn the_worlds_are_side_by_side(app: &App) {
     s.assert("  1.1 set aside here");
     s.assert("The programme");
     s.assert("How charts were reviewed");
-    let gone = "Buran flew once, unmanned, on 15 November 1988.  (1.1 set aside here)";
+    // The item states the date and the label; only the date is set aside,
+    // so the note names it and the text, still a label, is not struck.
+    let gone = "Buran flew once, unmanned, on 15 November 1988.  (1.1 set aside here: date(buran_flight, 1988))";
     s.assert(gone);
     let struck = s.style_of(gone).add_modifier;
     assert!(
-        struck.contains(Modifier::CROSSED_OUT),
-        "the fact set aside is struck through"
+        !struck.contains(Modifier::CROSSED_OUT),
+        "an item that keeps a fact is not struck through"
     );
     let changed = s.style_of("The flight came two years").add_modifier;
     assert!(

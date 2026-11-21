@@ -583,14 +583,14 @@ fn a_row_one_world_wraps_further_keeps_the_next_rows_together() {
     room.release(Quasi::Suppose);
     room.tap(&[Key::Enter]);
     room.app.evaluate().unwrap(); // as the window does
-    // At 52 columns "(1 set aside here)" wraps to a row whose actual side
+    // At 52 columns "(1 set aside here: ...)" wraps to a row whose actual side
     // is empty, so the supposed side's pair is a row taller.
     let rows = room.lines_at(52, 30);
     let right = |r: &String| r.split('│').nth(1).unwrap_or("").trim_start().to_string();
     let left_empty = |r: &String| r.split('│').next().unwrap_or("").trim().is_empty();
     let own_row = rows
         .iter()
-        .any(|r| left_empty(r) && right(r).starts_with("set aside here)"));
+        .any(|r| left_empty(r) && right(r).starts_with("set aside here"));
     assert!(own_row, "the supposed side is a row taller: {rows:#?}");
     let below = rows.iter().find(|r| r.starts_with("The income"));
     let below = right(below.expect("The income"));
