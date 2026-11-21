@@ -225,3 +225,64 @@ fn the_outline_takes_keys_again(mut r: Room, cursor: u64) {
     r.app.flush();
     assert_eq!(r.text(cursor), "secondx");
 }
+
+/// Hold Command, type one letter, and release it: a Ctrl chord.
+fn chord(r: &mut Room, letter: &str) {
+    r.hold(Quasi::Command, letter);
+    r.release(Quasi::Command);
+}
+
+#[test]
+fn ctrl_z_and_ctrl_y_undo_and_redo_as_everywhere_else() {
+    // Catches Ctrl+Z read as the prefix z of a command, which names none,
+    // so a habit from every other program did nothing but complain.
+    let mut r = Room::new("chord-undo");
+    r.items(&["Alpha", "Beta"]);
+    r.app.flush();
+    let text = |r: &Room| r.text(r.outline().in_order()[1]);
+    chord(&mut r, "z");
+    assert_eq!(text(&r), "", "Beta's text undone: {:?}", r.lines());
+    chord(&mut r, "y");
+    assert_eq!(text(&r), "Beta", "redone");
+    chord(&mut r, "z");
+    chord(&mut r, "Z");
+    assert_eq!(text(&r), "Beta", "Ctrl+Shift+Z redoes too");
+}
+
+#[test]
+fn ctrl_f_opens_leap() {
+    let mut r = Room::new("chord-find");
+    r.items(&["Alpha"]);
+    chord(&mut r, "f");
+    let leaping =
+        matches!(&r.app.session.mode, Mode::Quasi(a) if a.q() == Quasi::LeapForward && a.latched());
+    assert!(leaping, "{:?}", r.app.session.mode);
+}
+
+#[test]
+fn another_ctrl_chord_runs_no_command_by_surprise() {
+    // Catches Ctrl+O, held from habit, running outdent: the prefix o names
+    // it alone.
+    let mut r = Room::new("chord-other");
+    r.items(&["Alpha", "Beta"]);
+    r.tap(&[Key::Tab]);
+    chord(&mut r, "o");
+    assert_eq!(r.outline().number(r.app.cursor()), "1.1", "not outdented");
+    assert!(
+        r.app
+            .session
+            .message
+            .starts_with("a command held needs two letters")
+    );
+}
+
+#[test]
+fn a_latched_command_still_takes_one_letter() {
+    let mut r = Room::new("chord-latched");
+    r.items(&["Alpha", "Beta"]);
+    r.tap(&[Key::Tab]);
+    r.tap(&[Key::Quasi(Quasi::Command)]);
+    r.typ("o");
+    r.tap(&[Key::Enter]);
+    assert_eq!(r.outline().number(r.app.cursor()), "2", "outdented");
+}

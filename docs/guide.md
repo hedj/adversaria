@@ -244,6 +244,12 @@ Within a quasimode:
   holds “Korolov”; 2 holds “Korolev” · Enter again makes “Korolov”, or
   change the pattern`. The new item is read at the pause,
   as typed text is.
+- **Ctrl chords.** Command held for one letter, then released, is a
+  chord, as in any desktop program: Ctrl+Z undoes, Ctrl+Y or
+  Ctrl+Shift+Z redoes, Ctrl+F opens Leap, latched. Any other single
+  letter runs nothing and says so, so a chord typed from habit (Ctrl+O)
+  does not run a command (`outdent`) by surprise. A latched Command still
+  takes one letter: tap Left Ctrl, type `o`, press Enter.
 - **Focus lost while a key is held** (as by Alt+Tab): the release goes to
   another window, so the memex does not wait for it. A quasimode held with
   nothing typed is left without acting. One held after you typed stays open, latched, with what you

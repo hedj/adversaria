@@ -464,6 +464,15 @@ impl Active {
         suppose || lister && (self.listing || !self.input.is_empty())
     }
 
+    /// A quasimode latched, as if its key were tapped, nothing typed yet.
+    pub(crate) fn tapped(kind: Kind) -> Active {
+        let held = Active::held(kind);
+        Active {
+            hold: Hold::Latched,
+            ..held
+        }
+    }
+
     /// A quasimode whose key is held, nothing typed yet.
     pub(crate) fn held(kind: Kind) -> Active {
         Active {

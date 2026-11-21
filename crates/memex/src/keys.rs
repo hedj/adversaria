@@ -345,9 +345,29 @@ impl App {
                 let english = self.confirmed_english(&a, &text);
                 return self.suppose_text(text, english);
             }
+            Quasi::Command if a.hold == Hold::Used && a.input.chars().count() == 1 => {
+                return self.chord(&a.input);
+            }
             Quasi::Command => return self.run_command(&a.input),
         }
         Mode::Normal
+    }
+
+    /// Command held for one letter is a Ctrl chord, as every desktop
+    /// program reads it: Ctrl+Z undoes, Ctrl+Y and Ctrl+Shift+Z redo, and
+    /// Ctrl+F finds, opening Leap; any other is refused, not taken as a
+    /// prefix, so a chord of habit does not run a command by surprise.
+    fn chord(&mut self, letter: &str) -> Mode {
+        match letter {
+            "z" => self.run_command("undo"),
+            "y" | "Z" => self.run_command("redo"),
+            "f" => Mode::Quasi(Active::tapped(Kind::of(Quasi::LeapForward, self.cursor()))),
+            _ => {
+                let said = "a command held needs two letters or more · Ctrl+Z undoes, Ctrl+Y redoes, Ctrl+F finds";
+                self.session.message = said.into();
+                Mode::Normal
+            }
+        }
     }
 
     fn confirm(&mut self, target: u64, dependents: Vec<u64>, ev: Event) -> Mode {
