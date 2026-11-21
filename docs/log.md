@@ -1699,6 +1699,43 @@ Earlier ones stand: "Plumbing" (15), "Pointing at an argument" (8).
 The Wayland scale-2 click test failed once more in this round, then
 passed; not explained.
 
+### Fewer mechanisms, after a fourth UX review (21 November 2026)
+
+At the author's request a UX reviewer weighed what a learner must hold
+and listed where a familiar mechanism could replace a specific one
+without losing anything the build can do. The author chose eight. Each
+is a commit with tests that fail without it:
+
+1. Scope is removed: `delete word` deletes the word at the cursor, and
+   Right Ctrl is free (7ad99e2; format version 1 revised, a reader
+   ignores the `scope` an older view entry holds). That commit's message
+   said make test passed; it did not, as delete's brief help no longer
+   fitted the list. 991e14f fixed it and says so.
+2. In Command, Ctrl with one letter does what it does everywhere: Ctrl+Z
+   undoes, Ctrl+Y and Ctrl+Shift+Z redo, Ctrl+F opens Leap (f909b74).
+3. `help` opens the list F1 opens (fec3067).
+4. Tab completes and Esc cancels, in Command, Leap, Suppose and an open
+   `[[` alike; Esc had completed (d2b322a).
+5. The Suppose key opens Command with `suppose ` typed, with the
+   sentence aids Suppose had (28e2819).
+6. `retract` with no number takes back the target's own last entry, and
+   F4 runs it; `unadopt` is gone (c6f530e).
+7. `fold` toggles; `unfold` is gone (5804b8f).
+8. The moves have a group of their own, Moving (4d5c5d1), and Shift
+   with an arrow, Home or End makes the six by structure (8a9d2da). A
+   quasimode may not use those keys: if Shift were let go first, the
+   release would be the plain key's.
+
+The guide and tutorial changed with each commit; 3359220 swept the
+stale words left in docs/design.md and in comments.
+
+Measured over the referent gate and reported, not reworded: the
+guide's new "Moving by structure" (7: it names the six commands its keys
+run). Two others the keys raised were split: the guide's Editing table
+(9), whose Shift rows became that subsection, and an input test (7),
+which checked arrows and Home together. Earlier ones stand: "Plumbing"
+(15), "Pointing at an argument" (8), "The mouse" (7), Plumber::new (7).
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
