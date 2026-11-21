@@ -148,8 +148,9 @@ fact is a mark:
 
     ? sources disagree under constraint 1.4: 1988 here; 1989 in 1.3
 
-Items are addressed by number: 1.3 is the third item under item 1, the
-claim, and constraint 1.4 is the rule you just wrote. It is a disagreement, not an error, because 1989 is only a claim.
+Items are addressed by number, and each shows its address before its
+text: 1.3 is the third item under item 1, the claim, and constraint 1.4
+is the rule you just wrote. It is a disagreement, not an error, because 1989 is only a claim.
 You wrote the rule once; it now checks every date in the notebook,
 those you add later and those that arrive from documents and sources.
 

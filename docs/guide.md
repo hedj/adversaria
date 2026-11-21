@@ -132,7 +132,8 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   The cursor's item is tinted blue-grey across the pane, with a brighter
   blue bar beside it in the margin. `▼` marks an item with items under it, `▶` a
   folded one (followed by how many items it hides), `•` an item with none.
-  Top-level items show their number. Under an item, `‼` and `?` lines
+  Each item shows its address (`1.`, `1.3.`), as the foot, the menus
+  and the commands quote it. Under an item, `‼` and `?` lines
   are its marks: one for each constraint its facts break or disagree under,
   naming the constraint (`constraint 1.4` when an item states it, else its
   name in quotes), the item's own fact, and each other fact in the
