@@ -3,6 +3,7 @@
 //! state always draws the same screen.
 
 mod commands;
+mod matches;
 mod wrap;
 
 use crate::app::{Active, App, Hold, Mode, PaneKind, Quasi, ScopeLevel, View};
@@ -490,6 +491,7 @@ fn draw_pane(f: &mut Frame, app: &App, i: usize, area: Rect) -> Presentations {
         PaneKind::Outline => draw_outline(f, app, i, area),
         PaneKind::Links => draw_links(f, app, area),
         PaneKind::Suggestions => draw_suggestions(f, app, area),
+        PaneKind::Matches => matches::draw(f, app, area),
     }
 }
 

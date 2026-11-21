@@ -122,6 +122,8 @@ pub enum PaneKind {
     Outline,
     Links,
     Suggestions,
+    /// The items that hold the last Leap's pattern.
+    Matches,
 }
 
 impl PaneKind {
@@ -131,6 +133,7 @@ impl PaneKind {
             Some("outline") => Some(Self::Outline),
             Some("links") => Some(Self::Links),
             Some("suggestions") => Some(Self::Suggestions),
+            Some("matches") => Some(Self::Matches),
             _ => None,
         }
     }
@@ -141,6 +144,7 @@ impl PaneKind {
             Self::Outline => "outline",
             Self::Links => "links",
             Self::Suggestions => "suggestions",
+            Self::Matches => "matches",
         }
     }
 }
@@ -303,6 +307,7 @@ impl View {
                 self.panes[i].kind = match p["kind"].as_str() {
                     Some("links") => PaneKind::Links,
                     Some("suggestions") => PaneKind::Suggestions,
+                    Some("matches") => PaneKind::Matches,
                     _ => PaneKind::Outline,
                 };
                 self.panes[i].cursor = p["cursor"].as_u64().unwrap_or(TOP);

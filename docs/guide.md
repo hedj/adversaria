@@ -155,7 +155,7 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   on a view, its layers. Under the links or the constraint, `READ AS` and
   the address show what the item's text was read as, in Prolog, and its
   tags (§ 3.1). After `interrogate`, the pane shows the interrogation. `pane`
-  sets it to the outline, links or suggestions.
+  sets it to the outline, links, suggestions or matches.
 - **Foot:** the message line, and, while a quasimode is on (held or
   latched), what you have typed and how it ends.
 
@@ -428,7 +428,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | `forward` | `forward` (F8, or the mouse's forward button) | goes forward again to where `back` came from; a new jump empties the way forward, as in a browser |
 | `fold` | `fold` | hides the target's branch |
 | `unfold` | `unfold` | shows the target's branch |
-| `pane` | `pane outline`, `pane links`, `pane suggestions` | sets what the other pane shows |
+| `pane` | `pane outline`, `pane links`, `pane suggestions`, `pane matches` | sets what the other pane shows. `matches` lists every item that holds the last Leap's pattern, in the outline's order, numbered, with where the cursor is among them (`MATCHES OF “ener” · 14 · at 3 of 14`); a click on one jumps to it, so `back` returns, and the list stays as you edit |
 | `switch` | `switch` | moves focus to the other pane |
 | `help` | `help` | lists every command on the message line |
 | `quit` | `quit` | writes what is pending and leaves |

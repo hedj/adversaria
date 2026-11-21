@@ -203,3 +203,53 @@ fn erasing_the_pattern_or_leaving_puts_the_cursor_back() {
     assert!(matches!(r.app.session.mode, Mode::Normal), "left");
     assert_eq!(r.app.cursor(), alpha, "left without acting");
 }
+
+/// A click where a text starts.
+fn click_on(r: &mut Room, text: &str) {
+    let at = r.find(text);
+    let hits = r.hits();
+    r.app.click_at(&hits, at);
+}
+
+#[test]
+fn the_matches_pane_keeps_the_list_and_where_the_cursor_is_in_it() {
+    // Catches matches that vanish once a Leap ends: the third review's
+    // fifth finding, working through fourteen matches by leaping again.
+    let (mut r, [_, a, b]) = ener("leap-matches-pane");
+    r.leap(Quasi::LeapForward, "ener");
+    r.command("pane matches");
+    assert!(
+        r.shows("MATCHES OF “ener” · 2 · at 1 of 2"),
+        "{:#?}",
+        r.lines_at(160, 40)
+    );
+    assert!(r.shows("▸ 1. 2. Ener a"), "{:#?}", r.lines_at(160, 40));
+    click_on(&mut r, "2. 3. Ener b");
+    assert_eq!(r.app.cursor(), b, "a click jumps");
+    assert!(r.shows("· at 2 of 2"), "{:#?}", r.lines_at(160, 40));
+    r.command("back");
+    assert_eq!(r.app.cursor(), a);
+}
+
+#[test]
+fn before_any_leap_the_matches_pane_says_how_to_fill_it() {
+    let (mut r, _) = ener("leap-matches-empty");
+    r.command("pane matches");
+    let rows = r.lines_at(160, 40);
+    let said = "(Leap, and its matches are listed here)";
+    assert!(rows.iter().any(|l| l.contains(said)), "{rows:#?}");
+}
+
+#[test]
+fn a_reopened_notebook_keeps_the_matches_pane() {
+    // Catches a pane kind the view entry names but replay does not read.
+    let (mut r, _) = ener("leap-matches-replay");
+    r.leap(Quasi::LeapForward, "ener");
+    r.command("pane matches");
+    r.app.flush();
+    let again = support::replayed(&r.dir);
+    assert_eq!(
+        again.session.view.panes[1].kind,
+        memex::app::PaneKind::Matches
+    );
+}

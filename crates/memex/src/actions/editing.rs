@@ -286,7 +286,7 @@ impl App {
 
     pub(crate) fn cmd_pane(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let kind = PaneKind::named(words.first().copied())
-            .ok_or("pane (shows) outline, links, or suggestions")?;
+            .ok_or("pane (shows) outline, links, suggestions, or matches")?;
         self.session.view.show_other(kind, target);
         self.write_view("pane", json!({}));
         Ok(String::new())
