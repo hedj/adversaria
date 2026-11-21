@@ -373,7 +373,8 @@ fn the_worlds_are_side_by_side(app: &App) {
     s.assert("How charts were reviewed");
     // The item states the date and the label; only the date is set aside,
     // so the note names it and the text, still a label, is not struck.
-    let gone = "Buran flew once, unmanned, on 15 November 1988.  (1.1 set aside here: date(buran_flight, 1988))";
+    // The note wraps after "date(buran_flight,".
+    let gone = "1.1. Buran flew once, unmanned, on 15 November 1988.  (1.1 set aside here: date(buran_flight,";
     s.assert(gone);
     let struck = s.style_of(gone).add_modifier;
     assert!(

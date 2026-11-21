@@ -3127,7 +3127,7 @@ fn column_widths(halves: [Rect; 2]) -> [u16; 2] {
 /// Two columns of lines wrapped to their widths, each later row of a line
 /// set in by two, and kept row for row: each pair of lines takes as many
 /// rows as the taller of the two.
-fn side_by_side(columns: [Vec<Line<'static>>; 2], widths: [u16; 2]) -> [Vec<Line<'static>>; 2] {
+fn side_by_side(columns: [Vec<WorldLine>; 2], widths: [u16; 2]) -> [Vec<Line<'static>>; 2] {
     let pairs: Vec<_> = line_pairs(&columns)
         .map(|l| padded_pair(l, widths))
         .collect();
@@ -3136,16 +3136,14 @@ fn side_by_side(columns: [Vec<Line<'static>>; 2], widths: [u16; 2]) -> [Vec<Line
 
 /// The columns' lines, pair by pair: the ith of each, or none where a
 /// column is shorter.
-fn line_pairs<'a>(
-    columns: &'a [Vec<Line<'static>>; 2],
-) -> impl Iterator<Item = [Option<&'a Line<'static>>; 2]> {
+fn line_pairs(columns: &[Vec<WorldLine>; 2]) -> impl Iterator<Item = [Option<&WorldLine>; 2]> {
     let n = columns[0].len().max(columns[1].len());
     (0..n).map(move |i| columns.each_ref().map(|c| c.get(i)))
 }
 
 /// A pair of lines, one from each column, wrapped, the shorter padded to
 /// the taller's rows.
-fn padded_pair(lines: [Option<&Line<'static>>; 2], widths: [u16; 2]) -> [Vec<Line<'static>>; 2] {
+fn padded_pair(lines: [Option<&WorldLine>; 2], widths: [u16; 2]) -> [Vec<Line<'static>>; 2] {
     let mut pair = [0, 1].map(|k| wrapped_rows(lines[k], widths[k]));
     let height = pair.iter().map(Vec::len).max().unwrap_or(0);
     pair.iter_mut()
@@ -3153,10 +3151,18 @@ fn padded_pair(lines: [Option<&Line<'static>>; 2], widths: [u16; 2]) -> [Vec<Lin
     pair
 }
 
-/// A line's rows wrapped to a width, later rows set in by two; none for
-/// no line.
-fn wrapped_rows(line: Option<&Line<'static>>, width: u16) -> Vec<Line<'static>> {
-    line.map_or_else(Vec::new, |l| wrap(l, width as usize, 2).rows)
+/// A line's rows wrapped to a width, later rows set in by its hang; none
+/// for no line.
+fn wrapped_rows(line: Option<&WorldLine>, width: u16) -> Vec<Line<'static>> {
+    line.map_or_else(Vec::new, |(l, hang)| wrap(l, width as usize, *hang).rows)
+}
+
+/// A line of a world's column, and the hang of its wrapped rows.
+type WorldLine = (Line<'static>, usize);
+
+/// Lines that are not an item's row, their wrapped rows set in by two.
+fn hanging(lines: impl IntoIterator<Item = Line<'static>>) -> Vec<WorldLine> {
+    lines.into_iter().map(|l| (l, 2)).collect()
 }
 
 /// One world of a supposition: its outline, what reasoning found in it,
@@ -3298,30 +3304,40 @@ impl<'a> Sides<'a> {
     }
 
     /// The two worlds' columns, for their widths.
-    fn columns(&self, widths: [u16; 2]) -> [Vec<Line<'static>>; 2] {
+    fn columns(&self, widths: [u16; 2]) -> [Vec<WorldLine>; 2] {
         [0, 1].map(|k| self.column(k, widths[k]))
     }
 
     /// A world's column: its title, its rows, its constraints, and its
     /// views.
-    fn column(&self, k: usize, width: u16) -> Vec<Line<'static>> {
+    fn column(&self, k: usize, width: u16) -> Vec<WorldLine> {
         let mut lines = self.rows_of(k);
-        lines.extend(self.constraint_lines(k));
-        lines.extend(self.view_lines(k, width));
+        lines.extend(hanging(self.constraint_lines(k)));
+        lines.extend(hanging(self.view_lines(k, width)));
         lines
     }
 
     /// A world's title, what the supposed world supposes (blank rows on
     /// the actual side, to keep the worlds row for row), then its rows,
-    /// then a blank line.
-    fn rows_of(&self, k: usize) -> Vec<Line<'static>> {
-        let head = [Line::styled(self.side(k).title, dim()), Line::raw("")];
-        let rows = self.rows.iter().map(|i| self.row(k, *i));
-        head.into_iter()
-            .chain(self.supposed_lines(k))
-            .chain(rows)
-            .chain([Line::raw("")])
-            .collect()
+    /// each wrapped under its text, then a blank line.
+    fn rows_of(&self, k: usize) -> Vec<WorldLine> {
+        let mut lines = self.title_lines(k);
+        lines.extend(self.item_rows(k));
+        lines.extend(hanging([Line::raw("")]));
+        lines
+    }
+
+    /// A world's title, a blank line, and what the supposed world
+    /// supposes.
+    fn title_lines(&self, k: usize) -> Vec<WorldLine> {
+        let title = [Line::styled(self.side(k).title, dim()), Line::raw("")];
+        hanging(title.into_iter().chain(self.supposed_lines(k)))
+    }
+
+    /// A world's rows, each hung under its text, after its head.
+    fn item_rows(&self, k: usize) -> Vec<WorldLine> {
+        let row = |i: &u64| (self.row(k, *i), self.head(*i).len());
+        self.rows.iter().map(row).collect()
     }
 
     /// The rows of what the supposed world supposes, each fact as the
@@ -3357,13 +3373,13 @@ impl<'a> Sides<'a> {
         }
     }
 
-    /// A row of the actual world: the item's text there, set in by its
-    /// level, with a dashed trail where the supposed world differs.
+    /// A row of the actual world: the item's text there, after its head,
+    /// with a dashed trail where the supposed world differs.
     fn actual_row(&self, i: u64) -> Line<'static> {
         let here = self.side(0).text(i);
         let trail = here != self.side(1).text(i);
         let trail = trail.then(|| Span::styled("  - - -", dim()));
-        let text = Span::raw(format!("{}{here}", self.indent(i)));
+        let text = Span::raw(format!("{}{here}", self.head(i)));
         Line::from_iter(std::iter::once(text).chain(trail))
     }
 
@@ -3379,10 +3395,10 @@ impl<'a> Sides<'a> {
         Line::from_iter(std::iter::once(text).chain(said))
     }
 
-    /// An item's text in the supposed world, set in by its level, in its
-    /// style there.
+    /// An item's text in the supposed world, after its head, in its style
+    /// there.
     fn supposed_text(&self, i: u64, whole: bool) -> Span<'static> {
-        let here = format!("{}{}", self.indent(i), self.side(1).text(i));
+        let here = format!("{}{}", self.head(i), self.side(1).text(i));
         Span::styled(here, self.supposed_style(i, whole))
     }
 
@@ -3418,9 +3434,25 @@ impl<'a> Sides<'a> {
         shown.join("; ")
     }
 
-    /// An item's row's indent: two cells for each level below the top.
-    fn indent(&self, i: u64) -> String {
-        "  ".repeat(self.actual.depth_of(i))
+    /// An item's row's head: two cells for each level below the top,
+    /// then its address, as the outline shows it, so a note's "1.1" can
+    /// be found.
+    fn head(&self, i: u64) -> String {
+        let outline = self.outline_of(i);
+        format!(
+            "{}{}. ",
+            "  ".repeat(outline.depth_of(i)),
+            outline.number(i)
+        )
+    }
+
+    /// The outline that holds an item: the actual world's, else the
+    /// supposed world's, for an item only it has.
+    fn outline_of(&self, i: u64) -> &Outline {
+        match self.actual.contains(i) {
+            true => &self.actual,
+            false => &self.app.notebook.outline,
+        }
     }
 
     /// The entries the supposed world sets aside whose facts an item of

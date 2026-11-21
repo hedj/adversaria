@@ -698,7 +698,8 @@ left in place, and the message names it ("left for you: 1 violation of
 choice. The two worlds are shown row for row: in the supposed world,
 first what it supposes, each fact as the notebook reads it ("supposed:
 date(buran_flight, 1989)"), beside blank rows; then the whole outline,
-set in by level, then each constraint and each view. In the supposed world a row
+set in by level, each item with its address, then each constraint and
+each view. In the supposed world a row
 whose facts are all set aside is struck through and says so, with its
 place ("(2.2 set aside here)"); a row that states more keeps its text and
 names the facts set aside ("(1.1 set aside here: date(buran_flight,

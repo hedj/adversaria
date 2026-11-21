@@ -521,9 +521,31 @@ fn the_worlds_wrap_and_stay_row_for_row() {
     let rows = room.lines_at(80, 24);
     assert!(column_words(&rows, false).contains(long), "{rows:#?}");
     assert!(column_words(&rows, true).contains(long), "{rows:#?}");
-    let below = rows.iter().find(|r| r.starts_with("The income"));
+    let below = rows.iter().find(|r| r.starts_with("2. The income"));
     let right = below.expect("The income").split('│').nth(1).unwrap();
-    assert!(right.starts_with("The income"), "{rows:#?}");
+    assert!(right.starts_with("2. The income"), "{rows:#?}");
+}
+
+#[test]
+fn a_worlds_wrapped_row_hangs_under_its_text_after_its_address() {
+    // Catches a world's row wrapped back to two cells in, under its
+    // address, where the outline hangs it under its text.
+    let long = "The date of Buran-flight is 1988. The label of Buran-flight is \"Buran's flight\".";
+    let mut room = Room::new("screen-worlds-hang");
+    room.items(&[long, "The income is 2000."]);
+    room.app.idle();
+    room.command("suppose that w");
+    room.app.evaluate().unwrap();
+    let rows = room.lines_at(80, 24);
+    let first = rows
+        .iter()
+        .position(|r| r.starts_with("1. The date"))
+        .unwrap();
+    let next = &rows[first + 1];
+    assert!(
+        next.starts_with("   ") && !next.starts_with("    "),
+        "{rows:#?}"
+    );
 }
 
 /// A rent over a limit: one constraint violation, for the top bar.
@@ -592,9 +614,9 @@ fn a_row_one_world_wraps_further_keeps_the_next_rows_together() {
         .iter()
         .any(|r| left_empty(r) && right(r).starts_with("set aside here"));
     assert!(own_row, "the supposed side is a row taller: {rows:#?}");
-    let below = rows.iter().find(|r| r.starts_with("The income"));
+    let below = rows.iter().find(|r| r.starts_with("3. The income"));
     let below = right(below.expect("The income"));
-    assert!(below.starts_with("The income"), "{rows:#?}");
+    assert!(below.starts_with("3. The income"), "{rows:#?}");
 }
 
 #[test]

@@ -361,10 +361,13 @@ fn in_a_supposition_each_world_answers_the_question() {
     r.command("suppose that w");
     r.app.evaluate().unwrap();
     let rows = r.lines_at(120, 24);
-    let row = rows.iter().find(|l| l.starts_with("What is an animal?"));
+    let row = rows.iter().find(|l| l.starts_with("4. What is an animal?"));
     let row = row.unwrap_or_else(|| panic!("{rows:#?}"));
     let sides: Vec<&str> = row.split('│').map(str::trim).collect();
-    assert_eq!(sides, ["What is an animal? → dory, nemo"; 2], "{rows:#?}");
+    assert_eq!(
+        sides, ["4. What is an animal? → dory, nemo"; 2],
+        "{rows:#?}"
+    );
 }
 
 #[test]

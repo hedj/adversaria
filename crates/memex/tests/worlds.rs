@@ -180,7 +180,7 @@ fn a_row_that_differs_is_bold_in_the_supposed_world_alone() {
     let bold = |text: &str| r.style_of(text).add_modifier.contains(Modifier::BOLD);
     assert!(bold("Spent: 1600"));
     assert!(!bold("Spent: 1500"));
-    let food = column(&r, 1).iter().position(|l| l.trim_end() == "food");
+    let food = column(&r, 1).iter().position(|l| l.trim_end() == "2. food");
     let food = r.screen(160, 40)[(80, food.expect("a row of food") as u16)].style();
     assert!(!food.add_modifier.contains(Modifier::BOLD));
 }
@@ -193,7 +193,7 @@ fn each_row_and_view_is_drawn_once_in_each_world() {
     for k in 0..2 {
         let lines = column(&r, k);
         let count = |text: &str| lines.iter().filter(|l| l.trim_end() == text).count();
-        assert_eq!((count("food"), count("chart")), (1, 1), "world {k}");
+        assert_eq!((count("2. food"), count("chart")), (1, 1), "world {k}");
     }
 }
 
@@ -254,7 +254,7 @@ fn the_supposed_world_shows_what_it_supposes_first_with_the_actual_beside_it_bla
     let at = at.unwrap_or_else(|| panic!("{supposed:#?}"));
     assert_eq!(actual[at].trim(), "", "{actual:#?}");
     assert!(
-        supposed[at + 1].starts_with("rent  (1 set aside here)"),
+        supposed[at + 1].starts_with("1. rent  (1 set aside here)"),
         "{supposed:#?}"
     );
     let (x, y) = r.find("supposed: cell(rent, 1300)");
