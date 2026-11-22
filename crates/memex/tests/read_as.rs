@@ -38,10 +38,10 @@ fn each_statement_is_shown_in_its_prolog_form() {
     let expected = [
         "fact  date(buran_flight, 1988)",
         "claim of Talk-notes  date(buran_flight, 1989)",
-        "rule  rest(A):-cell(income, B), cell(rent, C), A is B-C",
+        "rule  rest(A):-box(income, B), box(rent, C), A is B-C",
         "constraint  false:-date(A, B), date(A, C), B\\==C",
         "question  findall(C, (animal(A), (label(A,",
-        "fact  cell(income, 2000)",
+        "fact  box(income, 2000)",
     ];
     for (item, shown) in order.iter().zip(expected) {
         r.put_cursor(*item);

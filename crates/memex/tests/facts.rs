@@ -12,7 +12,7 @@ fn a_statement_that_cannot_be_read_is_told_as_prolog_writes_it() {
     r.items(&["x"]);
     for (command, said) in [
         (
-            "fact cell(rent, 1200",
+            "fact box(rent, 1200",
             "not a Prolog fact: syntax_error(operator_expected)",
         ),
         (
@@ -24,7 +24,7 @@ fn a_statement_that_cannot_be_read_is_told_as_prolog_writes_it() {
             "not a Prolog goal: syntax_error(end_of_clause)",
         ),
         (
-            "constraint c: false :- cell(",
+            "constraint c: false :- box(",
             "not a Prolog rule: syntax_error(end_of_clause)",
         ),
         (

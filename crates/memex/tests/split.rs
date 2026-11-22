@@ -109,7 +109,7 @@ fn each_part_is_read_as_its_own_statements() {
         "the rent is stated by the second item"
     );
     assert!(
-        r.facts().contains(&"cell(income, 2000)".to_string()),
+        r.facts().contains(&"box(income, 2000)".to_string()),
         "{:?}",
         r.facts()
     );

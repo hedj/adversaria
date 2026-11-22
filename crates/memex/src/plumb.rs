@@ -309,8 +309,8 @@ mod tests {
             offers("the flight was in 1989", &[])
                 .contains(&"suppose the flight was in 1989".into())
         );
-        assert!(offers("cell(rent, 1600)", &[]).contains(&"suppose cell(rent, 1600)".into()));
-        assert!(offers("cell(rent, 1600)", &[]).contains(&"set cell(rent, 1600)".into()));
+        assert!(offers("box(rent, 1600)", &[]).contains(&"suppose box(rent, 1600)".into()));
+        assert!(offers("box(rent, 1600)", &[]).contains(&"set box(rent, 1600)".into()));
         assert_eq!(offers("rent", &[]), ["find rent"]);
         assert!(offers("1.2", &["1.2"]).contains(&"transclude from 1.2".into()));
         assert!(

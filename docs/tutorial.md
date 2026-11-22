@@ -424,9 +424,9 @@ same way make it `500.` Now `→ 300`, and the violation is gone.
 
 Tap Super, type `rent is 1600`, and press Enter. The notebook asks:
 
-    Do you mean: Suppose that the cell of rent is 1600.  Enter: yes · Esc: no
+    Do you mean: Suppose that the rent is 1600.  Enter: yes · Esc: no
 
-(`cell` is how the notebook keeps a box.) Press Enter. The two worlds are
+Press Enter. The two worlds are
 shown side by side, row for row. In the supposed one the old rent is
 struck through and marked `(2.2 set aside here)`, the answer is
 `→ -100`, and the cost rule counts `1 violation`. The notebook says:
@@ -450,8 +450,8 @@ Leap to `what is the rest`, press Enter, and Shift-Tab to the top level.
 Type `Spending chart`. Then run two commands, which draw it in layers, a
 mark for each answer to a query:
 
-- `show as chart`, which writes the layer `bar(x(C), y(V)) where cell(C, V)`
-- `show refline(y(I)) where cell(income, I)`
+- `show as chart`, which writes the layer `bar(x(C), y(V)) where box(C, V)`
+- `show refline(y(I)) where box(income, I)`
 
 The first draws a bar for each box, as high as its value; the second, a
 line across the chart at the income. The chart is drawn under the item,

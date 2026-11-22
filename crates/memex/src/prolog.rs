@@ -450,7 +450,7 @@ mod tests {
         // Catches a retraction that drops the server's record of a fact
         // and leaves the fact, which a query still finds.
         let mut p = Prolog::start().unwrap();
-        let cell = |v| Term::Compound("cell".into(), vec![Term::Atom("rent".into()), v]);
+        let cell = |v| Term::Compound("box".into(), vec![Term::Atom("rent".into()), v]);
         let fact = cell(Term::Int(1200));
         p.assert_fact(&fact, 1).unwrap();
         assert_eq!(p.all(&cell(Term::Var(0)), 2).unwrap().len(), 1);

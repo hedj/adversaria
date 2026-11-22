@@ -571,10 +571,10 @@ pub fn words_of(facts: &[(u64, Term)]) -> Words {
     }
 }
 
-/// The name of a box a fact gives a value: cell(Name, Value).
+/// The name of a box a fact gives a value: box(Name, Value).
 fn box_name(fact: &Term) -> Option<String> {
     match fact {
-        Term::Compound(f, a) if f == "cell" && a.len() == 2 => match &a[0] {
+        Term::Compound(f, a) if f == "box" && a.len() == 2 => match &a[0] {
             Term::Atom(name) => Some(name.clone()),
             _ => None,
         },

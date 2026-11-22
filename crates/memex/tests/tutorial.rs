@@ -486,7 +486,7 @@ fn a_value_changed(t: &mut T) {
 fn a_what_if(t: &mut T) {
     t.tapped(Quasi::Suppose, "rent is 1600");
     t.look("suppose rent?");
-    t.shows("Do you mean: Suppose that the cell of rent is 1600.  Enter: yes · Esc: no");
+    t.shows("Do you mean: Suppose that the rent is 1600.  Enter: yes · Esc: no");
     t.key(Key::Enter);
     t.look("supposed rent");
     t.says("set aside in this world: 2.2; left for you: 1 violation of It is false that the cost is greater than the income");
@@ -529,7 +529,7 @@ fn a_chart_with_a_limit(t: &mut T) -> u64 {
     t.tap(Key::BackTab);
     t.typ("Spending chart");
     t.command("show as chart");
-    t.command("show refline(y(I)) where cell(income, I)");
+    t.command("show refline(y(I)) where box(income, I)");
     t.look("chart");
     t.shows("VIEW · 2 LAYERS");
     let chart = find(&t.app, "Spending chart");

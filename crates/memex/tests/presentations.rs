@@ -81,8 +81,8 @@ fn a_layer_presents_itself_with_its_view() {
     // Catches a view's layer in the right pane presenting nothing.
     let mut r = Room::new("present-layer");
     r.items(&["chart"]);
-    r.command("fact cell(rent, 1200)");
-    r.command("layer bar(x(C), y(V)) where cell(C, V)");
+    r.command("fact box(rent, 1200)");
+    r.command("layer bar(x(C), y(V)) where box(C, V)");
     r.app.evaluate().unwrap();
     let view = r.app.notebook.outline.in_order()[0];
     let layer = presented_at(&r, "layer bar(x(C), y(V))");
@@ -266,8 +266,8 @@ fn pointing_at_a_layer_supplies_its_entry_and_another_type_nothing() {
     // or not filled from a layer.
     let mut r = Room::new("accept-entry");
     r.items(&["chart"]);
-    r.command("fact cell(rent, 1200)");
-    r.command("layer bar(x(C), y(V)) where cell(C, V)");
+    r.command("fact box(rent, 1200)");
+    r.command("layer bar(x(C), y(V)) where box(C, V)");
     r.app.evaluate().unwrap();
     let view = r.outline().in_order()[0];
     let layer = r.outline().views[&view][0].seq;

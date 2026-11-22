@@ -9,12 +9,12 @@ use support::Room;
 fn three_cells(name: &str) -> Room {
     let mut room = Room::new(name);
     room.items(&["a"]);
-    room.command("fact cell(a, 1)");
-    for (name, cell) in [("b", "cell(b, 2)"), ("c", "cell(c, 9)")] {
+    room.command("fact box(a, 1)");
+    for (name, cell) in [("b", "box(b, 2)"), ("c", "box(c, 9)")] {
         room.items(&["", name]);
         room.command(&format!("fact {cell}"));
     }
-    room.command("constraint sum: false :- cell(a, X), cell(b, Y), cell(c, Z), X + Y < Z.");
+    room.command("constraint sum: false :- box(a, X), box(b, Y), box(c, Z), X + Y < Z.");
     room.app.evaluate().unwrap();
     room
 }
@@ -57,7 +57,7 @@ fn findings_of_one_rule_on_an_item_are_one_mark() {
 fn an_item_stating_two_facts_of_a_finding_is_marked_by_its_first() {
     let mut room = three_cells("marks-first");
     room.put_cursor(room.app.notebook.outline.in_order()[0]);
-    room.command("fact cell(b, 5)");
+    room.command("fact box(b, 5)");
     room.app.evaluate().unwrap();
     let marks = first_marks(&room);
     assert!(marks.iter().all(|m| m.contains(": a 1 here")), "{marks:?}");

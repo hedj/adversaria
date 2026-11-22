@@ -8,7 +8,7 @@ whole is not read at all: every condition of the DRS must be used.
 
 A discourse referent stands for its value. A noun phrase is a goal on
 it: "the date of X" is date(X, R), and "the income", with no owner, is
-the box cell(income, R) when R stands for a value (it is a number, a
+box(income, R) when R stands for a value (it is a number, a
 sum or a variable, or it is compared); otherwise R is a thing and the
 noun its kind: "Nemo is a fish" is fish(nemo). "is" makes two values
 one: R = 1988, or, for a sum, R is A + B. So a fact, a rule's body and a constraint's body come
@@ -16,7 +16,7 @@ from one mapping:
 
 | ACE | Read as |
 | The date of Buran-flight is 1988. | fact(date(buran_flight, 1988)) |
-| The income is 2000. | fact(cell(income, 2000)) |
+| The income is 2000. | fact(box(income, 2000)) |
 | Buran is a:reusable. | fact(reusable(buran)) |
 | Nemo is a fish. | fact(fish(nemo)) |
 | Every fish is an animal. | rule(animal(X), fish(X)) |
@@ -28,12 +28,12 @@ from one mapping:
 | It is false that S. | constraint(S) |
 | No fish is a bird. | constraint((fish(X), bird(X))) |
 | Nothing has more than 1 date. | constraint((date(E, A), date(E, B), A \== B)) |
-| Nothing has more than 1 value. | constraint((cell(B, X), cell(B, Y), X \== Y)) |
+| Nothing has more than 1 value. | constraint((box(B, X), box(B, Y), X \== Y)) |
 | What is an animal? (Who swims? Which animals swim? Which things are animals?) | question(X, animal(X)) |
 | Is Nemo an animal? (Does Nemo swim?) | question(none, animal(nemo)) |
 
 A rule's value has a name of its own: "If C then the rest is X - Y" is a
-rule for rest(R), not for the box cell(rest, R), as a rule may not read
+rule for rest(R), not for box(rest, R), as a rule may not read
 what it defines. So "the rest" is rest(R) wherever a rule defines rest,
 in the world (the names the memex gives) or in the same text.
 
@@ -65,8 +65,8 @@ ace_read(Text, Result) :-
 %!  ace_read(+Text:string, +Words, -Result) is det.
 %   As ace_read/2, with the world's words: words(Rules, Boxes), Rules the
 %   names of its rules of one argument ("the N", for N one of them, is
-%   N(R), not cell(N, R)) and Boxes the names of its boxes ("What is the
-%   N?", for N one of them, asks for cell(N, R), not N(R)).
+%   N(R), not box(N, R)) and Boxes the names of its boxes ("What is the
+%   N?", for N one of them, asks for box(N, R), not N(R)).
 ace_read(Text, Words, Result) :-
     parsed(Text, Paraphrase, Drs, Messages),
     (   var(Paraphrase)
@@ -189,14 +189,14 @@ ruled_kind(fact(F), Names, fact(RF)) :- ruled_goals(F, Names, RF).
 ruled_kind(claim(S, F), Names, claim(S, RF)) :- ruled_goals(F, Names, RF).
 ruled_kind(question(A, G), Names, question(A, RG)) :- ruled_goals(G, Names, RG).
 
-rule_name(rule(cell(N, _), _), N).
+rule_name(rule(box(N, _), _), N).
 
-ruled_head(cell(N, R), H) :- !, H =.. [N, R].
+ruled_head(box(N, R), H) :- !, H =.. [N, R].
 ruled_head(H, H).
 
 %   A goal, or a conjunction of goals, with each box a rule defines read
 %   as the rule's value, and each kind that is a box of the world read as
-%   the box ("What is the income?" asks for cell(income, X)).
+%   the box ("What is the income?" asks for box(income, X)).
 ruled_goals(G, Names, RG) :-
     (   var(G)
     ->  RG = G
@@ -204,11 +204,11 @@ ruled_goals(G, Names, RG) :-
     ->  RG = (RA, RB), ruled_goals(A, Names, RA), ruled_goals(B, Names, RB)
     ;   G = (\+ A)
     ->  RG = (\+ RA), ruled_goals(A, Names, RA)
-    ;   G = cell(N, R), atom(N), Names = names(Rules, _), memberchk(N, Rules)
+    ;   G = box(N, R), atom(N), Names = names(Rules, _), memberchk(N, Rules)
     ->  RG =.. [N, R]
     ;   compound(G), G =.. [N, R], Names = names(Rules, Boxes),
         memberchk(N, Boxes), \+ memberchk(N, Rules)
-    ->  RG = cell(N, R)
+    ->  RG = box(N, R)
     ;   RG = G
     ).
 
@@ -314,9 +314,9 @@ bound_by(Body, Head) :-
     forall(member(V, Named), ( member(B, Bound), B == V )).
 
 %   The goal of an owner's noun: "the date of X" is date(X, R), and "the
-%   value of X" is X's box, cell(X, R), so that "Nothing has more than 1
+%   value of X" is X's box, box(X, R), so that "Nothing has more than 1
 %   value" says that a box holds one value.
-owned(value, X, R, cell(X, R)) :- !.
+owned(value, X, R, box(X, R)) :- !.
 owned(N, X, R, G) :- G =.. [N, X, R].
 
 %   "has more than 1 N": a count of N greater than 1 that A has, in
@@ -395,7 +395,7 @@ goal(Conds, object(R, N, countable, na, eq, 1), G) :-
     (   member(relation(O, of, Owner), Conds), O == R
     ->  value(Owner, X), owned(N, X, R, G)
     ;   valued(Conds, R)
-    ->  G = cell(N, R)
+    ->  G = box(N, R)
     ;   G =.. [N, R]
     ).
 goal(Conds, predicate(_, be, S, A), G) :-

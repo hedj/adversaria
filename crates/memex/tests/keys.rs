@@ -111,8 +111,8 @@ fn the_top_bar_puts_a_right_side_that_does_not_fit_on_a_row_of_its_own() {
     // then not shown at all at 80 columns.
     let mut r = Room::new("top-narrow");
     r.items(&["rent"]);
-    r.command("fact cell(rent, 1200)");
-    r.command("constraint limit: false :- cell(rent, R), R > 1000.");
+    r.command("fact box(rent, 1200)");
+    r.command("constraint limit: false :- box(rent, R), R > 1000.");
     r.app.evaluate().unwrap();
     let rows = r.lines_at(16, 12);
     assert!(
@@ -178,7 +178,7 @@ fn an_item_made_from_leap_is_read_like_typed_text() {
     r.release(Quasi::LeapDown);
     r.app.idle();
     assert!(
-        r.facts().contains(&"cell(income, 2000)".to_string()),
+        r.facts().contains(&"box(income, 2000)".to_string()),
         "{:?}",
         r.facts()
     );

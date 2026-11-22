@@ -10,15 +10,15 @@ use format::terms::Term;
 use serde_json::json;
 
 /// The layers each kind of view `show` makes, as `layer` takes them: the
-/// guide's recipes for a bar chart of the cells, a table of them, and the
+/// guide's recipes for a bar chart of the boxes, a table of them, and the
 /// graph of the notes' links.
 const SHOWN_AS: &[(&str, &[&str])] = &[
-    ("chart", &["bar(x(C), y(V)) where cell(C, V)"]),
+    ("chart", &["bar(x(C), y(V)) where box(C, V)"]),
     (
         "table",
         &[
-            "cell(x(a), y(C), text(C)) where cell(C, _)",
-            "cell(x(b), y(C), text(V)) where cell(C, V)",
+            "cell(x(a), y(C), text(C)) where box(C, _)",
+            "cell(x(b), y(C), text(V)) where box(C, V)",
         ],
     ),
     (

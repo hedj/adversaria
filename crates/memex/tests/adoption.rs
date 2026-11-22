@@ -105,7 +105,7 @@ fn a_fact_read_from_the_text_is_not_offered_but_a_layer_is() {
         "the target has nothing to retract: no adoption, fact or layer of its own"
     );
     r.put_cursor(order[1]);
-    r.command("layer bar(x(C), y(V)) where cell(C, V)");
+    r.command("layer bar(x(C), y(V)) where box(C, V)");
     let layer = r.outline().views[&order[1]][0].seq;
     r.command("retract");
     let asks = matches!(r.app.session.mode, memex::app::Mode::ConfirmRetract { target, .. } if target == layer);

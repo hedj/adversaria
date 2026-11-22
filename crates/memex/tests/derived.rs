@@ -10,8 +10,8 @@ fn a_derived_text_whose_goal_raises_an_error_says_so() {
     // as if nothing were derived.
     let mut r = Room::new("derive-error");
     r.items(&["typed"]);
-    r.command("fact cell(rent, 1200)");
-    r.command("derive {N} broken where cell(rent, R), N is R + foo");
+    r.command("fact box(rent, 1200)");
+    r.command("derive {N} broken where box(rent, R), N is R + foo");
     r.app.flush();
     r.app.evaluate().unwrap();
     let error = "(cannot answer: type_error(evaluable, foo / 0))";

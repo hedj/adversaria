@@ -66,11 +66,11 @@ fn budget(name: &str) -> Room {
     typ(&mut app, "Budget");
     for (name, v) in [("income", 2000), ("rent", 1200), ("food", 400)] {
         item(&mut app, name);
-        command(&mut app, &format!("fact cell({name}, {v})"));
+        command(&mut app, &format!("fact box({name}, {v})"));
     }
     command(
         &mut app,
-        "constraint one value per cell: false :- cell(C, A), cell(C, B), A \\= B.",
+        "constraint one value per cell: false :- box(C, A), box(C, B), A \\= B.",
     );
     app
 }
@@ -105,7 +105,7 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
     // change when a fact it rests on changes.
     let mut app = budget("layer");
     item(&mut app, "chart");
-    let m = command(&mut app, "layer bar(x(C), y(V)) where cell(C, V)");
+    let m = command(&mut app, "layer bar(x(C), y(V)) where box(C, V)");
     assert!(m.starts_with("layer added"), "{m}");
     let chart = find(&app, "chart");
     assert_eq!(
@@ -121,7 +121,7 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
     command(&mut app, "layer refline(y(1500))");
     assert_eq!(marks(&app, chart).last().unwrap(), "refline(y(1500))");
     // Change a fact: the layer follows.
-    command(&mut app, "set cell(food, 900)");
+    command(&mut app, "set box(food, 900)");
     assert!(marks(&app, chart).contains(&"bar(x(food), y(900))".to_string()));
     assert!(!marks(&app, chart).contains(&"bar(x(food), y(400))".to_string()));
     a_layer_over_a_rule_rests_on_the_facts_under_it(&mut app);
@@ -158,11 +158,11 @@ fn stated(app: &App, seq: u64) -> Option<&Term> {
     app.reason.eval[0].as_ref().unwrap().fact(seq)
 }
 
-/// The fact a bar shows: bar(x(C), y(V)) shows cell(C, V).
+/// The fact a bar shows: bar(x(C), y(V)) shows box(C, V).
 fn shown_fact(bar: &Term) -> Term {
     let x = arg(&arg(bar, 0), 0);
     let y = arg(&arg(bar, 1), 0);
-    Term::Compound("cell".into(), vec![x, y])
+    Term::Compound("box".into(), vec![x, y])
 }
 
 /// A compound term's argument at this place.
@@ -178,7 +178,7 @@ fn arg(t: &Term, i: usize) -> Term {
 fn a_layer_over_a_rule_rests_on_the_facts_under_it(app: &mut Room) {
     command(
         app,
-        "rule spent(S) :- cell(rent, R), cell(food, F), S is R + F.",
+        "rule spent(S) :- box(rent, R), box(food, F), S is R + F.",
     );
     item(app, "spent");
     command(app, "layer text(x(1), y(1), text(S)) where spent(S)");
@@ -200,18 +200,18 @@ fn a_layer_that_could_not_be_drawn_or_would_act_is_refused() {
     let mut app = budget("refuse");
     item(&mut app, "chart");
     for (line, why) in [
-        ("layer pie(x(C)) where cell(C, _)", "no mark “pie”"),
-        ("layer bar(x(C)) where cell(C, _)", "bar needs y(…)"),
+        ("layer pie(x(C)) where box(C, _)", "no mark “pie”"),
+        ("layer bar(x(C)) where box(C, _)", "bar needs y(…)"),
         (
-            "layer bar(x(C), y(V), colour(red)) where cell(C, V)",
+            "layer bar(x(C), y(V), colour(red)) where box(C, V)",
             "no channel colour",
         ),
         (
-            "layer bar(x(C), y(W)) where cell(C, V)",
+            "layer bar(x(C), y(W)) where box(C, V)",
             "W in the mark is not bound",
         ),
         (
-            "layer bar(x(C), y(V)) where cell(C, V), shell(ls)",
+            "layer bar(x(C), y(V)) where box(C, V), shell(ls)",
             "shell/1 is not allowed",
         ),
         // Text that closes the brackets the parts are read in, then
@@ -284,16 +284,16 @@ fn a_view_is_drawn_under_its_item_and_its_marks_lead_to_their_facts() {
     let mut app = budget("screen");
     command(
         &mut app,
-        "constraint spending within income: false :- cell(income, I), cell(rent, R), cell(food, F), R + F > I.",
+        "constraint spending within income: false :- box(income, I), box(rent, R), box(food, F), R + F > I.",
     );
     item(&mut app, "Budget chart");
-    command(&mut app, "layer bar(x(C), y(V)) where cell(C, V)");
-    command(&mut app, "layer refline(y(I)) where cell(income, I)");
+    command(&mut app, "layer bar(x(C), y(V)) where box(C, V)");
+    command(&mut app, "layer refline(y(I)) where box(income, I)");
     the_chart_is_drawn_under_its_item(&app);
     the_food_bar_leads_to_its_fact(&mut app);
     // Break the rule: a bar on a fact in the violation keeps its plain
     // fill, and its value, on top of it, is drawn in the violation's red.
-    command(&mut app, "set cell(food, 900)");
+    command(&mut app, "set box(food, 900)");
     the_bar_keeps_its_fill_and_its_value_is_red(&app);
     a_supposition_draws_the_view_in_each_world(&mut app);
 }
@@ -306,17 +306,17 @@ fn the_chart_is_drawn_under_its_item(app: &App) {
     let under = label.1 > title && label.1 < title + 15;
     assert!(under, "the chart under its item:\n{}", s.join("\n"));
     at(&s, "VIEW · 2 LAYERS");
-    at(&s, "layer bar(x(C), y(V)) where cell(C, V)");
+    at(&s, "layer bar(x(C), y(V)) where box(C, V)");
 }
 
-/// A click on the food bar goes to the item stating cell(food, 400).
+/// A click on the food bar goes to the item stating box(food, 400).
 fn the_food_bar_leads_to_its_fact(app: &mut Room) {
     let (s, hits, _) = screen(app);
     let (x, y) = food_bar(&s);
     let c = hits.at(x, y).cloned().expect("the bar is clickable");
     app.click(&c);
     let text = app.notebook.outline.text(app.cursor());
-    assert_eq!(text, "food", "the item stating cell(food, 400)");
+    assert_eq!(text, "food", "the item stating box(food, 400)");
 }
 
 /// Where the label of the food bar is: the first " food " under the
@@ -355,7 +355,7 @@ fn food_bar(s: &[String]) -> (u16, u16) {
 
 /// A supposition: the view in both worlds, each from its own facts.
 fn a_supposition_draws_the_view_in_each_world(app: &mut Room) {
-    command(app, "set cell(food, 500)");
+    command(app, "set box(food, 500)");
     app.handle(Event::down(Key::Quasi(Quasi::Suppose)));
     typ(app, "rent is 1600");
     app.handle(Event::up(Key::Quasi(Quasi::Suppose)));
@@ -401,10 +401,10 @@ fn gallery_a_spreadsheet_with_a_computed_box() {
     ] {
         command(&mut app, &format!("fact at({b}, {c}, {r})"));
     }
-    command(&mut app, "rule value(B, V) :- cell(B, V).");
+    command(&mut app, "rule value(B, V) :- box(B, V).");
     command(
         &mut app,
-        "rule value(left, L) :- cell(income, I), cell(rent, R), cell(food, F), L is I - R - F.",
+        "rule value(left, L) :- box(income, I), box(rent, R), box(food, F), L is I - R - F.",
     );
     command(
         &mut app,
@@ -432,7 +432,7 @@ fn gallery_a_spreadsheet_with_a_computed_box() {
         ],
         "{f:#?}"
     );
-    command(&mut app, "set cell(food, 900)");
+    command(&mut app, "set box(food, 900)");
     let f = figure(&app, "Sheet");
     assert!(
         f.iter().any(|l| l.contains("left") && l.contains("-100!")),
@@ -677,21 +677,21 @@ fn chart(name: &str, cells: &[&str]) -> Room {
         room.command(&format!("fact {cell}"));
     }
     room.items(&["", "Chart"]);
-    room.command("layer bar(x(C), y(V)) where cell(C, V)");
+    room.command("layer bar(x(C), y(V)) where box(C, V)");
     room.app.evaluate().unwrap();
     room
 }
 
 #[test]
 fn the_view_panel_counts_a_layers_marks_by_its_entry() {
-    let room = chart("panel-marks", &["cell(rent, 1200)", "cell(food, 400)"]);
+    let room = chart("panel-marks", &["box(rent, 1200)", "box(food, 400)"]);
     let layer = room.last("edit");
     assert!(room.shows(&format!("entry {layer} · 2 marks")));
 }
 
 #[test]
 fn the_view_panel_counts_one_mark_as_one() {
-    let room = chart("panel-mark", &["cell(rent, 1200)"]);
+    let room = chart("panel-mark", &["box(rent, 1200)"]);
     let layer = room.last("edit");
     assert!(room.shows(&format!("entry {layer} · 1 mark ")));
 }
@@ -719,7 +719,7 @@ fn loud(fig: &memex::view::Figure) -> bool {
 
 #[test]
 fn an_item_without_a_view_draws_nothing() {
-    let room = chart("no-view", &["cell(rent, 1200)"]);
+    let room = chart("no-view", &["box(rent, 1200)"]);
     let budget = room.app.notebook.outline.in_order()[0];
     let fig = memex::ui::view_figure(&room.app, 0, budget, 60, 12);
     assert!(fig.rows.is_empty() && fig.notes.is_empty());
@@ -727,10 +727,10 @@ fn an_item_without_a_view_draws_nothing() {
 
 #[test]
 fn a_view_is_loud_only_in_the_world_whose_facts_are_violated() {
-    let mut room = chart("loud-world", &["cell(income, 2000)", "cell(food, 400)"]);
-    room.command("constraint within income: false :- cell(income, I), cell(food, F), F > I.");
+    let mut room = chart("loud-world", &["box(income, 2000)", "box(food, 400)"]);
+    room.command("constraint within income: false :- box(income, I), box(food, F), F > I.");
     room.command("suppose that famine");
-    room.command("fact cell(food, 3000)");
+    room.command("fact box(food, 3000)");
     room.app.evaluate().unwrap();
     assert!(loud(&chart_figure(&room, 0, 60)), "the supposed world");
     assert!(!loud(&chart_figure(&room, 1, 60)), "the actual world");
@@ -738,7 +738,7 @@ fn a_view_is_loud_only_in_the_world_whose_facts_are_violated() {
 
 #[test]
 fn a_view_is_drawn_in_the_width_it_is_given() {
-    let room = chart("view-width", &["cell(rent, 1200)", "cell(food, 400)"]);
+    let room = chart("view-width", &["box(rent, 1200)", "box(food, 400)"]);
     let fig = chart_figure(&room, 0, 24);
     assert!(fig.rows.iter().all(|row| row.len() <= 24));
 }
@@ -747,7 +747,7 @@ fn a_view_is_drawn_in_the_width_it_is_given() {
 fn categories_drawn_over_others_are_named_under_the_view() {
     // Catches more categories than columns: some bars drawn over others,
     // with no note, though marks that do not fit are named (§ 3.3).
-    let cells: Vec<String> = (1..=12).map(|k| format!("cell(c{k:02}, {k})")).collect();
+    let cells: Vec<String> = (1..=12).map(|k| format!("box(c{k:02}, {k})")).collect();
     let cells: Vec<&str> = cells.iter().map(String::as_str).collect();
     let room = chart("crowded", &cells);
     let notes = chart_figure(&room, 0, 12).notes;
@@ -812,10 +812,10 @@ fn a_layer_whose_goal_raises_an_error_says_so() {
     // yet)" of a goal that has facts to read.
     let mut r = Room::new("layer-error");
     r.items(&["rent", "chart"]);
-    r.command("layer bar(x(C), y(V)) where cell(C, R), V is R + foo");
+    r.command("layer bar(x(C), y(V)) where box(C, R), V is R + foo");
     let layer = r.last("edit");
     r.leap(Quasi::LeapUp, "rent");
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     r.app.flush();
     r.app.evaluate().unwrap();
     let why = "cannot answer: type_error(evaluable, foo / 0)";
@@ -828,10 +828,10 @@ fn a_layer_that_cannot_answer_is_noted_under_the_marks_of_the_others() {
     // Catches the note given only to a view with nothing else to draw.
     let mut r = Room::new("layer-error-beside");
     r.items(&["rent", "chart"]);
-    r.command("layer bar(x(C), y(V)) where cell(C, V)");
-    r.command("layer bar(x(C), y(V)) where cell(C, R), V is R + foo");
+    r.command("layer bar(x(C), y(V)) where box(C, V)");
+    r.command("layer bar(x(C), y(V)) where box(C, R), V is R + foo");
     r.leap(Quasi::LeapUp, "rent");
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     r.app.flush();
     r.app.evaluate().unwrap();
     assert!(r.shows("1200 │"));

@@ -711,10 +711,13 @@ pub fn restate(facts: &[(u64, Term)], t: &Term) -> String {
 }
 
 /// A fact of two arguments, as an attribute: "the date of Buran's flight
-/// is 1989".
+/// is 1989"; a box is named for what it holds: "the rent is 1600".
 fn attribute(facts: &[(u64, Term)], name: &str, e: &Term, v: &Term) -> String {
-    let what = name.replace('_', " ");
-    format!("the {what} of {} is {}", label(facts, e), show(v))
+    let what = match name {
+        "box" => String::new(),
+        _ => format!("{} of ", name.replace('_', " ")),
+    };
+    format!("the {what}{} is {}", label(facts, e), show(v))
 }
 
 /// A fact of one argument, as a quality: "Buran is reusable".

@@ -271,6 +271,10 @@ Cursor moves and typing are merged into one entry until another kind of action, 
 
 The `op` may also be `world`, with `close` or `commit` true, which leaves the open supposition; `dismiss`, with the `key` of the suggestion dismissed, which stays dismissed; `interrogate`, the start of an interrogation; `export`, with the `file` name and the counts of `items` and `sources` written; and `observed` and `offer`, below (milestone 7). The memex wrote these before they were listed here; a code review found them unlisted, and `world` and `dismiss` change replayed state (version 1 revised, 22 November 2026, to list what was written, not to change it).
 
+##### Boxes
+
+A box is stored as `box(Name, Value)`. Until 22 November 2026 it was stored as `cell(Name, Value)`, the name the grid mark of a view has too; the memex reads a `cell/2` term in a journal's facts, rules and constraints as `box/2`, except as a layer's mark, where `cell` is the mark (version 1 revised, 22 November 2026, by the author's decision 7 of docs/concepts.md, to end the collision).
+
 #### The history pane
 
 The history pane draws the undo tree by the rules for diagrams:
@@ -441,30 +445,30 @@ Nothing that comes from outside is trusted as a fact. An imported document, a we
 
 The author's decision (18 November 2026): the memex reads what the user writes, so that no statement is written twice, once in English and again in Prolog. An item whose text is ACE is read as the statements it makes, as written, with no step to confirm; its text is drawn so that the user sees which text has a formal meaning to the memex. An item whose text is not ACE stays prose, with a quiet hint, at the cursor, of where APE stopped. Facts, claims, rules and constraints are all read.
 
-The reader (`prolog/ace_read.pl`) maps APE's logical form (its DRS) to the notebook's statements. A discourse referent stands for its value: a noun phrase is a goal on it ("the date of X" is `date(X, R)`; "the income", with no owner, is the box `cell(income, R)` when R stands for a value: it is a number, a string, a sum or a variable, or it is compared; any other referent is a thing, and its noun the thing's kind, so "Nemo is a fish" is `fish(nemo)`), and "is" makes two values one, or computes one ("R is A + B"). So a fact, a rule's body and a constraint's body come from one mapping. A text is read whole or not at all: every condition of the DRS must be one the mapping knows, so a reading never states less than the text says. A rule concludes one goal, with the sums that give its value, about what its condition names: "Every fish has a fin" (some fin for each fish) is not read, nor is a fact about a thing with no name, such as "A fish is an animal" (one fish, unnamed).
+The reader (`prolog/ace_read.pl`) maps APE's logical form (its DRS) to the notebook's statements. A discourse referent stands for its value: a noun phrase is a goal on it ("the date of X" is `date(X, R)`; "the income", with no owner, is the box `box(income, R)` when R stands for a value: it is a number, a string, a sum or a variable, or it is compared; any other referent is a thing, and its noun the thing's kind, so "Nemo is a fish" is `fish(nemo)`), and "is" makes two values one, or computes one ("R is A + B"). So a fact, a rule's body and a constraint's body come from one mapping. A text is read whole or not at all: every condition of the DRS must be one the mapping knows, so a reading never states less than the text says. A rule concludes one goal, with the sums that give its value, about what its condition names: "Every fish has a fin" (some fin for each fish) is not read, nor is a fact about a thing with no name, such as "A fish is an animal" (one fish, unnamed).
 
 | ACE | Read as |
 | --- | --- |
 | The date of Buran-flight is 1988. (Buran-flight's date is 1988.) | the fact `date(buran_flight, 1988)` |
-| The income is 2000. | the fact `cell(income, 2000)`, a box |
+| The income is 2000. | the fact `box(income, 2000)`, a box |
 | Buran is a:reusable. · Buran-flight follows Energia-launch. | the facts `reusable(buran)` · `follow(buran_flight, energia_launch)` |
 | Nemo is a fish. | the fact `fish(nemo)`, a kind |
 | Every fish is an animal. (Every fish swims.) | the rule `animal(A) :- fish(A)` (`swim(A) :- fish(A)`) |
 | No fish is a bird. | the constraint `false :- fish(A), bird(A)` |
 | Talk-notes says that the date of Buran-flight is 1989. (claims, states, believes, reports) | the claim `claims("Talk-notes", date(buran_flight, 1989))` |
-| If the income is X and the rent is Y then the rest is X - Y. | the rule `rest(A) :- cell(income, B), cell(rent, C), A is B-C` |
-| If the rent is X and the food is Y and the income is Z then X + Y =< Z. | the constraint `false :- cell(rent, A), cell(food, B), cell(income, C), \+ A+B =< C` |
-| It is false that the rent is greater than the income. | the constraint `false :- cell(rent, A), cell(income, B), A > B` |
+| If the income is X and the rent is Y then the rest is X - Y. | the rule `rest(A) :- box(income, B), box(rent, C), A is B-C` |
+| If the rent is X and the food is Y and the income is Z then X + Y =< Z. | the constraint `false :- box(rent, A), box(food, B), box(income, C), \+ A+B =< C` |
+| It is false that the rent is greater than the income. | the constraint `false :- box(rent, A), box(income, B), A > B` |
 | Nothing has more than 1 date. | the constraint `false :- date(A, B), date(A, C), B \== C` |
-| Nothing has more than 1 value. | the constraint `false :- cell(A, B), cell(A, C), B \== C`: a box holds one value, since "the value of X" is the box `cell(X, R)` |
+| Nothing has more than 1 value. | the constraint `false :- box(A, B), box(A, C), B \== C`: a box holds one value, since "the value of X" is the box `box(X, R)` |
 | What is an animal? (Who swims? Which animals swim? What is the date of Buran-flight?) | a question: every answer, each by its label if it has one, sorted, or none: `findall(N, (animal(A), (label(A, L) -> N = L ; atomic(A) -> atom_string(A, N) ; N = A)), Ns), sort(Ns, S), (S == [] -> Answer = none ; atomic_list_concat(S, ', ', Answer))` |
 | Is Nemo an animal? (Does Nemo swim?) | a question of whether: `animal(nemo) -> Answer = yes ; Answer = no` |
 
 A proper name is an entity: its letters in lower case and its hyphens made underscores (Buran-flight is `buran_flight`), as the notebook's names are; a name the notebook gives through APE's user lexicon (`lexicon_of`) comes back as the entity it names. Each statement goes to the memex as the text of the command that states it (`fact`, `claim`, `rule`, `constraint`), so a statement read is checked as one typed is: a constraint read is still tried against a planted violation, and the memex says what the commands said (a constraint kept, a statement refused, and why).
 
-A question is answered under its item, and its answer follows the facts as derived text does; the item keeps the question as written. ACE gives "the" and "a" alike, so a question of a noun that is a box of the world ("What is the income?") asks for the box's value, `cell(income, A)`; the memex gives the reader the world's box names as it gives its rule names. In a question, a plural ("Which animals swim?") asks of its kind as the singular does. ACE has no plural after "are", so a question APE rejects is tried once more with each plural after "are" made singular ("Which things are animals?" as "Which things are an animal?", which asks the same, since each thing asked of must be one); a statement is not, as "Nemo and Dory are an animal" says they are one animal together. "Thing" asks of anything: it is no kind.
+A question is answered under its item, and its answer follows the facts as derived text does; the item keeps the question as written. ACE gives "the" and "a" alike, so a question of a noun that is a box of the world ("What is the income?") asks for the box's value, `box(income, A)`; the memex gives the reader the world's box names as it gives its rule names. In a question, a plural ("Which animals swim?") asks of its kind as the singular does. ACE has no plural after "are", so a question APE rejects is tried once more with each plural after "are" made singular ("Which things are animals?" as "Which things are an animal?", which asks the same, since each thing asked of must be one); a statement is not, as "Nemo and Dory are an animal" says they are one animal together. "Thing" asks of anything: it is no kind.
 
-A rule's value has a name of its own. "If the income is X and the rent is Y then the rest is X - Y" defines `rest(A)`, not the box `cell(rest, A)`, because a rule may not read what it defines (a rule for `cell` that reads `cell` is recursive, and refused). So "the rest" is read as `rest(A)` wherever a rule of one argument named `rest` is in the world, or in the same text; elsewhere it is the box.
+A rule's value has a name of its own. "If the income is X and the rent is Y then the rest is X - Y" defines `rest(A)`, not the box `box(rest, A)`, because a rule may not read what it defines (a rule for `cell` that reads `cell` is recursive, and refused). So "the rest" is read as `rest(A)` wherever a rule of one argument named `rest` is in the world, or in the same text; elsewhere it is the box.
 
 The memex reads an item's text when the user pauses (`App::idle`: the window calls it after a second with no event, and when it closes), not at the keystroke, because APE takes about 1.4 s to start (measured). Writing the text starts APE, so it is ready by the pause. A reading is recorded by an `edit` entry of op `read` (§ The journal format); when the text changes, the entries of its last reading are retracted and the text is read again, and an undo or a redo reads again each item whose text it changed. An item whose text is read is drawn in cyan. Only text typed is read: an imported document is a source's claims.
 

@@ -59,7 +59,7 @@ fn a_sentence_waits_to_be_read_until_the_user_pauses() {
     assert!(facts_of(&r.app, item).is_empty(), "read before a pause");
     assert!(r.app.idle_work());
     r.app.idle();
-    assert_eq!(facts_of(&r.app, item), ["cell(income, 2000)"]);
+    assert_eq!(facts_of(&r.app, item), ["box(income, 2000)"]);
     assert!(!r.app.idle_work());
 }
 
@@ -193,8 +193,8 @@ fn boxes_and_a_rule_between_them_are_read() {
     ]);
     r.app.idle();
     let all = facts(&r.app);
-    assert!(all.contains(&"cell(income, 2000)".to_string()), "{all:?}");
-    assert!(all.contains(&"cell(rent, 1200)".to_string()), "{all:?}");
+    assert!(all.contains(&"box(income, 2000)".to_string()), "{all:?}");
+    assert!(all.contains(&"box(rent, 1200)".to_string()), "{all:?}");
     let rules = stated(&r.app);
     let ruled = rules
         .iter()

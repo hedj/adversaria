@@ -11,7 +11,7 @@ fn reasoning_goes_on_after_the_prolog_server_dies() {
     // constraint was refused as "not a Prolog rule".
     let mut r = Room::new("dead-engine");
     r.items(&["rent"]);
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     r.app.evaluate().unwrap();
     let me = std::process::id().to_string();
     let killed = std::process::Command::new("pkill")
@@ -19,7 +19,7 @@ fn reasoning_goes_on_after_the_prolog_server_dies() {
         .status();
     assert!(killed.unwrap().success(), "a Prolog server was running");
     std::thread::sleep(std::time::Duration::from_millis(200));
-    r.command("constraint high: false :- cell(C, R), R > 1000.");
+    r.command("constraint high: false :- box(C, R), R > 1000.");
     assert_eq!(
         r.app.session.message,
         "constraint high kept: it fires on a planted violation"

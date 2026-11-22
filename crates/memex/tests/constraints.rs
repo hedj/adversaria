@@ -9,7 +9,7 @@ use support::Room;
 fn stated(name: &str, constraint: &str) -> String {
     let mut r = Room::new(name);
     r.items(&["rent"]);
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     r.command(&format!("constraint {constraint}"));
     r.app.session.message.clone()
 }
@@ -24,7 +24,7 @@ fn a_constraint_that_compares_with_a_number_is_kept() {
     {
         let said = stated(
             &format!("limit-{n}"),
-            &format!("limit: false :- cell(C, R), {body}."),
+            &format!("limit: false :- box(C, R), {body}."),
         );
         assert_eq!(
             said, "constraint limit kept: it fires on a planted violation",
@@ -36,7 +36,7 @@ fn a_constraint_that_compares_with_a_number_is_kept() {
 #[test]
 fn a_constraint_without_variables_is_tried_too() {
     // Catches a body with no variables, which the planting did not answer.
-    let said = stated("no-variables", "exact: false :- cell(rent, 1200).");
+    let said = stated("no-variables", "exact: false :- box(rent, 1200).");
     assert_eq!(
         said,
         "constraint exact kept: it fires on a planted violation"
@@ -49,10 +49,10 @@ fn a_constraint_may_wrap_a_fact_in_a_construct() {
     // where the facts they wrap are not predicates: the constraint was
     // refused with an existence error, though it can fire.
     for (n, body) in [
-        "cell(C, R), \\+ known(C)",
-        "cell(C, R), \\+ (known(C), R > 0)",
-        "cell(C, R), findall(K, known(K), []) ",
-        "cell(C, R), forall(known(K), K \\== C)",
+        "box(C, R), \\+ known(C)",
+        "box(C, R), \\+ (known(C), R > 0)",
+        "box(C, R), findall(K, known(K), []) ",
+        "box(C, R), forall(known(K), K \\== C)",
     ]
     .iter()
     .enumerate()
@@ -65,8 +65,8 @@ fn a_constraint_may_wrap_a_fact_in_a_construct() {
     }
     let mut r = Room::new("wrap-fires");
     r.items(&["rent", "known"]);
-    r.command("fact cell(rent, 1200)");
-    r.command("constraint unknown: false :- cell(C, R), \\+ known(C).");
+    r.command("fact box(rent, 1200)");
+    r.command("constraint unknown: false :- box(C, R), \\+ known(C).");
     r.app.evaluate().unwrap();
     assert!(r.shows("1 constraint violation"), "{:#?}", r.lines());
     r.command("fact known(rent)");
@@ -76,12 +76,12 @@ fn a_constraint_may_wrap_a_fact_in_a_construct() {
 
 #[test]
 fn a_constraint_that_can_never_fire_is_still_refused() {
-    let said = stated("never", "never: false :- cell(C, R), R > 5, R < 3.");
+    let said = stated("never", "never: false :- box(C, R), R > 5, R < 3.");
     assert!(said.starts_with("constraint not kept"), "{said}");
 }
 
 /// A constraint that a cell has one value.
-const ONE_VALUE: &str = "constraint one value: false :- cell(C, A), cell(C, B), A \\= B.";
+const ONE_VALUE: &str = "constraint one value: false :- box(C, A), box(C, B), A \\= B.";
 
 /// A room with two rents that break a constraint, and definitions made at
 /// a third item; the cursor on the second rent, so the right pane is the
@@ -101,9 +101,9 @@ fn rents_defined(name: &str, items: &[&[&str]]) -> Room {
         definitions.iter().for_each(|d| r.command(d));
     }
     r.leap(Quasi::LeapUp, "rent again");
-    r.command("fact cell(rent, 1300)");
+    r.command("fact box(rent, 1300)");
     r.leap(Quasi::LeapUp, "rent");
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     r.leap(Quasi::LeapDown, "rent again");
     r.app.flush();
     r.app.evaluate().unwrap();
@@ -114,11 +114,11 @@ fn rents_defined(name: &str, items: &[&[&str]]) -> Room {
 fn a_derived_text_that_reads_the_facts_within_a_construct_depends_on_them() {
     // Catches reads looked for only within ',', ';' and '\+'.
     for (n, goal) in [
-        "findall(C, cell(C, _), L), length(L, N)",
-        "findall(C, cell(C, _), L, []), length(L, N)",
-        "(cell(rent, N) -> true ; N = 0)",
-        "(cell(rent, N) *-> true ; N = 0)",
-        "N = 1, forall(cell(_, V), V > 0)",
+        "findall(C, box(C, _), L), length(L, N)",
+        "findall(C, box(C, _), L, []), length(L, N)",
+        "(box(rent, N) -> true ; N = 0)",
+        "(box(rent, N) *-> true ; N = 0)",
+        "N = 1, forall(box(_, V), V > 0)",
     ]
     .iter()
     .enumerate()
@@ -133,8 +133,8 @@ fn a_derived_text_that_reads_the_facts_within_a_construct_depends_on_them() {
 fn a_derived_text_that_reads_the_facts_through_a_rule_depends_on_them() {
     // Catches a rule taken as the end of what a definition reads.
     for (n, (rule, goal)) in [
-        ("rule costly(C) :- cell(C, V), V > 1000.", "costly(_)"),
-        ("rule costly :- cell(_, V), V > 1000.", "costly"),
+        ("rule costly(C) :- box(C, V), V > 1000.", "costly(_)"),
+        ("rule costly :- box(_, V), V > 1000.", "costly"),
     ]
     .iter()
     .enumerate()
@@ -149,7 +149,7 @@ fn a_derived_text_that_reads_the_facts_through_a_rule_depends_on_them() {
 fn a_derived_text_that_shares_only_a_builtin_does_not_depend_on_the_facts() {
     // Catches a builtin, which reads no fact, taken as a read.
     let constraint =
-        "constraint one value: false :- cell(C, A), cell(C, B), A \\= B, atom_length(C, N), N > 0.";
+        "constraint one value: false :- box(C, A), box(C, B), A \\= B, atom_length(C, N), N > 0.";
     let derive = "derive {L} letters where atom_length(word, L)";
     let r = rents_with("deps-builtin", &[constraint, derive]);
     assert!(r.shows("CONSTRAINT · ONE VALUE"));
@@ -161,10 +161,10 @@ fn a_derived_text_that_shares_only_a_builtin_does_not_depend_on_the_facts() {
 fn over_the_limit(name: &str) -> Room {
     let mut r = Room::new(name);
     r.items(&["rent", "food"]);
-    r.command("fact cell(food, 300)");
+    r.command("fact box(food, 300)");
     r.leap(Quasi::LeapUp, "rent");
-    r.command("fact cell(rent, 1200)");
-    r.command("constraint limit: false :- cell(C, R), R > 1000.");
+    r.command("fact box(rent, 1200)");
+    r.command("constraint limit: false :- box(C, R), R > 1000.");
     r.app.flush();
     r.app.evaluate().unwrap();
     r
@@ -181,7 +181,7 @@ fn a_finding_on_one_fact_is_marked_under_its_item() {
         .filter(|l| l.contains('‼'))
         .count();
     assert_eq!(marks, 1);
-    assert!(r.shows("‼ breaks “limit”: cell(rent, 1200) here"));
+    assert!(r.shows("‼ breaks “limit”: box(rent, 1200) here"));
     assert!(r.shows("CONSTRAINT · LIMIT"));
 }
 
@@ -190,7 +190,7 @@ fn a_finding_on_no_fact_is_marked_under_no_item() {
     // Catches a finding with no facts taken as resting on each item's.
     let mut r = Room::new("no-fact-marks");
     r.items(&["rent"]);
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     r.command("constraint always: false :- 2 > 1.");
     assert!(
         r.app.session.message.contains("kept"),
@@ -208,7 +208,7 @@ fn a_finding_on_one_fact_is_listed_as_that_fact() {
     // Catches a row of the arguments its facts share and of how they
     // differ, which for one fact is "rent, 1200:  (1)".
     let r = over_the_limit("limit-listed");
-    assert!(r.shows("  cell(rent, 1200) (1)"));
+    assert!(r.shows("  box(rent, 1200) (1)"));
 }
 
 #[test]
@@ -216,7 +216,7 @@ fn a_finding_whose_facts_share_nothing_is_listed_without_a_key() {
     // Catches a row that begins with the key of what its facts share,
     // empty here: ": rent, 1200 (1) · food, 300 (2)".
     let mut r = over_the_limit("no-key");
-    r.command("constraint rent first: false :- cell(rent, R), cell(food, F), R > F.");
+    r.command("constraint rent first: false :- box(rent, R), box(food, F), R > F.");
     r.app.flush();
     r.app.evaluate().unwrap();
     assert!(r.shows("│  rent 1200 (1) · food 300 (2)"));
@@ -226,8 +226,8 @@ fn a_finding_whose_facts_share_nothing_is_listed_without_a_key() {
 fn the_constraints_of_an_item_are_drawn_apart() {
     // Catches a constraint's heading drawn straight under the list of
     // what depends on the one before.
-    let derive = "derive {N} cells where findall(C, cell(C, _), L), length(L, N)";
-    let limit = "constraint limit: false :- cell(C, R), R > 1000.";
+    let derive = "derive {N} cells where findall(C, box(C, _), L), length(L, N)";
+    let limit = "constraint limit: false :- box(C, R), R > 1000.";
     let r = rents_with("drawn-apart", &[ONE_VALUE, limit, derive]);
     let lines = r.lines_at(160, 40);
     let at = lines.iter().position(|l| l.contains("CONSTRAINT · LIMIT"));
@@ -245,7 +245,7 @@ fn a_kind_with_no_findings_has_no_heading() {
 
 /// A derived text, at an item of its own, that reads the rents.
 fn counting(template: &str) -> String {
-    format!("derive {template} where findall(C, cell(C, _), L), length(L, N)")
+    format!("derive {template} where findall(C, box(C, _), L), length(L, N)")
 }
 
 #[test]
@@ -276,7 +276,7 @@ fn a_derived_text_longer_than_40_characters_is_cut() {
 fn a_derived_text_that_cannot_answer_is_listed_as_the_outline_shows_it() {
     // Catches the text of a derived item taken from its answer alone: a
     // goal that raises an error has none.
-    let derive = "derive {N} broken where cell(rent, R), N is R + foo";
+    let derive = "derive {N} broken where box(rent, R), N is R + foo";
     let r = rents_with("deps-no-answer", &[ONE_VALUE, derive]);
     assert!(r.shows("3. {N} broken (cannot answer: type_error"));
     assert!(r.shows("  3 {N} broken (cannot answer: type_error"));
@@ -298,7 +298,7 @@ fn a_finding_whose_facts_share_two_arguments_is_keyed_by_both() {
 #[test]
 fn a_constraint_that_raises_an_error_when_tried_is_not_kept() {
     // Catches the error alone, with nothing to say what it is about.
-    let said = stated("raises", "c: false :- cell(C, R), X is R + foo, X > 0.");
+    let said = stated("raises", "c: false :- box(C, R), X is R + foo, X > 0.");
     let why = "type_error(evaluable, foo / 0)";
     let not_kept = "constraint not kept: tried against a planted violation";
     assert_eq!(said, format!("{not_kept}, it did not fire ({why})"));

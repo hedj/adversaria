@@ -121,7 +121,30 @@ fn fact(encoded: &Value) -> Result<Term, String> {
     if !matches!(t, Term::Atom(_) | Term::Compound(..)) {
         return Err("a fact must be an atom or a compound".into());
     }
-    Ok(t)
+    Ok(boxed(t))
+}
+
+/// A term with each box as it is now stored, box(Name, Value). Until 22
+/// November 2026 a box was stored as cell(Name, Value), the name the grid
+/// mark has too (docs/design.md, version 1 revised; docs/concepts.md,
+/// decision 7). A layer's mark is left as written: there cell is the mark.
+fn boxed(t: Term) -> Term {
+    match t {
+        Term::Compound(f, mut a) if f == "layer" && a.len() == 2 => {
+            let goal = boxed(a.pop().expect("two arguments"));
+            Term::Compound(f, vec![a.pop().expect("two arguments"), goal])
+        }
+        Term::Compound(f, a) => {
+            let a: Vec<Term> = a.into_iter().map(boxed).collect();
+            let f = if f == "cell" && a.len() == 2 {
+                "box".into()
+            } else {
+                f
+            };
+            Term::Compound(f, a)
+        }
+        t => t,
+    }
 }
 
 /// Load a world's facts into Prolog, in order.
@@ -136,6 +159,41 @@ pub fn load(p: &mut Prolog, facts: &[(u64, Term)]) -> Result<(), prolog::Error> 
 mod tests {
     use super::*;
     use serde_json::{Value, json};
+
+    fn c(f: &str, args: Vec<Term>) -> Term {
+        Term::Compound(f.into(), args)
+    }
+
+    #[test]
+    fn a_box_an_old_journal_stored_as_cell_is_read_as_box() {
+        // Catches a journal written before the rename losing its boxes, or
+        // a constraint over them, or the grid mark of a layer renamed too.
+        let cell = |n: &str, v: Term| c("cell", vec![Term::Atom(n.into()), v]);
+        let boxed_rent = c("box", vec![Term::Atom("rent".into()), Term::Int(1200)]);
+        let stored = terms::encode(&cell("rent", Term::Int(1200))).unwrap();
+        assert_eq!(fact(&stored).unwrap(), boxed_rent, "as the journal is read");
+        let rule = c(":-", vec![c("false", vec![]), cell("rent", Term::Var(0))]);
+        let read = boxed(rule);
+        assert_eq!(
+            read,
+            c(
+                ":-",
+                vec![
+                    c("false", vec![]),
+                    c("box", vec![Term::Atom("rent".into()), Term::Var(0)])
+                ]
+            )
+        );
+        let mark = c(
+            "cell",
+            vec![c("x", vec![Term::Var(0)]), c("y", vec![Term::Var(1)])],
+        );
+        let layer = c("layer", vec![mark.clone(), cell("rent", Term::Var(1))]);
+        let goal = c("box", vec![Term::Atom("rent".into()), Term::Var(1)]);
+        assert_eq!(boxed(layer), c("layer", vec![mark, goal]));
+        let three = c("cell", vec![Term::Int(1), Term::Int(2), Term::Int(3)]);
+        assert_eq!(boxed(three.clone()), three, "only cell/2 was a box");
+    }
 
     fn date(e: &str, y: i64) -> Value {
         terms::encode(&Term::Compound(

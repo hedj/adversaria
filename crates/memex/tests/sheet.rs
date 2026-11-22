@@ -74,11 +74,11 @@ fn shows(app: &App, text: &str) {
 }
 
 /// A box: a new item whose text is shown from a value it holds.
-fn cell(app: &mut App, name: &str, label: &str, value: i64) {
+fn put_box(app: &mut App, name: &str, label: &str, value: i64) {
     tap(app, Key::Enter);
     typ(app, name);
-    command(app, &format!("fact cell({name}, {value})"));
-    command(app, &format!("derive {label}: {{V}} where cell({name}, V)"));
+    command(app, &format!("fact box({name}, {value})"));
+    command(app, &format!("derive {label}: {{V}} where box({name}, V)"));
 }
 
 /// The budget: three boxes, two derived from them, and two rules.
@@ -86,23 +86,23 @@ fn budget(name: &str) -> Room {
     let mut app = Room::new(&format!("sheet-{name}"));
     app.set_durable(false);
     typ(&mut app, "Budget");
-    cell(&mut app, "income", "Income", 2000);
+    put_box(&mut app, "income", "Income", 2000);
     tap(&mut app, Key::Tab);
-    cell(&mut app, "rent", "Rent", 1200);
-    cell(&mut app, "food", "Food", 400);
+    put_box(&mut app, "rent", "Rent", 1200);
+    put_box(&mut app, "food", "Food", 400);
     tap(&mut app, Key::Enter);
     typ(&mut app, "left");
     command(
         &mut app,
-        "derive Left over: {L} where cell(income, I), cell(rent, R), cell(food, F), L is I - R - F",
+        "derive Left over: {L} where box(income, I), box(rent, R), box(food, F), L is I - R - F",
     );
     command(
         &mut app,
-        "constraint one value per cell: false :- cell(C, A), cell(C, B), A \\= B.",
+        "constraint one value per cell: false :- box(C, A), box(C, B), A \\= B.",
     );
     command(
         &mut app,
-        "constraint spending within income: false :- cell(income, I), cell(rent, R), cell(food, F), R + F > I.",
+        "constraint spending within income: false :- box(income, I), box(rent, R), box(food, F), R + F > I.",
     );
     app.flush();
     app.evaluate().unwrap();
@@ -150,7 +150,7 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
     over_budget_on_the_food_box(&mut app);
     back_within_income(&mut app);
     // A fact nothing contradicts is simply added, on the cursor's item.
-    let m = command(&mut app, "set cell(savings, 300)");
+    let m = command(&mut app, "set box(savings, 300)");
     assert!(m.contains("nothing replaced"), "{m}");
     the_journal_replays_to_the_same_values(&app);
 }
@@ -158,7 +158,7 @@ fn set_replaces_what_a_new_value_directly_contradicts() {
 /// Food set to 900: the old value replaced, income and rent kept, the
 /// violation left, and the new value on the Food box.
 fn over_budget_on_the_food_box(app: &mut Room) {
-    let m = command(app, "set cell(food, 900)");
+    let m = command(app, "set box(food, 900)");
     assert!(m.contains("replaced the fact at 1.3"), "{m}");
     let left = "left for you: 1 violation of spending within income";
     assert!(m.contains(left), "{m}");
@@ -177,7 +177,7 @@ fn over_budget_on_the_food_box(app: &mut Room) {
 /// Food set to 500: back within income, the violation goes, nothing else
 /// changes.
 fn back_within_income(app: &mut Room) {
-    let m = command(app, "set cell(food, 500)");
+    let m = command(app, "set box(food, 500)");
     let only = m.contains("replaced the fact at 1.3") && !m.contains("left for you");
     assert!(only, "{m}");
     shows(app, "Left over: 300 [derived]");
@@ -204,7 +204,7 @@ fn a_rule_is_written_once_and_used_everywhere() {
     let mut app = budget("rule");
     let m = command(
         &mut app,
-        "rule spent(S) :- cell(rent, R), cell(food, F), S is R + F.",
+        "rule spent(S) :- box(rent, R), box(food, F), S is R + F.",
     );
     assert!(m.contains("rule spent/1 kept"), "{m}");
     tap(&mut app, Key::Enter);
@@ -213,9 +213,9 @@ fn a_rule_is_written_once_and_used_everywhere() {
     shows(&app, "Spent: 1600 [derived]");
     command(
         &mut app,
-        "constraint within income: false :- spent(S), cell(income, I), S > I.",
+        "constraint within income: false :- spent(S), box(income, I), S > I.",
     );
-    command(&mut app, "set cell(food, 900)");
+    command(&mut app, "set box(food, 900)");
     shows(&app, "Spent: 2100 [derived]");
     shows(&app, "breaks “within income”");
     each_bad_rule_is_refused(&mut app);
@@ -229,8 +229,8 @@ fn each_bad_rule_is_refused(app: &mut Room) {
         ("rule above(X, Y) :- above(X, Z), above(Z, Y).", "recursive"),
         ("rule loop1(X) :- loop2(X).", ""),
         ("rule loop2(X) :- loop1(X).", "recursive"),
-        ("rule free(X, Y) :- cell(X, _).", "Y"),
-        ("rule bad(X) :- cell(X, _), shell(ls).", "not allowed"),
+        ("rule free(X, Y) :- box(X, _).", "Y"),
+        ("rule bad(X) :- box(X, _), shell(ls).", "not allowed"),
         ("rule rule_def(a, b, c) :- true.", "reserved"),
     ] {
         app.command(line);
@@ -253,12 +253,12 @@ fn rules_work_under_negation_disjunction_and_findall() {
     // only facts are defined, so a rule inside \+, ; or findall raises an
     // unknown-procedure error or never holds.
     let mut app = budget("rule-control");
-    command(&mut app, "rule big(C) :- cell(C, V), V >= 1000.");
+    command(&mut app, "rule big(C) :- box(C, V), V >= 1000.");
     tap(&mut app, Key::Enter);
     typ(&mut app, "small");
     command(
         &mut app,
-        "derive Small: {N} where findall(C, (cell(C, _), \\+ big(C)), L), length(L, N)",
+        "derive Small: {N} where findall(C, (box(C, _), \\+ big(C)), L), length(L, N)",
     );
     shows(&app, "Small: 1 [derived]");
     tap(&mut app, Key::Enter);
@@ -278,20 +278,20 @@ fn a_violation_through_a_rule_rests_on_the_facts_under_it() {
     let mut app = budget("rule-prov");
     command(
         &mut app,
-        "rule spent(S) :- cell(rent, R), cell(food, F), S is R + F.",
+        "rule spent(S) :- box(rent, R), box(food, F), S is R + F.",
     );
     let rule = app.journal().entries().last().unwrap().seq;
     command(
         &mut app,
-        "constraint within income: false :- spent(S), cell(income, I), S > I.",
+        "constraint within income: false :- spent(S), box(income, I), S > I.",
     );
-    command(&mut app, "set cell(food, 900)");
+    command(&mut app, "set box(food, 900)");
     let facts = violation_facts(&app, "within income");
     assert!(
         facts.iter().all(|(s, _)| *s != rule),
         "not the rule: {facts:?}"
     );
-    for f in ["cell(rent, 1200)", "cell(food, 900)", "cell(income, 2000)"] {
+    for f in ["box(rent, 1200)", "box(food, 900)", "box(income, 2000)"] {
         assert!(facts.iter().any(|(_, x)| x == f), "{f} in {facts:?}");
     }
     shows(&app, "breaks “within income”");

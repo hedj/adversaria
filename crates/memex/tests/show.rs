@@ -26,7 +26,7 @@ fn show_as_chart_makes_the_target_a_bar_chart_of_the_cells() {
     let mut r = budget("show-chart");
     let view = r.app.cursor();
     r.command("show as chart");
-    let bar = ("bar(x(C), y(V))".to_string(), "cell(C, V)".to_string());
+    let bar = ("bar(x(C), y(V))".to_string(), "box(C, V)".to_string());
     assert_eq!(layers(&r, view), [bar]);
     r.app.evaluate().unwrap();
     let rows = r.lines_at(160, 40);

@@ -89,7 +89,7 @@ fn foot(room: &Room) -> Vec<String> {
 fn the_foot_asks_before_a_retraction_and_says_when_nothing_depends_on_it() {
     let mut room = Room::new("foot-retract");
     room.items(&["rent"]);
-    room.command("fact cell(rent, 3000)");
+    room.command("fact box(rent, 3000)");
     let entry = room.last("edit");
     room.command(&format!("retract {entry}"));
     let asked = format!(" RETRACT  entry {entry}");
@@ -111,10 +111,10 @@ fn a_message_takes_the_place_of_the_fading_hint() {
     // The hint shows on an item with marks, while there is no message.
     let mut room = Room::new("foot-hint");
     room.items(&["income", "rent"]);
-    room.command("fact cell(rent, 3000)");
+    room.command("fact box(rent, 3000)");
     room.put_cursor(room.app.notebook.outline.in_order()[0]);
-    room.command("fact cell(income, 1000)");
-    room.command("constraint within: false :- cell(income, I), cell(rent, R), R > I.");
+    room.command("fact box(income, 1000)");
+    room.command("constraint within: false :- box(income, I), box(rent, R), R > I.");
     room.app.evaluate().unwrap();
     room.app.session.message.clear();
     assert!(
@@ -567,8 +567,8 @@ fn a_worlds_wrapped_row_hangs_under_its_text_after_its_address() {
 /// A rent over a limit: one constraint violation, for the top bar.
 fn violated(room: &mut Room) {
     room.items(&["rent"]);
-    room.command("fact cell(rent, 1200)");
-    room.command("constraint limit: false :- cell(rent, R), R > 1000.");
+    room.command("fact box(rent, 1200)");
+    room.command("constraint limit: false :- box(rent, R), R > 1000.");
     room.app.evaluate().unwrap();
 }
 

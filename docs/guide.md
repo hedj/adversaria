@@ -513,7 +513,7 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 | `set` | `set FACT` | states FACT and retracts the beliefs it directly contradicts (each that breaks a constraint with it and nothing else); the fact goes on the item that held the one it replaces, else on the target. A violation it leaves is named, not resolved |
 | `constraint` | `constraint NAME: false :- BODY.` | adds a constraint, after checking it fires on a planted violation |
 | `derive` | `derive TEMPLATE where GOAL` | the target shows text computed from facts (§ 3.1) |
-| `show` | `show as chart`, `show as table`, `show as graph`, `show ADDRESS as chart`, `show MARK where GOAL` | makes the target, or the item ADDRESS names, a view of the world's facts (§ 3.3): a bar for each `cell` fact, a table of them, or the graph of the items and their links. With a mark, it adds that layer, as `layer` did |
+| `show` | `show as chart`, `show as table`, `show as graph`, `show ADDRESS as chart`, `show MARK where GOAL` | makes the target, or the item ADDRESS names, a view of the world's facts (§ 3.3): a bar for each box (`box` fact), a table of them, or the graph of the items and their links. With a mark, it adds that layer, as `layer` did |
 | `layer` | `layer MARK where GOAL` | an old name, kept: `show MARK where GOAL` adds a layer to the target's view: one mark for each solution of GOAL (§ 3.3) |
 | `check` | `check quote`, `check source` | checks the target's text against the document it came from, or its `doi` fact against Crossref |
 
@@ -572,7 +572,7 @@ constraint. A box is a value with a name, such as the income;
 `Nothing has more than 1 value.` says that each box holds one, and
 `Nothing has more than 1 date.` the same of dates. With an item selected, the right pane shows, under `READ AS`,
 each statement its text was read as, in Prolog, as the memex runs it
-(`fact  date(buran_flight, 1988)`, `rule  rest(A):-cell(income, B), …`),
+(`fact  date(buran_flight, 1988)`, `rule  rest(A):-box(income, B), …`),
 and its tags (`tag  item_tag(12, money)`). A text read before the memex
 kept these forms shows none until its text changes. Change the text, and
 what it said is taken back and the new text read; undo takes back a
@@ -645,9 +645,9 @@ answer: type_error(evaluable, foo / 0))`.
 a rule, and then used like a fact:
 
 ```
-rule spent(S) :- cell(rent, R), cell(food, F), S is R + F.
+rule spent(S) :- box(rent, R), box(food, F), S is R + F.
 derive Spent: {S} where spent(S)
-constraint within income: false :- spent(S), cell(income, I), S > I.
+constraint within income: false :- spent(S), box(income, I), S > I.
 ```
 
 A rule may not be recursive, directly or through other rules (the
@@ -734,7 +734,7 @@ everything that may come next, not only the first twelve, type `?` (at
 the start, or after a space): the notebook's words, each kind of word
 with what it is (`a name — one thing by its name: John, buran_flight`),
 and the words of ACE. A fact written as
-Prolog, such as `cell(fuel, 80)`, is read exactly as you wrote it, even
+Prolog, such as `box(fuel, 80)`, is read exactly as you wrote it, even
 for something the memex has no facts about. The command `suppose
 STATEMENT` does the same as the key. If there is no reading, ending
 the quasimode starts a named world with nothing supposed; if what you typed
@@ -743,7 +743,7 @@ is believed already, it starts one with nothing changed, and says so.
 In the supposed world, each belief the supposition directly contradicts
 is set aside, in that world only: the supposition wins. A belief is
 directly contradicted when it and the supposition, and nothing else, break
-a constraint (two dates for one event; two values for one cell). A
+a constraint (two dates for one event; two values for one box). A
 violation that rests on the supposition and two or more other beliefs is
 left in place, and the message names it ("left for you: 1 violation of
 …"): any of those beliefs could be given up, and which one is your
@@ -773,7 +773,7 @@ constraint.
 
 A view is an item that draws something: a chart, a timeline, a grid, a
 flowchart, a tree. `show as chart` makes the item at the cursor a bar
-chart of the `cell` facts (`The rent is 1200.` states `cell(rent,
+chart of the boxes (`The rent is 1200.` states `box(rent,
 1200)`); `show as table` a table of them; `show as graph` the graph of
 your items and their links. Each writes the layers of a recipe below.
 
@@ -781,10 +781,10 @@ Behind `show` is the grammar views are made in. A view is made of
 layers, and each layer is a mark drawn once for each solution of a goal:
 
 ```
-show bar(x(C), y(V)) where cell(C, V)
+show bar(x(C), y(V)) where box(C, V)
 ```
 
-This draws one bar for each `cell(C, V)` fact, at category C, V high:
+This draws one bar for each `box(C, V)` fact, at category C, V high:
 it is what `show as chart` writes. Run `show` with the cursor on the
 item that is to be the view; each `show` with a mark adds a layer
 (`layer`, its old name, does the same). A layer without `where` is drawn once, as a
@@ -818,7 +818,7 @@ Each mark is written with its channels, `channel(Value)`:
 | `text` | x, y, text | a label at a point |
 | `tick` | x; y, text | a mark on the axis with its label above: a timeline. With y, on that lane |
 | `span` | x1, x2; y, text | an interval from x1 to x2, on lane y: a Gantt chart |
-| `cell` | x, y; text | a box in a grid: a table, a spreadsheet |
+| `cell` | x, y; text | a cell in a grid: a table, a spreadsheet |
 | `node` | id; text, shape | a box in a graph; shape `box`, `round` or `decision` |
 | `edge` | from, to; text | an arrow from one node to another, by id |
 
@@ -840,8 +840,8 @@ Each is ordinary facts and rules, with layers over them.
 A bar chart with a limit:
 
 ```
-layer bar(x(C), y(V)) where cell(C, V)
-layer refline(y(I)) where cell(income, I)
+layer bar(x(C), y(V)) where box(C, V)
+layer refline(y(I)) where box(income, I)
 ```
 
 A spreadsheet: boxes at places in a grid, one computed by a rule.
@@ -850,8 +850,8 @@ A spreadsheet: boxes at places in a grid, one computed by a rule.
 fact at(income, b, 1)
 fact at(rent, b, 2)
 fact at(left, b, 4)
-rule value(B, V) :- cell(B, V).
-rule value(left, L) :- cell(income, I), cell(rent, R), L is I - R.
+rule value(B, V) :- box(B, V).
+rule value(left, L) :- box(income, I), box(rent, R), L is I - R.
 layer cell(x(a), y(R), text(B)) where at(B, _, R)
 layer cell(x(C), y(R), text(V)) where at(B, C, R), value(B, V)
 ```

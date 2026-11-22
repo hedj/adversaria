@@ -24,11 +24,11 @@ test(an_owners_noun_and_its_value_are_a_fact) :-
 
 test(a_noun_with_no_owner_is_a_box) :-
     % Catches "the income is 2000" read as a fact of one place, or not
-    % at all: a box is cell(Name, Value), as the boxes of the tutorial.
-    reads("The income is 2000.", [fact(cell(income, 2000))]).
+    % at all: a box is box(Name, Value), as the boxes of the tutorial.
+    reads("The income is 2000.", [fact(box(income, 2000))]).
 
 test(a_noun_that_is_not_a_value_is_a_kind) :-
-    % Catches a kind read as a box ("Nemo is a fish" as cell(fish, ...)),
+    % Catches a kind read as a box ("Nemo is a fish" as box(fish, ...)),
     % a name left as APE gives it (named('Nemo')), or a kind lost in a
     % rule or a constraint.
     reads("Nemo is a fish.", [fact(fish(nemo))]),
@@ -66,26 +66,26 @@ test(a_source_that_says_something_makes_claims_not_facts) :-
 test(if_then_a_value_is_a_rule) :-
     % Catches the head's value left unbound, or the sum not computed.
     reads("If the income is X and the rent is Y then the rest is X - Y.",
-          [rule(rest(R), (cell(income, A), cell(rent, B), R is A - B))]),
+          [rule(rest(R), (box(income, A), box(rent, B), R is A - B))]),
     assertion(R-A-B == '$VAR'(0)-'$VAR'(1)-'$VAR'(2)).
 
 test(what_must_not_be_is_a_constraint) :-
     % Catches a comparison that must hold read as one that must not, a
     % negation lost, or "more than 1" not read as two different values.
     reads("If the rent is X and the food is Y and the income is Z then X + Y =< Z.",
-          [constraint((cell(rent, A), cell(food, B), cell(income, C), \+ A + B =< C))]),
+          [constraint((box(rent, A), box(food, B), box(income, C), \+ A + B =< C))]),
     assertion(A-B-C == '$VAR'(0)-'$VAR'(1)-'$VAR'(2)),
     reads("It is false that the rent is greater than the income.",
-          [constraint((cell(rent, R), cell(income, I), R > I))]),
+          [constraint((box(rent, R), box(income, I), R > I))]),
     assertion(R-I == '$VAR'(0)-'$VAR'(1)),
     reads("Nothing has more than 1 date.", [constraint((date(E, D1), date(E, D2), D1 \== D2))]),
     assertion(E-D1-D2 == '$VAR'(0)-'$VAR'(1)-'$VAR'(2)).
 
 test(a_box_holds_one_value) :-
     % Catches "value" read as a relation value(E, V), which no box is:
-    % a box's value is the second place of cell(Name, Value), so "Nothing
+    % a box's value is the second place of box(Name, Value), so "Nothing
     % has more than 1 value" is the constraint that a box holds one.
-    reads("Nothing has more than 1 value.", [constraint((cell(B, V1), cell(B, V2), V1 \== V2))]),
+    reads("Nothing has more than 1 value.", [constraint((box(B, V1), box(B, V2), V1 \== V2))]),
     assertion(B-V1-V2 == '$VAR'(0)-'$VAR'(1)-'$VAR'(2)).
 
 test(sentences_each_give_their_statements) :-
@@ -116,7 +116,7 @@ test(each_statement_is_written_as_the_command_text_for_it) :-
     ace_lexicon([], _),
     ace_read_text("If the income is X and the rent is Y and the food is Z then the rest is X - (Y + Z).",
                   words([], []), read(_, [said(rule, R)], _)),
-    assertion(R == "rest(A):-cell(income, B), cell(rent, C), cell(food, D), A is B-(C+D)"),
+    assertion(R == "rest(A):-box(income, B), box(rent, C), box(food, D), A is B-(C+D)"),
     ace_read_text("The label of Buran-flight is \"Buran's flight\".", words([], []), read(_, [said(fact, F)], _)),
     assertion(F == "label(buran_flight, \"Buran's flight\")").
 
@@ -128,7 +128,7 @@ test(a_box_a_rule_defines_is_the_rule_value) :-
     ace_read("It is false that the rest is smaller than 0.", words([rest], []), read(_, [W], _)),
     assertion(W == constraint((rest('$VAR'(0)), '$VAR'(0) < 0))),
     ace_read("It is false that the rest is smaller than 0.", words([], []), read(_, [B], _)),
-    assertion(B == constraint((cell(rest, '$VAR'(0)), '$VAR'(0) < 0))),
+    assertion(B == constraint((box(rest, '$VAR'(0)), '$VAR'(0) < 0))),
     ace_read("If the income is X then the rest is X - 1. It is false that the rest is smaller than 0.",
              read(_, [_, C], _)),
     assertion(C == constraint((rest('$VAR'(2)), '$VAR'(2) < 0))).
@@ -159,7 +159,7 @@ test(a_question_of_a_box_asks_for_its_value) :-
     % world has the box: ACE gives "the" and "an" alike.
     ace_lexicon([], _),
     ace_read("What is the income?", words([], [income]), read(_, [Q], _)),
-    assertion(Q == question('$VAR'(0), cell(income, '$VAR'(0)))).
+    assertion(Q == question('$VAR'(0), box(income, '$VAR'(0)))).
 
 :- dynamic animal/1, label/2.
 animal(nemo).

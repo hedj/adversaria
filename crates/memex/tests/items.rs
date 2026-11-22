@@ -128,10 +128,10 @@ fn an_items_marks_are_set_in_under_it() {
     // item.
     let mut r = Room::new("marks-indent");
     r.items(&["rent"]);
-    r.command("fact cell(rent, 1200)");
-    r.command("constraint limit: false :- cell(C, R), R > 1000.");
+    r.command("fact box(rent, 1200)");
+    r.command("constraint limit: false :- box(C, R), R > 1000.");
     r.app.evaluate().unwrap();
-    let line = "    ‼ breaks “limit”: cell(rent, 1200) here";
+    let line = "    ‼ breaks “limit”: box(rent, 1200) here";
     assert!(
         r.lines().iter().any(|l| l.starts_with(line)),
         "{:?}",
@@ -143,9 +143,9 @@ fn an_items_marks_are_set_in_under_it() {
 fn charted(name: &str) -> Room {
     let mut r = Room::new(name);
     r.items(&["rent", "chart"]);
-    r.command("layer bar(x(C), y(V)) where cell(C, V)");
+    r.command("layer bar(x(C), y(V)) where box(C, V)");
     r.leap(Quasi::LeapUp, "rent");
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     r.app.evaluate().unwrap();
     r
 }

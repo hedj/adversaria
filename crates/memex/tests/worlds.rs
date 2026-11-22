@@ -133,11 +133,11 @@ fn a_derived_text_that_cannot_answer_says_so_in_both_worlds() {
     // the text typed into it.
     let mut r = Room::new("worlds-cannot-answer");
     r.items(&["rent", "broken"]);
-    r.command("derive {N} broken where cell(rent, R), N is R + foo");
+    r.command("derive {N} broken where box(rent, R), N is R + foo");
     r.leap(Quasi::LeapUp, "rent");
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     r.app.evaluate().unwrap();
-    suppose(&mut r, "cell(food, 300)");
+    suppose(&mut r, "box(food, 300)");
     r.app.evaluate().unwrap();
     let rows = r.lines_at(160, 10);
     let row = rows
@@ -152,16 +152,16 @@ fn a_derived_text_that_cannot_answer_says_so_in_both_worlds() {
 fn rent_supposed(name: &str) -> Room {
     let mut r = Room::new(name);
     r.items(&["rent", "food", "chart", "spent"]);
-    r.command("derive Spent: {S} where cell(rent, R), cell(food, F), S is R + F");
+    r.command("derive Spent: {S} where box(rent, R), box(food, F), S is R + F");
     r.leap(Quasi::LeapUp, "chart");
-    r.command("layer bar(x(C), y(V)) where cell(C, V)");
+    r.command("layer bar(x(C), y(V)) where box(C, V)");
     r.leap(Quasi::LeapUp, "food");
-    r.command("fact cell(food, 300)");
+    r.command("fact box(food, 300)");
     r.leap(Quasi::LeapUp, "rent");
-    r.command("fact cell(rent, 1200)");
-    r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
+    r.command("fact box(rent, 1200)");
+    r.command("constraint one value: false :- box(C, A), box(C, B), A \\= B.");
     r.app.evaluate().unwrap();
-    suppose(&mut r, "cell(rent, 1300)");
+    suppose(&mut r, "box(rent, 1300)");
     r.app.evaluate().unwrap();
     r
 }
@@ -212,12 +212,12 @@ fn each_fact_set_aside_is_marked_on_its_own_row() {
     // aside: with two, on two items, neither was marked.
     let mut r = Room::new("worlds-two-aside");
     r.items(&["rent", "rent again"]);
-    r.command("fact cell(rent, 1250)");
+    r.command("fact box(rent, 1250)");
     r.leap(Quasi::LeapUp, "rent");
-    r.command("fact cell(rent, 1200)");
-    r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
+    r.command("fact box(rent, 1200)");
+    r.command("constraint one value: false :- box(C, A), box(C, B), A \\= B.");
     r.app.evaluate().unwrap();
-    suppose(&mut r, "cell(rent, 1300)");
+    suppose(&mut r, "box(rent, 1300)");
     r.app.evaluate().unwrap();
     let marked = column(&r, 1)
         .iter()
@@ -231,11 +231,11 @@ fn each_fact_set_aside_is_marked_on_its_own_row() {
 fn rent_alone_supposed(name: &str, more: &[&str]) -> Room {
     let mut r = Room::new(name);
     r.items(&["rent"]);
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     more.iter().for_each(|f| r.command(&format!("fact {f}")));
-    r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
+    r.command("constraint one value: false :- box(C, A), box(C, B), A \\= B.");
     r.app.evaluate().unwrap();
-    suppose(&mut r, "cell(rent, 1300)");
+    suppose(&mut r, "box(rent, 1300)");
     r.app.evaluate().unwrap();
     r
 }
@@ -250,14 +250,14 @@ fn the_supposed_world_shows_what_it_supposes_first_with_the_actual_beside_it_bla
     let (actual, supposed) = (column(&r, 0), column(&r, 1));
     let at = supposed
         .iter()
-        .position(|l| l.trim_end() == "supposed: cell(rent, 1300)");
+        .position(|l| l.trim_end() == "supposed: box(rent, 1300)");
     let at = at.unwrap_or_else(|| panic!("{supposed:#?}"));
     assert_eq!(actual[at].trim(), "", "{actual:#?}");
     assert!(
         supposed[at + 1].starts_with("1. rent  (1 set aside here)"),
         "{supposed:#?}"
     );
-    let (x, y) = r.find("supposed: cell(rent, 1300)");
+    let (x, y) = r.find("supposed: box(rent, 1300)");
     let style = r.screen(160, 40)[(x + 10, y)].style().add_modifier;
     assert!(
         style.contains(Modifier::BOLD | Modifier::UNDERLINED),
@@ -300,7 +300,7 @@ fn a_row_that_keeps_a_fact_names_what_is_set_aside_and_is_not_struck() {
     // than the fact set aside: the second review read the label sentence
     // of 1.1 as set aside too.
     let r = rent_alone_supposed("worlds-struck-part", &["due(rent, monthly)"]);
-    let row = "rent  (1 set aside here: cell(rent, 1200))";
+    let row = "rent  (1 set aside here: box(rent, 1200))";
     assert!(
         column(&r, 1).iter().any(|l| l.contains(row)),
         "{:#?}",
@@ -312,34 +312,34 @@ fn a_row_that_keeps_a_fact_names_what_is_set_aside_and_is_not_struck() {
 
 #[test]
 fn a_fact_typed_for_an_entity_the_world_lacks_is_supposed_as_typed() {
-    // Catches a typed fact read as another entity's: "cell(fuel, 80)",
-    // where only rent and food have cells, was offered as "the cell of
+    // Catches a typed fact read as another entity's: "box(fuel, 80)",
+    // where only rent and food have boxes, was offered as "the cell of
     // rent is 80" and "the cell of food is 80", never as typed.
     let mut r = Room::new("worlds-typed-fact");
     r.items(&["rent", "food"]);
-    r.command("fact cell(food, 300)");
+    r.command("fact box(food, 300)");
     r.leap(Quasi::LeapUp, "rent");
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     r.app.evaluate().unwrap();
-    suppose(&mut r, "cell(fuel, 80)");
+    suppose(&mut r, "box(fuel, 80)");
     r.app.evaluate().unwrap();
     let said = &r.app.session.message;
     assert_eq!(said, "supposed; nothing set aside");
-    assert!(supposed_facts(&r).contains(&"cell(fuel, 80)".to_string()));
+    assert!(supposed_facts(&r).contains(&"box(fuel, 80)".to_string()));
 }
 
 #[test]
 fn a_typed_fact_already_held_is_believed_already() {
     // Catches a typed fact that is held read as another entity's: with
-    // rent at 1200 and food at 300, "cell(rent, 1200)" was offered as "the
+    // rent at 1200 and food at 300, "box(rent, 1200)" was offered as "the
     // cell of food is 1200".
     let mut r = Room::new("worlds-typed-held");
     r.items(&["rent", "food"]);
-    r.command("fact cell(food, 300)");
+    r.command("fact box(food, 300)");
     r.leap(Quasi::LeapUp, "rent");
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     r.app.evaluate().unwrap();
-    r.hold(Quasi::Suppose, "cell(rent, 1200)");
+    r.hold(Quasi::Suppose, "box(rent, 1200)");
     r.release(Quasi::Suppose);
     let said = &r.app.session.message;
     assert!(said.contains("is believed already"), "{said}");
@@ -351,12 +351,12 @@ fn english_with_brackets_is_read_through_the_worlds_facts() {
     // "rent is f(1300)" is is(rent, f(1300)), which no one meant.
     let mut r = Room::new("worlds-english-brackets");
     r.items(&["rent"]);
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     r.app.evaluate().unwrap();
     suppose(&mut r, "rent is f(1300)");
     r.app.evaluate().unwrap();
     let facts = supposed_facts(&r);
-    assert!(facts.contains(&"cell(rent, 1300)".to_string()), "{facts:?}");
+    assert!(facts.contains(&"box(rent, 1300)".to_string()), "{facts:?}");
 }
 
 /// The facts of the world shown first, as text.
@@ -372,15 +372,17 @@ fn a_fact_set_aside_is_named_on_the_line_of_its_constraint_alone() {
     // value", but "within income", still violated, said it too.
     let mut r = Room::new("worlds-aside-by-constraint");
     r.items(&["income", "rent", "food"]);
-    r.command("fact cell(food, 400)");
+    r.command("fact box(food, 400)");
     r.leap(Quasi::LeapUp, "rent");
-    r.command("fact cell(rent, 1200)");
+    r.command("fact box(rent, 1200)");
     r.leap(Quasi::LeapUp, "income");
-    r.command("fact cell(income, 2000)");
-    r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
-    r.command("constraint within income: false :- cell(income, I), cell(rent, R), cell(food, F), R + F > I.");
+    r.command("fact box(income, 2000)");
+    r.command("constraint one value: false :- box(C, A), box(C, B), A \\= B.");
+    r.command(
+        "constraint within income: false :- box(income, I), box(rent, R), box(food, F), R + F > I.",
+    );
     r.app.evaluate().unwrap();
-    suppose(&mut r, "cell(food, 900)");
+    suppose(&mut r, "box(food, 900)");
     r.app.evaluate().unwrap();
     let lines = column(&r, 1);
     assert!(
@@ -408,9 +410,9 @@ fn a_fact_retracted_by_hand_is_named_on_a_line_of_its_own() {
     // constraint line, or not at all: no constraint asked for it.
     let mut r = Room::new("worlds-aside-by-hand");
     r.items(&["food"]);
-    r.command("fact cell(food, 400)");
+    r.command("fact box(food, 400)");
     let fact = r.last("edit");
-    r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
+    r.command("constraint one value: false :- box(C, A), box(C, B), A \\= B.");
     r.app.evaluate().unwrap();
     suppose(&mut r, "plan b");
     r.command(&format!("retract {fact}"));
