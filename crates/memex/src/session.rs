@@ -139,7 +139,6 @@ impl Menu {
     }
 }
 
-/// The pattern and direction of a leap entry.
 /// Where the cursor jumped from, so that back returns there: the items
 /// left by each jump (follow, leap, go), the last on top, and those back
 /// left, for forward. Each jump's view entry records where it came from,
@@ -181,6 +180,7 @@ fn step(along: &mut Vec<u64>, other: &mut Vec<u64>, from: u64, to: Option<u64>) 
     other.push(from);
 }
 
+/// The pattern and direction of a leap entry.
 fn leap_of(b: &Value) -> Option<(String, bool)> {
     let pattern = b["pattern"].as_str()?;
     Some((pattern.to_string(), b["forward"] != false))
