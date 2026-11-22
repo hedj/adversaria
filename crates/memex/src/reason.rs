@@ -651,7 +651,10 @@ fn claimed(fact: &Term) -> &Term {
 /// A text's words of three letters or more.
 fn words_of(text: &str) -> Vec<String> {
     let words = text.split(|c: char| !c.is_alphanumeric());
-    words.filter(|w| w.chars().count() >= 3).map(String::from).collect()
+    words
+        .filter(|w| w.chars().count() >= 3)
+        .map(String::from)
+        .collect()
 }
 
 /// A text's whole numbers, as written: a sign kept, a full stop that ends
