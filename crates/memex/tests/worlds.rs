@@ -426,3 +426,20 @@ fn a_fact_retracted_by_hand_is_named_on_a_line_of_its_own() {
         .count();
     assert_eq!((on_constraint, own), (false, 1), "{lines:#?}");
 }
+
+#[test]
+fn redo_after_close_does_not_bring_the_supposition_back() {
+    // Catches the redo list kept across `close`: an edit undone in the
+    // supposition was redone after it, onto the supposition's branch,
+    // and the actual world showed it (the code review, D-B3).
+    let mut r = Room::new("redo-after-close");
+    r.items(&["ants"]);
+    r.command("fact date(ant, 1)");
+    suppose(&mut r, "the ant 2");
+    r.items(&["", "only in the supposition"]);
+    r.command("undo");
+    r.command("close");
+    r.app.run_command("redo");
+    assert_eq!(r.app.reason.world(), "actual");
+    assert!(!r.shows("only in the supposition"), "{:#?}", r.lines());
+}

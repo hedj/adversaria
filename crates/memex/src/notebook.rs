@@ -440,9 +440,12 @@ impl Notebook {
     }
 
     /// The entries undone after an entry: an undo adds the entry it undoes,
-    /// a redo takes the last back, and a change clears them.
+    /// a redo takes the last back, and a change clears them. Leaving a
+    /// world is a change: what was undone there is not redone in another.
     fn follow_undone(&mut self, e: &Entry) {
+        let leaves = e.body().is_some_and(|b| b["op"] == "world");
         match e.kind() {
+            "view" if leaves => self.redo.clear(),
             "view" | "purge" => {}
             "undo" => self
                 .redo
