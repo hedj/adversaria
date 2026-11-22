@@ -224,8 +224,8 @@ when it ends.
 
 | Quasimode | Default keys | While on | When it ends |
 | --- | --- | --- | --- |
-| Leap forward | Right Alt (AltGr) | type a pattern: as each letter is typed, the cursor goes to the next item holding it, counted from where the Leap began, and stays at the last match if a letter matches nothing | the cursor stays where it is; back returns to where the Leap began. Erasing the pattern puts the cursor back |
-| Leap back | Left Alt | type a pattern: as Leap forward, to the previous item holding it | as Leap forward |
+| Leap down | Right Alt (AltGr) | type a pattern: as each letter is typed, the cursor goes to the next item down holding it, counted from where the Leap began, and stays at the last match if a letter matches nothing | the cursor stays where it is; back returns to where the Leap began. Erasing the pattern puts the cursor back |
+| Leap up | Left Alt | type a pattern: as Leap down, to the item above holding it | as Leap down |
 | Command | Left Ctrl | type a command line | the command runs on the item under the cursor |
 | Suppose | Super (either) | opens Command with `suppose ` typed: type a statement; the line below says what may come next in controlled English, whether it is a sentence of it, and if it breaks, where and how to mend it | the memex offers its readings of it (§ 3.2) |
 
@@ -1117,8 +1117,8 @@ defaults are below; `[[plumb]]`, which has no defaults here, is in § 2.3.
 
 ```toml
 [quasimodes]
-leap_forward = ["RightAlt", "IsoLevel3Shift"]
-leap_back = ["LeftAlt"]
+leap_down = ["RightAlt", "IsoLevel3Shift"]
+leap_up = ["LeftAlt"]
 command = ["LeftControl"]
 suppose = ["LeftSuper", "RightSuper"]
 
@@ -1181,7 +1181,7 @@ from a binding to a quasimode, unbind it as well:
 
 ```toml
 [quasimodes]
-leap_back = ["F1"]
+leap_up = ["F1"]
 
 [keys]
 F1 = ""
@@ -1192,7 +1192,7 @@ Examples:
 
 - A laptop whose desktop takes Super: `suppose = ["RightControl"]`
   (Right Ctrl has no job by default).
-- Keys only, no modifiers: `leap_forward = ["F11"]`, `leap_back = ["F12"]`,
+- Keys only, no modifiers: `leap_down = ["F11"]`, `leap_up = ["F12"]`,
   `command = ["Insert"]`. Tap them to latch if holding a function key is
   awkward.
 

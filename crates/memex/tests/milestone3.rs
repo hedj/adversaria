@@ -101,8 +101,8 @@ fn essay(dir: &std::path::Path) -> App {
     command(&mut app, "link 2 3 as supports");
     command(&mut app, "link 3 2 as cites");
     command(&mut app, "link 1.1 source 4 as cites");
-    hold(&mut app, Quasi::LeapForward, "timeline");
-    release(&mut app, Quasi::LeapForward);
+    hold(&mut app, Quasi::LeapDown, "timeline");
+    release(&mut app, Quasi::LeapDown);
     item(&mut app, "");
     tap(&mut app, Key::Tab);
     app.flush();
@@ -110,8 +110,8 @@ fn essay(dir: &std::path::Path) -> App {
     command(&mut app, "undo"); // the empty item stays; the transclusion goes after it
     command(&mut app, "redo");
     // Back to the first fact, as in the scene.
-    hold(&mut app, Quasi::LeapBack, "buran flew");
-    release(&mut app, Quasi::LeapBack);
+    hold(&mut app, Quasi::LeapUp, "buran flew");
+    release(&mut app, Quasi::LeapUp);
     app.flush();
     app
 }
@@ -128,9 +128,9 @@ fn scene_one_as_written() {
     let buran = "Buran flew once, unmanned, on 15 November 1988.";
     assert_eq!(cursor_text(&app), buran);
     let before = app.journal().entries().len();
-    hold(&mut app, Quasi::LeapForward, "dra");
+    hold(&mut app, Quasi::LeapDown, "dra");
     leap_held_lists_matches(&app, before);
-    release(&mut app, Quasi::LeapForward);
+    release(&mut app, Quasi::LeapDown);
     leap_released_lands_on_drakon(&app, before);
     the_right_pane_shows_drakons_links(&app);
     std::fs::remove_dir_all(&dir).unwrap();
@@ -150,7 +150,7 @@ fn leap_held_lists_matches(app: &App, before: usize) {
     let copy = "6. Timeline (chart) › DRAKON";
     assert!(shows(&s, copy), "the transcluded copy matches too");
     assert!(shows(&s, "the drafts of chapter 2"));
-    assert!(shows(&s, "LEAP  dra"));
+    assert!(shows(&s, "LEAP DOWN  dra"));
     let guide = "release Leap to go to the first match · Tab completes · Esc cancels · ? lists every match · Leap again repeats";
     assert!(shows(&s, guide));
     let written = app.journal().entries().len();
@@ -199,7 +199,7 @@ fn leap_recognition_listing_latching_and_repeat() {
     // again not repeating.
     let dir = temp("leap");
     let mut app = essay(&dir);
-    hold(&mut app, Quasi::LeapForward, "sour");
+    hold(&mut app, Quasi::LeapDown, "sour");
     tap(&mut app, Key::Tab);
     match &app.session.mode {
         Mode::Quasi(a) => assert_eq!(
@@ -208,10 +208,10 @@ fn leap_recognition_listing_latching_and_repeat() {
         ),
         m => panic!("{m:?}"),
     }
-    release(&mut app, Quasi::LeapForward);
+    release(&mut app, Quasi::LeapDown);
     assert_eq!(app.notebook.outline.text(app.cursor()), "Sources");
     // A tap latches; typing then Enter goes.
-    tap(&mut app, Key::Quasi(Quasi::LeapBack));
+    tap(&mut app, Key::Quasi(Quasi::LeapUp));
     assert!(matches!(&app.session.mode, Mode::Quasi(a) if a.latched()));
     typ(&mut app, "energia");
     tap(&mut app, Key::Enter);
@@ -222,8 +222,8 @@ fn leap_recognition_listing_latching_and_repeat() {
             .starts_with("Energia")
     );
     // Leap again repeats the last pattern: a tap to latch, a tap to go.
-    tap(&mut app, Key::Quasi(Quasi::LeapForward));
-    tap(&mut app, Key::Quasi(Quasi::LeapForward));
+    tap(&mut app, Key::Quasi(Quasi::LeapDown));
+    tap(&mut app, Key::Quasi(Quasi::LeapDown));
     assert!(
         app.notebook
             .outline
@@ -232,7 +232,7 @@ fn leap_recognition_listing_latching_and_repeat() {
         "the only match is where we are"
     );
     // ? lists every match.
-    hold(&mut app, Quasi::LeapForward, "o?");
+    hold(&mut app, Quasi::LeapDown, "o?");
     let s = screen(&app, 140, 60);
     let n = app.leap_matches("o", true).len();
     assert!(n > 5 && shows(&s, &format!("LEAP · {n} MATCHES")));
@@ -242,7 +242,7 @@ fn leap_recognition_listing_latching_and_repeat() {
             .count()
             >= n.min(50)
     );
-    release(&mut app, Quasi::LeapForward);
+    release(&mut app, Quasi::LeapDown);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -347,7 +347,7 @@ fn claim_with_dependents(name: &str) -> (Room, u64) {
     r.items(&["a claim", "independent work"]);
     let claim = r.app.notebook.outline.by_number("1").unwrap();
     r.command("link 1 2 as supports");
-    r.leap(Quasi::LeapBack, "claim");
+    r.leap(Quasi::LeapUp, "claim");
     r.typ(" (revised)");
     r.app.flush();
     (r, claim)
@@ -422,11 +422,11 @@ fn every_kind_of_action(app: &mut App) {
     typ(app, " Buran");
     command(app, "undo");
     command(app, "redo");
-    hold(app, Quasi::LeapForward, "open");
-    release(app, Quasi::LeapForward);
+    hold(app, Quasi::LeapDown, "open");
+    release(app, Quasi::LeapDown);
     command(app, "fold");
-    hold(app, Quasi::LeapForward, "energia");
-    release(app, Quasi::LeapForward);
+    hold(app, Quasi::LeapDown, "energia");
+    release(app, Quasi::LeapDown);
     command(app, "delete word");
     command(app, &format!("retract {}", last_of_kind(app, "link")));
     tap(app, Key::Enter);
@@ -596,9 +596,9 @@ impl Timer {
             self.time(app, Event::down(Key::Down));
         }
         self.typed(app, "typed");
-        self.time(app, Event::down(Key::Quasi(Quasi::LeapForward)));
+        self.time(app, Event::down(Key::Quasi(Quasi::LeapDown)));
         self.typed(app, "number 9876");
-        self.time(app, Event::up(Key::Quasi(Quasi::LeapForward)));
+        self.time(app, Event::up(Key::Quasi(Quasi::LeapDown)));
         self.time(app, Event::down(Key::Enter));
     }
 
@@ -650,8 +650,8 @@ fn command_steps() -> Vec<Step> {
         Box::new(|a| command(a, "redo")),
         Box::new(|a| command(a, "fold")),
         Box::new(|a| {
-            hold(a, Quasi::LeapForward, "sec");
-            release(a, Quasi::LeapForward)
+            hold(a, Quasi::LeapDown, "sec");
+            release(a, Quasi::LeapDown)
         }),
         Box::new(|a| command(a, "link 1 1.1 as supports")),
         Box::new(|a| command(a, "switch")),
@@ -687,11 +687,11 @@ fn draws_at_any_size() {
     // 0 x 0, found by the terminal's test; a window may be one cell).
     let dir = temp("sizes");
     let mut app = essay(&dir);
-    hold(&mut app, Quasi::LeapForward, "dra");
+    hold(&mut app, Quasi::LeapDown, "dra");
     for (w, h) in [(0, 0), (1, 1), (10, 3), (20, 5), (200, 4), (3, 100)] {
         screen(&app, w, h);
     }
-    release(&mut app, Quasi::LeapForward);
+    release(&mut app, Quasi::LeapDown);
     for (w, h) in [(0, 0), (1, 1), (10, 3), (20, 5), (200, 4), (3, 100)] {
         screen(&app, w, h);
     }
@@ -812,15 +812,15 @@ fn leaping_again_after_reopening_repeats_the_last_pattern() {
     // holds it.
     let dir = temp("leap-again");
     let mut app = essay(&dir);
-    hold(&mut app, Quasi::LeapBack, "energia");
-    release(&mut app, Quasi::LeapBack);
+    hold(&mut app, Quasi::LeapUp, "energia");
+    release(&mut app, Quasi::LeapUp);
     app.flush();
     drop(app);
     let mut app = App::open(&dir).unwrap();
     tap(&mut app, Key::Down);
     assert!(!app.text_of(app.cursor()).starts_with(&['E', 'n', 'e']));
-    tap(&mut app, Key::Quasi(Quasi::LeapForward));
-    tap(&mut app, Key::Quasi(Quasi::LeapForward));
+    tap(&mut app, Key::Quasi(Quasi::LeapDown));
+    tap(&mut app, Key::Quasi(Quasi::LeapDown));
     assert!(app.text_of(app.cursor()).starts_with(&['E', 'n', 'e']));
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -832,7 +832,7 @@ fn focus_lost_with_a_quasimode_key_alone_held_leaves_it_doing_nothing() {
     let dir = temp("focus-alone");
     let mut app = essay(&dir);
     let before = app.journal().entries().len();
-    hold(&mut app, Quasi::LeapBack, "");
+    hold(&mut app, Quasi::LeapUp, "");
     app.focus_lost();
     assert_eq!(app.session.mode, Mode::Normal);
     assert_eq!(app.journal().entries().len(), before);
@@ -845,10 +845,10 @@ fn focus_lost_after_typing_in_a_quasimode_keeps_it_open_until_enter() {
     // never released here.
     let dir = temp("focus-typed");
     let mut app = essay(&dir);
-    hold(&mut app, Quasi::LeapForward, "dra");
+    hold(&mut app, Quasi::LeapDown, "dra");
     app.focus_lost();
     assert!(matches!(&app.session.mode, Mode::Quasi(a) if a.latched() && a.input == "dra"));
-    release(&mut app, Quasi::LeapForward);
+    release(&mut app, Quasi::LeapDown);
     assert!(
         matches!(&app.session.mode, Mode::Quasi(_)),
         "a late release does not end it"

@@ -47,9 +47,9 @@ fn typ(app: &mut App, text: &str) {
 
 /// Leap to the next item whose text holds a pattern; that item.
 fn leap(app: &mut App, pattern: &str) -> u64 {
-    app.handle(Event::down(Key::Quasi(Quasi::LeapForward)));
+    app.handle(Event::down(Key::Quasi(Quasi::LeapDown)));
     typ(app, pattern);
-    app.handle(Event::up(Key::Quasi(Quasi::LeapForward)));
+    app.handle(Event::up(Key::Quasi(Quasi::LeapDown)));
     app.cursor()
 }
 

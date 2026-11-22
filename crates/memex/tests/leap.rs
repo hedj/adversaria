@@ -17,7 +17,7 @@ fn room(name: &str) -> Room {
 
 /// What recognition makes of a pattern typed into a leap.
 fn recognised(r: &mut Room, pattern: &str) -> String {
-    r.hold(Quasi::LeapForward, pattern);
+    r.hold(Quasi::LeapDown, pattern);
     r.tap(&[Key::Tab]);
     match &r.app.session.mode {
         Mode::Quasi(a) => a.input.clone(),
@@ -28,14 +28,14 @@ fn recognised(r: &mut Room, pattern: &str) -> String {
 #[test]
 fn leaping_back_finds_the_nearest_match_before_the_cursor() {
     let mut r = room("back");
-    r.leap(Quasi::LeapBack, "a");
+    r.leap(Quasi::LeapUp, "a");
     assert_eq!(r.here(), "a2");
 }
 
 #[test]
 fn leaping_forward_wraps_to_the_first_match() {
     let mut r = room("forward");
-    r.leap(Quasi::LeapForward, "a");
+    r.leap(Quasi::LeapDown, "a");
     assert_eq!(r.here(), "a1");
 }
 
@@ -79,7 +79,7 @@ fn a_pattern_whose_small_letters_are_longer_lists_without_a_crash() {
     // a character of the item's text, and the memex panicked.
     let mut r = Room::new("leap-dotted");
     r.items(&["ai\u{307}b", "plain"]);
-    r.hold(Quasi::LeapForward, "İ");
+    r.hold(Quasi::LeapDown, "İ");
     let lines = r.lines_at(80, 12);
     assert!(
         lines.iter().any(|l| l.contains("LEAP · 1 MATCHES")),
@@ -99,7 +99,7 @@ fn listing(name: &str) -> Room {
     for k in 0..6 {
         r.items(&["", &format!("energy {k}")]);
     }
-    r.hold(Quasi::LeapForward, "ener");
+    r.hold(Quasi::LeapDown, "ener");
     r
 }
 
@@ -171,7 +171,7 @@ fn the_cursor_moves_to_the_first_match_as_each_letter_is_typed() {
     // Catches a Leap that moves only when it ends: the design (Raskin's
     // LEAP) moves the cursor as each letter is typed.
     let (mut r, [_, a, _]) = ener("leap-incremental");
-    r.hold(Quasi::LeapForward, "E");
+    r.hold(Quasi::LeapDown, "E");
     assert_eq!(r.app.cursor(), a, "after one letter, still held");
 }
 
@@ -180,11 +180,11 @@ fn each_letter_counts_matches_from_where_the_leap_began() {
     // Catches a search from the moved cursor: the second letter would
     // pass over "Ener a", where the cursor already is, to "Ener b".
     let (mut r, [_, a, _]) = ener("leap-from-start");
-    r.hold(Quasi::LeapForward, "En");
+    r.hold(Quasi::LeapDown, "En");
     assert_eq!(r.app.cursor(), a);
     r.typ("er b");
     assert_eq!(r.app.cursor(), r.outline().in_order()[2]);
-    r.release(Quasi::LeapForward);
+    r.release(Quasi::LeapDown);
     r.command("back");
     assert_eq!(r.app.cursor(), r.outline().in_order()[0], "back to Alpha");
 }
@@ -192,14 +192,14 @@ fn each_letter_counts_matches_from_where_the_leap_began() {
 #[test]
 fn with_no_match_the_cursor_stays_at_the_last() {
     let (mut r, [_, a, _]) = ener("leap-no-match");
-    r.hold(Quasi::LeapForward, "Enerx");
+    r.hold(Quasi::LeapDown, "Enerx");
     assert_eq!(r.app.cursor(), a);
 }
 
 #[test]
 fn erasing_the_pattern_or_leaving_puts_the_cursor_back() {
     let (mut r, [alpha, _, _]) = ener("leap-leave");
-    r.tap(&[Key::Quasi(Quasi::LeapForward)]);
+    r.tap(&[Key::Quasi(Quasi::LeapDown)]);
     r.typ("E");
     r.tap(&[Key::Backspace]);
     assert_eq!(r.app.cursor(), alpha, "nothing typed");
@@ -221,7 +221,7 @@ fn the_matches_pane_keeps_the_list_and_where_the_cursor_is_in_it() {
     // Catches matches that vanish once a Leap ends: the third review's
     // fifth finding, working through fourteen matches by leaping again.
     let (mut r, [_, a, b]) = ener("leap-matches-pane");
-    r.leap(Quasi::LeapForward, "ener");
+    r.leap(Quasi::LeapDown, "ener");
     r.command("pane matches");
     assert!(
         r.shows("MATCHES OF “ener” · 2 · at 1 of 2"),
@@ -249,7 +249,7 @@ fn before_any_leap_the_matches_pane_says_how_to_fill_it() {
 fn a_reopened_notebook_keeps_the_matches_pane() {
     // Catches a pane kind the view entry names but replay does not read.
     let (mut r, _) = ener("leap-matches-replay");
-    r.leap(Quasi::LeapForward, "ener");
+    r.leap(Quasi::LeapDown, "ener");
     r.command("pane matches");
     r.app.flush();
     let again = support::replayed(&r.dir);
@@ -266,7 +266,7 @@ fn near(name: &str, pattern: &str) -> Room {
     r.items(&["Alpha", "Korolev's notes"]);
     let first = r.outline().in_order()[0];
     r.put_cursor(first);
-    r.tap(&[Key::Quasi(Quasi::LeapForward)]);
+    r.tap(&[Key::Quasi(Quasi::LeapDown)]);
     r.typ(pattern);
     r
 }
@@ -314,7 +314,7 @@ fn enter_finds_what_it_would_make_rather_than_make_it_again() {
     // making a second "a3", the text trimmed (the code review, F-B7).
     let mut r = room("leap-trailing-space");
     r.put_cursor(r.outline().in_order()[0]);
-    r.hold(Quasi::LeapForward, "a3 ");
+    r.hold(Quasi::LeapDown, "a3 ");
     r.tap(&[Key::Enter]);
     assert_eq!(r.outline().in_order().len(), 4, "nothing made");
     assert_eq!(r.here(), "a3");

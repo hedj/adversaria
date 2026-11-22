@@ -70,7 +70,7 @@ fn a_nested_item_shows_its_address_and_the_cursor_follows_it() {
     use ratatui::{Terminal, backend::Backend, backend::TestBackend};
     let mut r = Room::new("nested-address");
     r.items(&["Alpha", "Beta"]);
-    r.leap(Quasi::LeapBack, "Beta");
+    r.leap(Quasi::LeapUp, "Beta");
     r.tap(&[memex::app::Key::Tab]);
     assert!(r.shows("• 1.1. Beta"), "{:?}", r.lines());
     let mut t = Terminal::new(TestBackend::new(160, 40)).unwrap();
@@ -85,11 +85,11 @@ fn a_folded_item_shows_how_many_items_it_hides() {
     // Catches a folded item drawn as open, or without its count.
     let mut r = Room::new("folded");
     r.items(&["Alpha", "Beta", "Gamma"]);
-    r.leap(Quasi::LeapBack, "Gamma");
+    r.leap(Quasi::LeapUp, "Gamma");
     r.tap(&[memex::app::Key::Tab]);
-    r.leap(Quasi::LeapBack, "Beta");
+    r.leap(Quasi::LeapUp, "Beta");
     r.tap(&[memex::app::Key::Tab]);
-    r.leap(Quasi::LeapBack, "Alpha");
+    r.leap(Quasi::LeapUp, "Alpha");
     r.command("fold");
     assert!(r.shows("▶ 1. Alpha 2"), "{:?}", r.lines());
 }
@@ -144,7 +144,7 @@ fn charted(name: &str) -> Room {
     let mut r = Room::new(name);
     r.items(&["rent", "chart"]);
     r.command("layer bar(x(C), y(V)) where cell(C, V)");
-    r.leap(Quasi::LeapBack, "rent");
+    r.leap(Quasi::LeapUp, "rent");
     r.command("fact cell(rent, 1200)");
     r.app.evaluate().unwrap();
     r
@@ -269,7 +269,7 @@ fn the_first_steps_name_the_keys_configured() {
     // moved them: here Suppose to Right Alt, Leap to Right Ctrl, and
     // Command to F11.
     let mut r = Room::new("first-steps-keys");
-    let toml = "[quasimodes]\nsuppose = [\"RightAlt\", \"IsoLevel3Shift\"]\nleap_forward = [\"RightControl\"]\ncommand = [\"F11\"]\n";
+    let toml = "[quasimodes]\nsuppose = [\"RightAlt\", \"IsoLevel3Shift\"]\nleap_down = [\"RightControl\"]\ncommand = [\"F11\"]\n";
     r.app.session.keys = memex::config::Config::parse(toml).unwrap().keys();
     assert!(
         r.shows("tap F11 (Command), type a command"),

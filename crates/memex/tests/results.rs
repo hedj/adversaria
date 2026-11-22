@@ -60,7 +60,7 @@ fn a_result_is_its_name_value_uncertainty_and_unit() {
         &results(r#"{"name": "x", "value": 1.5, "uncertainty": 0.1, "unit": "s"}"#),
     );
     assert_eq!(said, "imported the results of analysis.py@abc");
-    r.leap(memex::app::Quasi::LeapForward, "x =");
+    r.leap(memex::app::Quasi::LeapDown, "x =");
     assert_eq!(r.here(), "x = 1.5 ± 0.1 s");
 }
 

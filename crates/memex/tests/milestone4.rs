@@ -39,9 +39,9 @@ fn item(app: &mut App, text: &str) {
 }
 
 fn leap(app: &mut App, pattern: &str) {
-    app.handle(Event::down(Key::Quasi(Quasi::LeapForward)));
+    app.handle(Event::down(Key::Quasi(Quasi::LeapDown)));
     typ(app, pattern);
-    app.handle(Event::up(Key::Quasi(Quasi::LeapForward)));
+    app.handle(Event::up(Key::Quasi(Quasi::LeapDown)));
     assert!(
         app.session.message.is_empty(),
         "leap {pattern}: {}",

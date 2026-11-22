@@ -100,11 +100,11 @@ fn rents_defined(name: &str, items: &[&[&str]]) -> Room {
         r.items(&["", "defined"]);
         definitions.iter().for_each(|d| r.command(d));
     }
-    r.leap(Quasi::LeapBack, "rent again");
+    r.leap(Quasi::LeapUp, "rent again");
     r.command("fact cell(rent, 1300)");
-    r.leap(Quasi::LeapBack, "rent");
+    r.leap(Quasi::LeapUp, "rent");
     r.command("fact cell(rent, 1200)");
-    r.leap(Quasi::LeapForward, "rent again");
+    r.leap(Quasi::LeapDown, "rent again");
     r.app.flush();
     r.app.evaluate().unwrap();
     r
@@ -162,7 +162,7 @@ fn over_the_limit(name: &str) -> Room {
     let mut r = Room::new(name);
     r.items(&["rent", "food"]);
     r.command("fact cell(food, 300)");
-    r.leap(Quasi::LeapBack, "rent");
+    r.leap(Quasi::LeapUp, "rent");
     r.command("fact cell(rent, 1200)");
     r.command("constraint limit: false :- cell(C, R), R > 1000.");
     r.app.flush();
@@ -288,7 +288,7 @@ fn a_finding_whose_facts_share_two_arguments_is_keyed_by_both() {
     let one_price = "constraint one price: false :- price(I, M, A), price(I, M, B), A \\= B.";
     let mut r = rents_with("two-keys", &[one_price]);
     r.command("fact price(rent, june, 1300)");
-    r.leap(Quasi::LeapBack, "rent");
+    r.leap(Quasi::LeapUp, "rent");
     r.command("fact price(rent, june, 1200)");
     r.app.flush();
     r.app.evaluate().unwrap();

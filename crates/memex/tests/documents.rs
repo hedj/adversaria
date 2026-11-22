@@ -172,7 +172,7 @@ fn a_new_block_stays_with_a_document_the_user_moved() {
     let mut r = Room::new("rev-moved");
     r.items(&["holder"]);
     import(&mut r, "d.md", "# A\n\nText.\n");
-    r.leap(memex::app::Quasi::LeapForward, "A");
+    r.leap(memex::app::Quasi::LeapDown, "A");
     r.tap(&[memex::app::Key::Tab]);
     let after = revised_again(&mut r, "Intro text.\n\n# A\n\nText.\n");
     assert_eq!(

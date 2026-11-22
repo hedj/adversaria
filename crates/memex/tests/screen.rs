@@ -20,7 +20,7 @@ fn the_foot_shows_a_held_quasimode_in_a_supposition_too() {
 fn either_leap_lists_its_matches_over_the_outline() {
     let mut room = Room::new("screen-leaps");
     room.items(&["Alpha", "Beta"]);
-    for q in [Quasi::LeapForward, Quasi::LeapBack] {
+    for q in [Quasi::LeapDown, Quasi::LeapUp] {
         room.hold(q, "Al");
         assert!(room.shows("┌"), "{q:?}");
         room.release(q);
@@ -687,7 +687,7 @@ fn a_quasimode_just_entered_says_a_release_runs_only_after_typing() {
             "or type and release Command to run on the target",
         ),
         (
-            Quasi::LeapForward,
+            Quasi::LeapDown,
             "or type and release Leap to go to the first match",
         ),
         (

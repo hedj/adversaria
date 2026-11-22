@@ -447,30 +447,30 @@ mod tests {
     }
 
     fn remapped() -> Config {
-        let toml = "[quasimodes]\nleap_forward = \"F12\"\n[keys]\nInsert = \"quit\"\n";
+        let toml = "[quasimodes]\nleap_down = \"F12\"\n[keys]\nInsert = \"quit\"\n";
         Config::parse(toml).unwrap()
     }
 
     #[test]
-    fn right_alt_released_ends_leap_forward() {
+    fn right_alt_released_ends_leap_down() {
         // Catches a release read as a press, or Right Alt not Leap's.
         let k = named_key(KeyCode::AltRight, NamedKey::Alt);
         let e = map_key(&released(&k), false, &Config::default()).unwrap();
         assert_eq!(
             e,
             Event {
-                key: Key::Quasi(Quasi::LeapForward),
+                key: Key::Quasi(Quasi::LeapDown),
                 press: Press::Up
             }
         );
     }
 
     #[test]
-    fn right_alt_made_alt_graph_by_the_layout_is_still_leap_forward() {
+    fn right_alt_made_alt_graph_by_the_layout_is_still_leap_down() {
         // Catches AltGr (IsoLevel3Shift) missed where the layout has one.
         let k = named_key(KeyCode::AltRight, NamedKey::AltGraph);
         let e = map_key(&k, false, &Config::default()).unwrap();
-        assert_eq!(e.key, Key::Quasi(Quasi::LeapForward));
+        assert_eq!(e.key, Key::Quasi(Quasi::LeapDown));
     }
 
     #[test]
@@ -555,7 +555,7 @@ mod tests {
     fn a_quasimode_moved_to_a_function_key_reports_its_release() {
         // Catches F12 not Leap's when the configuration moves Leap there.
         let f12 = released(&named_key(KeyCode::F12, NamedKey::F12));
-        let leap_up = Event::up(Key::Quasi(Quasi::LeapForward));
+        let leap_up = Event::up(Key::Quasi(Quasi::LeapDown));
         assert_eq!(map_key(&f12, false, &remapped()), Some(leap_up));
     }
 

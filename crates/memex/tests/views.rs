@@ -814,7 +814,7 @@ fn a_layer_whose_goal_raises_an_error_says_so() {
     r.items(&["rent", "chart"]);
     r.command("layer bar(x(C), y(V)) where cell(C, R), V is R + foo");
     let layer = r.last("edit");
-    r.leap(Quasi::LeapBack, "rent");
+    r.leap(Quasi::LeapUp, "rent");
     r.command("fact cell(rent, 1200)");
     r.app.flush();
     r.app.evaluate().unwrap();
@@ -830,7 +830,7 @@ fn a_layer_that_cannot_answer_is_noted_under_the_marks_of_the_others() {
     r.items(&["rent", "chart"]);
     r.command("layer bar(x(C), y(V)) where cell(C, V)");
     r.command("layer bar(x(C), y(V)) where cell(C, R), V is R + foo");
-    r.leap(Quasi::LeapBack, "rent");
+    r.leap(Quasi::LeapUp, "rent");
     r.command("fact cell(rent, 1200)");
     r.app.flush();
     r.app.evaluate().unwrap();

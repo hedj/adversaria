@@ -27,8 +27,8 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Quasi {
-    LeapForward,
-    LeapBack,
+    LeapDown,
+    LeapUp,
     #[default]
     Command,
     Suppose,
@@ -37,16 +37,16 @@ pub enum Quasi {
 impl Quasi {
     /// Every quasimode, in order.
     pub const ALL: [Quasi; 4] = [
-        Quasi::LeapForward,
-        Quasi::LeapBack,
+        Quasi::LeapDown,
+        Quasi::LeapUp,
         Quasi::Command,
         Quasi::Suppose,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
-            Quasi::LeapForward => "LEAP",
-            Quasi::LeapBack => "LEAP BACK",
+            Quasi::LeapDown => "LEAP DOWN",
+            Quasi::LeapUp => "LEAP UP",
             Quasi::Command => "COMMAND",
             Quasi::Suppose => "SUPPOSE",
         }
@@ -386,12 +386,12 @@ impl Kind {
     /// The kind of a quasimode entered with the cursor on an item.
     pub(crate) fn of(q: Quasi, from: u64) -> Kind {
         match q {
-            Quasi::LeapForward => Kind::Leap {
+            Quasi::LeapDown => Kind::Leap {
                 forward: true,
                 from,
                 near: None,
             },
-            Quasi::LeapBack => Kind::Leap {
+            Quasi::LeapUp => Kind::Leap {
                 forward: false,
                 from,
                 near: None,
@@ -445,8 +445,8 @@ impl Active {
     /// Which quasimode it is.
     pub fn q(&self) -> Quasi {
         match self.kind {
-            Kind::Leap { forward: true, .. } => Quasi::LeapForward,
-            Kind::Leap { forward: false, .. } => Quasi::LeapBack,
+            Kind::Leap { forward: true, .. } => Quasi::LeapDown,
+            Kind::Leap { forward: false, .. } => Quasi::LeapUp,
             Kind::Command(_) => Quasi::Command,
         }
     }
@@ -515,8 +515,8 @@ impl Active {
     /// A quasimode whose key is held, nothing typed yet.
     pub(crate) fn held(kind: Kind) -> Active {
         let key = match kind {
-            Kind::Leap { forward: true, .. } => Quasi::LeapForward,
-            Kind::Leap { forward: false, .. } => Quasi::LeapBack,
+            Kind::Leap { forward: true, .. } => Quasi::LeapDown,
+            Kind::Leap { forward: false, .. } => Quasi::LeapUp,
             Kind::Command(_) => Quasi::Command,
         };
         Active::held_on(key, kind, "")

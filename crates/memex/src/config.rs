@@ -32,8 +32,8 @@ pub const DEFAULT_TOML: &str = r#"# Adversaria: key configuration. Copy to ~/.co
 # Each quasimode is held (or tapped, to latch it) on any of its keys. A
 # quasimode named here replaces its default keys; the others keep theirs.
 [quasimodes]
-leap_forward = ["RightAlt", "IsoLevel3Shift"]
-leap_back = ["LeftAlt"]
+leap_down = ["RightAlt", "IsoLevel3Shift"]
+leap_up = ["LeftAlt"]
 command = ["LeftControl"]
 suppose = ["LeftSuper", "RightSuper"]
 
@@ -329,14 +329,14 @@ fn plumb_rule(t: &toml::Table) -> Result<Rule, String> {
 fn no_quasimode(name: &str) -> String {
     match name {
         "scope" => "[quasimodes] has no scope: it was removed; `delete word` deletes the word at the cursor, and Right Ctrl is free".into(),
-        _ => format!("[quasimodes] has no {name}: the quasimodes are leap_forward, leap_back, command, suppose"),
+        _ => format!("[quasimodes] has no {name}: the quasimodes are leap_down, leap_up, command, suppose"),
     }
 }
 
 fn quasi_named(name: &str) -> Option<Quasi> {
     match name {
-        "leap_forward" => Some(Quasi::LeapForward),
-        "leap_back" => Some(Quasi::LeapBack),
+        "leap_down" | "leap_forward" => Some(Quasi::LeapDown),
+        "leap_up" | "leap_back" => Some(Quasi::LeapUp),
         "command" => Some(Quasi::Command),
         "suppose" => Some(Quasi::Suppose),
         _ => None,
@@ -488,8 +488,8 @@ impl Config {
     fn defaults_for(q: Quasi) -> Vec<QuasiKey> {
         let d: toml::Table = toml::from_str(DEFAULT_TOML).unwrap();
         let name = match q {
-            Quasi::LeapForward => "leap_forward",
-            Quasi::LeapBack => "leap_back",
+            Quasi::LeapDown => "leap_down",
+            Quasi::LeapUp => "leap_up",
             Quasi::Command => "command",
             Quasi::Suppose => "suppose",
         };
@@ -552,18 +552,18 @@ mod tests {
         // works for.
         let defaults = Config::default().keys();
         assert_eq!(defaults.quasi_key(Quasi::Command), "Left Ctrl");
-        assert_eq!(defaults.quasi_key(Quasi::LeapForward), "Right Alt");
+        assert_eq!(defaults.quasi_key(Quasi::LeapDown), "Right Alt");
         assert_eq!(defaults.quasi_key(Quasi::Suppose), "Super");
-        let toml = "[quasimodes]\nsuppose = [\"RightAlt\", \"IsoLevel3Shift\"]\nleap_forward = [\"RightControl\"]\nleap_back = [\"Menu\"]\n";
+        let toml = "[quasimodes]\nsuppose = [\"RightAlt\", \"IsoLevel3Shift\"]\nleap_down = [\"RightControl\"]\nleap_up = [\"Menu\"]\n";
         let moved = Config::parse(toml).unwrap().keys();
         assert_eq!(moved.quasi_key(Quasi::Suppose), "Right Alt");
-        assert_eq!(moved.quasi_key(Quasi::LeapForward), "Right Ctrl");
-        assert_eq!(moved.quasi_key(Quasi::LeapBack), "Menu");
+        assert_eq!(moved.quasi_key(Quasi::LeapDown), "Right Ctrl");
+        assert_eq!(moved.quasi_key(Quasi::LeapUp), "Menu");
         let altgr = Config::parse(
-            "[quasimodes]\nleap_forward = [\"IsoLevel3Shift\"]\nsuppose = [\"RightSuper\"]\n",
+            "[quasimodes]\nleap_down = [\"IsoLevel3Shift\"]\nsuppose = [\"RightSuper\"]\n",
         );
         let altgr = altgr.unwrap().keys();
-        assert_eq!(altgr.quasi_key(Quasi::LeapForward), "AltGr");
+        assert_eq!(altgr.quasi_key(Quasi::LeapDown), "AltGr");
         assert_eq!(altgr.quasi_key(Quasi::Suppose), "Right Super");
     }
 
@@ -585,7 +585,7 @@ mod tests {
     fn defaults() {
         // Catches defaults that differ from what the guide and the tests use.
         let c = Config::default();
-        assert_eq!(quasi(&c, "RightAlt"), Some(Quasi::LeapForward));
+        assert_eq!(quasi(&c, "RightAlt"), Some(Quasi::LeapDown));
         assert_eq!(quasi(&c, "LeftControl"), Some(Quasi::Command));
         assert_eq!(bound(&c, "F10"), Some("quit"));
     }
@@ -626,18 +626,30 @@ mod tests {
     }
 
     #[test]
+    fn the_leaps_are_down_and_up_and_take_their_old_names_too() {
+        // Catches a configuration written before the rename (docs/concepts.md,
+        // decision 7) refused, or the new names unknown.
+        for (down, up) in [("leap_down", "leap_up"), ("leap_forward", "leap_back")] {
+            let c = Config::parse(&format!("[quasimodes]\n{down} = \"F11\"\n{up} = \"F12\"\n"));
+            let c = c.unwrap_or_else(|e| panic!("{down}: {e}"));
+            assert_eq!(quasi(&c, "F11"), Some(Quasi::LeapDown), "{down}");
+            assert_eq!(quasi(&c, "F12"), Some(Quasi::LeapUp), "{up}");
+        }
+    }
+
+    #[test]
     fn a_remap_replaces_only_what_it_names() {
         // Catches a configured key ignored, a default kept beside its
         // replacement, or the others losing their defaults.
         let c = Config::parse(
-            "[quasimodes]\nleap_forward = \"F12\"\n[keys]\nInsert = \"pane suggestions\"\n",
+            "[quasimodes]\nleap_down = \"F12\"\n[keys]\nInsert = \"pane suggestions\"\n",
         )
         .unwrap();
-        assert_eq!(quasi(&c, "F12"), Some(Quasi::LeapForward));
+        assert_eq!(quasi(&c, "F12"), Some(Quasi::LeapDown));
         assert_eq!(quasi(&c, "RightAlt"), None, "replaced, not added");
         assert_eq!(
             quasi(&c, "LeftAlt"),
-            Some(Quasi::LeapBack),
+            Some(Quasi::LeapUp),
             "the others keep their defaults"
         );
         assert_eq!(bound(&c, "Insert"), Some("pane suggestions"));
@@ -647,7 +659,7 @@ mod tests {
     fn a_shifted_key_is_bound_but_holds_no_quasimode() {
         // Catches a quasimode held on Shift+Up: Shift let go first, the
         // release would be plain Up's, and the quasimode would stay held.
-        let err = Config::parse("[quasimodes]\nleap_back = \"ShiftUp\"\n").unwrap_err();
+        let err = Config::parse("[quasimodes]\nleap_up = \"ShiftUp\"\n").unwrap_err();
         assert!(err.contains("ShiftUp is two keys"), "{err}");
         let c = Config::parse("[keys]\nShiftUp = \"back\"\n").unwrap();
         assert_eq!(bound(&c, "ShiftUp"), Some("back"));
@@ -657,9 +669,9 @@ mod tests {
     fn a_binding_replaces_or_unbinds_its_default() {
         // Catches "" not unbinding, an unbound key not free for a
         // quasimode, or a binding added beside its default.
-        let c = Config::parse("[keys]\nF1 = \"\"\n[quasimodes]\nleap_back = \"F1\"\n").unwrap();
+        let c = Config::parse("[keys]\nF1 = \"\"\n[quasimodes]\nleap_up = \"F1\"\n").unwrap();
         assert_eq!(bound(&c, "F1"), None);
-        assert_eq!(quasi(&c, "F1"), Some(Quasi::LeapBack));
+        assert_eq!(quasi(&c, "F1"), Some(Quasi::LeapUp));
         let c = Config::parse("[keys]\nF10 = \"export out.md\"\n").unwrap();
         assert_eq!(bound(&c, "F10"), Some("export out.md"), "replaced");
     }
@@ -732,7 +744,7 @@ mod tests {
             ),
             ("[keys]\nF2 = \"frobnicate\"\n", "no command “frobnicate”"),
             ("[keys]\nF2 = 3\n", "a command line"),
-            ("[quasimodes]\nleap_back = \"F1\"\n", "two jobs"),
+            ("[quasimodes]\nleap_up = \"F1\"\n", "two jobs"),
             ("[quasimodes]\nsuppose = \"LeftAlt\"\n", "two jobs"),
             (
                 "[quasimodes]\nscope = \"Menu\"\n",
@@ -740,7 +752,7 @@ mod tests {
             ),
             ("[colours]\nx = 1\n", "no section [colours]"),
             ("[keys\n", "TOML parse error"),
-            ("[quasimodes]\nleap_back = []\n", "at least one key"),
+            ("[quasimodes]\nleap_up = []\n", "at least one key"),
             ("[mouse]\nenabled = \"yes\"\n", "true or false"),
             ("[mouse]\nwheel = true\n", "has no wheel"),
         ];

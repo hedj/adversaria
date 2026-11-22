@@ -2062,7 +2062,7 @@ fn list_lines(app: &App, a: &Active, inside: (u16, u16)) -> Vec<Line<'static>> {
     match a.q() {
         Quasi::Command if a.sentence().is_some() => suppose_lines(a),
         Quasi::Command | Quasi::Suppose => commands::command_lines(app, &a.input, inside),
-        Quasi::LeapForward | Quasi::LeapBack => leap_lines(app, a),
+        Quasi::LeapDown | Quasi::LeapUp => leap_lines(app, a),
     }
 }
 
@@ -2256,7 +2256,7 @@ fn near_warning(n: &crate::app::Near) -> String {
 /// rest can be typed without holding; or what to do while holding.
 fn quasi_fresh(q: Quasi) -> String {
     let holding = match q {
-        Quasi::LeapForward | Quasi::LeapBack => {
+        Quasi::LeapDown | Quasi::LeapUp => {
             "or type and release Leap to go to the first match · ? lists every match · Leap again repeats"
         }
         Quasi::Command => {
@@ -2273,7 +2273,7 @@ fn quasi_fresh(q: Quasi) -> String {
 fn quasi_doing(a: &Active) -> String {
     let end = release_text(a);
     match a.q() {
-        Quasi::LeapForward | Quasi::LeapBack => format!(
+        Quasi::LeapDown | Quasi::LeapUp => format!(
             "{end} to go to the first match · Tab completes · Esc cancels · ? lists every match · Leap again repeats"
         ),
         _ if a.sentence().is_some() => sentence_doing(a, &end),
@@ -2310,7 +2310,7 @@ fn release_text(a: &Active) -> String {
     let name = match a.key {
         Quasi::Command => "Command",
         Quasi::Suppose => "Suppose",
-        Quasi::LeapForward | Quasi::LeapBack => "Leap",
+        Quasi::LeapDown | Quasi::LeapUp => "Leap",
     };
     format!("release {name}")
 }
@@ -3914,8 +3914,8 @@ fn command_step(app: &App) -> String {
 fn leap_step(app: &App) -> String {
     let keys = &app.session.keys;
     let (leap, back) = (
-        keys.quasi_key(Quasi::LeapForward),
-        keys.quasi_key(Quasi::LeapBack),
+        keys.quasi_key(Quasi::LeapDown),
+        keys.quasi_key(Quasi::LeapUp),
     );
     format!("hold {leap} (Leap) and type, to jump to an item with that text · {back} jumps back")
 }

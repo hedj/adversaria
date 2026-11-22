@@ -85,7 +85,7 @@ fn every_key_name_is_listed() {
         );
     }
     // Every other quasimode and binding moved out of the way first.
-    let clear = "leap_forward = [\"F30\"]\nleap_back = [\"F31\"]\nsuppose = [\"F33\"]\n[keys]\nF1 = \"\"\nF2 = \"\"\nF3 = \"\"\nF4 = \"\"\nF6 = \"\"\nF10 = \"\"\n";
+    let clear = "leap_down = [\"F30\"]\nleap_up = [\"F31\"]\nsuppose = [\"F33\"]\n[keys]\nF1 = \"\"\nF2 = \"\"\nF3 = \"\"\nF4 = \"\"\nF6 = \"\"\nF10 = \"\"\n";
     for n in names {
         let r = Config::parse(&format!("[quasimodes]\ncommand = [\"{n}\"]\n{clear}"));
         assert!(
@@ -114,7 +114,7 @@ fn the_guides_examples_are_accepted() {
     }
     let defaults = blocks
         .iter()
-        .filter(|b| b.contains("[quasimodes]\nleap_forward"));
+        .filter(|b| b.contains("[quasimodes]\nleap_down"));
     let defaults: Vec<_> = defaults.collect();
     assert_eq!(defaults.len(), 1, "one block shows the defaults");
     assert_eq!(Config::parse(defaults[0]).unwrap(), Config::default());

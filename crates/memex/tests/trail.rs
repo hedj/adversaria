@@ -31,7 +31,7 @@ fn back_returns_from_a_follow_and_forward_goes_again() {
 #[test]
 fn a_leap_and_a_go_are_jumps_back_returns_from() {
     let (mut r, [buran, energia, polyus]) = linked("trail-leap-go");
-    r.leap(Quasi::LeapForward, "Polyus");
+    r.leap(Quasi::LeapDown, "Polyus");
     assert_eq!(r.app.cursor(), polyus);
     r.command("go 2");
     assert_eq!(r.app.cursor(), energia);

@@ -221,7 +221,7 @@ impl App {
                 }
             }
             Key::Tab => match a.q() {
-                Quasi::LeapForward | Quasi::LeapBack => a.input = self.leap_complete(&a),
+                Quasi::LeapDown | Quasi::LeapUp => a.input = self.leap_complete(&a),
                 _ if a.apply_repair() => {}
                 _ => a.input = complete_command(&a.input),
             },
@@ -232,7 +232,7 @@ impl App {
                 self.session.message.clear();
                 return self.leave(a);
             }
-            Key::Enter if matches!(a.q(), Quasi::LeapForward | Quasi::LeapBack) => {
+            Key::Enter if matches!(a.q(), Quasi::LeapDown | Quasi::LeapUp) => {
                 return self.leap_or_create(a);
             }
             Key::Enter => return self.finish(a),
@@ -318,8 +318,8 @@ impl App {
     fn finish(&mut self, a: Active) -> Mode {
         self.leap_return(&a);
         match a.q() {
-            Quasi::LeapForward | Quasi::LeapBack => {
-                let forward = a.q() == Quasi::LeapForward;
+            Quasi::LeapDown | Quasi::LeapUp => {
+                let forward = a.q() == Quasi::LeapDown;
                 let pattern = if a.input.is_empty() {
                     match &self.session.last_leap {
                         Some((p, _)) => p.clone(),
@@ -366,7 +366,7 @@ impl App {
         match letter {
             "z" => self.run_command("undo"),
             "y" | "Z" => self.run_command("redo"),
-            "f" => Mode::Quasi(Active::tapped(Kind::of(Quasi::LeapForward, self.cursor()))),
+            "f" => Mode::Quasi(Active::tapped(Kind::of(Quasi::LeapDown, self.cursor()))),
             _ => {
                 let said = "a command held needs two letters or more · Ctrl+Z undoes, Ctrl+Y redoes, Ctrl+F finds";
                 self.session.message = said.into();
@@ -460,7 +460,7 @@ impl App {
     /// began, after that item.
     pub(crate) fn leap_round(&self, a: &Active) -> Vec<u64> {
         let from = a.leap_from().unwrap_or(self.cursor());
-        let forward = a.q() == Quasi::LeapForward;
+        let forward = a.q() == Quasi::LeapDown;
         self.notebook.outline.round_from(from, forward)
     }
 

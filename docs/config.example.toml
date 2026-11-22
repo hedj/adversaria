@@ -14,8 +14,8 @@
 # Each quasimode is held (or tapped, to latch it) on any of its keys. A
 # quasimode named here replaces its default keys; the others keep theirs.
 [quasimodes]
-leap_forward = ["RightAlt", "IsoLevel3Shift"]
-leap_back = ["LeftAlt"]
+leap_down = ["RightAlt", "IsoLevel3Shift"]
+leap_up = ["LeftAlt"]
 command = ["LeftControl"]
 suppose = ["LeftSuper", "RightSuper"]
 

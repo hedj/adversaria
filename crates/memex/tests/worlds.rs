@@ -134,7 +134,7 @@ fn a_derived_text_that_cannot_answer_says_so_in_both_worlds() {
     let mut r = Room::new("worlds-cannot-answer");
     r.items(&["rent", "broken"]);
     r.command("derive {N} broken where cell(rent, R), N is R + foo");
-    r.leap(Quasi::LeapBack, "rent");
+    r.leap(Quasi::LeapUp, "rent");
     r.command("fact cell(rent, 1200)");
     r.app.evaluate().unwrap();
     suppose(&mut r, "cell(food, 300)");
@@ -153,11 +153,11 @@ fn rent_supposed(name: &str) -> Room {
     let mut r = Room::new(name);
     r.items(&["rent", "food", "chart", "spent"]);
     r.command("derive Spent: {S} where cell(rent, R), cell(food, F), S is R + F");
-    r.leap(Quasi::LeapBack, "chart");
+    r.leap(Quasi::LeapUp, "chart");
     r.command("layer bar(x(C), y(V)) where cell(C, V)");
-    r.leap(Quasi::LeapBack, "food");
+    r.leap(Quasi::LeapUp, "food");
     r.command("fact cell(food, 300)");
-    r.leap(Quasi::LeapBack, "rent");
+    r.leap(Quasi::LeapUp, "rent");
     r.command("fact cell(rent, 1200)");
     r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
     r.app.evaluate().unwrap();
@@ -213,7 +213,7 @@ fn each_fact_set_aside_is_marked_on_its_own_row() {
     let mut r = Room::new("worlds-two-aside");
     r.items(&["rent", "rent again"]);
     r.command("fact cell(rent, 1250)");
-    r.leap(Quasi::LeapBack, "rent");
+    r.leap(Quasi::LeapUp, "rent");
     r.command("fact cell(rent, 1200)");
     r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
     r.app.evaluate().unwrap();
@@ -318,7 +318,7 @@ fn a_fact_typed_for_an_entity_the_world_lacks_is_supposed_as_typed() {
     let mut r = Room::new("worlds-typed-fact");
     r.items(&["rent", "food"]);
     r.command("fact cell(food, 300)");
-    r.leap(Quasi::LeapBack, "rent");
+    r.leap(Quasi::LeapUp, "rent");
     r.command("fact cell(rent, 1200)");
     r.app.evaluate().unwrap();
     suppose(&mut r, "cell(fuel, 80)");
@@ -336,7 +336,7 @@ fn a_typed_fact_already_held_is_believed_already() {
     let mut r = Room::new("worlds-typed-held");
     r.items(&["rent", "food"]);
     r.command("fact cell(food, 300)");
-    r.leap(Quasi::LeapBack, "rent");
+    r.leap(Quasi::LeapUp, "rent");
     r.command("fact cell(rent, 1200)");
     r.app.evaluate().unwrap();
     r.hold(Quasi::Suppose, "cell(rent, 1200)");
@@ -373,9 +373,9 @@ fn a_fact_set_aside_is_named_on_the_line_of_its_constraint_alone() {
     let mut r = Room::new("worlds-aside-by-constraint");
     r.items(&["income", "rent", "food"]);
     r.command("fact cell(food, 400)");
-    r.leap(Quasi::LeapBack, "rent");
+    r.leap(Quasi::LeapUp, "rent");
     r.command("fact cell(rent, 1200)");
-    r.leap(Quasi::LeapBack, "income");
+    r.leap(Quasi::LeapUp, "income");
     r.command("fact cell(income, 2000)");
     r.command("constraint one value: false :- cell(C, A), cell(C, B), A \\= B.");
     r.command("constraint within income: false :- cell(income, I), cell(rent, R), cell(food, F), R + F > I.");

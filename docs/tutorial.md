@@ -307,7 +307,7 @@ your screen.
 *Why: an outline soon grows past a screen. Leap moves by what you
 remember, not by arrowing.*
 
-Hold **Right Alt** (Leap forward), type `fully automatic`, and release.
+Hold **Right Alt** (Leap down), type `fully automatic`, and release.
 As you type, the cursor goes to the next item holding what you have
 typed so far, past the end and round to the top, and stays when you
 let go: on the chief designer's words. Left Alt leaps backward; `?`

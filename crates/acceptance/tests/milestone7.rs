@@ -61,9 +61,9 @@ pub fn session(dir: &Path) -> App {
         &mut app,
         "constraint one date: false :- date(E, A), date(E, B), A \\= B.",
     );
-    app.handle(Event::down(Key::Quasi(Quasi::LeapBack)));
+    app.handle(Event::down(Key::Quasi(Quasi::LeapUp)));
     typ(&mut app, "buran");
-    app.handle(Event::up(Key::Quasi(Quasi::LeapBack)));
+    app.handle(Event::up(Key::Quasi(Quasi::LeapUp)));
     app.evaluate().unwrap();
     let wrong = first_containing(&app, "1988");
     command(&mut app, &format!("retract {wrong}"));

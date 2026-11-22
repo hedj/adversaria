@@ -77,7 +77,7 @@ impl T {
     /// Leap to an item, put its text's end in place of its last `n`
     /// characters, and pause.
     fn retype_end(&mut self, leap: &str, n: usize, end: &str) {
-        self.hold(Quasi::LeapForward, leap);
+        self.hold(Quasi::LeapDown, leap);
         self.tap(Key::End);
         for _ in 0..n {
             self.tap(Key::Backspace);
@@ -336,7 +336,7 @@ fn the_claim_supposed(t: &mut T) {
 fn part_b(t: &mut T) {
     a_draft_imported(t);
     a_revision_taken_in(t);
-    t.hold(Quasi::LeapForward, "fully automatic");
+    t.hold(Quasi::LeapDown, "fully automatic");
     t.look("leap");
     assert!(t.here().starts_with("The chief designer wrote"));
     a_quotation_checked(t);
@@ -434,7 +434,7 @@ fn part_c(t: &mut T) {
 
 /// Step 11: boxes, rules over them, and a question answered.
 fn boxes_and_rules(t: &mut T) {
-    t.hold(Quasi::LeapForward, "nothing has");
+    t.hold(Quasi::LeapDown, "nothing has");
     t.tap(Key::Enter);
     t.tap(Key::BackTab);
     t.typ("Budget");
@@ -508,7 +508,7 @@ fn part_d(t: &mut T) {
 
 /// Step 16: a second date, a sentence computed from both, and a query.
 fn a_sentence_computed(t: &mut T) {
-    t.hold(Quasi::LeapForward, "buran flew once, unmanned");
+    t.hold(Quasi::LeapDown, "buran flew once, unmanned");
     t.tap(Key::Enter);
     t.typ("The date of Energia-launch is 1987. The label of Energia-launch is \"Energia's first launch\".");
     t.pause();
@@ -524,7 +524,7 @@ fn a_sentence_computed(t: &mut T) {
 
 /// Step 15: a chart of the boxes, with a limit: its item.
 fn a_chart_with_a_limit(t: &mut T) -> u64 {
-    t.hold(Quasi::LeapForward, "what is the rest");
+    t.hold(Quasi::LeapDown, "what is the rest");
     t.tap(Key::Enter);
     t.tap(Key::BackTab);
     t.typ("Spending chart");

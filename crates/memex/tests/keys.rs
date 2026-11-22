@@ -133,9 +133,9 @@ fn enter_in_leap_with_no_match_makes_an_item_holding_the_pattern() {
     r.items(&["Alpha", "Beta"]);
     let alpha = r.outline().in_order()[0];
     r.put_cursor(alpha);
-    r.hold(Quasi::LeapForward, "Gamma ray");
+    r.hold(Quasi::LeapDown, "Gamma ray");
     r.tap(&[Key::Enter]);
-    r.release(Quasi::LeapForward);
+    r.release(Quasi::LeapDown);
     r.app.flush();
     let order: Vec<String> = r.outline().in_order().iter().map(|i| r.text(*i)).collect();
     assert_eq!(order, ["Alpha", "Gamma ray", "Beta"]);
@@ -149,9 +149,9 @@ fn enter_in_leap_with_a_match_leaps_and_makes_nothing() {
     r.items(&["Alpha", "Beta"]);
     let alpha = r.outline().in_order()[0];
     r.put_cursor(alpha);
-    r.hold(Quasi::LeapForward, "bet");
+    r.hold(Quasi::LeapDown, "bet");
     r.tap(&[Key::Enter]);
-    r.release(Quasi::LeapForward);
+    r.release(Quasi::LeapDown);
     assert_eq!(r.outline().in_order().len(), 2);
     assert_eq!(r.here(), "Beta");
 }
@@ -161,8 +161,8 @@ fn releasing_leap_with_no_match_makes_nothing() {
     // Catches a mistyped pattern turned into an item.
     let mut r = Room::new("leap-release-none");
     r.items(&["Alpha"]);
-    r.hold(Quasi::LeapForward, "Gamma");
-    r.release(Quasi::LeapForward);
+    r.hold(Quasi::LeapDown, "Gamma");
+    r.release(Quasi::LeapDown);
     assert_eq!(r.outline().in_order().len(), 1);
     assert!(r.app.session.message.contains("no item holds"));
 }
@@ -173,9 +173,9 @@ fn an_item_made_from_leap_is_read_like_typed_text() {
     // Leap can say it waits to be read.
     let mut r = Room::new("leap-create-read");
     r.items(&["Alpha"]);
-    r.hold(Quasi::LeapForward, "The income is 2000.");
+    r.hold(Quasi::LeapDown, "The income is 2000.");
     r.tap(&[Key::Enter]);
-    r.release(Quasi::LeapForward);
+    r.release(Quasi::LeapDown);
     r.app.idle();
     assert!(
         r.facts().contains(&"cell(income, 2000)".to_string()),
@@ -244,7 +244,7 @@ fn ctrl_f_opens_leap() {
     r.items(&["Alpha"]);
     chord(&mut r, "f");
     let leaping =
-        matches!(&r.app.session.mode, Mode::Quasi(a) if a.q() == Quasi::LeapForward && a.latched());
+        matches!(&r.app.session.mode, Mode::Quasi(a) if a.q() == Quasi::LeapDown && a.latched());
     assert!(leaping, "{:?}", r.app.session.mode);
 }
 
@@ -298,7 +298,7 @@ fn esc_cancels_a_leap_and_puts_the_cursor_back() {
     r.items(&["Alpha", "Beta"]);
     let alpha = r.outline().in_order()[0];
     r.put_cursor(alpha);
-    r.tap(&[Key::Quasi(Quasi::LeapForward)]);
+    r.tap(&[Key::Quasi(Quasi::LeapDown)]);
     r.typ("Be");
     r.tap(&[Key::Escape]);
     assert_eq!(r.app.session.mode, Mode::Normal);

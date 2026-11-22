@@ -706,7 +706,7 @@ The interface has no modes, only quasimodes, after Jef Raskin: a state that last
 
 | Quasimode | While held | On release | Origin |
 | --- | --- | --- | --- |
-| Leap forward, Leap back | type a pattern; the cursor moves to the next or previous match as each letter is typed | the cursor stays; leaping from one end of a span to the other selects it | Raskin's LEAP, meant to "turn cursor positioning into a reflex" |
+| Leap down, Leap up (Leap forward and back until 22 November 2026) | type a pattern; the cursor moves to the next or previous match as each letter is typed | the cursor stays; leaping from one end of a span to the other selects it | Raskin's LEAP, meant to "turn cursor positioning into a reflex" |
 | Command | type a command name, with recognition, guide words and help on "?"; the effect is previewed on the target | the command runs on the target, as one journal entry that can be undone | Raskin's command quasimode, with TOPS-20's aids |
 | Suppose | commands act in a sprouted world, not in reality | the differences are shown; a Commit command makes them real, and anything else sets the world aside, kept in the journal so that it can be reopened | this design: the shell's dry run and counterfactuals |
 
