@@ -740,12 +740,7 @@ fn outline_frame(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Rect {
 
 /// A pane's frame, the first ruled off from the second: the area inside.
 fn draw_frame(f: &mut Frame, pane: usize, area: Rect) -> Rect {
-    let border = if pane == 0 {
-        Borders::RIGHT
-    } else {
-        Borders::NONE
-    };
-    let block = Block::default().borders(border);
+    let block = ruled(pane);
     let inner = block.inner(area);
     f.render_widget(block, area);
     inner
