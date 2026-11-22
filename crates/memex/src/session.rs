@@ -35,6 +35,8 @@ pub struct Session {
     pub trail: Trail,
     /// What is selected, if anything.
     pub selection: Option<Selection>,
+    /// What Ctrl+C or Ctrl+X took, for Ctrl+V (crate::habits).
+    pub clipboard: Option<Clip>,
     pub keys: Keys,
     /// The plumbing rules a right-click asks (crate::plumb).
     pub plumber: crate::plumb::Plumber,
@@ -52,6 +54,45 @@ pub enum Selection {
     From { item: u64, pos: usize },
     /// Text a drag of the mouse covers, as drawn.
     Drawn(String),
+}
+
+/// What Ctrl+C or Ctrl+X took: text, or items, marked to move if cut.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Clip {
+    Text(String),
+    Items { items: Vec<u64>, cut: bool },
+}
+
+impl Clip {
+    /// What was taken, and what Ctrl+V will do with it.
+    pub(crate) fn said(&self) -> String {
+        match self {
+            Clip::Text(t) if t.is_empty() => "nothing is selected to take".into(),
+            Clip::Text(t) => format!("took “{t}”: Ctrl+V puts it at the text cursor"),
+            Clip::Items { items, .. } if items.is_empty() => "there is no item to take".into(),
+            Clip::Items { items, cut: true } => match items.len() {
+                1 => "cut 1 item: Ctrl+V moves it after the cursor's".into(),
+                n => format!("cut {n} items: Ctrl+V moves them after the cursor's"),
+            },
+            Clip::Items { items, cut: false } => match items.len() {
+                1 => "copied 1 item: Ctrl+V puts a copy after the cursor's".into(),
+                n => format!("copied {n} items: Ctrl+V puts copies after the cursor's"),
+            },
+        }
+    }
+
+    /// Whether it took nothing.
+    pub(crate) fn is_empty(&self) -> bool {
+        match self {
+            Clip::Text(t) => t.is_empty(),
+            Clip::Items { items, .. } => items.is_empty(),
+        }
+    }
+
+    /// Whether it is items cut, which a paste moves once.
+    pub(crate) fn is_cut(&self) -> bool {
+        matches!(self, Clip::Items { cut: true, .. })
+    }
 }
 
 /// What a right-click offers (crate::plumb): the offers, the one chosen,

@@ -186,7 +186,7 @@ impl App {
 
     fn erase(&mut self, before: bool) {
         let item = self.cursor();
-        if item == TOP {
+        if item == TOP || before && self.erase_empty() {
             return;
         }
         let text = self.text_of(item);
@@ -399,12 +399,22 @@ impl App {
             "z" => self.run_command("undo"),
             "y" | "Z" => self.run_command("redo"),
             "f" => Mode::Quasi(Active::tapped(Kind::of(Quasi::LeapDown, self.cursor()))),
+            "c" => self.clip_chord(App::copy_clip),
+            "x" => self.clip_chord(App::cut_clip),
+            "v" => self.clip_chord(App::paste_clip),
             _ => {
-                let said = "a command held needs two letters or more · Ctrl+Z undoes, Ctrl+Y redoes, Ctrl+F finds";
+                let said = "a command held needs two letters or more · Ctrl+Z undoes, Ctrl+Y redoes, Ctrl+F finds, Ctrl+X, Ctrl+C and Ctrl+V cut, copy and paste";
                 self.session.message = said.into();
                 Mode::Normal
             }
         }
+    }
+
+    /// Ctrl+X, Ctrl+C or Ctrl+V: do it, saying what was done.
+    fn clip_chord(&mut self, clip: fn(&mut App)) -> Mode {
+        self.session.message.clear();
+        clip(self);
+        Mode::Normal
     }
 
     fn confirm(&mut self, target: u64, dependents: Vec<u64>, ev: Event) -> Mode {

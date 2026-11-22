@@ -186,6 +186,15 @@ prompts for the rest, with defaults.
 | A verb typed alone takes its nouns' defaults, shown in the foot as it is typed (`move (after) ‹item› [3]`); a noun with no default now is asked for, Command latched with the verb typed, and the message says why there is none. Typed with words, a command runs as before | the author's rule (22 November 2026): "Following arguments are prompted for, with defaults", and "it prompts for unfilled arguments". Defaults only for a verb alone keep every line typed in full, every bound key and every journal of old commands as they were |
 | Typed alone, a command takes the selection for its first noun if it is of that noun's kind: `delete` the items selected, each top-most one with its branch, or the characters selected in one item; a command with no target whose first noun is text or an address (`find`, `go`, `suppose`, `import`) the text selected. With several items selected, a command that acts on one item refuses | the author's rule: "the first noun is replaced with the target if one is selected"; the author's choice that the cursor's item is a selection that fills only a noun of its kind (22 November 2026), so the cursor's item never fills a text. Each item deleted is an entry of its own, since the journal has no entry that deletes several: undo takes them back one at a time, and the message says so |
 
+##### Editing by habit
+
+docs/concepts-next.md, § How far, move 2: keys every desktop program
+gives these jobs.
+
+| Decision | Reason |
+| --- | --- |
+| Backspace in an empty item with nothing under it deletes the item; Ctrl+C, Ctrl+X and Ctrl+V copy, cut and paste text and items, through the chords Ctrl+Z uses; a cut marks its items until they are pasted, and the paste moves them | docs/concepts-next.md, move 2, after the grammar was built (22 November 2026): the keys are habits from every desktop program, so `new`, `move`, `copy`, `undo` and `redo` need not be recalled. A cut that deleted at once would make a new item at the paste, losing the item's identity and its entries; a spreadsheet's cut marks instead. What is cut or copied is the session's, so the journal format is unchanged |
+
 #### Open questions
 
 - [ ] How fast does the journal grow in real use, and how are span lists compacted?

@@ -306,7 +306,7 @@ The defaults are below. All of them can be changed (§ 4.3).
 | Enter | makes a new item after the cursor's item |
 | Tab | makes the item the last child of the item before it at its level; in an open `[[`, completes the link (§ 2.4) |
 | Shift-Tab | makes the item a sibling of its parent |
-| Backspace, Delete | erase a character before or after the cursor; with text selected, erase it |
+| Backspace, Delete | erase a character before or after the cursor; with text selected, erase it. Backspace in an empty item with nothing under it deletes the item, and the cursor goes to the end of the item above |
 | Up, Down | move to the item above or below |
 | Left, Right, Home, End | move within the item's text |
 | Shift with an arrow, Home or End | moves as the key does, and selects from where the cursor was |
@@ -407,12 +407,6 @@ Within a quasimode:
   holds “Korolov”; 2 holds “Korolev” · Enter again makes “Korolov”, or
   change the pattern`. The new item is read at the pause,
   as typed text is.
-- **Ctrl chords.** Command held for one letter, then released, is a
-  chord, as in any desktop program: Ctrl+Z undoes, Ctrl+Y or
-  Ctrl+Shift+Z redoes, Ctrl+F opens Leap, latched. Any other single
-  letter runs nothing and says so, so a chord typed from habit (Ctrl+N)
-  does not run a command (`new`) by surprise. A latched Command still
-  takes one letter: tap Left Ctrl, type `n`, press Enter.
 - **Focus lost while a key is held** (as by Alt+Tab): the release goes to
   another window, so the memex does not wait for it. A quasimode held with
   nothing typed is left without acting. One held after you typed stays open, latched, with what you
@@ -420,6 +414,22 @@ Within a quasimode:
 
 Leap matches anywhere in an item's text, ignoring case, and wraps round
 at either end of the outline. It unfolds a folded branch to reach a match.
+
+#### Ctrl chords
+
+Command held for one letter, then released, is a
+chord, as in any desktop program: Ctrl+Z undoes, Ctrl+Y or
+Ctrl+Shift+Z redoes, Ctrl+F opens Leap, latched. Ctrl+C copies and
+Ctrl+X cuts the text selected, or else the items selected or the
+cursor's, each top-most one with its branch; Ctrl+V puts text at the
+text cursor, and items after the cursor's item. Items cut are drawn
+dim until Ctrl+V moves them, so each keeps its identity and its
+entries, as a spreadsheet's cut does; items copied are new items of
+their text, as `copy` makes, and may be pasted again. Text dragged with
+the mouse can be copied, not cut. Any other single
+letter runs nothing and says so, so a chord typed from habit (Ctrl+N)
+does not run a command (`new`) by surprise. A latched Command still
+takes one letter: tap Left Ctrl, type `n`, press Enter.
 
 #### Function keys and confirmations
 

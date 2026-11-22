@@ -95,7 +95,7 @@ impl App {
     }
 
     /// Move an item's branch to follow another item.
-    fn move_after(&mut self, item: u64, to: u64) -> Result<(), String> {
+    pub(crate) fn move_after(&mut self, item: u64, to: u64) -> Result<(), String> {
         self.move_item(item, self.notebook.outline.parent_or_top(to), Some(to))
     }
 

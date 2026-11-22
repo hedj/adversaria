@@ -871,16 +871,25 @@ impl<'a> OutlinePane<'a> {
     fn item_line(&self, id: u64, depth: usize) -> Line<'static> {
         let at_cursor = id == self.cursor();
         let mut spans = self.item_head(id, depth);
-        spans.extend(
-            self.selected_spans(id)
-                .unwrap_or_else(|| item_spans(self.app, id)),
-        );
+        spans.extend(self.text_spans(id));
         spans.extend(self.folded_count(id));
         let line = Line::from(spans);
         if at_cursor {
             line.style(cursor())
         } else {
             line
+        }
+    }
+
+    /// An item's text as drawn: with what is selected reversed, and dim if
+    /// it is cut and not yet pasted (crate::habits).
+    fn text_spans(&self, id: u64) -> Vec<Span<'static>> {
+        let spans = self
+            .selected_spans(id)
+            .unwrap_or_else(|| item_spans(self.app, id));
+        match self.app.cut_items().contains(&id) {
+            true => spans.into_iter().map(|s| s.patch_style(dim())).collect(),
+            false => spans,
         }
     }
 

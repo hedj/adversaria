@@ -12,6 +12,7 @@ pub mod engine;
 mod evaluation;
 pub mod found;
 pub mod gui;
+mod habits;
 pub mod journal;
 pub mod keys;
 mod near;
