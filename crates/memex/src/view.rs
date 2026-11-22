@@ -2181,7 +2181,7 @@ impl Layout {
         let neighbours = self.neighbours(v, side);
         let places: Vec<usize> = neighbours
             .iter()
-            .filter_map(|u| place_in(other, *u))
+            .filter_map(|u| other.iter().position(|x| x == u))
             .collect();
         if places.is_empty() {
             return i as f64;
@@ -2315,11 +2315,6 @@ impl Layout {
     fn run_row(&self, si: usize) -> usize {
         self.top(self.segs[si].from) + 4
     }
-}
-
-/// A vertex's place in a layer, if it is there.
-fn place_in(layer: &[usize], v: usize) -> Option<usize> {
-    layer.iter().position(|x| *x == v)
 }
 
 /// Each node's layer, then a dummy for each layer a long edge crosses,
