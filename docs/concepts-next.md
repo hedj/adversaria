@@ -1,7 +1,9 @@
 # Concepts, a second proposal: how far, and the small changes first
 
 A proposal for the author, 22 November 2026, after the fifth review
-(docs/research/notes/ux-review-5-regularity.md). Nothing here is built.
+(docs/research/notes/ux-review-5-regularity.md). The grammar is built,
+and so are the lists of each verb's words (§ Built, and the count now);
+the four moves of § How far are not.
 
 ## The answer
 
@@ -11,8 +13,10 @@ If the interface is not sacred, about 20 is reachable with no capability
 lost, and a first day needs about 9. The author's rule for the grammar
 (§ The grammar) does most of it: a command is a verb and nouns, the
 first noun is the selection, and the rest are prompted for with
-defaults. That alone takes the count to about 48, within the budget.
-Four structural moves take it the rest of the way (§ How far). Twelve
+defaults. The proposal expected that to take the count to about 48. As
+built, with each verb's words listed where they are used, it is about
+53, just over the budget of about 50 (§ Built, and the count now). Four
+structural moves take it the rest of the way (§ How far). Twelve
 small changes, written before the rule, are kept below; the rule makes
 most of them follow (§ The small changes, without the grammar).
 
@@ -23,6 +27,88 @@ goes. Word users recognised about 135 commands but used 27 to 50 (measured,
 self-report and logs; research/concept-budget.md). Recognition still
 costs time (Hick's law), so menus must stay short and ranked. The journal
 can test the assumption (§ Measuring).
+
+## Built, and the count now
+
+The author took both recommendations of § The grammar (the cursor's item
+is a selection of its kind; Shift selects and Ctrl moves by structure).
+Built on 22 November 2026, one change a commit:
+
+| What | Commit |
+| --- | --- |
+| Shift with an arrow selects; Ctrl with one moves by structure | dd8ad27 |
+| a Leap (the other Leap key) and a drag of the mouse select | 4b7e484 |
+| a verb alone takes its nouns' defaults, or asks for a noun with none | 3793314, c0e839a |
+| typed alone, a command takes the selection for its first noun | a3a28f5 |
+| `import` reads the kind from the file's ending | 1782194 |
+| `?` after a verb lists the words its first noun may be; Tab completes | 3b9e805 |
+| the tutorial teaches the grammar where it is first used | 5a68a1f |
+
+Where the build differs from § The grammar:
+
+- **Defaults only for a verb alone.** Typed with words, a command runs as
+  before, so every line typed in full, every key bound and every old
+  journal is unchanged. A latched Enter does not step through the
+  prompts one by one: it takes every default and stops at the first noun
+  with none.
+- **Numbers are not yet read by kind.** `retract 12` is entry 12 and
+  `adopt 3` suggestion 3 because those verbs read them so. The address
+  form "a number after an object word" stays.
+- **Not built:** `retract`'s prompt as its confirmation (it still asks in
+  a step of its own); `adopt`'s (in place of) prompt (`adopt instead`
+  stays, now listed); `go` as a place only (it still looks for text);
+  `copy` and `transclude` as one verb; `show 2 as chart` charting what
+  item 2 states; `export` taking an item. `export` alone asks for its
+  file rather than default to one, since a default name could overwrite
+  a file.
+- **Several items selected:** only `delete` takes them, and each is
+  deleted by an entry of its own, since the journal has no entry that
+  deletes several; undo takes them back one at a time, and the message
+  says so. Any other verb that acts on one item refuses.
+- **Found, not fixed:** Ctrl held while a letter is pressed twice (Ctrl+Z,
+  Z) types `zz`, which is no command. It was so before the build.
+
+The count now, by concepts.md's rule (estimates; the boundaries are
+mine, as in the fifth review):
+
+| Held in recall | Before the build | Now |
+| --- | --- | --- |
+| concepts | 12 | 12 |
+| verbs | 20 | 20 |
+| object words not concept names | 23 | 0: each is listed by `?` after its verb, with what it means, and Tab completes it |
+| command shape and its rules | 2 | 2: the shape (the first noun is the selection; the rest are asked for, with defaults) and the guide-word rule |
+| statement forms | 6 | 6 |
+| address forms | 4 | 4 |
+| quasimodes and tap | 3 | 3 |
+| `?` and the in-quasimode keys | 4 | 4 |
+| keys with an arrow; right-click | 2 | 2: Shift selects, a habit; Ctrl with an arrow moves by structure; right-click |
+| **total** | **about 76** | **about 53** |
+
+All 23 of the fall come from the lists, and rest on one assumption: that
+a list shown by `?` after the verb is recognition, as the fifth review's
+first suggestion assumed. The grammar itself removes nothing by the rule.
+It changes how a noun is given, not what must be recalled; its gain is
+fewer words typed and fewer refusals, which the journal can measure
+(§ Measuring). The budget is about 50.
+
+### The rest of the way
+
+From about 53 to about 20, each move keeping every capability (§ How far
+gives each in full):
+
+| Move | Held after it | Cost | What it needs |
+| --- | --- | --- | --- |
+| 2. Editing by habit: Backspace deletes an empty item; Ctrl+X, Ctrl+C and Ctrl+V on items and text; drag to move | about 47: `new`, `delete`, `move`, `copy`, `undo`, `redo` become habits | small to medium | three chords on the path Ctrl+Z uses, and a clipboard of the session's. A cut marks its items until they are pasted, as a spreadsheet's cut does, so a moved item keeps its identity and its entries |
+| 1. The act key: Menu at the cursor offers the verbs that apply to the target, ranked, each with its key | about 30: the other 14 verbs, and 3 address forms, since pointing fills an argument | large | for each verb, a test of whether it applies and a rank; the menu itself exists (the right-click's) |
+| 4. One reader for every line | about 28 | medium | a line that is no command but reads as a statement is supposed, a question is answered, and the foot says which, before Enter. Risk: a mistyped command read as a statement, so only a line with a reading is taken |
+| 3. Seven concepts | about 23 | large | labels as links and the five kinds of offer change the guide's vocabulary throughout; labels as links need a decision on the journal's meaning |
+| Enter, Esc, Tab and the right-click counted as habits | about 19 | none | a decision on the counting rule, for the author |
+
+Recommended order: 2, then 1, then 4, then 3. Move 2 is the cheapest,
+and costs nothing to learn, since the keys are habits already. Move 1
+removes the most. Move 3 changes what the learner is told the notebook
+is, so it is the author's to choose, and it is best done last, when the
+other moves have shown which concepts users reach for.
 
 ## The grammar
 
@@ -251,7 +337,9 @@ The last 4 come from counting Enter, Esc, Tab and the right-click as the
 habits they are, as concepts.md's rule allows. With the grammar (§ The
 grammar), the start is 48: the object words and address forms are gone
 already, so move 1 removes the 19 verbs, and the sum is 48 − 19 − 5 − 2 −
-4 = 18, about 20 again.
+4 = 18, about 20 again. As built, the start is about 53, since numbers
+are not yet read by kind; § Built, and the count now, tables the rest of
+the way from there, to about 19.
 
 A first day: item, statement, offer and world; typing, Enter and Tab;
 Leap; the act key; and F3, which the screen shows. About 9.
