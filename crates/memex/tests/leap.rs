@@ -307,3 +307,15 @@ fn a_pattern_near_nothing_is_made_at_once() {
     r.tap(&[Key::Enter]);
     assert_eq!(r.outline().in_order().len(), 3);
 }
+
+#[test]
+fn enter_finds_what_it_would_make_rather_than_make_it_again() {
+    // Catches Enter searching "a3 " with its space, finding nothing, and
+    // making a second "a3", the text trimmed (the code review, F-B7).
+    let mut r = room("leap-trailing-space");
+    r.put_cursor(r.outline().in_order()[0]);
+    r.hold(Quasi::LeapForward, "a3 ");
+    r.tap(&[Key::Enter]);
+    assert_eq!(r.outline().in_order().len(), 4, "nothing made");
+    assert_eq!(r.here(), "a3");
+}

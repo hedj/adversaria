@@ -293,7 +293,10 @@ impl App {
     /// read, as typed text does. Releasing Leap on no match only says so,
     /// so a mistyped pattern makes nothing.
     fn leap_or_create(&mut self, mut a: Active) -> Mode {
+        // The text searched is the text made, so "foo " finds "foo"
+        // rather than make it again.
         let pattern = a.input.trim().to_string();
+        a.input.clone_from(&pattern);
         if pattern.is_empty() || self.leap_first(&a).is_some() {
             return self.finish(a);
         }
