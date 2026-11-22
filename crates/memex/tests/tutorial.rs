@@ -3,7 +3,7 @@
 //! command it types and every text it expects appears in the tutorial word
 //! for word, so the two cannot drift apart unnoticed.
 
-use memex::app::{App, Event, Key, Mode, Quasi};
+use memex::app::{App, Event, Key, Mode, Quasi, Special};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
@@ -339,8 +339,7 @@ fn part_b(t: &mut T) {
     t.hold(Quasi::LeapDown, "fully automatic");
     t.look("leap");
     assert!(t.here().starts_with("The chief designer wrote"));
-    t.command("find automatic");
-    t.shows("MATCHES OF “automatic”");
+    word_found(t);
     t.command("find");
     a_quotation_checked(t);
     a_note_linked(t);
@@ -371,7 +370,27 @@ fn a_note_linked(t: &mut T) {
     );
     t.key(Key::F(8));
     assert!(t.here().starts_with("How Buran"), "forward again");
+    linked_back(t);
     t.key(Key::F(7));
+}
+
+/// Step 8: a word selected with Shift, and found by `find` alone.
+fn word_found(t: &mut T) {
+    t.key(Key::Left);
+    (0..9).for_each(|_| t.key(Key::Special(Special::ShiftLeft)));
+    t.command("find");
+    t.shows("MATCHES OF “automatic”");
+}
+
+/// Step 10: `link` held alone shows its defaults, and its release
+/// links the heading back to the note jumped from.
+fn linked_back(t: &mut T) {
+    t.app.handle(Event::down(Key::Quasi(Quasi::Command)));
+    "link".chars().for_each(|c| t.tap(Key::Char(c)));
+    t.shows("link (from 2) (to) ‹item› [2.1.3] (as) ‹word› [link]");
+    t.app.handle(Event::up(Key::Quasi(Quasi::Command)));
+    let heading = t.app.cursor();
+    assert_eq!(t.app.notebook.outline.links_of(heading).0.len(), 1);
 }
 
 /// Step 6: a document, imported as items.

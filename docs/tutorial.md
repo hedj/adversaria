@@ -16,11 +16,13 @@ used before the next:
   found there;
 - a **world**, a "what if" beside the actual one.
 
-and a few keys: typing, Enter and Tab; Left Ctrl for a command, with `?`
-to list and Esc to cancel; F3 to adopt and F4 to take back; Super to
-suppose. Ctrl+Z undoes, as in any program. Every command has one shape,
-a verb and then what it acts on: `adopt world`, `dismiss change 52`,
-`go link 1`, `show as chart`.
+and a few keys: typing, Enter and Tab; Shift with an arrow to select;
+Left Ctrl for a command, with `?` to list and Esc to cancel; F3 to adopt
+and F4 to take back; Super to suppose. Ctrl+Z undoes, as in any program.
+Every command has one shape, a verb and then what it acts on:
+`adopt world`, `dismiss change 52`, `go link 1`, `show as chart`. Typed
+alone, a verb takes what you have selected, or the defaults the foot
+shows, and asks for what it lacks.
 
 - A. A claim, checked (about ten minutes): you write a fact, record what
   a speaker said against it, and see the notebook catch the conflict.
@@ -340,12 +342,16 @@ holding lists every match. If no item holds what you typed, Enter makes
 an item of it; when an item holds something a letter or two away, the
 first Enter only warns, and names it.
 
-To see every item that holds some words, run `find automatic`. The
-inspector's place beside the outline now lists them, numbered, under
-`MATCHES OF “automatic”`, each a click away. `find` also lists the
-items that carry a label (`find #draft`), and those that a rule's
-findings mark (`find violations`). Run `find` alone to have the
-inspector back.
+To see every item that holds a word, select it and run `find`. Press
+Left once, then hold Shift and press Left nine times: `automatic` is
+drawn reversed, selected. (A drag of the mouse selects too.) Run `find`:
+typed alone, a command takes what is selected, so the inspector's place
+beside the outline now lists the items that hold it, numbered, under
+`MATCHES OF “automatic”`, each a click away. Typed in full,
+`find automatic` does the same. `find` also lists the items that carry a
+label (`find #draft`), and those that a rule's findings mark
+(`find violations`). Run `find` alone, with nothing selected, to have
+the inspector back.
 
 ### 9. A quotation checked
 
@@ -395,6 +401,17 @@ and the inspector lists your note among the items that link to it:
 
 Press **F7** (`go back`; a mouse's back button does the same): the
 cursor returns to your note. F8 (`go forward`) goes forward again.
+
+On the heading again, hold Left Ctrl and type `link`. The foot shows
+what the link would take:
+
+    link (from 2) (to) ‹item› [2.1.3] (as) ‹word› [link]
+
+Each part in square brackets is a default: here, the item you last
+jumped from, your note. Let go, and the heading links back to it. A verb
+typed alone takes its defaults; for a part with none, it asks, and
+waits until you type it or point at it. Press F7 to return to your
+note.
 `go`, Leap and a click on a link are jumps, which `go back` retraces;
 arrow keys are not. `go` takes every way of moving: an address
 (`go 2.1`), a link (`go link 1`), the trail (`go back`), or the
@@ -491,7 +508,8 @@ mark for each answer to a query:
 - `show refline(y(I)) where box(income, I)`
 
 The first draws a bar for each box, as high as its value; the second, a
-line across the chart at the income. The chart is drawn under the item,
+line across the chart at the income. (`show` alone would draw the first:
+a chart is its default.) The chart is drawn under the item,
 and the right pane says `VIEW · 2 LAYERS`. These are Prolog queries;
 docs/guide.md, § 3.3 has recipes to copy for line charts, tables, Gantt
 charts and flowcharts.
