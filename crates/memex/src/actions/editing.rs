@@ -201,6 +201,27 @@ impl App {
         self.write_view(op, body);
     }
 
+    /// The item the last jump came from, if it is left and is not the
+    /// target: by its number, the default of `move` and `link`.
+    pub(crate) fn jumped_from(&self, target: u64) -> Option<String> {
+        let from = self.last_present(&self.session.trail.back);
+        let from = from.filter(|f| *f != target)?;
+        Some(self.notebook.outline.number(from))
+    }
+
+    /// The target, by its number: where `copy` puts its copy by default,
+    /// after itself.
+    pub(crate) fn itself(&self, target: u64) -> Option<String> {
+        Some(self.notebook.outline.number(target))
+    }
+
+    /// `back`, if a jump came from an item that is left: where `go` goes
+    /// by default.
+    pub(crate) fn back_to(&self, _: u64) -> Option<String> {
+        let from = self.last_present(&self.session.trail.back);
+        from.map(|_| "back".into())
+    }
+
     /// Go back to where the last jump came from, passing over items gone.
     pub(crate) fn cmd_back(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let trail = &self.session.trail.back;

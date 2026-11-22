@@ -1,7 +1,8 @@
 //! The command line: the table of commands, finding a command from what
 //! was typed, and running it on the target (docs/guide.md, § 2.4).
 
-use crate::app::{App, Mode};
+use super::nouns::{Alone, Noun, alone, asking, noun, prompts};
+use crate::app::{Active, App, Mode};
 use crate::outline::TOP;
 
 /// What a command's slot takes: what may be typed in it, and what may be
@@ -21,6 +22,19 @@ pub enum Slot {
     Text,
 }
 
+impl Slot {
+    /// The kind's name, as a prompt shows it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Slot::Item => "item",
+            Slot::Entry => "entry",
+            Slot::Suggestion => "suggestion",
+            Slot::Word => "word",
+            Slot::Text => "text",
+        }
+    }
+}
+
 /// A command's handler, given the words after the command's name and the
 /// target item. A command that asks a question sets `App::mode`.
 /// A command: what it does to the memex, and its reply for the message
@@ -32,7 +46,7 @@ pub struct Command {
     run: Handler,
     /// It acts on the target item, so needs one.
     target: bool,
-    slots: &'static [(&'static str, Slot)],
+    pub(crate) slots: &'static [Noun],
     pub help: &'static str,
     /// What it does, short enough for the list of commands that match
     /// what is typed (at most 32 characters).
@@ -44,7 +58,7 @@ pub const COMMANDS: &[Command] = &[
         name: "accept",
         run: App::cmd_accept,
         target: false,
-        slots: &[("suggestion", Slot::Suggestion)],
+        slots: &[noun("suggestion", Slot::Suggestion)],
         help: "adopt the nth suggestion shown, with its evidence",
         brief: "adopt the nth suggestion shown",
     },
@@ -52,7 +66,7 @@ pub const COMMANDS: &[Command] = &[
         name: "adopt",
         run: App::cmd_adopt,
         target: true,
-        slots: &[("suggestion", Slot::Suggestion)],
+        slots: &[noun("suggestion", Slot::Suggestion)],
         help: "make the target's claims beliefs, keeping their source (`adopt instead`: retracting what they contradict); `adopt world`, the supposed world as the actual one; `adopt fix`, the fix for the target's [[links]] that name no item, which makes them; with a number, the suggestion shown with it, a claim the memex makes",
         brief: "believe claims or a suggestion",
     },
@@ -60,7 +74,7 @@ pub const COMMANDS: &[Command] = &[
         name: "claim",
         run: App::cmd_claim,
         target: true,
-        slots: &[("that", Slot::Text)],
+        slots: &[noun("that", Slot::Text)],
         help: "the target states a claim: a Prolog fact, then from and its source",
         brief: "the target states a claim",
     },
@@ -68,7 +82,10 @@ pub const COMMANDS: &[Command] = &[
         name: "check",
         run: App::cmd_check,
         target: true,
-        slots: &[("which", Slot::Word)],
+        slots: &[noun("which", Slot::Word).defaults_to(
+            App::check_kind,
+            "the target has both a quote and a source to check, or neither",
+        )],
         help: "check quote (the text is in its source) or check source (the DOI, through Crossref)",
         brief: "check a quote or a source",
     },
@@ -92,7 +109,7 @@ pub const COMMANDS: &[Command] = &[
         name: "constraint",
         run: App::cmd_constraint,
         target: false,
-        slots: &[("named", Slot::Text)],
+        slots: &[noun("named", Slot::Text)],
         help: "a constraint: its name, a colon, then a Prolog denial false :- ...",
         brief: "a rule that must never break",
     },
@@ -100,7 +117,7 @@ pub const COMMANDS: &[Command] = &[
         name: "copy",
         run: App::cmd_copy,
         target: true,
-        slots: &[("after", Slot::Item)],
+        slots: &[noun("after", Slot::Item).defaults_to(App::itself, "the target is no item")],
         help: "copy the target's text to a new item after an item",
         brief: "copy the target's text",
     },
@@ -124,7 +141,7 @@ pub const COMMANDS: &[Command] = &[
         name: "dismiss",
         run: App::cmd_dismiss,
         target: false,
-        slots: &[("suggestion", Slot::Suggestion)],
+        slots: &[noun("suggestion", Slot::Suggestion)],
         help: "set aside what is offered: the nth suggestion shown, which returns only if its evidence changes; `dismiss world`, the supposed world, back to the actual one; `dismiss change N`, one change of a revision",
         brief: "set a suggestion or world aside",
     },
@@ -132,7 +149,7 @@ pub const COMMANDS: &[Command] = &[
         name: "derive",
         run: App::cmd_derive,
         target: true,
-        slots: &[("text", Slot::Text)],
+        slots: &[noun("text", Slot::Text)],
         help: "the target shows a computed text: a template with {Var}, then where and a Prolog goal",
         brief: "show a text computed from facts",
     },
@@ -140,7 +157,7 @@ pub const COMMANDS: &[Command] = &[
         name: "export",
         run: App::cmd_export,
         target: false,
-        slots: &[("to", Slot::Text)],
+        slots: &[noun("to", Slot::Text).asked()],
         help: "export the outline, or one section, as a document (md, docx, odt, tex, html)",
         brief: "export as a document",
     },
@@ -148,7 +165,7 @@ pub const COMMANDS: &[Command] = &[
         name: "fact",
         run: App::cmd_fact,
         target: true,
-        slots: &[("that", Slot::Text)],
+        slots: &[noun("that", Slot::Text)],
         help: "the target states a belief: a Prolog fact",
         brief: "the target states a belief",
     },
@@ -156,7 +173,7 @@ pub const COMMANDS: &[Command] = &[
         name: "follow",
         run: App::cmd_follow,
         target: true,
-        slots: &[("link", Slot::Word)],
+        slots: &[noun("link", Slot::Word)],
         help: "go to the item at the end of the target's nth link",
         brief: "go to the end of the nth link",
     },
@@ -180,7 +197,7 @@ pub const COMMANDS: &[Command] = &[
         name: "find",
         run: App::cmd_find,
         target: false,
-        slots: &[("what", Slot::Text)],
+        slots: &[noun("what", Slot::Text)],
         help: "list beside the outline the items that hold a text, carry a #label, or are marked by violations or disagreements; find suggestions lists those; a question (What is the rest?, or Prolog in backticks) is answered once; find alone shows the links again",
         brief: "list what matches, or answer",
     },
@@ -236,7 +253,8 @@ pub const COMMANDS: &[Command] = &[
         name: "go",
         run: App::cmd_go,
         target: false,
-        slots: &[("text", Slot::Item)],
+        slots: &[noun("where", Slot::Item)
+            .defaults_to(App::back_to, "no jump came from an item that is left")],
         help: "go to the item an address names, else to the next that holds the text; go link N follows the target's Nth link; go back and go forward walk the trail of jumps; go next, previous, first, last, parent or child moves by the outline's structure",
         brief: "go to an address, link or place",
     },
@@ -252,7 +270,7 @@ pub const COMMANDS: &[Command] = &[
         name: "import",
         run: App::cmd_import,
         target: false,
-        slots: &[("from", Slot::Text)],
+        slots: &[noun("from", Slot::Text).asked()],
         help: "import wikidata, document or results, then a file: what it says arrives as claims",
         brief: "import a file as claims",
     },
@@ -276,7 +294,7 @@ pub const COMMANDS: &[Command] = &[
         name: "layer",
         run: App::cmd_layer,
         target: true,
-        slots: &[("mark", Slot::Text)],
+        slots: &[noun("mark", Slot::Text)],
         help: "add a layer to the target's view: a mark, then where and a goal; one mark per solution",
         brief: "add a layer to a view",
     },
@@ -284,7 +302,11 @@ pub const COMMANDS: &[Command] = &[
         name: "link",
         run: App::cmd_link,
         target: true,
-        slots: &[("from", Slot::Item), ("to", Slot::Item), ("as", Slot::Word)],
+        slots: &[
+            noun("from", Slot::Item),
+            noun("to", Slot::Item).defaults_to(App::jumped_from, "no jump came from another item"),
+            noun("as", Slot::Word).fixed("link"),
+        ],
         help: "link one item to another; the type defaults to link",
         brief: "link one item to another",
     },
@@ -300,7 +322,8 @@ pub const COMMANDS: &[Command] = &[
         name: "move",
         run: App::cmd_move,
         target: true,
-        slots: &[("after", Slot::Item)],
+        slots: &[noun("after", Slot::Item)
+            .defaults_to(App::jumped_from, "no jump came from another item")],
         help: "move the target's branch to follow an item",
         brief: "move the target's branch",
     },
@@ -308,7 +331,7 @@ pub const COMMANDS: &[Command] = &[
         name: "name",
         run: App::cmd_name,
         target: true,
-        slots: &[("as", Slot::Word)],
+        slots: &[noun("as", Slot::Word)],
         help: "give the target a name that addresses it",
         brief: "give the target a name",
     },
@@ -332,7 +355,7 @@ pub const COMMANDS: &[Command] = &[
         name: "pane",
         run: App::cmd_pane,
         target: false,
-        slots: &[("shows", Slot::Word)],
+        slots: &[noun("shows", Slot::Word)],
         help: "set the other pane to outline, links, suggestions or matches",
         brief: "set the other pane",
     },
@@ -348,7 +371,7 @@ pub const COMMANDS: &[Command] = &[
         name: "query",
         run: App::cmd_query,
         target: false,
-        slots: &[("goal", Slot::Text)],
+        slots: &[noun("goal", Slot::Text)],
         help: "run a Prolog goal over this world's beliefs, through rules: each answer by its variables (at most 20), yes or no for a goal without them; it may only read facts, compare and compute",
         brief: "run a Prolog query",
     },
@@ -364,7 +387,7 @@ pub const COMMANDS: &[Command] = &[
         name: "rule",
         run: App::cmd_rule,
         target: false,
-        slots: &[("that", Slot::Text)],
+        slots: &[noun("that", Slot::Text)],
         help: "define a predicate from others: Head :- Body. Usable in derive, constraint, layer and other rules",
         brief: "define a predicate from others",
     },
@@ -372,7 +395,7 @@ pub const COMMANDS: &[Command] = &[
         name: "ace",
         run: App::cmd_ace,
         target: false,
-        slots: &[("sentence", Slot::Text)],
+        slots: &[noun("sentence", Slot::Text)],
         help: "what APE makes of a sentence of controlled English: its paraphrase, or where it fails and APE's advice",
         brief: "what APE makes of a sentence",
     },
@@ -380,7 +403,7 @@ pub const COMMANDS: &[Command] = &[
         name: "set",
         run: App::cmd_set,
         target: false,
-        slots: &[("that", Slot::Text)],
+        slots: &[noun("that", Slot::Text)],
         help: "state a fact and retract the beliefs it directly contradicts under a constraint; the fact goes where the replaced one was",
         brief: "state a fact in place of others",
     },
@@ -388,7 +411,10 @@ pub const COMMANDS: &[Command] = &[
         name: "retract",
         run: App::cmd_retract,
         target: false,
-        slots: &[("entry", Slot::Entry)],
+        slots: &[noun("entry", Slot::Entry).defaults_to(
+            App::last_retractable,
+            "the target has nothing to retract: no adoption, fact or layer of its own",
+        )],
         help: "reverse one earlier entry, keeping later work; lists what depends on it first; with no entry, the target's last adoption, fact or layer",
         brief: "reverse an earlier entry (F4)",
     },
@@ -396,7 +422,10 @@ pub const COMMANDS: &[Command] = &[
         name: "suppose",
         run: App::cmd_suppose,
         target: false,
-        slots: &[("that", Slot::Text)],
+        slots: &[noun("that", Slot::Text).defaults_to(
+            App::statement_of,
+            "the target states nothing the memex reads",
+        )],
         help: "suppose a statement, as the Suppose key does: its readings against the facts are offered; with none, a world of that name opens with nothing supposed",
         brief: "suppose a statement",
     },
@@ -412,7 +441,7 @@ pub const COMMANDS: &[Command] = &[
         name: "show",
         run: App::cmd_show,
         target: true,
-        slots: &[("as", Slot::Text)],
+        slots: &[noun("as", Slot::Text).fixed("chart")],
         help: "make an item a view of the world's facts: show (as) chart, a bar for each cell; show (as) table, a row for each; show (as) graph, the items and their links; with an address first, that item (show 2 as chart); else a mark, where a goal, as one layer",
         brief: "show an item as a chart",
     },
@@ -428,7 +457,7 @@ pub const COMMANDS: &[Command] = &[
         name: "transclude",
         run: App::cmd_transclude,
         target: true,
-        slots: &[("from", Slot::Item)],
+        slots: &[noun("from", Slot::Item)],
         help: "show an item's text in place, in a new item after the target",
         brief: "show an item's text in place",
     },
@@ -488,11 +517,33 @@ impl App {
         let Some((cmd, words)) = parse_line(line)? else {
             return Ok(Mode::Normal);
         };
-        let reply = self.run(cmd, &words)?;
+        match words.is_empty() {
+            true => self.command_alone(cmd),
+            false => self.ran(cmd, &words),
+        }
+    }
+
+    /// Run a command on words, its reply the message; the mode it leaves.
+    fn ran(&mut self, cmd: &Command, words: &[&str]) -> Result<Mode, String> {
+        let reply = self.run(cmd, words)?;
         if !reply.is_empty() {
             self.session.message = reply;
         }
         Ok(self.next_mode())
+    }
+
+    /// A command typed alone: run with its nouns' defaults, or, for a
+    /// noun with none, ask for it, Command latched with the verb typed.
+    fn command_alone(&mut self, cmd: &'static Command) -> Result<Mode, String> {
+        let target = self.target_for(cmd)?;
+        match alone(self, cmd, target) {
+            Alone::Ask(n) => {
+                self.session.message = asking(cmd, &n);
+                Ok(Mode::Quasi(Active::prompting(format!("{} ", cmd.name))))
+            }
+            Alone::Line(line) if line != cmd.name => self.command(&line),
+            Alone::Line(_) => self.ran(cmd, &[]),
+        }
     }
 
     fn run(&mut self, cmd: &Command, words: &[&str]) -> Result<String, String> {
@@ -557,7 +608,11 @@ impl App {
         if cmd.name == "link" {
             return self.guided_link(&words, open);
         }
-        guided_slots(cmd, &words, open)
+        let asks = prompts(self, cmd, self.cursor());
+        match words.is_empty() && !asks.is_empty() {
+            true => format!("{}{asks}", cmd.name),
+            false => guided_slots(cmd, &words, open),
+        }
     }
 
     /// The link command's line: its two ends, then its type.
@@ -603,7 +658,7 @@ impl App {
 /// A command's words, and its first slot's guide word before them.
 fn guided_slots(cmd: &Command, words: &[&str], open: bool) -> String {
     let mut out = cmd.name.to_string();
-    if let Some((noise, _)) = cmd.slots.first() {
+    if let Some(Noun { guide: noise, .. }) = cmd.slots.first() {
         if !words.is_empty() || open {
             out.push_str(&format!(" ({noise})"));
         }
@@ -615,13 +670,15 @@ fn guided_slots(cmd: &Command, words: &[&str], open: bool) -> String {
     out
 }
 
+/// The guide words that commands read where they are typed.
+pub(crate) const GUIDES: [&str; 4] = ["to", "from", "after", "as"];
+
 /// Words without the guide words that may come before an address.
 fn unguided<'a>(words: &[&'a str]) -> Vec<&'a str> {
-    let guides = ["to", "from", "after", "as"];
     words
         .iter()
         .copied()
-        .filter(|w| !guides.contains(w))
+        .filter(|w| !GUIDES.contains(w))
         .collect()
 }
 
@@ -659,7 +716,7 @@ pub fn awaited(input: &str) -> Option<Slot> {
 
 /// The slot a guide word of a command names, if the word is one.
 fn guide_slot(cmd: &Command, word: &str) -> Option<Slot> {
-    cmd.slots.iter().find(|(g, _)| *g == word).map(|(_, s)| *s)
+    cmd.slots.iter().find(|n| n.guide == word).map(|n| n.kind)
 }
 
 /// A command's slot after those its words fill, guide words not counted.
@@ -668,7 +725,7 @@ fn next_slot(cmd: &Command, words: &[&str]) -> Option<Slot> {
         .iter()
         .filter(|w| guide_slot(cmd, w).is_none())
         .count();
-    cmd.slots.get(filled).map(|(_, s)| *s)
+    cmd.slots.get(filled).map(|n| n.kind)
 }
 
 /// Whether a command line ends inside a quoted string ("…" or '…'), so a
@@ -809,7 +866,7 @@ pub fn command_groups(input: &str) -> Vec<Group> {
 
 /// A command's slots, each with its guide word, and what it does.
 fn usage(c: &Command) -> String {
-    let slots: Vec<String> = c.slots.iter().map(|(n, _)| format!("({n}) …")).collect();
+    let slots: Vec<String> = c.slots.iter().map(|n| format!("({}) …", n.guide)).collect();
     format!("{} {} — {}", c.name, slots.join(" "), c.help)
 }
 

@@ -222,7 +222,7 @@ fn function(n: NamedKey) -> Option<Key> {
 /// left button is down, selecting.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Drag {
-    pub selection: Option<Selection>,
+    pub selection: Option<CellRange>,
     pub dragging: bool,
 }
 
@@ -230,7 +230,7 @@ impl Drag {
     /// The left button down at a cell: a selection starts there; with no
     /// cell (the mouse off, or a menu open), none does.
     pub fn press(&mut self, at: Option<(u16, u16)>) {
-        self.selection = at.map(|cell| Selection {
+        self.selection = at.map(|cell| CellRange {
             from: cell,
             to: cell,
         });
@@ -262,9 +262,10 @@ impl Drag {
     }
 }
 
-/// A selection, by the cell where it began and the cell where it ends.
+/// The cells a drag selects, by the cell where it began and the cell where
+/// it ends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Selection {
+pub struct CellRange {
     pub from: (u16, u16),
     pub to: (u16, u16),
 }
@@ -273,7 +274,7 @@ pub struct Selection {
 /// last.
 type Columns = (u16, u16);
 
-impl Selection {
+impl CellRange {
     /// Whether it holds only the cell it began at: a click, not a drag.
     pub fn is_click(&self) -> bool {
         self.from == self.to
@@ -613,23 +614,23 @@ mod selection_tests {
         // Catches the other pane's text taken in, rows out of order, a
         // drag up read backwards, or a row's indent kept.
         let buf = screen(&PANES);
-        let down = Selection {
+        let down = CellRange {
             from: (8, 0),
             to: (8, 1),
         };
         assert_eq!(down.text(&buf), "flew in 1988. It land");
-        let up = Selection {
+        let up = CellRange {
             from: (8, 1),
             to: (8, 0),
         };
         assert_eq!(up.text(&buf), down.text(&buf));
-        let right = Selection {
+        let right = CellRange {
             from: (26, 1),
             to: (34, 1),
         };
         assert_eq!(right.text(&buf), "cites 1.3");
         assert!(
-            Selection {
+            CellRange {
                 from: (3, 2),
                 to: (3, 2)
             }
@@ -658,7 +659,7 @@ mod selection_tests {
         assert_eq!(word_at(&buf, (0, 0)), "日本");
         assert_eq!(word_at(&buf, (3, 0)), "日本", "the cell 本 covers");
         assert_eq!(word_at(&buf, (5, 0)), "x");
-        let all = Selection {
+        let all = CellRange {
             from: (0, 0),
             to: (5, 0),
         };
@@ -670,7 +671,7 @@ mod selection_tests {
         // Catches a cell outside the selection marked, or one inside it
         // left as it was.
         let mut buf = screen(&PANES);
-        Selection {
+        CellRange {
             from: (2, 0),
             to: (6, 0),
         }

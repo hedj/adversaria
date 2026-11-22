@@ -2,7 +2,7 @@
 //! the adoptions back (docs/guide.md § 1.3, § 2.4).
 
 mod support;
-use memex::app::Key;
+use memex::app::{Key, Mode};
 use support::Room;
 
 /// An item stating two claims of a date, from two sources.
@@ -89,6 +89,11 @@ fn a_claim_taken_back_can_be_adopted_again() {
     assert_eq!(dates(&mut r), 2);
 }
 
+/// Whether Command is open, latched, with this line typed: a prompt.
+fn asks_with(r: &Room, line: &str) -> bool {
+    matches!(&r.app.session.mode, Mode::Quasi(a) if a.latched() && a.input == line)
+}
+
 #[test]
 fn a_fact_read_from_the_text_is_not_offered_but_a_layer_is() {
     // Catches `retract` alone taking back a statement its item's text was
@@ -100,10 +105,14 @@ fn a_fact_read_from_the_text_is_not_offered_but_a_layer_is() {
     let order = r.outline().in_order();
     r.put_cursor(order[0]);
     r.command("retract");
-    assert_eq!(
-        r.app.session.message,
-        "the target has nothing to retract: no adoption, fact or layer of its own"
+    let why = "the target has nothing to retract: no adoption, fact or layer of its own";
+    assert!(
+        r.app.session.message.starts_with(why),
+        "{}",
+        r.app.session.message
     );
+    assert!(asks_with(&r, "retract "), "it asks for the entry");
+    r.tap(&[Key::Escape]);
     r.put_cursor(order[1]);
     r.command("layer bar(x(C), y(V)) where box(C, V)");
     let layer = r.outline().views[&order[1]][0].seq;

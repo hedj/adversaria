@@ -79,6 +79,19 @@ impl App {
         }
     }
 
+    /// What `check` checks by default: the target's quote, if it was
+    /// imported from a document, or the source it states; neither if it
+    /// has both or none, so the memex asks.
+    pub(crate) fn check_kind(&self, target: u64) -> Option<String> {
+        let quote = self.notebook.quote(target).is_ok();
+        let source = self.states_a_source(target);
+        match (quote, source) {
+            (true, false) => Some("quote".into()),
+            (false, true) => Some("source".into()),
+            _ => None,
+        }
+    }
+
     pub(crate) fn cmd_check(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let ruling = match words.first().copied() {
             Some("quote") => self.check_quote(target)?,

@@ -45,6 +45,12 @@ impl App {
         Ok(ruling.into())
     }
 
+    /// Whether an item's facts state a source the source check can check.
+    pub(crate) fn states_a_source(&self, item: u64) -> bool {
+        let facts = self.notebook.facts_of(item);
+        facts.is_ok_and(|f| Source::of(&f).is_ok())
+    }
+
     /// The source check: fetch the item's DOI from Crossref, never trusting a
     /// copy that came with the claim, and rule: found, misattributed (the
     /// title differs from the one claimed), not_found, unavailable, retracted.

@@ -51,6 +51,12 @@ impl App {
         Ok(String::new())
     }
 
+    /// The target's last entry that can be retracted, by its number: what
+    /// `retract` takes back by default.
+    pub(crate) fn last_retractable(&self, _: u64) -> Option<String> {
+        self.targets_last().map(|seq| seq.to_string())
+    }
+
     /// The target's own last entry on this branch that can still be
     /// retracted: an adoption of its claims, a fact stated on it (not one
     /// its text was read as, which its text keeps), or a layer of its view.
@@ -72,6 +78,13 @@ impl App {
     fn ask_retract(&mut self, target: u64, dependents: Vec<u64>) {
         self.session.message.clear();
         self.session.mode = Mode::ConfirmRetract { target, dependents };
+    }
+
+    /// The target's text, if the memex reads it as statements: what
+    /// `suppose` supposes by default.
+    pub(crate) fn statement_of(&self, target: u64) -> Option<String> {
+        let outline = &self.notebook.outline;
+        outline.has_meaning(target).then(|| outline.text(target))
     }
 
     /// Suppose a statement as the Suppose key does (App::suppose_text).

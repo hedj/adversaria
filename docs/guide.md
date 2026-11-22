@@ -178,6 +178,14 @@ An **address** names an item in three forms: its number (`1.2`), the
 start of its text or a label it alone carries (`Energia`, `draft`), or,
 for an entry, `entry 12`.
 
+Type a verb alone, and the memex fills in what it can. The foot shows
+each part it will fill, with its guide word, its kind and its default:
+`move (after) ‹item› [3]` moves the target after item 3, the item you
+last jumped from. A part with no default now is asked for: Command stays
+open, latched, with the verb typed, and the message says why there is no
+default. Type the part or point at it (§ 2.3), then press Enter; Esc
+leaves the command. § 2.4, A verb alone, lists the defaults.
+
 ## 2. Working
 
 ### 2.1 Starting
@@ -553,6 +561,23 @@ type. Any other guide word you type is read as part of what follows it,
 so leave those out. Unless the table
 says otherwise, a command acts on the **target**, the item under the
 cursor.
+
+#### A verb alone
+
+| Verb alone | Takes | With none now |
+| --- | --- | --- |
+| `move` | (after) the item you last jumped from | asks for it |
+| `copy` | (after) the target itself | |
+| `link` | (to) the item you last jumped from, (as) `link` | asks for the item |
+| `go` | `back` | asks where |
+| `show` | (as) `chart` | |
+| `suppose` | (that) the target's text, if the memex reads it as statements | asks for a statement |
+| `check` | (which) `quote` or `source`, whichever the target has | asks, if it has both or neither |
+| `retract` | (entry) the target's last entry that can be retracted | asks for an entry |
+| `import`, `export` | | asks for the file |
+
+The item you last jumped from is never the target itself. Other verbs
+alone do what their rows below say.
 
 Where a command takes an ADDRESS, any of these name an item:
 

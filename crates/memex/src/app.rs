@@ -547,6 +547,14 @@ impl Active {
 
     /// The command palette: the Command quasimode, latched, listing what
     /// may come next.
+    /// Command latched with a line typed, prompting for what it needs.
+    pub(crate) fn prompting(line: String) -> Active {
+        Active {
+            input: line,
+            ..Active::tapped(Kind::default())
+        }
+    }
+
     pub(crate) fn palette() -> Active {
         let held = Active::held(Kind::default());
         Active {

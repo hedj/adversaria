@@ -8,6 +8,7 @@ mod find;
 mod formal;
 mod inline;
 mod knowledge;
+mod nouns;
 mod reading;
 mod split;
 mod structure;
