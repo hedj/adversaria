@@ -400,3 +400,17 @@ fn an_item_not_imported_is_no_document_to_revise() {
         "1 did not come from an imported document"
     );
 }
+
+#[test]
+fn a_block_new_at_the_start_goes_after_the_items_before_the_document() {
+    // Catches a revision's new first block written at the top of the
+    // outline, above the user's own items, far from its document (the
+    // code review, E8).
+    let mut r = Room::new("rev-new-first");
+    r.items(&["mine"]);
+    let after = revised(&mut r, "Old para.\n", "New first.\n\nOld para.\n");
+    assert_eq!(
+        after,
+        items(&[("", "mine"), ("", "New first."), ("", "Old para.")])
+    );
+}

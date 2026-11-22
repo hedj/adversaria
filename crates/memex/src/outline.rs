@@ -68,10 +68,13 @@ pub struct Revised {
     pub changed: Vec<usize>,
     pub dropped: Vec<u64>,
     pub home: u64,
+    /// The item before the document where it is, if any: a block new at
+    /// its start goes after it, not above the outline.
+    pub before: Option<u64>,
 }
 
 impl Revised {
-    fn of(r: crate::docs::Revision, old: &[u64], home: u64) -> Revised {
+    fn of(r: crate::docs::Revision, old: &[u64], home: u64, before: Option<u64>) -> Revised {
         let kept = r.kept.iter().map(|k| k.map(|o| old[o])).collect();
         let dropped = r.dropped.iter().map(|o| old[*o]).collect();
         Revised {
@@ -79,6 +82,7 @@ impl Revised {
             changed: r.changed,
             dropped,
             home,
+            before,
         }
     }
 }
@@ -1013,7 +1017,12 @@ impl Outline {
         let home = self
             .parent(old.first().copied().unwrap_or(TOP))
             .unwrap_or(TOP);
-        Revised::of(r, &old, home)
+        let before = old.first().and_then(|first| {
+            let siblings = self.siblings(*first);
+            let at = siblings.iter().position(|s| s == first)?;
+            at.checked_sub(1).map(|i| siblings[i])
+        });
+        Revised::of(r, &old, home, before)
     }
 
     /// Each item's style and text.

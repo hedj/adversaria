@@ -252,6 +252,7 @@ impl App {
         let mut stack = Stack {
             chain: vec![],
             home: revised.home,
+            last_home: revised.before,
         };
         for (b, kept) in blocks.iter().zip(&revised.kept) {
             let id = match kept {
@@ -304,13 +305,18 @@ impl App {
 struct Stack {
     chain: Vec<(usize, u64)>,
     home: u64,
+    /// The last item placed where the document is, or, before any, the
+    /// item before the document there.
+    last_home: Option<u64>,
 }
 
 impl Stack {
     /// Where a block of a depth goes.
     fn spot(&mut self, depth: usize) -> Spot {
         let after = self.pop_to(depth);
+        let at_home = self.chain.is_empty();
         let under = self.chain.last().map_or(self.home, |(_, id)| *id);
+        let after = after.or(self.last_home.filter(|_| at_home));
         Spot { under, after }
     }
 
@@ -327,6 +333,9 @@ impl Stack {
 
     fn push(&mut self, depth: usize, id: u64) {
         self.pop_to(depth);
+        if self.chain.is_empty() {
+            self.last_home = Some(id);
+        }
         self.chain.push((depth, id));
     }
 }
