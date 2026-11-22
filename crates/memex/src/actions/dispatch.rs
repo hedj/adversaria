@@ -729,7 +729,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
         ],
     ),
     ("FINDING AND MOVING", &["find", "go"]),
-    ("FACTS AND DEFINITIONS", &["show", "check"]),
+    ("VIEWS AND CHECKS", &["show", "check"]),
     (
         "CLAIMS AND SUGGESTIONS",
         &["adopt", "dismiss", "import", "export"],
