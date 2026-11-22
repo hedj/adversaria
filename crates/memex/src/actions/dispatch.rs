@@ -737,7 +737,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
     ("FACTS AND DEFINITIONS", &["layer", "check"]),
     (
         "CLAIMS AND SUGGESTIONS",
-        &["adopt", "interrogate", "dismiss", "import", "export"],
+        &["adopt", "dismiss", "import", "export"],
     ),
     (
         "WORLDS AND HISTORY",
@@ -763,6 +763,7 @@ pub const ALIASES: &[&str] = &[
     "set",
     "query",
     "pane",
+    "interrogate",
 ];
 
 /// A group of commands: its heading, and those of its commands listed.

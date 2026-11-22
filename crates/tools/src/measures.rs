@@ -7,7 +7,8 @@
 //! * following links: view follow;
 //! * navigating: view move, fold, pane, scope;
 //! * deciding: adopt, retract, suppose, undo, redo, purge, view dismiss and world;
-//! * checking: view interrogate, and facts that are rulings;
+//! * checking: view interrogate; view move that ends with the inspector
+//!   showing a claim's questions (`inspects`); and facts that are rulings;
 //! * importing: import; exporting: view export.
 //!
 //! Clerical work is searching, following links and navigating.
@@ -79,6 +80,7 @@ pub fn kind(e: &Entry) -> Option<&'static str> {
         ("import", _) => Some("importing"),
         ("view", "leap" | "find") => Some("searching"),
         ("view", "follow") => Some("following links"),
+        ("view", "move") if inspects(e) => Some("checking"),
         ("view", "move" | "fold" | "pane" | "scope") => Some("navigating"),
         ("view", "dismiss" | "world") => Some("deciding"),
         ("view", "interrogate") => Some("checking"),
@@ -124,6 +126,13 @@ impl Report {
             self.dismissed += 1;
         }
     }
+}
+
+/// Whether a view entry shows a claim's questions in the inspector: since
+/// the inspector shows them at the selected claim item, without a command
+/// (docs/concepts.md, decision 4), a move to one is a check.
+fn inspects(e: &Entry) -> bool {
+    e.body().is_some_and(|b| b["inspects"].is_u64())
 }
 
 /// Whether an entry is a view of one of these ops.
@@ -324,6 +333,23 @@ mod tests {
             obs(&[], "actual"),
         ]);
         assert_eq!(measure(&es).violations_corrected, 1);
+    }
+
+    #[test]
+    fn a_move_to_a_claims_questions_is_checking() {
+        // Catches a check made by selecting a claim item counted as
+        // navigating: checking would fall with no less of it done.
+        let moved =
+            |inspects: serde_json::Value| ("view", json!({"op": "move", "inspects": inspects}));
+        let es = chain(&[
+            ("edit", json!({"op": "init"})),
+            moved(json!(3)),
+            moved(json!(null)),
+        ]);
+        assert_eq!(
+            (kind(&es[1]), kind(&es[2])),
+            (Some("checking"), Some("navigating"))
+        );
     }
 
     #[test]

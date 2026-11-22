@@ -224,7 +224,7 @@ impl Keys {
     }
 
     /// An offer, its label naming the key bound to its line, if one is,
-    /// so a menu teaches the key ("question its claim  (F2)").
+    /// so a menu teaches the key ("adopt its claims  (F3)").
     pub(crate) fn labelled(&self, o: Offer) -> Offer {
         match self.bound_to(&o.line) {
             Some(key) => Offer {

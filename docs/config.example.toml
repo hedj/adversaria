@@ -24,7 +24,6 @@ suppose = ["LeftSuper", "RightSuper"]
 # its default; the others keep theirs.
 [keys]
 F1 = "palette"
-F2 = "interrogate"
 F3 = "adopt"
 F4 = "retract"
 F6 = "switch"

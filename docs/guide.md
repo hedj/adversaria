@@ -161,8 +161,12 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   marks, the constraint, its rule, its solutions and what depends on them;
   on a view, its layers. Under the links or the constraint, `READ AS` and
   the address show what the item's text was read as, in Prolog, and its
-  tags (§ 3.1). After `interrogate`, the pane shows the interrogation. `pane`
-  sets it to the outline, links, suggestions or matches.
+  tags (§ 3.1). On an item that states a claim, the pane then asks of each
+  claim who else claims it, who claims the contrary, its source, the
+  source's record, and what adopting it would do (`CLAIMS OF 2 · WHO SAYS
+  THEM`). This pane is the inspector: it shows what is known about the
+  item the cursor is on, and never takes the keys. `find` shows a list in
+  its place, and `find` alone shows the inspector again (§ 2.4).
 - **Foot:** the message line, and, while a quasimode is on (held or
   latched), what you have typed and how it ends.
 
@@ -277,9 +281,9 @@ at either end of the outline. It unfolds a folded branch to reach a match.
 #### Function keys and confirmations
 
 F1 opens the command palette: Command, latched, with the list of
-commands open. F10 runs `quit`. F2, F3 and F4 question a claim, adopt it
-and take back the target's own last entry, an adoption, a fact or a
-layer (`retract`), F6 switches between two outline panes, and F7 and F8 go back and
+commands open. F10 runs `quit`. F3 and F4 adopt a claim and take back
+the target's own last entry, an adoption, a fact or a layer
+(`retract`), F6 switches between two outline panes, and F7 and F8 go back and
 forward along the trail of jumps; each runs the command of that name
 (§ 2.4), and § 4.3 lists every default.
 
@@ -344,7 +348,7 @@ under it. The offers appear in a
 menu titled with what it acts on, such as `act on “flight”` or the
 item's text, just below the pointer (above it near the foot), so the
 row clicked stays in view. An offer that a key runs names the key, as
-`question its claim  (F2)`. Up and Down choose, Enter or a number runs
+`adopt its claims  (F3)`. Up and Down choose, Enter or a number runs
 one, Esc closes it; a click on an offer runs it, and a click anywhere
 else closes the menu. If nothing can act on it, the foot says so.
 
@@ -383,8 +387,8 @@ first:
 | text that names an item | `link to` it from here, or `transclude` it: show its text here, in place |
 | any text | `go` to the next item holding it (find) |
 
-The other commands act on the item, not on text (`adopt`, `interrogate`,
-`split`, `delete` and the rest), so the menu does not offer them; run
+The other commands act on the item, not on text (`adopt`, `split`,
+`delete` and the rest), so the menu does not offer them; run
 them with Command, or the keys bound to them.
 
 Add your own with `[[plumb]]` in the configuration (§ 4.3); yours are
@@ -415,7 +419,7 @@ the command an offer runs is.
 ### 2.4 Commands and addresses
 
 Type a command in the Command quasimode, or bind it to a key (§ 4.3). A
-unique prefix is enough: `interr` runs `interrogate`. Words in parentheses
+unique prefix is enough: `supp` runs `suppose`. Words in parentheses
 in the help, such as `(after)`, are guide words, which say what each part
 is. Only `to`, `from` and `after`, before an address, may be typed or
 left out (`move after 2` or `move 2`), and `link` needs `as` before a
@@ -514,7 +518,7 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 | Command | Form | Does |
 | --- | --- | --- |
 | `adopt` | `adopt` | makes the target's claims beliefs, keeping their source |
-| `interrogate` | `interrogate` | asks of the target's claim: who else claims it, who claims the contrary, its source, the source's record, and what adopting it would do |
+| `interrogate` | `interrogate` | an old name, kept: the inspector asks these questions at any item that states a claim (§ 2.2). `interrogate` holds the target in the inspector while the cursor moves elsewhere, until a supposition is left |
 | `accept` | `accept N` | adopts the Nth suggestion shown, with its evidence |
 | `dismiss` | `dismiss N` | dismisses the Nth suggestion shown; it returns only if its evidence changes |
 | `import` | `import wikidata FILE`, `import document FILE [as ADDRESS]`, `import results FILE` | imports a Wikidata subset, a document (with `as`, as a revision of the document the item at ADDRESS came from), or an analysis's results (§ 3.4, § 4.1) |
@@ -1109,7 +1113,6 @@ suppose = ["LeftSuper", "RightSuper"]
 
 [keys]
 F1 = "palette"
-F2 = "interrogate"
 F3 = "adopt"
 F4 = "retract"
 F6 = "switch"

@@ -122,7 +122,7 @@ impl App {
     }
 
     fn world_body(&self, op: &str) -> Value {
-        self.session.view.to_json("world", json!({op: true}))
+        self.view_body("world", json!({op: true}))
     }
 }
 

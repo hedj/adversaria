@@ -47,8 +47,9 @@ pub struct Reasoning {
     /// What reasoning found: [0] the current world, [1] the actual world
     /// while a supposition is open.
     pub eval: [Option<WorldEval>; 2],
-    /// Interrogation's preview of adopting a claim: violations it would raise.
-    pub preview: Option<String>,
+    /// The preview of adopting a claim item's claims, and the item: the
+    /// violations adopting them would raise.
+    pub preview: Option<(u64, String)>,
     pub suggestions: Suggestions,
     /// The parser of controlled English, started when first needed.
     ace: Option<Ace>,

@@ -21,22 +21,41 @@ fn room(name: &str, statements: &[&str]) -> Room {
     r
 }
 
-/// The preview of adopting the claims at the cursor.
+/// The preview of adopting the claims at the cursor, which the inspector
+/// shows there without a command.
 fn preview(r: &mut Room) -> String {
-    r.command("interrogate");
     r.app.evaluate().unwrap();
-    r.app.reason.preview.clone().unwrap_or_default()
+    let cursor = r.app.cursor();
+    match r.app.reason.preview.clone() {
+        Some((item, said)) if item == cursor => said,
+        other => panic!("no preview for the cursor's item: {other:?}"),
+    }
 }
 
 #[test]
 fn a_claim_retracted_while_interrogated_leaves_none_to_adopt() {
+    // Catches a preview kept for a claim no longer stated: interrogate
+    // (an alias) holds the item, so its preview says why it is empty.
     let mut r = room("none", &["claim date(flight, 1989) from talk"]);
+    let claim = r.last("edit");
+    r.command("interrogate");
+    preview(&mut r);
+    r.command(&format!("retract {claim}"));
+    r.tap(&[memex::app::Key::Enter]);
+    assert_eq!(preview(&mut r), "no claims to adopt");
+}
+
+#[test]
+fn the_inspector_shows_no_preview_once_its_item_states_no_claim() {
+    // Catches a claim's questions kept beside an item that no longer
+    // states one, when nothing holds the item.
+    let mut r = room("gone", &["claim date(flight, 1989) from talk"]);
     let claim = r.last("edit");
     preview(&mut r);
     r.command(&format!("retract {claim}"));
     r.tap(&[memex::app::Key::Enter]);
     r.app.evaluate().unwrap();
-    assert_eq!(r.app.reason.preview.as_deref(), Some("no claims to adopt"));
+    assert_eq!(r.app.reason.preview, None);
 }
 
 #[test]

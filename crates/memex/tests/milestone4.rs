@@ -6,6 +6,7 @@ use memex::config::Config;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::style::{Color, Modifier, Style};
+use serde_json::json;
 
 mod support;
 use support::{Room, replayed};
@@ -213,16 +214,16 @@ fn adopting_turns_a_disagreement_into_a_violation_and_back() {
 }
 
 #[test]
-fn interrogation_answers_its_five_questions() {
+fn the_inspector_answers_a_claims_five_questions() {
     // Plan: "interrogate with one key: who else claims it, who claims the
     // contrary, its provenance, the source's record, and a preview of
-    // adopting it as a world".
+    // adopting it as a world". Since decision 4 of docs/concepts.md, with
+    // no key: the inspector asks them at the claim's item.
     let mut app = scene("interrogate");
     leap(&mut app, "talk notes");
-    tap(&mut app, Key::F(2));
     app.evaluate().unwrap();
     let s = screen(&app);
-    s.assert("INTERROGATE · WHAT IS CLAIMED HERE");
+    s.assert("CLAIMS OF 2.1 · WHO SAYS THEM");
     s.assert("claims: the date of Buran's flight is 1989 — from my notes, conference talk");
     s.assert("  entry ");
     s.assert("who else claims it");
@@ -233,10 +234,21 @@ fn interrogation_answers_its_five_questions() {
     s.assert("0 of its claims adopted, 0 of them retracted since");
     s.assert("adopting it would raise 1 violation of one date per event");
     s.assert("F3 adopts · F4 retracts");
+    tap(&mut app, Key::Down);
+    tap(&mut app, Key::Up);
+    app.flush();
+    let last = app
+        .journal()
+        .entries()
+        .last()
+        .unwrap()
+        .body()
+        .unwrap()
+        .clone();
     assert_eq!(
-        app.journal().entries().last().unwrap().body().unwrap()["op"],
-        "interrogate",
-        "interrogation is journaled as an action"
+        (&last["op"], &last["inspects"]),
+        (&json!("move"), &json!(app.cursor())),
+        "the check is journaled: the view entry names the claim item shown"
     );
 }
 
@@ -245,7 +257,6 @@ fn the_interrogation_hint_follows_the_configured_keys() {
     // Catches a hint that names the default keys after they are rebound.
     let mut app = scene("interrogate-keys");
     leap(&mut app, "talk notes");
-    tap(&mut app, Key::F(2));
     app.evaluate().unwrap();
     let config = Config::parse("[keys]\nF3 = \"\"\nInsert = \"adopt\"\nF4 = \"\"\n");
     app.session.keys = config.unwrap().keys();
@@ -265,7 +276,6 @@ fn wikipedia_too(name: &str) -> Room {
 /// What the interrogation of the talk notes shows.
 fn talk_interrogated(app: &mut App) -> Screen {
     leap(app, "Talk notes:");
-    tap(app, Key::F(2));
     app.evaluate().unwrap();
     screen(app)
 }
@@ -605,7 +615,6 @@ fn replay_reproduces_claims_constraints_and_worlds() {
 /// suppose the flight was in 1989; flushed and evaluated.
 fn interrogate_adopt_retract_suppose(app: &mut App) {
     leap(app, "talk notes");
-    tap(app, Key::F(2));
     tap(app, Key::F(3));
     tap(app, Key::F(4));
     tap(app, Key::Enter);

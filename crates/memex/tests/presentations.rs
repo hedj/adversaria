@@ -136,7 +136,7 @@ fn a_claim_offers_what_applies_to_it_first() {
     // apply (taking back an adoption it does not have), or after plumbing's.
     let mut r = dated("translate-claim");
     let offers = right_click_on(&mut r, "Talk-notes says");
-    assert_eq!(offers[..2], ["interrogate", "adopt"], "{offers:?}");
+    assert_eq!(offers[..2], ["adopt", "adopt instead"], "{offers:?}");
     let takes_back = |o: &Vec<String>| o.iter().any(|l| l.starts_with("retract "));
     assert!(!takes_back(&offers), "{offers:?}");
     assert_eq!(
@@ -150,16 +150,11 @@ fn a_claim_offers_what_applies_to_it_first() {
 
 #[test]
 fn a_menu_names_the_key_bound_to_an_offer() {
-    // Catches a menu that runs interrogate without saying F2 does it too,
-    // so the mouse never teaches the keyboard; or a key named for an
-    // offer no key runs.
+    // Catches a menu that runs adopt without saying F3 does it too, so
+    // the mouse never teaches the keyboard; or a key named for an offer
+    // no key runs.
     let mut r = dated("menu-keys");
     right_click_on(&mut r, "Talk-notes says");
-    assert!(
-        r.shows("question its claim  (F2)"),
-        "{:#?}",
-        r.lines_at(160, 40)
-    );
     assert!(
         r.shows("adopt its claims  (F3)"),
         "{:#?}",
@@ -192,15 +187,15 @@ fn a_mark_offers_its_rule_and_retracting_its_constraint() {
 fn a_mark_under_a_claim_offers_the_claims_actions_first_on_its_item() {
     // Catches a mark that offers only its rule, though it is a finding
     // about the item it is under: the second review right-clicked a
-    // mark under a claim and could not question the claim from it.
+    // mark under a claim and could not act on the claim from it.
     let mut r = dated("mark-claim-menu");
     let offers = right_click_on(&mut r, "1989 here");
     assert_eq!(
         offers,
-        ["interrogate", "adopt", "adopt instead", "go 3", &offers[4]],
+        ["adopt", "adopt instead", "go 3", &offers[3]],
         "the claim's (disputed, so adopting it instead), then the rule's"
     );
-    assert!(offers[4].starts_with("retract "), "{offers:?}");
+    assert!(offers[3].starts_with("retract "), "{offers:?}");
     assert!(
         r.here().starts_with("Talk-notes says"),
         "the cursor on the claim"
@@ -334,7 +329,7 @@ fn the_foot_says_what_the_mouse_does_over_what_is_under_it() {
     let said = foot(&r);
     assert_eq!(
         said[0],
-        "click: go to 2 · right-click for: question its claim; adopt its claims; adopt them instead of what they contradict"
+        "click: go to 2 · right-click for: adopt its claims; adopt them instead of what they contradict"
     );
     assert_eq!(said[1], "a message stays");
     r.app.session.pointer = None;

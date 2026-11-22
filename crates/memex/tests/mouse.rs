@@ -128,7 +128,6 @@ fn a_click_on_the_hint_adopts_and_retracts() {
     // Plan: "Adopt and retract with one click". Catches a hint that is drawn
     // but not clickable, or whose two halves run the wrong commands.
     let mut app = notes("hint");
-    tap(&mut app, Key::F(2));
     app.evaluate().unwrap();
     let adopt = Presentation::Command("adopt".into());
     assert_eq!(click_on(&mut app, "F3 adopts"), adopt);

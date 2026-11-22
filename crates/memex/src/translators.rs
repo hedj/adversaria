@@ -68,12 +68,11 @@ impl App {
         offers
     }
 
-    /// What an item's claims offer: questioned or adopted, if it states
-    /// any; its adoption taken back, if it has one.
+    /// What an item's claims offer: adopted, if it states any (selecting
+    /// it shows their questions); its adoption taken back, if it has one.
     fn claim_offers(&self, id: u64) -> Vec<Offer> {
         let mut offers = Vec::new();
         if !self.claims_of(id).is_empty() {
-            offers.push(offer("question its claim", "interrogate"));
             offers.push(offer("adopt its claims", "adopt"));
             if self.disputed(id) {
                 let instead = "adopt them instead of what they contradict";

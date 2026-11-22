@@ -93,11 +93,12 @@ impl App {
         self.record_observations();
     }
 
-    /// While a claim is interrogated, the preview of adopting it.
+    /// While the inspector shows a claim's questions, the preview of
+    /// adopting it.
     fn refresh_preview(&mut self) -> Result<(), String> {
         self.reason.preview = None;
-        if let Some(item) = self.session.view.interrogate {
-            self.reason.preview = Some(self.preview_adoption(item)?);
+        if let Some(item) = self.inspected_claim() {
+            self.reason.preview = Some((item, self.preview_adoption(item)?));
         }
         Ok(())
     }

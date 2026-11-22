@@ -160,14 +160,16 @@ and what it would break.*
 Move the mouse pointer over the claim. It is underlined, and the foot
 says what the mouse does there:
 
-    click: go to 1.3 · right-click for: question its claim; adopt its claims
+    click: go to 1.3 · right-click for: adopt its claims; adopt them instead of what they contradict
 
 What the screen shows stands for your notes themselves, so the mouse
 acts on them: a right-click offers what can be done with this claim.
-The keys do the same. Press Up to put the cursor on the claim, and press
-**F2** to question it. The right pane answers five questions:
+The keys do the same. Press Up to put the cursor on the claim. The right
+pane, the inspector, shows what is known about the item the cursor is
+on. Here it shows the constraint the claim's mark comes from, then five
+questions about the claim:
 
-    INTERROGATE · WHAT IS CLAIMED HERE
+    CLAIMS OF 1.3 · WHO SAYS THEM
 
 It shows who else claims it, `who claims the contrary`, its source, the
 source's record, and what adopting it would do:
@@ -287,12 +289,12 @@ changes in a world of their own, one entry each:
 
     WORLD · REVISION OF ESSAY.MD
 
-    #53  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”
-    #54  added: “Each team wrote its findings in the DRAKON language.”
+    #52  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”
+    #53  added: “Each team wrote its findings in the DRAKON language.”
 
 Say your own sources name two teams. Reject that change: right-click it,
 and the menu offers `reject this change`; or run, by its number,
-`dismiss change 53`. The foot of the screen says
+`dismiss change 52`. The foot of the screen says
 `nothing depends on it · Enter retracts · Esc keeps it`; press Enter.
 Then run `adopt world` to keep the rest. The essay keeps
 `Two teams reviewed the flight software.` and gains

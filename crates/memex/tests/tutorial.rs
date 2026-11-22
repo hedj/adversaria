@@ -282,12 +282,12 @@ fn a_claim_and_a_rule(t: &mut T) {
 /// Step 4: the claim questioned, adopted, and the adoption taken back.
 fn the_claim_questioned(t: &mut T) {
     t.point_at("Talk-notes says");
-    t.shows("click: go to 1.3 · right-click for: question its claim; adopt its claims");
+    t.shows("click: go to 1.3 · right-click for: adopt its claims; adopt them instead of what they contradict");
     t.app.session.pointer = None;
     t.tap(Key::Up);
     assert!(t.here().starts_with("Talk-notes"));
-    t.key(Key::F(2));
-    t.shows("INTERROGATE · WHAT IS CLAIMED HERE");
+    t.pause();
+    t.shows("CLAIMS OF 1.3 · WHO SAYS THEM");
     t.shows("who claims the contrary");
     t.shows("adopting it would raise 1 violation of Nothing has more than 1 date");
     t.key(Key::F(3));
@@ -383,14 +383,22 @@ fn a_draft_imported(t: &mut T) {
 /// rejected, the other kept.
 fn a_revision_taken_in(t: &mut T) {
     t.command("import document docs/tutorial/revised/essay.md");
+    for e in t.app.journal().entries() {
+        eprintln!(
+            "DBG {} {} {}",
+            e.seq,
+            e.kind(),
+            e.body().map(|b| b["op"].to_string()).unwrap_or_default()
+        );
+    }
     t.look("revision");
     t.shows("WORLD · REVISION OF ESSAY.MD");
-    t.shows("#53  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”");
-    t.shows("#54  added: “Each team wrote its findings in the DRAKON language.”");
-    t.right_click_on("#53");
+    t.shows("#52  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”");
+    t.shows("#53  added: “Each team wrote its findings in the DRAKON language.”");
+    t.right_click_on("#52");
     t.shows("reject this change");
     t.key(Key::Escape);
-    t.command("dismiss change 53");
+    t.command("dismiss change 52");
     t.shows("nothing depends on it · Enter retracts · Esc keeps it");
     t.key(Key::Enter);
     t.look("retracted");

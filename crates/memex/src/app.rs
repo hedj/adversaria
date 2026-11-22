@@ -691,7 +691,7 @@ impl App {
         self.flush_text();
         if self.session.view_dirty {
             self.session.view_dirty = false;
-            let body = self.session.view.to_json("move", json!({}));
+            let body = self.view_body("move", json!({}));
             let written = self.write_here("view", body);
             self.session.report(written);
         }
@@ -700,9 +700,16 @@ impl App {
     pub(crate) fn write_view(&mut self, op: &str, extra: Value) {
         self.flush_text();
         self.session.view_dirty = false;
-        let body = self.session.view.to_json(op, extra);
+        let body = self.view_body(op, extra);
         let written = self.write_here("view", body);
         self.session.report(written);
+    }
+
+    /// A view entry's body: what is shown, the claim item the inspector
+    /// shows the questions of among it, and what the action adds.
+    pub(crate) fn view_body(&self, op: &str, mut extra: Value) -> Value {
+        extra["inspects"] = json!(self.inspected_claim());
+        self.session.view.to_json(op, extra)
     }
 
     pub(crate) fn flush_text(&mut self) {

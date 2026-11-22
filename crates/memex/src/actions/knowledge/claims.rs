@@ -10,19 +10,30 @@ use format::terms::Term;
 use serde_json::{Value, json};
 
 impl App {
-    /// An item's claims: (entry seq, source, claimed fact).
+    /// An item's claims at the tip: (entry seq, source, claimed fact).
     pub fn claims_of(&self, item: u64) -> Vec<(u64, String, Term)> {
         let facts = self.notebook.facts_now().unwrap_or_default();
-        facts
-            .into_iter()
-            .filter(|(s, _)| self.notebook.outline.fact_item.get(s) == Some(&item))
-            .filter_map(|(s, f)| match f {
-                Term::Compound(n, a) if n == "claims" && a.len() == 2 => {
-                    Some((s, name_of(&a[0]), a[1].clone()))
-                }
-                _ => None,
-            })
-            .collect()
+        claims_among(&facts, &self.notebook.outline, item)
+    }
+
+    /// The claim item whose questions the inspector shows: one being
+    /// interrogated, else the selected item if, as the current world was
+    /// last evaluated, it states a claim.
+    pub fn inspected_claim(&self) -> Option<u64> {
+        if let Some(item) = self.session.view.interrogate {
+            return Some(item);
+        }
+        let item = self.session.view.selected();
+        (!self.claims_shown(item).is_empty()).then_some(item)
+    }
+
+    /// An item's claims as the current world was last evaluated: what the
+    /// screen shows, without reading the journal again.
+    pub fn claims_shown(&self, item: u64) -> Vec<(u64, String, Term)> {
+        let Some(e) = self.reason.eval[0].as_ref() else {
+            return vec![];
+        };
+        claims_among(&e.facts, &self.notebook.outline, item)
     }
 
     /// State a claim: a fact, then from and its source.
@@ -281,6 +292,26 @@ impl App {
 
 /// A name, as a term gives it: a string's text, or any other term shown,
 /// as an atom is by its own text.
+/// The claims, of these facts, that an item states: (entry seq, source,
+/// claimed fact).
+fn claims_among(
+    facts: &[(u64, Term)],
+    outline: &crate::outline::Outline,
+    item: u64,
+) -> Vec<(u64, String, Term)> {
+    let stated = facts
+        .iter()
+        .filter(|(s, _)| outline.fact_item.get(s) == Some(&item));
+    stated
+        .filter_map(|(s, f)| match f {
+            Term::Compound(n, a) if n == "claims" && a.len() == 2 => {
+                Some((*s, name_of(&a[0]), a[1].clone()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 fn name_of(t: &Term) -> String {
     match t {
         Term::Str(x) => x.clone(),

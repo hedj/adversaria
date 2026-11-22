@@ -1619,10 +1619,10 @@ fn inverse(kind: &str) -> String {
 /// selected item needs (right_panel).
 fn draw_links(f: &mut Frame, app: &App, area: Rect) -> Presentations {
     let inner = inset(area);
-    if let Some(item) = app.session.view.interrogate {
-        return draw_interrogation(f, app, item, inner);
+    match app.inspected_claim() {
+        Some(item) => draw_claimed(f, app, item, inner),
+        None => draw_presented(f, selected_panel(app), inner),
     }
-    draw_presented(f, selected_panel(app), inner)
 }
 
 /// What the selected item needs.
@@ -1710,13 +1710,45 @@ fn wrapped(lines: Vec<Line<'static>>) -> Paragraph<'static> {
     Paragraph::new(lines).wrap(Wrap { trim: false })
 }
 
-/// An interrogation, and under it the hint of what adopts and what takes
-/// an adoption back, each part a click on its command.
-fn draw_interrogation(f: &mut Frame, app: &App, item: u64, inner: Rect) -> Presentations {
-    let lines = interrogation(app, item);
-    let used = hung(&lines, inner.width as usize).len() as u16;
-    f.render_widget(Hung(lines), inner);
-    draw_adopt_hint(f, app, row_below(inner, used))
+/// A claim item in the inspector, and under it the hint of what adopts
+/// and what takes an adoption back, each part a click on its command.
+fn draw_claimed(f: &mut Frame, app: &App, item: u64, inner: Rect) -> Presentations {
+    let lines = claimed(app, item);
+    let used = rows_of(&lines, inner.width);
+    let mut hits = draw_presented(f, lines, inner);
+    hits.0
+        .extend(draw_adopt_hint(f, app, row_below(inner, used)).0);
+    hits
+}
+
+/// The rows that lines take, hung at a width.
+fn rows_of(lines: &[Presented], width: u16) -> u16 {
+    let drawn: Vec<Line<'static>> = lines.iter().map(|(l, _)| l.clone()).collect();
+    hung(&drawn, width as usize).len() as u16
+}
+
+/// A claim item's lines in the inspector: the findings that mark it, what
+/// its text was read as, and its claims' questions.
+fn claimed(app: &App, item: u64) -> Vec<Presented> {
+    let mut lines = findings_of(app, item);
+    lines.extend(plain(read_as_lines(&app.notebook.outline, item)));
+    if !lines.is_empty() {
+        lines.push((Line::raw(""), None));
+    }
+    lines.extend(plain(interrogation(app, item)));
+    lines
+}
+
+/// The constraints whose findings mark an item, if any do.
+fn findings_of(app: &App, item: u64) -> Vec<Presented> {
+    let outline = &app.notebook.outline;
+    let Some(e) = app.reason.eval[0].as_ref() else {
+        return vec![];
+    };
+    if item_marks(e, outline, item).is_empty() {
+        return vec![];
+    }
+    ConstraintPane { outline, e }.of(item)
 }
 
 /// The row of an area after its first rows: none high if it is outside.
@@ -2903,7 +2935,7 @@ fn definition_goal(e: &WorldEval, id: u64) -> Option<&Term> {
     }
 }
 
-/// The right pane when a claim is interrogated (one key, F2): each of the
+/// The right pane at a claim item, or one interrogated: each of the
 /// item's claims, then what adopting them would do. The hint follows,
 /// drawn by draw_interrogation, where a click can find it.
 fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
@@ -2911,15 +2943,21 @@ fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
         return vec![Line::raw("not yet evaluated")];
     };
     let mut lines = interrogation_head(&app.notebook.outline, item);
-    let claims = app.claims_of(item);
-    lines.extend(claims.into_iter().flat_map(|c| claim_lines(app, e, c)));
-    lines.extend(adoption_lines(app));
+    lines.extend(claims_asked(app, e, item));
+    lines.extend(adoption_lines(app, item));
     lines
 }
 
-/// The interrogation's heading, and the item interrogated.
+/// Each claim an item states, and what is asked of it.
+fn claims_asked(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
+    let claims = app.claims_shown(item).into_iter();
+    claims.flat_map(|c| claim_lines(app, e, c)).collect()
+}
+
+/// The heading of a claim item's questions, and the item.
 fn interrogation_head(outline: &Outline, item: u64) -> Vec<Line<'static>> {
-    let heading = Line::styled("INTERROGATE · WHAT IS CLAIMED HERE", dim());
+    let named = format!("CLAIMS OF {} · WHO SAYS THEM", outline.number(item));
+    let heading = Line::styled(named, dim());
     vec![
         heading,
         Line::raw(""),
@@ -3088,12 +3126,11 @@ fn retracts(e: &format::record::Entry, target: u64) -> bool {
 
 /// What adopting the interrogated claims would do, then the blank line
 /// before the hint.
-fn adoption_lines(app: &App) -> [Line<'static>; 3] {
-    let preview = app
-        .reason
-        .preview
-        .clone()
-        .unwrap_or_else(|| "not yet computed".into());
+fn adoption_lines(app: &App, item: u64) -> [Line<'static>; 3] {
+    let preview = match &app.reason.preview {
+        Some((of, said)) if *of == item => said.clone(),
+        _ => "not yet computed".into(),
+    };
     [
         Line::styled("if adopted", dim()),
         Line::raw(format!("  {preview}")),

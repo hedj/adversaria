@@ -42,7 +42,6 @@ suppose = ["LeftSuper", "RightSuper"]
 # its default; the others keep theirs.
 [keys]
 F1 = "palette"
-F2 = "interrogate"
 F3 = "adopt"
 F4 = "retract"
 F6 = "switch"
@@ -592,9 +591,9 @@ mod tests {
     }
 
     #[test]
-    fn fourteen_default_bindings() {
+    fn thirteen_default_bindings() {
         // Catches a default binding added or lost unnoticed.
-        assert_eq!(Config::default().bindings.len(), 14);
+        assert_eq!(Config::default().bindings.len(), 13);
     }
 
     #[test]
