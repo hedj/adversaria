@@ -55,12 +55,14 @@ impl From<String> for Error {
     }
 }
 
-/// A time as ISO 8601 UTC to the second, as 2026-11-12T09:30:00Z.
+/// A time as ISO 8601 UTC to the second, as 2026-11-12T09:30:00Z. A
+/// clock before 1970 gives its date too, so that the sealer refuses it as
+/// any clock that went back, rather than panic.
 pub fn utc_date(t: SystemTime) -> String {
-    let since = t
-        .duration_since(UNIX_EPOCH)
-        .expect("the clock is after 1970");
-    let secs = since.as_secs() as i64;
+    let secs = match t.duration_since(UNIX_EPOCH) {
+        Ok(after) => after.as_secs() as i64,
+        Err(before) => -(before.duration().as_secs_f64().ceil() as i64),
+    };
     let date = civil_date(secs.div_euclid(86_400));
     let time = clock_time(secs.rem_euclid(86_400));
     format!("{date}T{time}Z")
@@ -351,6 +353,9 @@ mod tests {
         assert_eq!(at(1_709_251_199), "2024-02-29T23:59:59Z");
         assert_eq!(at(1_794_000_000), "2026-11-06T21:20:00Z"); // checked with Python datetime
         assert_eq!(at(4_102_444_800), "2100-01-01T00:00:00Z");
+        let before = |s: u64| utc_date(UNIX_EPOCH - Duration::from_secs(s));
+        assert_eq!(before(1), "1969-12-31T23:59:59Z", "a clock before 1970");
+        assert_eq!(utc_date(UNIX_EPOCH - Duration::from_millis(1)), before(1));
         for s in (0..5_000_000_000u64).step_by(86_399 * 37) {
             assert!(record::is_date(&at(s)), "{}", at(s));
         }
