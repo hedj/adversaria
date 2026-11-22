@@ -17,6 +17,11 @@ impl Source {
     /// The source an item's facts claim.
     fn of(facts: &[Term]) -> Result<Source, String> {
         let doi = stated(facts, "doi").ok_or("the target states no doi(Entity, \"10.…\") fact")?;
+        // A dot segment would make the fetch climb out of /works (curl
+        // removes them), to a record that answers for no DOI.
+        if !doi.starts_with("10.") || doi.split('/').any(|s| s == "." || s == "..") {
+            return Err(format!("“{doi}” is not a DOI"));
+        }
         let title = stated(facts, "title");
         Ok(Source { doi, title })
     }
@@ -154,4 +159,27 @@ pub fn encode_doi(doi: &str) -> String {
             _ => format!("%{b:02X}"),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_doi_with_a_dot_segment_is_refused() {
+        // Catches "10.1/../../members" fetched as Crossref's /members,
+        // which answers, so the claim was ruled found with no title
+        // claimed (the code review, D-B2).
+        let doi = |d: &str| {
+            let fact = Term::Compound(
+                "doi".into(),
+                vec![Term::Atom("x".into()), Term::Str(d.into())],
+            );
+            Source::of(&[fact]).map(|s| s.doi)
+        };
+        assert_eq!(doi("10.1038/nphys1170").unwrap(), "10.1038/nphys1170");
+        for bad in ["10.1/../../members", "10.1/./x", "members"] {
+            assert!(doi(bad).unwrap_err().contains("is not a DOI"), "{bad}");
+        }
+    }
 }
