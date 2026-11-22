@@ -19,4 +19,5 @@ pub use dispatch::{
 };
 pub(crate) use inline::bracketed;
 pub(crate) use knowledge::adopts;
+pub use nouns::candidates;
 pub(crate) use split::sentences;

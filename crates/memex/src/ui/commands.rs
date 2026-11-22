@@ -2,17 +2,18 @@
 //! next, in the guide's groups (docs/guide.md § 2.4).
 
 use super::{bold, dim, fits};
-use crate::actions::{Command, Group, command_groups, command_usage};
+use crate::actions::{Command, Group, candidates, command_groups, command_usage};
 use crate::app::App;
 use ratatui::text::{Line, Span};
 
 /// What may come next in Command: the command's slots and help, once
-/// it is named; else the commands that start so, in the guide's groups,
-/// each with what it does and its key, if one is bound to it; or, where
-/// those do not fit, each group's names alone; or that none starts so.
+/// it is named, then the words its first noun may be; else the commands
+/// that start so, in the guide's groups, each with what it does and its
+/// key, if one is bound to it; or, where those do not fit, each group's
+/// names alone; or that none starts so.
 pub(super) fn command_lines(app: &App, input: &str, inside: (u16, u16)) -> Vec<Line<'static>> {
-    if let Some(usage) = command_usage(input) {
-        return vec![Line::raw(usage)];
+    if let Some(lines) = usage_lines(input) {
+        return lines;
     }
     let groups = command_groups(input);
     if groups.is_empty() {
@@ -23,6 +24,15 @@ pub(super) fn command_lines(app: &App, input: &str, inside: (u16, u16)) -> Vec<L
         true => described,
         false => command_index(app, &groups),
     }
+}
+
+/// Once a line names its command: its slots and help, then the words its
+/// first noun may be, each with what it means.
+fn usage_lines(input: &str) -> Option<Vec<Line<'static>>> {
+    let usage = Line::raw(command_usage(input)?);
+    let words = candidates(input).into_iter();
+    let words = words.map(|(w, what)| Line::raw(format!("  {w} — {what}")));
+    Some(std::iter::once(usage).chain(words).collect())
 }
 
 /// That no command starts as the line does.

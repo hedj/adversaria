@@ -7,12 +7,14 @@ use super::dispatch::{Command, Slot};
 use crate::app::App;
 
 /// A noun of a command: the guide word shown before it, the kind of thing
-/// it takes, and what it is if left out.
+/// it takes, what it is if left out, and the words it may be, each with
+/// what it means, so `?` lists them and Tab completes them.
 #[derive(Clone, Copy)]
 pub struct Noun {
     pub guide: &'static str,
     pub kind: Slot,
     fill: Fill,
+    among: &'static [(&'static str, &'static str)],
 }
 
 /// What a noun left out is.
@@ -35,10 +37,19 @@ pub const fn noun(guide: &'static str, kind: Slot) -> Noun {
         guide,
         kind,
         fill: Fill::Optional,
+        among: &[],
     }
 }
 
 impl Noun {
+    /// The noun, which may be these words, each with what it means.
+    pub const fn among(self, words: &'static [(&'static str, &'static str)]) -> Noun {
+        Noun {
+            among: words,
+            ..self
+        }
+    }
+
     /// The noun, asked for if it is left out.
     pub const fn asked(self) -> Noun {
         Noun {
@@ -149,4 +160,49 @@ pub(crate) fn asking(cmd: &Command, n: &Noun) -> String {
 pub(crate) fn takes_text(cmd: &Command) -> bool {
     let first = cmd.slots.first().map(|n| n.kind);
     !cmd.target && matches!(first, Some(Slot::Text | Slot::Item))
+}
+
+/// The words a line's first noun may be that start as its last word does,
+/// once the line names its command: each with what it means. None before
+/// the command is named, or after a second word; the noun's guide word
+/// typed is not one.
+pub fn candidates(input: &str) -> Vec<(&'static str, &'static str)> {
+    let Some((_, noun, start)) = first_noun(input) else {
+        return vec![];
+    };
+    let among = noun.among.iter().copied();
+    among.filter(|(w, _)| w.starts_with(start)).collect()
+}
+
+/// A line's command, its first noun, and the start of that noun's word
+/// typed, if the line has gone no further.
+fn first_noun(input: &str) -> Option<(&'static Command, Noun, &str)> {
+    let (verb, rest) = input.split_once(' ')?;
+    let cmd = super::dispatch::find_command(verb)?;
+    let noun = *cmd.slots.first()?;
+    Some((cmd, noun, typing(rest, noun.guide)?))
+}
+
+/// The start of the one word being typed in what follows a line's
+/// command, its guide word left out, or nothing yet if it ends in a
+/// space; none after more words.
+fn typing<'a>(rest: &'a str, guide: &str) -> Option<&'a str> {
+    let typed: Vec<&str> = rest.split_whitespace().filter(|w| *w != guide).collect();
+    match (typed.as_slice(), rest.is_empty() || rest.ends_with(' ')) {
+        ([], true) => Some(""),
+        ([w], false) => Some(w),
+        _ => None,
+    }
+}
+
+/// Recognition on Tab after a command: the first noun's word, after its
+/// guide word if the command reads it, if one word alone starts as the
+/// last word does ("adopt wo" becomes "adopt world ").
+pub(crate) fn complete_noun(input: &str) -> Option<String> {
+    let (cmd, noun, _) = first_noun(input)?;
+    let [(word, _)] = candidates(input)[..] else {
+        return None;
+    };
+    let word = word.split_whitespace().next()?;
+    Some(format!("{} {} ", cmd.name, noun.words(word)))
 }

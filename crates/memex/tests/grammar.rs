@@ -335,3 +335,73 @@ fn link_held_alone_shows_its_from_and_its_defaults() {
         " COMMAND  link (from 1) (to) ‹item› [3] (as) ‹word› [link]"
     );
 }
+
+/// The Command line typed so far, whatever the quasimode's hold.
+fn line(r: &Room) -> String {
+    match &r.app.session.mode {
+        Mode::Quasi(a) => a.input.clone(),
+        other => format!("{other:?}"),
+    }
+}
+
+#[test]
+fn every_object_word_of_the_fifth_review_is_listed_by_its_verb() {
+    // Catches an object word left to be recalled: the fifth review
+    // counted 23 in the taught forms (docs/research/notes/
+    // ux-review-5-regularity.md), and each is now among the words `?`
+    // lists after its verb.
+    let words = [
+        (
+            "go",
+            "back forward next previous first last parent child link",
+        ),
+        ("find", "violations disagreements suggestions"),
+        ("show", "chart table graph"),
+        ("check", "quote source"),
+        ("import", "results wikidata"),
+        ("adopt", "instead fix suggestion"),
+        ("dismiss", "change"),
+        ("delete", "word"),
+    ];
+    for (verb, listed) in words {
+        let among = memex::actions::candidates(&format!("{verb} "));
+        let firsts: Vec<&str> = among
+            .iter()
+            .map(|(w, _)| w.split(' ').next().unwrap())
+            .collect();
+        for w in listed.split(' ') {
+            assert!(firsts.contains(&w), "{verb} does not list {w}: {firsts:?}");
+        }
+    }
+}
+
+#[test]
+fn a_question_mark_after_a_verb_lists_its_words_with_what_each_means() {
+    let mut r = abc("grammar-listed");
+    r.hold(Quasi::Command, "adopt ?");
+    assert!(
+        r.shows("world — the supposed world, as the actual one"),
+        "{:#?}",
+        r.lines()
+    );
+    assert!(r.shows("suggestion N — the suggestion shown with that number"));
+}
+
+#[test]
+fn tab_completes_a_word_one_alone_starts_with_after_its_guide_word() {
+    // Catches Tab completing only the command's name, or a word of show
+    // without the `as` that show reads.
+    let mut r = abc("grammar-tab");
+    for (typed, completed) in [
+        ("adopt wo", "adopt world "),
+        ("show ch", "show as chart "),
+        ("show as ta", "show as table "),
+        ("go pa", "go parent "),
+        ("go p", "go p"),
+    ] {
+        r.hold(Quasi::Command, typed);
+        r.tap(&[Key::Tab]);
+        assert_eq!(line(&r), completed, "{typed}");
+        r.tap(&[Key::Escape]);
+    }
+}

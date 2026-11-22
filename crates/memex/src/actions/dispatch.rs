@@ -1,7 +1,7 @@
 //! The command line: the table of commands, finding a command from what
 //! was typed, and running it on the target (docs/guide.md, § 2.4).
 
-use super::nouns::{Alone, Noun, alone, asking, noun, prompts, takes_text};
+use super::nouns::{Alone, Noun, alone, asking, complete_noun, noun, prompts, takes_text};
 use crate::app::{Active, App, Mode};
 use crate::outline::TOP;
 
@@ -66,7 +66,7 @@ pub const COMMANDS: &[Command] = &[
         name: "adopt",
         run: App::cmd_adopt,
         target: true,
-        slots: &[noun("suggestion", Slot::Suggestion)],
+        slots: &[noun("suggestion", Slot::Suggestion).among(ADOPTED)],
         help: "make the target's claims beliefs, keeping their source (`adopt instead`: retracting what they contradict); `adopt world`, the supposed world as the actual one; `adopt fix`, the fix for the target's [[links]] that name no item, which makes them; with a number, the suggestion shown with it, a claim the memex makes",
         brief: "believe claims or a suggestion",
     },
@@ -82,7 +82,7 @@ pub const COMMANDS: &[Command] = &[
         name: "check",
         run: App::cmd_check,
         target: true,
-        slots: &[noun("which", Slot::Word).defaults_to(
+        slots: &[noun("which", Slot::Word).among(CHECKED).defaults_to(
             App::check_kind,
             "the target has both a quote and a source to check, or neither",
         )],
@@ -125,7 +125,7 @@ pub const COMMANDS: &[Command] = &[
         name: "delete",
         run: App::cmd_delete,
         target: true,
-        slots: &[],
+        slots: &[noun("what", Slot::Word).among(&[("word", "the word at the text cursor")])],
         help: "delete the target and its branch; delete word deletes the word at the text cursor",
         brief: "delete a branch, or a word",
     },
@@ -141,7 +141,7 @@ pub const COMMANDS: &[Command] = &[
         name: "dismiss",
         run: App::cmd_dismiss,
         target: false,
-        slots: &[noun("suggestion", Slot::Suggestion)],
+        slots: &[noun("suggestion", Slot::Suggestion).among(DISMISSED)],
         help: "set aside what is offered: the nth suggestion shown, which returns only if its evidence changes; `dismiss world`, the supposed world, back to the actual one; `dismiss change N`, one change of a revision",
         brief: "set a suggestion or world aside",
     },
@@ -197,7 +197,7 @@ pub const COMMANDS: &[Command] = &[
         name: "find",
         run: App::cmd_find,
         target: false,
-        slots: &[noun("what", Slot::Text)],
+        slots: &[noun("what", Slot::Text).among(FOUND)],
         help: "list beside the outline the items that hold a text, carry a #label, or are marked by violations or disagreements; find suggestions lists those; a question (What is the rest?, or Prolog in backticks) is answered once; find alone shows the links again",
         brief: "list what matches, or answer",
     },
@@ -254,6 +254,7 @@ pub const COMMANDS: &[Command] = &[
         run: App::cmd_go,
         target: false,
         slots: &[noun("where", Slot::Item)
+            .among(WAYS)
             .defaults_to(App::back_to, "no jump came from an item that is left")],
         help: "go to the item an address names, else to the next that holds the text; go link N follows the target's Nth link; go back and go forward walk the trail of jumps; go next, previous, first, last, parent or child moves by the outline's structure",
         brief: "go to an address, link or place",
@@ -270,7 +271,7 @@ pub const COMMANDS: &[Command] = &[
         name: "import",
         run: App::cmd_import,
         target: false,
-        slots: &[noun("from", Slot::Text).asked()],
+        slots: &[noun("from", Slot::Text).asked().among(IMPORTED)],
         help: "import wikidata, document or results, then a file: what it says arrives as claims",
         brief: "import a file as claims",
     },
@@ -441,7 +442,7 @@ pub const COMMANDS: &[Command] = &[
         name: "show",
         run: App::cmd_show,
         target: true,
-        slots: &[noun("as", Slot::Text).fixed("chart")],
+        slots: &[noun("as", Slot::Text).fixed("chart").among(SHOWN)],
         help: "make an item a view of the world's facts: show (as) chart, a bar for each cell; show (as) table, a row for each; show (as) graph, the items and their links; with an address first, that item (show 2 as chart); else a mark, where a goal, as one layer",
         brief: "show an item as a chart",
     },
@@ -780,8 +781,75 @@ pub(crate) fn find_command(w: &str) -> Option<&'static Command> {
     (hits.len() == 1).then(|| hits[0])
 }
 
-/// Recognition on Tab: complete the command word if it is unambiguous.
+/// The words the first nouns may be, each with what it means: `?` lists
+/// them, and Tab completes them (docs/concepts-next.md § The grammar).
+const ADOPTED: &[(&str, &str)] = &[
+    (
+        "instead",
+        "the target's claims, retracting first what each contradicts",
+    ),
+    ("world", "the supposed world, as the actual one"),
+    (
+        "fix",
+        "the fix for the target's [[links]] that name no item: it makes them",
+    ),
+    ("suggestion N", "the suggestion shown with that number"),
+];
+const DISMISSED: &[(&str, &str)] = &[
+    ("world", "the supposed world: back to the actual one"),
+    ("change N", "a revision's change, which is retracted"),
+    ("suggestion N", "the suggestion shown with that number"),
+];
+const FOUND: &[(&str, &str)] = &[
+    ("suggestions", "the suggestions"),
+    ("violations", "the items whose beliefs break a rule"),
+    (
+        "disagreements",
+        "the items where a claim disagrees with a belief or a claim",
+    ),
+    ("#label", "the items that carry a label"),
+];
+const WAYS: &[(&str, &str)] = &[
+    ("back", "to where the last jump came from (F7)"),
+    ("forward", "forward again along the trail (F8)"),
+    ("next", "the next item at the cursor's level (Ctrl+Down)"),
+    (
+        "previous",
+        "the item before at the cursor's level (Ctrl+Up)",
+    ),
+    ("first", "the first item at the cursor's level (Ctrl+Home)"),
+    ("last", "the last item at the cursor's level (Ctrl+End)"),
+    ("parent", "the item the cursor's is under (Ctrl+Left)"),
+    ("child", "the first item under the cursor's (Ctrl+Right)"),
+    ("link N", "the other end of the target's Nth link"),
+];
+const IMPORTED: &[(&str, &str)] = &[
+    (
+        "document",
+        "a document Pandoc reads; with as ADDRESS, a revision",
+    ),
+    ("results", "an analysis's results (.json)"),
+    ("wikidata", "a Wikidata subset (.pl)"),
+];
+const SHOWN: &[(&str, &str)] = &[
+    ("chart", "a bar for each box, as high as its value"),
+    ("table", "a row for each box, its name and its value"),
+    (
+        "graph",
+        "a node for each item with a link, an edge for each link",
+    ),
+];
+const CHECKED: &[(&str, &str)] = &[
+    ("quote", "the quotation, against the document it came from"),
+    ("source", "the DOI the target states, at Crossref"),
+];
+
+/// Recognition on Tab: complete the first noun's word, or else the
+/// command word, if it is unambiguous.
 pub(crate) fn complete_command(input: &str) -> String {
+    if let Some(completed) = complete_noun(input) {
+        return completed;
+    }
     let mut parts = input.splitn(2, ' ');
     let first = parts.next().unwrap_or("");
     let rest = parts.next();

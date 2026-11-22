@@ -561,7 +561,10 @@ the command an offer runs is.
 ### 2.4 Commands and addresses
 
 Type a command in the Command quasimode, or bind it to a key (§ 4.3). A
-unique prefix is enough: `supp` runs `suppose`. Words in parentheses
+unique prefix is enough: `supp` runs `suppose`. After a verb and a
+space, `?` lists the words its first part may be, each with what it
+means (`world — the supposed world, as the actual one` after `adopt`),
+and Tab completes one that alone starts as you typed. Words in parentheses
 in the help, such as `(after)`, are guide words, which say what each part
 is. Only `to`, `from` and `after`, before an address, may be typed or
 left out (`move after 2` or `move 2`), and `link` needs `as` before a
