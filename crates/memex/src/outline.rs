@@ -692,9 +692,19 @@ impl Outline {
     }
 
     /// The item a [[link]] of this name goes to: the one named so, if it
-    /// still exists, else the first whose text it is, ignoring case.
+    /// still exists, else the first whose text it is, ignoring case, else
+    /// the one that alone carries it as a label.
     pub fn resolve(&self, name: &str) -> Option<u64> {
-        self.by_name(name).or_else(|| self.titled(name))
+        self.by_name(name)
+            .or_else(|| self.titled(name))
+            .or_else(|| self.by_label(name))
+    }
+
+    /// The item that alone carries the label `title`, which heads the
+    /// outline. It reads every item's text, so the memex finds it once
+    /// for each evaluation, not at each frame.
+    pub fn labelled_title(&self) -> Option<u64> {
+        self.by_label("title")
     }
 
     /// The first item whose text is this, ignoring case, as Leap and
@@ -886,7 +896,8 @@ impl Outline {
     }
 
     /// The item an address names: "#seq", an outline number ("3.2"), a
-    /// name, or the start of only one item's text.
+    /// name, a label that one item alone carries (`draft` or `#draft`), or
+    /// the start of only one item's text.
     pub fn addressed(&self, a: &str) -> Option<u64> {
         if a.is_empty() {
             return None;
@@ -894,7 +905,22 @@ impl Outline {
         self.by_seq(a)
             .or_else(|| self.by_number(a))
             .or_else(|| self.by_name(a))
+            .or_else(|| self.by_label(a))
             .or_else(|| self.by_prefix(a))
+    }
+
+    /// The one item that carries a label, written with its # or without
+    /// (docs/concepts.md, decision 5: a label addresses as a name did).
+    fn by_label(&self, a: &str) -> Option<u64> {
+        let word = a.strip_prefix('#').unwrap_or(a);
+        let label = tags(&format!("#{word}")).pop()?;
+        if label != word.to_lowercase().replace('-', "_") {
+            return None;
+        }
+        let carries = |id: &&u64| tags(&self.text(**id)).contains(&label);
+        let mut carrying = self.items.keys().filter(carries);
+        let first = *carrying.next()?;
+        carrying.next().is_none().then_some(first)
     }
 
     /// "#seq": an item by its sequence number.

@@ -87,6 +87,7 @@ impl App {
     // What follows.
 
     fn after_evaluation(&mut self) {
+        self.reason.title = self.notebook.outline.labelled_title();
         self.update_frozen();
         let stale = self.notebook.stale_results();
         self.session.set_stale(stale);

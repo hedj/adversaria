@@ -433,6 +433,10 @@ Where a command takes an ADDRESS, any of these name an item:
 - its number: `2`, or `1.4` for the fourth item under item 1;
 - `#` and its entry number: `#28`;
 - a name given by `name`;
+- a label that it alone carries, with its `#` or without: `draft` or
+  `#draft`, for the one item whose text has `#draft`. A `[[draft]]` link
+  goes there too, and is made when the label is written; the item
+  labelled `#title` heads the outline;
 - the start of its text, if only one item starts that way: `Energia`.
 
 #### Editing the outline
@@ -449,7 +453,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | `split` | `split` | splits the target's text at each sentence end (`.`, `?` or `!`, a space, then a capital, a digit, a quote or a bracket; never after an abbreviation that comes before what it shortens, such as `e.g.`, `Dr.` or `p.`, or an initial such as `J.`; `etc.`, `et al.`, `Jr.`, `Sr.`, `ed.`, `eds.` and `St.` end one only before a capital letter): the target keeps the first sentence, with its links; each other becomes a new item after it, linked back as `split_from`, its characters kept from the target's text, so their history stays. Each part is read at the pause. One `undo` takes the whole split back |
 | `transclude` | `transclude from ADDRESS` | makes a new item after the target that shows ADDRESS's text in place |
 | `link` | `link [FROM] to TO [as TYPE]` | links two items; FROM defaults to the target, TYPE to `link`. `cites`, `supports` and `opposes` read well in the links pane |
-| `name` | `name WORD` | names the target, so WORD addresses it; the name `title` also heads the outline. A name is also a marker, as NLS had: `go WORD` jumps to it from anywhere, and `back` returns |
+| `name` | `name WORD` | an old name, kept: a label that one item alone carries now addresses it (§ 2.4). `name` still names the target, so WORD addresses it, before any label; the name `title` also heads the outline |
 | `fold` | `fold` | hides the target's branch, or shows it if it is hidden |
 | `pane` | `pane outline`, `pane links`, `pane suggestions`, `pane matches` | sets what the other pane shows. `matches` lists every item that holds the last Leap's pattern, in the outline's order, numbered, with where the cursor is among them (`MATCHES OF “ener” · 14 · at 3 of 14`); a click on one jumps to it, so `back` returns, and the list stays as you edit |
 | `switch` | `switch` | moves focus to the other pane if it is an outline; a pane that shows links or a list takes no keys, so `switch` there says so (`only an outline takes keys; the other pane shows links`) |

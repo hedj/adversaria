@@ -711,13 +711,20 @@ fn item_notes(outline: &Outline, id: u64) -> Vec<Span<'static>> {
 }
 
 fn title(app: &App) -> String {
-    match app.notebook.outline.names.get("title") {
-        Some(id) => format!(
-            "OUTLINE · {}",
-            app.notebook.outline.text(*id).to_uppercase()
-        ),
+    let outline = &app.notebook.outline;
+    let named = outline.names.get("title").copied();
+    match named.or(app.reason.title).filter(|i| outline.contains(*i)) {
+        Some(id) => format!("OUTLINE · {}", untitled(&outline.text(id)).to_uppercase()),
         None => "OUTLINE".into(),
     }
+}
+
+/// A title's text without the label that makes it the title.
+fn untitled(text: &str) -> String {
+    let words = text
+        .split_whitespace()
+        .filter(|w| !w.eq_ignore_ascii_case("#title"));
+    words.collect::<Vec<_>>().join(" ")
 }
 
 /// An outline pane: its frame and title, then every line of the outline

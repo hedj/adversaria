@@ -47,6 +47,8 @@ pub struct Reasoning {
     /// What reasoning found: [0] the current world, [1] the actual world
     /// while a supposition is open.
     pub eval: [Option<WorldEval>; 2],
+    /// The item labelled `title`, as of the last evaluation.
+    pub title: Option<u64>,
     /// The preview of adopting a claim item's claims, and the item: the
     /// violations adopting them would raise.
     pub preview: Option<(u64, String)>,
