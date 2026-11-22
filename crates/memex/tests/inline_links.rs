@@ -88,7 +88,7 @@ fn a_link_to_nothing_makes_nothing_and_says_so() {
     r.app.idle();
     assert_eq!(r.outline().in_order().len(), 2, "no item made");
     assert!(
-        r.shows("not yet items: Energia · make makes them"),
+        r.shows("not yet items: Energia · adopt fix makes them"),
         "{:#?}",
         r.lines()
     );
@@ -107,6 +107,19 @@ fn make_makes_the_items_a_text_links_and_links_them() {
     assert_eq!(r.outline().parent_or_top(last), memex::outline::TOP);
     assert_eq!(inline_to(&r, titled(&r, "See [[Energia]].")), [last]);
     assert!(!r.shows("not yet items"), "{:#?}", r.lines());
+}
+
+#[test]
+fn adopt_fix_makes_the_items_as_make_did() {
+    // Catches the fix the finding names (docs/concepts.md: fixes are
+    // offered, not commanded) doing otherwise than make.
+    let mut r = Room::new("inline-adopt-fix");
+    r.items(&["Notes", "See [[Energia]]."]);
+    r.app.idle();
+    r.command("adopt fix");
+    let last = *r.outline().in_order().last().unwrap();
+    assert_eq!(r.text(last), "Energia");
+    assert_eq!(inline_to(&r, titled(&r, "See [[Energia]].")), [last]);
 }
 
 #[test]

@@ -271,6 +271,19 @@ fn the_whole_list_names_every_command_under_its_group() {
 }
 
 #[test]
+fn a_described_list_keeps_a_groups_names_in_order() {
+    // Catches the commands of one group listed out of the order of their
+    // names.
+    let mut room = Room::new("screen-described-order");
+    room.hold(Quasi::Command, "re");
+    let shown = listed(&room);
+    let at = |l: &str| shown.iter().position(|s| s.starts_with(l));
+    let worlds = at("WORLDS AND HISTORY").expect("its heading");
+    assert_eq!(at("redo — "), Some(worlds + 1), "by name: {shown:#?}");
+    assert_eq!(at("retract — "), Some(worlds + 2), "by name: {shown:#?}");
+}
+
+#[test]
 fn a_list_that_fits_says_what_each_does_under_its_group() {
     // Catches the described list not grouped, not in the order of the
     // names within a group, or a bound key not at the box's right edge.
@@ -281,8 +294,7 @@ fn a_list_that_fits_says_what_each_does_under_its_group() {
     let editing = at("EDITING THE OUTLINE").expect("its heading");
     let worlds = at("WORLDS AND HISTORY").expect("its heading");
     assert_eq!(at("suppose — "), Some(worlds + 1), "{shown:#?}");
-    assert_eq!(at("split — "), Some(editing + 1), "by name: {shown:#?}");
-    assert_eq!(at("switch — "), Some(editing + 2), "by name: {shown:#?}");
+    assert_eq!(at("switch — "), Some(editing + 1), "{shown:#?}");
     let switch = &shown[at("switch — ").expect("switch")];
     let rows = room.lines_at(80, 30);
     let edge = rows

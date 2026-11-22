@@ -67,6 +67,7 @@ impl App {
             [] => self.adopt_claims(target, false),
             ["instead"] => self.adopt_claims(target, true),
             ["world"] => self.cmd_commit(&[], target),
+            ["fix"] => self.cmd_make(&[], target),
             _ => self.cmd_accept(words, target),
         }
     }

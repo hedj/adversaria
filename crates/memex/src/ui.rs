@@ -950,7 +950,7 @@ impl<'a> OutlinePane<'a> {
         let names = self.unmade_here(id)?;
         let indent = "  ".repeat(depth + 1);
         let hint = format!(
-            "{indent}  not yet items: {} · make makes them",
+            "{indent}  not yet items: {} · adopt fix makes them",
             names.join(", ")
         );
         Some(Line::styled(hint, dim()))

@@ -494,8 +494,8 @@ gave, and the texts short enough to be names (3 to 60 characters, six
 words at most, not ending in `.`, `?` or `!`). Tab completes as far as
 they agree, and, when one fits, closes the link with `]]`. A link that names no item makes
 nothing: at the cursor a dim line says `not yet items: Buran flight ·
-make makes them`, and `make` makes each at the foot of the top level and
-links it; one `undo` takes that back. If you make such an item yourself
+adopt fix makes them`, and `adopt fix` (or `make`, its old name) makes
+each at the foot of the top level and links it; one `undo` takes that back. If you make such an item yourself
 (by typing it, or with Leap and Enter), the link is made at the pause;
 if you give an item the name with `name`, at once. A name moved to
 another item takes its links with it; one `undo` takes a name and its
