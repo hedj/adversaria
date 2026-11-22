@@ -192,17 +192,19 @@ impl Watch {
         }
     }
 
-    /// An observation: a violation shown before and not now, in the
-    /// actual world, is corrected.
+    /// An observation: a violation that the actual world showed when last
+    /// observed and does not show now is corrected. A supposition's
+    /// observations are seen, but compared with nothing: they are not the
+    /// actual world's.
     fn observe(&mut self, b: &serde_json::Value) {
         let now = strings(&b["violations"]);
+        self.violations.extend(now.iter().cloned());
+        self.disagreements.extend(strings(&b["disagreements"]));
         if b["world"] == "actual" {
             let gone = self.last.iter().filter(|k| !now.contains(k)).cloned();
             self.corrected.extend(gone);
+            self.last = now;
         }
-        self.violations.extend(now.iter().cloned());
-        self.disagreements.extend(strings(&b["disagreements"]));
-        self.last = now;
     }
 
     fn report(&self, r: &mut Report) {
@@ -300,6 +302,23 @@ mod tests {
         let es = chain(&[
             ("edit", json!({"op": "init"})),
             obs(&["x"], "actual"),
+            obs(&[], "actual"),
+        ]);
+        assert_eq!(measure(&es).violations_corrected, 1);
+        // A supposition's observations are not what the actual world is
+        // compared with: one seen only there is not corrected, and one
+        // gone from the actual world after a supposition is (the code
+        // review, B1).
+        let es = chain(&[
+            ("edit", json!({"op": "init"})),
+            obs(&["z"], "suppose y"),
+            obs(&[], "actual"),
+        ]);
+        assert_eq!(measure(&es).violations_corrected, 0);
+        let es = chain(&[
+            ("edit", json!({"op": "init"})),
+            obs(&["x"], "actual"),
+            obs(&[], "suppose y"),
             obs(&[], "actual"),
         ]);
         assert_eq!(measure(&es).violations_corrected, 1);
