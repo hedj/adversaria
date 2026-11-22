@@ -532,12 +532,17 @@ impl<'a> Writer<'a> {
         Some(b)
     }
 
-    /// A run of list items, nested by depth relative to the first.
+    /// A run of list items, nested by depth relative to the first, each
+    /// with the paragraphs under it, indented, so they stay its own.
     fn list(&mut self, base: usize) {
         while let Some(x) = self.next_if(|x| is_list_item(x) && x.depth >= base) {
             let mark = if x.style == "bullet" { "-" } else { "1." };
             let nest = "    ".repeat(x.depth - base);
             self.say(format!("{nest}{mark} {}\n", escaped(&x.text)));
+            let under = |p: &Block| p.style == "para" && p.depth == x.depth + 1;
+            while let Some(p) = self.next_if(under) {
+                self.say(format!("\n{nest}    {}\n", escaped(&p.text)));
+            }
         }
         self.say("\n".into());
     }
@@ -943,6 +948,37 @@ mod tests {
             .collect()
     }
 
+    /// Blocks written as Markdown, then read back: (depth, style, text).
+    fn through_markdown(blocks: &[Block]) -> Vec<(usize, String, String)> {
+        let dir = std::env::temp_dir().join(format!("adversaria-md-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join(format!("{}.md", blocks.len()));
+        std::fs::write(&file, markdown(blocks)).unwrap();
+        let (back, _, _) = read(&file).unwrap();
+        std::fs::remove_file(&file).unwrap();
+        back.into_iter()
+            .map(|b| (b.depth, b.style, b.text))
+            .collect()
+    }
+
+    #[test]
+    fn a_list_items_paragraphs_stay_under_it_through_an_export() {
+        // Catches a list item's second paragraph written unindented, so it
+        // came back a paragraph of the section (the code review, E9).
+        let blocks = [
+            Block::plain(0, "bullet", "a".into()),
+            Block::plain(1, "para", "b".into()),
+            Block::plain(1, "bullet", "a2".into()),
+            Block::plain(2, "para", "b2".into()),
+            Block::plain(0, "para", "c".into()),
+        ];
+        let shape = |b: &Block| (b.depth, b.style.clone(), b.text.clone());
+        assert_eq!(
+            through_markdown(&blocks),
+            blocks.iter().map(shape).collect::<Vec<_>>()
+        );
+    }
+
     #[test]
     fn text_that_looks_like_a_block_comes_back_as_its_text() {
         // Catches a paragraph exported as Markdown that reads back as
@@ -966,17 +1002,8 @@ mod tests {
             .iter()
             .map(|t| Block::plain(0, "para", t.to_string()))
             .collect();
-        let dir = std::env::temp_dir().join(format!("adversaria-escaped-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let file = dir.join("out.md");
-        std::fs::write(&file, markdown(&blocks)).unwrap();
-        let (back, _, _) = read(&file).unwrap();
-        std::fs::remove_dir_all(&dir).unwrap();
-        let read: Vec<(&str, &str)> = back
-            .iter()
-            .map(|b| (b.style.as_str(), b.text.as_str()))
-            .collect();
-        assert_eq!(read, texts.map(|t| ("para", t)));
+        let paragraphs = texts.map(|t| (0, "para".to_string(), t.to_string()));
+        assert_eq!(through_markdown(&blocks), paragraphs);
     }
 
     #[test]
