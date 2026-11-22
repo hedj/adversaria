@@ -146,3 +146,37 @@ fn the_guide_names_every_builtin_a_definition_may_call() {
         assert!(listed, "the guide does not list {name}/{:?}", a[1]);
     }
 }
+
+mod support;
+
+#[test]
+fn the_guides_rule_its_sentence_and_its_named_constraint_work_as_items() {
+    // Catches the guide's § 3.1 example of Prolog written in items not
+    // doing what it says: each of its lines is an item of the outline.
+    let block = GUIDE
+        .split("```\n`spent(S)")
+        .nth(1)
+        .and_then(|b| b.split("```").next())
+        .expect("the example");
+    let lines: Vec<String> = format!("`spent(S){block}")
+        .lines()
+        .map(String::from)
+        .collect();
+    let mut r = support::Room::new("guide-items");
+    let mut items: Vec<&str> = vec![
+        "The rent is 1200.",
+        "The food is 900.",
+        "The income is 2000.",
+    ];
+    items.extend(lines.iter().map(String::as_str).filter(|l| !l.is_empty()));
+    r.items(&items);
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    assert!(r.shows("Spent: 2100"), "{:#?}", r.lines());
+    assert!(
+        r.shows("Within income"),
+        "the constraint, by the prose before it: {:#?}",
+        r.lines()
+    );
+    assert!(r.shows("1 constraint violation"), "{:#?}", r.lines());
+}

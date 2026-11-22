@@ -8,8 +8,8 @@ docs/design.md; for what has been tested and what has not, docs/log.md.
 
 Contents, four parts of four:
 
-1. Concepts: the record, the outline, facts claims and beliefs,
-   constraints and worlds.
+1. Concepts: twelve ideas, the record, facts claims and beliefs,
+   constraints and worlds, and one command shape with seventeen verbs.
 2. Working: starting, the screen, keys and quasimodes, commands and
    addresses.
 3. Reasoning: facts rules and constraints, worlds, views, suggestions and
@@ -19,7 +19,69 @@ Contents, four parts of four:
 
 ## 1. Concepts
 
-### 1.1 The record
+The notebook is built from twelve ideas, and you act on them with
+seventeen verbs, each in one command shape. Five of the ideas are enough
+for a first day; they are marked *first day*, and the tutorial's part A
+teaches them (docs/tutorial.md). The rest you meet when you need them:
+`?` in Command lists what may come next, and a right-click offers what
+can act on what is under the pointer.
+
+### 1.1 Twelve ideas
+
+#### Item (first day)
+
+For writing and organising notes. Type; Enter makes a new item, Tab and Shift+Tab indent and outdent; `new`, `delete`, `move`, `copy`.
+
+#### Statement (first day)
+
+For saying what the notebook can reason with. Write a sentence in an item: `The rent is 1200.` It turns cyan when it is read; the inspector shows what it was read as. What controlled English cannot say is written in Prolog between backticks.
+
+#### Claim (first day)
+
+For keeping what a source says apart from what you hold. Write `Talk-notes says that the date of Buran-flight is 1989.`; `adopt` it (F3) to hold it, `retract` the adoption (F4); `dismiss` a suggestion, which is a claim the notebook makes.
+
+#### Finding (first day)
+
+For noticing a conflict when it arrives. Write a constraint once, `Nothing has more than 1 date.`; each break is a finding, a line under the items involved; `adopt fix` where a finding offers a fix.
+
+#### World (first day)
+
+For trying "what if?" without changing what you hold. `suppose` (the Super key); the two worlds stand side by side; `adopt world` makes the supposed one actual, `dismiss world` drops it.
+
+#### Link
+
+For connecting items. `[[Buran flight]]` in an item's text, or `link to 9 as cites`; the inspector shows an item's links both ways.
+
+#### Label
+
+For grouping items, and naming one. `#draft` in an item's text; `find #draft` lists the items that carry it, and a label one item alone carries addresses it: `go draft`.
+
+#### Entry
+
+For losing nothing, and proving the record. Every change is an entry in the journal (§ 1.2); `undo` and `redo` (Ctrl+Z, Ctrl+Y); `retract entry 12` takes back an old one, keeping what came after.
+
+#### Trail
+
+For getting back after a jump. `go back` (F7) and `go forward` (F8), as in a browser.
+
+#### Find
+
+For getting to things. Leap: hold Alt and type, and the cursor goes to the match; `find` lists what matches a text, a label, a kind of finding or a question; `go` goes to an address.
+
+#### View
+
+For seeing facts as a chart, a table or a graph. `show as chart`, drawn from the world's facts; behind it, the marks a view is made of (§ 3.3).
+
+#### Document
+
+For exchanging with files outside. `import`, `export`; a co-author's revision opens as a world of changes, one entry each (§ 4.1).
+
+The pane beside the outline is the **inspector**: it shows what is known
+about the item the cursor is on (its links, its findings, what its text
+was read as, its claims and who else makes them, its view's layers),
+and it never takes the keys. `find` shows a list in its place.
+
+### 1.2 The record
 
 **Journal.** So that nothing is lost, and you can always go back,
 everything you do is an entry in an append-only journal: a file of JSON
@@ -34,24 +96,30 @@ a lab notebook, for priority, or to trust your own record), a separate
 program, the sealer, holds a signing key and signs the journal's entries,
 dated. The memex itself never sees the key.
 
-### 1.2 The outline
-
-**Outline.** Your notes are an outline of items. Each item has text, may
-have items under it, and may state facts. Most items are prose, notes
-for you; the notebook reads the rest (§ 1.3).
-
 ### 1.3 Facts, claims and beliefs
 
-**Fact, claim, belief.** Notes mix what you checked with what someone
-told you; these keep them apart. A fact is a statement the notebook can
-check and compute from, written as a short English sentence
-(`The date of Buran-flight is 1988.`) and kept as a Prolog term
-(`date(buran_flight, 1988)`). A fact you state is a belief. A fact from a
-source (a talk, a paper, Wikidata, an analysis) is a claim
+Notes mix what you checked with what someone told you; these keep them
+apart. A fact is a statement the notebook can check and compute from,
+written as a short English sentence (`The date of Buran-flight is
+1988.`) and kept as a Prolog term (`date(buran_flight, 1988)`). A fact
+you state is a belief. A fact from a source (a talk, a paper, Wikidata,
+an analysis, or the notebook's own suggestions) is a claim
 (`Talk-notes says that the date of Buran-flight is 1989.`). A claim
 becomes a belief only when you adopt it, and the adoption keeps its
 source, so what rests on a source can be found, and taken back if the
 source proves wrong.
+
+The sentences the notebook reads, and Prolog in backticks for what they
+cannot say:
+
+| Form | Example | Kind |
+| --- | --- | --- |
+| a fact | `The rent is 1200.` | a belief |
+| what a source says | `Talk-notes says that the date of Buran-flight is 1989.` | a claim |
+| if, then | `If the rent is X and the food is Y then the cost is X + Y.` | a rule |
+| what must never be | `Nothing has more than 1 date.` | a constraint |
+| a question | `What is the rest?` | answered under its item, and kept current |
+| Prolog, in backticks | `` `box(rent, 1200).` `` | as Prolog says: a fact, a `claims(Source, Fact)`, a rule `:-`, a constraint `false :- …`, a question `?- …`; with `{N}` in the text around it, the text filled from the goal |
 
 ### 1.4 Constraints and worlds
 
@@ -60,17 +128,55 @@ later, a constraint says what must never be: `Nothing has more than 1
 date.`, or in Prolog a denial, `false :- ...`. Written once, it checks
 every fact, now and later. When beliefs break it, that is a
 **violation**. When a claim and a belief, or two claims, would break it,
-that is a **disagreement between sources**. Both are marked under the
-items involved. Before it is kept, a constraint is tried on a made-up
-case that should break it (a planted violation): one that could never
-fire would give false comfort, so it is refused.
+that is a **disagreement between sources**. Each is a finding, shown
+under the items involved. Before it is kept, a constraint is tried on a
+made-up case that should break it (a planted violation): one that could
+never fire would give false comfort, so it is refused.
 
 **World.** So that you can try "what if?" without changing what you
 believe, the facts as they stand are the actual world, and a supposition
 opens a second world in which something else holds; the two are shown
-side by side. Closing a world keeps it in the journal; committing it
-makes it the actual world. A co-author's revision of a document opens in
-a world too, one change per entry (§ 4.1).
+side by side. `dismiss world` leaves it, and it stays in the journal;
+`adopt world` makes it the actual world. A co-author's revision of a
+document opens in a world too, one change per entry (§ 4.1).
+
+### 1.5 One command shape
+
+A command is a verb, then what it acts on, each part after its guide
+word: `link 3.2 (to) source 9 (as) cites`. The memex shows the guide
+words in parentheses as you type; § 2.4 says which you may type. Unless
+it names an item, a command acts on the **target**, the item the cursor
+is on. The seventeen verbs:
+
+| Verb | Acts on | Its opposite |
+| --- | --- | --- |
+| `new` | an item | `delete` |
+| `delete` | an item, or the word at the text cursor | `new` |
+| `move` | an item, after a place | |
+| `copy` | an item, after a place | |
+| `link` | an item, to an item, as a type | |
+| `go` | an address, a link, the trail, or a way along the outline | |
+| `find` | a text, a label, a kind of finding, or a question | |
+| `adopt` | claims, a suggestion, a fix or a world | `dismiss` |
+| `dismiss` | a suggestion, a world, or a change of a revision | `adopt` |
+| `retract` | an entry, or the target's last | |
+| `undo` | the last change | `redo` |
+| `redo` | the last change undone | `undo` |
+| `suppose` | a statement | |
+| `import` | a document, results, or a Wikidata subset | `export` |
+| `export` | the outline, or a section, to a file | `import` |
+| `check` | a quotation, or a source | |
+| `show` | an item, as a chart, a table or a graph | |
+
+Three more are listed: `transclude` and `fold`, until what replaces them
+is built (a link of type `shows`, a click on a bullet), and `switch`,
+which moves between two outlines side by side (`pane outline` puts a
+second one beside the first). Every older command name still runs,
+typed whole; § 2.4 lists them with what replaces each.
+
+An **address** names an item in three forms: its number (`1.2`), the
+start of its text or a label it alone carries (`Energia`, `draft`), or,
+for an entry, `entry 12`.
 
 ## 2. Working
 
@@ -82,7 +188,7 @@ The memex needs:
   draws through Vulkan or OpenGL;
 - SWI-Prolog (`swipl`) on the path, for reasoning;
 - APE, the parser of controlled English, found through `APE_HOME`, for
-  reading text, Suppose and `ace`; without it they say "APE is not
+  reading text and Suppose; without it they say "APE is not
   installed";
 - Pandoc, for importing and exporting documents;
 - curl, for the source check.
@@ -135,7 +241,7 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   folded one (followed by how many items it hides), `•` an item with none.
   Each item shows its address (`1.`, `1.3.`), as the foot, the menus
   and the commands quote it. Under an item, `‼` and `?` lines
-  are its marks: one for each constraint its facts break or disagree under,
+  are its findings: one for each constraint its facts break or disagree under,
   naming the constraint (`constraint 1.4` when an item states it, else its
   name in quotes), the item's own fact, and each other fact in the
   conflict with where it is: `‼ breaks constraint 2.7: income 2000 here; rent
@@ -150,7 +256,8 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   question, `→` gives its answer. Under the item at the cursor, a dim line
   says why its text was not read, or which of its `[[links]]` name no item
   yet (§ 2.4, § 3.1).
-- **Right pane:** what the selected item needs. By default its links,
+- **Right pane, the inspector:** what is known about the item the cursor
+  is on. By default its links,
   under `LINKS OF` and the item's address, or `no links`, each with the
   text of the item at its other end, grouped by kind: those from it as
   `cites →`, those into it as `cited by ←`, `supported by ←` or `opposed
@@ -158,19 +265,19 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   linked ←`, the items whose text names this one's as whole words, in any
   case, without linking to it (only a text that reads as a name, as for
   unlinked-mention suggestions, § 3.4), each a click away; on an item with
-  marks, the constraint, its rule, its solutions and what depends on them;
+  findings, the constraint, its rule, its solutions and what depends on them;
   on a view, its layers. Under the links or the constraint, `READ AS` and
   the address show what the item's text was read as, in Prolog, and its
   tags (§ 3.1). On an item that states a claim, the pane then asks of each
   claim who else claims it, who claims the contrary, its source, the
   source's record, and what adopting it would do (`CLAIMS OF 2 · WHO SAYS
-  THEM`). This pane is the inspector: it shows what is known about the
-  item the cursor is on, and never takes the keys. `find` shows a list in
-  its place, and `find` alone shows the inspector again (§ 2.4).
+  THEM`). The inspector follows the cursor and never takes the keys.
+  `find` shows a list in its place, and `find` alone shows the inspector
+  again (§ 2.4).
 - **Foot:** the message line, and, while a quasimode is on (held or
   latched), what you have typed and how it ends.
 
-With the cursor on an item with marks, the foot suggests a what-if
+With the cursor on an item with findings, the foot suggests a what-if
 (`Try a what-if: tap Super to suppose a statement, …`), dim, until you have used Suppose
 four times.
 
@@ -184,8 +291,8 @@ The defaults are below. All of them can be changed (§ 4.3).
 | --- | --- |
 | a printable character | types into the item under the cursor |
 | Enter | makes a new item after the cursor's item |
-| Tab | makes the item the last child of the item before it at its level (`indent`); in an open `[[`, completes the link (§ 2.4) |
-| Shift-Tab | makes the item a sibling of its parent (`outdent`) |
+| Tab | makes the item the last child of the item before it at its level; in an open `[[`, completes the link (§ 2.4) |
+| Shift-Tab | makes the item a sibling of its parent |
 | Backspace, Delete | erase a character before or after the cursor |
 | Up, Down | move to the item above or below |
 | Left, Right, Home, End | move within the item's text |
@@ -193,14 +300,14 @@ The defaults are below. All of them can be changed (§ 4.3).
 #### Moving by structure
 
 Shift with an arrow, Home or End moves by the outline's structure, as
-the commands of § 2.4, Moving, do: over the items under one, not line by
-line.
+`go next` and the other ways of § 2.4, Finding and moving, do: over the
+items under one, not line by line.
 
 | Key | Does |
 | --- | --- |
-| Shift with Up, Down | move to the previous or next item at the cursor's level (`previous`, `next`) |
-| Shift with Left, Right | move to the item the cursor's is under, or the first under it (`parent`, `child`) |
-| Shift with Home, End | move to the first or last item at the cursor's level (`first`, `last`) |
+| Shift with Up, Down | move to the previous or next item at the cursor's level (`go previous`, `go next`) |
+| Shift with Left, Right | move to the item the cursor's is under, or the first under it (`go parent`, `go child`) |
+| Shift with Home, End | move to the first or last item at the cursor's level (`go first`, `go last`) |
 
 #### Quasimodes
 
@@ -235,7 +342,7 @@ Within a quasimode:
   and the quasimode stays on without holding. Enter, or a second tap, ends
   it. Backspace on an empty latched quasimode leaves it without acting.
 - **Tab completes:** a command name in Command, a pattern in Leap. In a
-  sentence (a Command line that starts `suppose ` or `ace `) it
+  sentence (a Command line that starts `suppose `, or `ace `, an old name) it
   completes the word being typed when one word alone fits, or mends: it
   puts the repair the line below offers first in place.
 - **Esc cancels,** as everywhere: the quasimode ends and nothing acts; a
@@ -267,9 +374,9 @@ Within a quasimode:
 - **Ctrl chords.** Command held for one letter, then released, is a
   chord, as in any desktop program: Ctrl+Z undoes, Ctrl+Y or
   Ctrl+Shift+Z redoes, Ctrl+F opens Leap, latched. Any other single
-  letter runs nothing and says so, so a chord typed from habit (Ctrl+O)
-  does not run a command (`outdent`) by surprise. A latched Command still
-  takes one letter: tap Left Ctrl, type `o`, press Enter.
+  letter runs nothing and says so, so a chord typed from habit (Ctrl+N)
+  does not run a command (`new`) by surprise. A latched Command still
+  takes one letter: tap Left Ctrl, type `n`, press Enter.
 - **Focus lost while a key is held** (as by Alt+Tab): the release goes to
   another window, so the memex does not wait for it. A quasimode held with
   nothing typed is left without acting. One held after you typed stays open, latched, with what you
@@ -281,11 +388,11 @@ at either end of the outline. It unfolds a folded branch to reach a match.
 #### Function keys and confirmations
 
 F1 opens the command palette: Command, latched, with the list of
-commands open. F10 runs `quit`. F3 and F4 adopt a claim and take back
-the target's own last entry, an adoption, a fact or a layer
-(`retract`), F6 switches between two outline panes, and F7 and F8 go back and
-forward along the trail of jumps; each runs the command of that name
-(§ 2.4), and § 4.3 lists every default.
+commands open. F10 quits, writing what is pending first. F3 and F4 adopt
+a claim and take back the target's own last entry, an adoption, a fact
+or a layer (`adopt`, `retract`), F6 switches between two outline panes,
+and F7 and F8 go back and forward along the trail of jumps (`go back`,
+`go forward`); § 4.3 lists every default.
 
 **Confirmations.** Two commands ask before acting, at the foot of the
 screen:
@@ -309,13 +416,13 @@ on the characters. Presented are:
 | What is drawn | Presents | A click |
 | --- | --- | --- |
 | an item's line in an outline pane | the item | moves the cursor to it, in the outline pane it is drawn in, and focus there, as the arrow keys would |
-| a link, a mention or a match, in the right pane | the item at its other end | jumps to it in the left pane (§ 2.4) |
-| a mark under an item (`‼ breaks …`, `? sources disagree …`), and the heading of the constraint pane | the constraint | goes to the item that states the rule, if one does |
+| a link, a mention or a match, in the inspector or a list | the item at its other end | jumps to it in the left pane (§ 2.4) |
+| a finding under an item (`‼ breaks …`, `? sources disagree …`), and the heading of the constraint in the inspector | the constraint | goes to the item that states the rule, if one does |
 | a mark of a view: a bar, a point, a box | the fact it draws | goes to the item that states the fact (§ 3.3) |
-| a layer, in a view's right pane | the layer | goes to its view |
+| a layer, in a view's inspector | the layer | goes to its view |
 | a change, in a revision's pane | the change | nothing: a right-click offers what to do |
-| a suggestion, anywhere in its lines | the suggestion | runs `accept` for it |
-| `F3 adopts` or `F4 retracts` under an interrogation | the command | runs `adopt` or `retract` (the hint names whichever keys you have bound) |
+| a suggestion, anywhere in its lines | the suggestion | adopts it (`adopt suggestion N`) |
+| `F3 adopts` or `F4 retracts` under a claim's questions | the command | runs `adopt` or `retract` (the hint names whichever keys you have bound) |
 
 **Pointing.** The presentation under the pointer is underlined, all its
 rows, when a click or a right-click on it would do something now; and the foot says what
@@ -335,11 +442,11 @@ offers the commands that apply to what it presents, as it is now:
 | Right-click on | Offers |
 | --- | --- |
 | an item (the cursor goes to it first) | question its claim and adopt its claims, if it states any; take back its adoption, if it has one; split it, if it has two sentences or more; hide or show its branch, if it has one |
-| a mark under an item (the cursor goes to that item first) | what the item offers, as above, since the mark is a finding about it; then go to the item that states the rule; retract the constraint |
+| a finding under an item (the cursor goes to that item first) | what the item offers, as above, since the finding is about it; then go to the item that states the rule; retract the constraint |
 | a mark of a view | go to the item that states its fact |
 | a layer | retract it; go to its view |
-| a revision's change | reject it (`retract`, which asks first); keep the rest (`commit`) |
-| a suggestion | accept it; dismiss it |
+| a revision's change | reject it (`dismiss change N`, which asks first); keep the rest (`adopt world`) |
+| a suggestion | adopt it; dismiss it |
 
 After them come the commands plumbing offers (below) for the word under
 the pointer (without the punctuation around it), if it is in an item or
@@ -360,7 +467,7 @@ argument takes types it in for you, with a space after, and only those
 are underlined: an item, by its address, for `link`, `copy`, `move`,
 `transclude` and `go` (a link, a fact, a rule or a view stands for its
 item); an entry, by its number, for `retract` (a layer, a change, a
-constraint or a fact); a suggestion, by its number, for `accept` and
+constraint or a fact); a suggestion, by its number, for `adopt` and
 `dismiss`. Tap Left Ctrl, type `link to `, and click the item to link
 to: the line reads `link (from 1) (to) 2`, the from being the target,
 which you did not type, and Enter runs it. The foot says what
@@ -382,13 +489,13 @@ specific first:
 | the path of a file that exists, ending in `.md`, `.docx`, `.odt`, `.tex`, `.html` (and others Pandoc reads), `.json` or `.pl` | `import document`, `import results` or `import wikidata` |
 | a Prolog goal, such as `date(E, Y)` | `find` its answers (`` find `date(E, Y)` ``), state it here as a fact, or state it and set aside what it contradicts |
 | a Prolog fact, or two or more words without brackets | `suppose` it, as the Suppose key does |
-| two or more words, without brackets | read them with `ace`, which says why if it cannot |
+| two or more words, without brackets | read them as ACE (`ace`, an old command), which says why if it cannot |
 | text that names an item | `link to` it from here, or `transclude` it: show its text here, in place |
 | any text | `find` the items that hold it |
 
-The other commands act on the item, not on text (`adopt`, `split`,
-`delete` and the rest), so the menu does not offer them; run
-them with Command, or the keys bound to them.
+The other commands act on the item, not on text (`adopt`, `delete`,
+`show` and the rest), so the menu offers them on the item, not on its
+words; run them with Command, or the keys bound to them.
 
 Add your own with `[[plumb]]` in the configuration (§ 4.3); yours are
 offered before the built-in ones. Each has a `name` (the menu's words), a
@@ -410,7 +517,7 @@ does not exist, or an unknown setting is refused when the memex starts,
 as any configuration it would have to guess at is.
 
 A click does nothing while a quasimode or a confirmation is open, and
-nothing on a mark line, a heading or empty space. The middle button and
+nothing on a finding's line, a heading or empty space. The middle button and
 the wheel do nothing. A click is recorded in the journal as the keyboard
 action it stands for; a selection and an open menu are not recorded, but
 the command an offer runs is.
@@ -431,7 +538,7 @@ Where a command takes an ADDRESS, any of these name an item:
 
 - its number: `2`, or `1.4` for the fourth item under item 1;
 - `#` and the number of the entry that made it, `#28`, an old form, kept;
-- a name given by `name`;
+- a name given by `name`, an old command (§ 2.4, Old names);
 - a label that it alone carries, with its `#` or without: `draft` or
   `#draft`, for the one item whose text has `#draft`. A `[[draft]]` link
   goes there too, and is made when the label is written; the item
@@ -444,38 +551,23 @@ Where a command takes an ADDRESS, any of these name an item:
 | --- | --- | --- |
 | `new` | `new` | makes a new item after the target |
 | `delete` | `delete`, `delete word` | deletes the target and its branch; `delete word` deletes only the word at the text cursor |
-| `indent` | `indent` | makes the target the last child of the item before it at its own level |
-| `outdent` | `outdent` | makes the target a sibling of its parent |
-| `make` | `make` | makes an item for each of the target's `[[links]]` that names no item, at the foot of the top level, and links it; one `undo` takes it all back |
 | `move` | `move after ADDRESS` | moves the target's branch to follow ADDRESS |
 | `copy` | `copy after ADDRESS` | copies the target's text to a new item after ADDRESS |
-| `split` | `split` | splits the target's text at each sentence end (`.`, `?` or `!`, a space, then a capital, a digit, a quote or a bracket; never after an abbreviation that comes before what it shortens, such as `e.g.`, `Dr.` or `p.`, or an initial such as `J.`; `etc.`, `et al.`, `Jr.`, `Sr.`, `ed.`, `eds.` and `St.` end one only before a capital letter): the target keeps the first sentence, with its links; each other becomes a new item after it, linked back as `split_from`, its characters kept from the target's text, so their history stays. Each part is read at the pause. One `undo` takes the whole split back |
+| `link` | `link [FROM] to TO [as TYPE]` | links two items; FROM defaults to the target, TYPE to `link`. `cites`, `supports` and `opposes` read well in the inspector |
 | `transclude` | `transclude from ADDRESS` | makes a new item after the target that shows ADDRESS's text in place |
-| `link` | `link [FROM] to TO [as TYPE]` | links two items; FROM defaults to the target, TYPE to `link`. `cites`, `supports` and `opposes` read well in the links pane |
-| `name` | `name WORD` | an old name, kept: a label that one item alone carries now addresses it (§ 2.4). `name` still names the target, so WORD addresses it, before any label; the name `title` also heads the outline |
-| `fold` | `fold` | hides the target's branch, or shows it if it is hidden |
-| `pane` | `pane outline`, `pane links`, `pane suggestions`, `pane matches` | sets what the other pane shows. `matches` lists every item that holds the last Leap's pattern, in the outline's order, numbered, with where the cursor is among them (`MATCHES OF “ener” · 14 · at 3 of 14`); a click on one jumps to it, so `back` returns, and the list stays as you edit |
-| `switch` | `switch` | moves focus to the other pane if it is an outline; a pane that shows links or a list takes no keys, so `switch` there says so (`only an outline takes keys; the other pane shows links`) |
-| `help` | `help` | opens the list of every command, as F1 does |
-| `quit` | `quit` | writes what is pending and leaves |
+| `fold` | `fold` | hides the target's branch, or shows it if it is hidden; a right-click on an item with a branch offers it |
+| `switch` | `switch` (F6) | moves focus to the other pane if it is an outline (`pane outline` puts a second outline there); the inspector and a list take no keys, so `switch` there says so (`only an outline takes keys; the other pane shows links`) |
 
-#### Moving
+#### Finding and moving
 
 | Command | Form | Does |
 | --- | --- | --- |
-| `find` | `find TEXT`, `find #LABEL`, `find violations`, `find disagreements`, `find suggestions`, `find QUESTION?`, `` find `GOAL` ``, `find` | lists in the other pane the items that hold TEXT, ignoring case (as Leap matches), that carry the label, or that a violation or a disagreement marks, in the outline's order, numbered, with where the cursor is among them (`LABELLED #draft · 2 · at 1 of 2`); a click on one jumps to it. `find suggestions` lists the suggestions. A question, in English or in Prolog between backticks, is answered once, as `query` answers it, and nothing is written. `find` alone shows the links again |
-| `go` | `go TEXT`, `go link N`, `go back`, `go forward`, `go next`, `go previous`, `go first`, `go last`, `go parent`, `go child` | goes to the item TEXT addresses, else to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3). `go link N` goes to the other end of the target's Nth link, as `follow` did; `go back` and `go forward` walk the trail of jumps (F7, F8); `go next` and the rest move by the outline's structure (Shift with an arrow, Home or End). These words are kept for these ways: an item whose text is `next` is reached by its number |
-| `follow` | `follow [N]` | goes to the other end of the target's Nth link (default 1) |
-| `back` | `back` (F7, or the mouse's back button, when no quasimode, menu or question is open) | goes back to where the last jump came from: `follow`, Leap, `go`, or a click on a link, a mention or a match in the right pane (the foot says `click: follow to 2`). Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over |
-| `forward` | `forward` (F8, or the mouse's forward button) | goes forward again to where `back` came from; a new jump empties the way forward, as in a browser |
-| `next` | `next` | goes to the next item at the target's level, over the items under it, after NLS: a move, as an arrow key is, not a jump. Shift with an arrow, Home or End makes these six moves (§ 2.3) |
-| `previous` | `previous` | goes to the previous item at the target's level |
-| `first` | `first` | goes to the first item at the target's level |
-| `last` | `last` | goes to the last item at the target's level |
-| `parent` | `parent` | goes to the item the target is under |
-| `child` | `child` | goes to the first item under the target, showing it if folded |
+| `find` | `find TEXT`, `find #LABEL`, `find violations`, `find disagreements`, `find suggestions`, `find QUESTION?`, `` find `GOAL` ``, `find` | lists in the inspector's place the items that hold TEXT, ignoring case (as Leap matches), that carry the label, or that a violation or a disagreement marks, in the outline's order, numbered, with where the cursor is among them (`LABELLED #draft · 2 · at 1 of 2`); a click on one jumps to it, so `go back` returns, and the list stays as you edit. `find suggestions` lists the suggestions. A question, in English or as a Prolog goal between backticks, is answered once over this world's beliefs, through rules: `` find `animal(X)` `` says `2 answers: X = nemo · X = dory`, a goal without variables `yes` or `no`, and an English question its answer alone (`1 answer: Answer = 1600`). At most 20 answers are shown; the goal may only read facts, compare and compute, as a definition may; nothing is written. `find` alone shows the inspector again |
+| `go` | `go TEXT`, `go link N`, `go back`, `go forward`, `go next`, `go previous`, `go first`, `go last`, `go parent`, `go child` | goes to the item TEXT addresses, else to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3). `go link N` goes to the other end of the target's Nth link (default 1). `go back` (F7, or the mouse's back button) goes back to where the last jump came from: `go`, Leap, or a click on a link, a mention or a match; `go forward` (F8) goes forward again, and a new jump empties the way forward, as in a browser. Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over. `go next`, `go previous`, `go first`, `go last`, `go parent` and `go child` move by the outline's structure, after NLS (Shift with an arrow, Home or End, § 2.3): `go next` passes over the items under the target, and `go child` shows a folded branch. These are moves, as arrow keys are, not jumps. The words of the ways are kept for them: an item whose text is `next` is reached by its number |
 
-**Tags.** A `#` at the start of a text or after a space, then a word,
+#### Labels
+
+A `#` at the start of a text or after a space, then a word,
 tags the item: `Buran #reusable #Soviet-space` gives `item_tag(Item,
 reusable)` and `item_tag(Item, soviet_space)` (lower case, hyphens made
 underscores, as the reader writes names). Tags follow the text: there is
@@ -484,47 +576,40 @@ them, as `constraint not both draft and final: false :- item_tag(I,
 draft), item_tag(I, final).` does. `C#`, `#1`, a heading's `# ` and a web
 address's `/#anchor` are not tags.
 
-**Links typed in text.** Write `[[Buran flight]]` in an item's text and,
+#### Links typed in text
+
+Write `[[Buran flight]]` in an item's text and,
 at the pause, the item links to the item named so, else to the first
 whose text it is (ignoring case). While the text cursor is after an open
 `[[`, a dim line under the item lists the names that fit what you have
-typed (`[[ Energia · Energy launch · Tab completes`): the names `name`
-gave, and the texts short enough to be names (3 to 60 characters, six
+typed (`[[ Energia · Energy launch · Tab completes`): the names that
+`name` gave, and the texts short enough to be names (3 to 60 characters, six
 words at most, not ending in `.`, `?` or `!`). Tab completes as far as
 they agree, and, when one fits, closes the link with `]]`. A link that names no item makes
 nothing: at the cursor a dim line says `not yet items: Buran flight ·
 adopt fix makes them`, and `adopt fix` (or `make`, its old name) makes
 each at the foot of the top level and links it; one `undo` takes that back. If you make such an item yourself
-(by typing it, or with Leap and Enter), the link is made at the pause;
-if you give an item the name with `name`, at once. A name moved to
-another item takes its links with it; one `undo` takes a name and its
-links back. Take the brackets out, and the link goes. The reader reads
+(by typing it, or with Leap and Enter), or an item comes to carry the
+link's text as its label alone (`#buran-flight` for `[[buran-flight]]`),
+the link is made at the pause, and one `undo` takes the text and its
+links back together. A name given by `name` links at once; a name moved
+to another item takes its links with it. Take the brackets out, and the link goes. The reader reads
 the text without its brackets, so `The date of [[Buran-flight]] is
 1988.` is still a fact.
 
-#### Facts and definitions
+#### Views and checks
 
 | Command | Form | Does |
 | --- | --- | --- |
-| `fact` | `fact FACT` | the target states a belief |
-| `claim` | `claim FACT from SOURCE` | the target states a claim: what SOURCE says |
-| `rule` | `rule HEAD :- BODY.` | defines a predicate from others, usable wherever a goal is: in `derive`, `constraint`, `layer` and other rules. Refused if recursive, if a head variable is not bound by the body, or if the body calls what a definition may not |
-| `ace` | `ace SENTENCE` | shows what APE, the parser of controlled English, makes of SENTENCE: its paraphrase, or where it fails and APE's advice. Each entity of the current world is a word for it, as are the names of one-place facts (adjectives) and two-place facts (nouns) and labels of one word (§ 3.2) |
-| `set` | `set FACT` | states FACT and retracts the beliefs it directly contradicts (each that breaks a constraint with it and nothing else); the fact goes on the item that held the one it replaces, else on the target. A violation it leaves is named, not resolved |
-| `constraint` | `constraint NAME: false :- BODY.` | adds a constraint, after checking it fires on a planted violation |
-| `derive` | `derive TEMPLATE where GOAL` | the target shows text computed from facts (§ 3.1) |
-| `show` | `show as chart`, `show as table`, `show as graph`, `show ADDRESS as chart`, `show MARK where GOAL` | makes the target, or the item ADDRESS names, a view of the world's facts (§ 3.3): a bar for each box (`box` fact), a table of them, or the graph of the items and their links. With a mark, it adds that layer, as `layer` did |
-| `layer` | `layer MARK where GOAL` | an old name, kept: `show MARK where GOAL` adds a layer to the target's view: one mark for each solution of GOAL (§ 3.3) |
+| `show` | `show as chart`, `show as table`, `show as graph`, `show ADDRESS as chart`, `show MARK where GOAL` | makes the target, or the item ADDRESS names, a view of the world's facts (§ 3.3): a bar for each box (`box` fact), a table of them, or the graph of the items and their links. With a mark, it adds that layer: one mark for each solution of GOAL |
 | `check` | `check quote`, `check source` | checks the target's text against the document it came from, or its `doi` fact against Crossref |
 
 #### Claims and suggestions
 
 | Command | Form | Does |
 | --- | --- | --- |
-| `adopt` | `adopt` | makes the target's claims beliefs, keeping their source |
-| `interrogate` | `interrogate` | an old name, kept: the inspector asks these questions at any item that states a claim (§ 2.2). `interrogate` holds the target in the inspector while the cursor moves elsewhere, until a supposition is left |
-| `accept` | `accept N` | adopts the Nth suggestion shown, with its evidence |
-| `dismiss` | `dismiss N` | dismisses the Nth suggestion shown; it returns only if its evidence changes |
+| `adopt` | `adopt` (F3), `adopt instead`, `adopt suggestion N`, `adopt fix`, `adopt world` | `adopt` makes the target's claims beliefs, keeping their source, one adoption for each claim; `adopt instead` also retracts the beliefs they directly contradict (each that breaks a constraint with them and nothing else); `adopt suggestion N`, the Nth suggestion shown, with its evidence; `adopt fix`, the fix of a finding: the items the target's `[[links]]` name, made at the foot of the top level and linked, one `undo` taking it all back; `adopt world`, the supposed world as the actual one |
+| `dismiss` | `dismiss suggestion N`, `dismiss world`, `dismiss change N` | `dismiss suggestion N` sets the Nth suggestion aside; it returns only if its evidence changes. `dismiss world` closes the supposition and returns to the actual world; it stays in the journal. `dismiss change N` rejects one change of a revision (§ 4.1), asking first |
 | `import` | `import wikidata FILE`, `import document FILE [as ADDRESS]`, `import results FILE` | imports a Wikidata subset, a document (with `as`, as a revision of the document the item at ADDRESS came from), or an analysis's results (§ 3.4, § 4.1) |
 | `export` | `export FILE [NUMBER]` | exports the outline, or the section at item NUMBER, as a document |
 
@@ -533,21 +618,56 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 | Command | Form | Does |
 | --- | --- | --- |
 | `suppose` | `suppose [that] STATEMENT` | supposes STATEMENT as the Suppose key does (§ 3.2): asks which of its readings against the facts you mean, or, with none, starts a world of that name with nothing supposed |
-| `close` | `close` | closes the supposition and returns to the actual world; it stays in the journal |
-| `commit` | `commit` | makes the supposed world the actual one |
-| `undo` | `undo` | undoes the last change on this branch |
-| `query` | `query GOAL` | runs a Prolog goal over this world's beliefs, through rules, as derived text does: `query animal(X)` says `2 answers: X = nemo · X = dory`; a goal without variables is answered `yes` or `no`. At most 20 answers are shown. The goal may only read facts, compare and compute, as a definition may; a query writes nothing to the journal |
-| `redo` | `redo` | redoes what undo undid, along the current branch |
-| `retract` | `retract [entry N]` (F4) | reverses one earlier entry, by its number (`retract entry 12`; `retract 12` and `retract #12`, the old forms, still work), keeping later work; lists what depends on it first, and Enter retracts. With no number, the target's own last entry that can be retracted: an adoption of its claims, a fact given it by `fact` or `claim` (not one its text was read as, which its text keeps), or a layer of its view. `adopt` writes one adoption for each claim, so an item with two claims needs two |
+| `undo` | `undo` (Ctrl+Z) | undoes the last change on this branch |
+| `redo` | `redo` (Ctrl+Y) | redoes what undo undid, along the current branch |
+| `retract` | `retract [entry N]` (F4) | reverses one earlier entry, by its number (`retract entry 12`; `retract 12` and `retract #12`, the old forms, still work), keeping later work; lists what depends on it first, and Enter retracts. With no number, the target's own last entry that can be retracted: an adoption of its claims, a fact given it by command (not one its text was read as, which its text keeps), or a layer of its view. An item with two claims has two adoptions |
 
 **Undo and retract.** `undo` and `redo` move along the current branch of
 the journal, as in any editor; undoing and then editing starts a new
 branch, and the old one stays in the journal. To reverse one earlier
-decision without losing what came after, `retract` it instead. The entry
-number is shown in the interrogation pane, in the right pane, and in the
-journal. A `set` writes each retraction and the new fact as separate
-entries, so one `undo` reverses only the new fact; reversing a whole
-`set` takes one `undo` per entry, or `set` again with the old value.
+decision without losing what came after, `retract` it instead. An
+entry's number is shown in the inspector, offered by a right-click, and
+in the journal. `adopt instead` writes each retraction and the adoption
+as separate entries, so one `undo` reverses only the last of them.
+
+#### Old names
+
+Each of these still runs, typed whole (a prefix finds only the commands
+above), so habits, journals and scripts keep working. None is listed by
+`?`.
+
+| Old name | Form | Now |
+| --- | --- | --- |
+| `fact` | `fact FACT` | write the fact in an item, as a sentence or in Prolog between backticks. `fact` states it on the target |
+| `claim` | `claim FACT from SOURCE` | write `SOURCE says that …` in an item, or `` `claims("SOURCE", FACT).` ``. `claim` states it on the target |
+| `rule` | `rule HEAD :- BODY.` | write `If … then …` in an item, or the rule between backticks. A rule defines a predicate from others, usable wherever a goal is; it is refused if recursive, if a head variable is not bound by the body, or if the body calls what a definition may not |
+| `constraint` | `constraint NAME: false :- BODY.` | write the sentence in an item (`Nothing has more than 1 date.`), or `` `false :- BODY.` `` |
+| `derive` | `derive TEMPLATE where GOAL` | write the sentence with its blanks and, between backticks, the goal that fills them, in the item (§ 3.1) |
+| `query` | `query GOAL` | `` find `GOAL` `` |
+| `ace` | `ace SENTENCE` | shows what APE, the parser of controlled English, makes of SENTENCE: its paraphrase, or where it fails and APE's advice. Each entity of the current world is a word for it, as are the names of one-place facts (adjectives) and two-place facts (nouns) and labels of one word (§ 3.2). Typing in an item shows the same, at the cursor |
+| `set` | `set FACT` | edit the sentence that states the fact: the old value is taken back as the new one is read; or, at a disputed claim, `adopt instead`. `set` states FACT and retracts the beliefs it directly contradicts; the fact goes on the item that held the one it replaces, else on the target. A violation it leaves is named, not resolved |
+| `accept` | `accept N` | `adopt suggestion N` |
+| `interrogate` | `interrogate` | the inspector asks a claim's questions at any item that states one (§ 2.2). `interrogate` holds the target in the inspector while the cursor moves elsewhere, until a supposition is left |
+| `commit` | `commit` | `adopt world` |
+| `close` | `close` | `dismiss world` |
+| `pane` | `pane outline`, `pane links`, `pane suggestions`, `pane matches` | `find` and `find suggestions` for the lists, `find` alone for the inspector; `pane outline` puts a second outline beside the first |
+| `name` | `name WORD` | a label the item alone carries (§ 2.4, addresses). `name` still names the target, so WORD addresses it, before any label; the name `title` heads the outline, as the label `#title` does |
+| `make` | `make` | `adopt fix` |
+| `split` | `split` | a right-click on an item of several sentences offers it. It splits the target's text at each sentence end (`.`, `?` or `!`, a space, then a capital, a digit, a quote or a bracket; never after an abbreviation that comes before what it shortens, such as `e.g.`, `Dr.` or `p.`, or an initial such as `J.`; `etc.`, `et al.`, `Jr.`, `Sr.`, `ed.`, `eds.` and `St.` end one only before a capital letter): the target keeps the first sentence, with its links; each other becomes a new item after it, linked back as `split_from`, its characters kept from the target's text, so their history stays. Each part is read at the pause. One `undo` takes the whole split back |
+| `layer` | `layer MARK where GOAL` | `show MARK where GOAL` |
+| `indent` | `indent` | Tab: makes the target the last child of the item before it at its own level |
+| `outdent` | `outdent` | Shift+Tab: makes the target a sibling of its parent |
+| `help` | `help` | F1, or `?` in Command: the list of every command |
+| `quit` | `quit` | F10, or closing the window: writes what is pending and leaves |
+| `follow` | `follow [N]` | `go link N` |
+| `back` | `back` | `go back` (F7) |
+| `forward` | `forward` | `go forward` (F8) |
+| `next` | `next` | `go next` (Shift+Down) |
+| `previous` | `previous` | `go previous` (Shift+Up) |
+| `first` | `first` | `go first` (Shift+Home) |
+| `last` | `last` | `go last` (Shift+End) |
+| `parent` | `parent` | `go parent` (Shift+Left) |
+| `child` | `child` | `go child` (Shift+Right) |
 
 ## 3. Reasoning
 
@@ -570,7 +690,7 @@ It is false that the rest is smaller than 0.
 These are a fact, a claim from a source, two boxes, a rule and a
 constraint. A box is a value with a name, such as the income;
 `Nothing has more than 1 value.` says that each box holds one, and
-`Nothing has more than 1 date.` the same of dates. With an item selected, the right pane shows, under `READ AS`,
+`Nothing has more than 1 date.` the same of dates. With an item selected, the inspector shows, under `READ AS`,
 each statement its text was read as, in Prolog, as the memex runs it
 (`fact  date(buran_flight, 1988)`, `rule  rest(A):-box(income, B), …`),
 and its tags (`tag  item_tag(12, money)`). A text read before the memex
@@ -595,25 +715,28 @@ one fish with no name; write `Every fish is an animal.` for all fish, or
 name one: `Nemo is a fish.` The table in docs/design.md (§ Reading
 controlled English) lists what each kind of sentence is read as.
 
-The commands below state the same things in Prolog.
-
-Facts are Prolog terms: an atom or a compound, with no variables. Strings
-go in double quotes. A trailing full stop is optional.
-
-```
-fact date(buran_flight, 1988)
-fact label(buran_flight, "Buran's flight")
-claim date(buran_flight, 1989) from my notes, conference talk
-```
-
-A `label(Entity, "words")` fact lets the memex write facts about Entity in
-words, in interrogation, Suppose's readings, timelines and answers to
-questions. Marks, and the marks of views, show terms as they are.
-
-**Constraints** are denials. The name comes before the colon:
+What controlled English cannot say, write in Prolog between backticks,
+in an item's text; the prose around it is read as any prose is. Each
+item below is one line of your outline:
 
 ```
-constraint one date per event: false :- date(E, D1), date(E, D2), D1 \= D2.
+The flight's date: `date(buran_flight, 1988).`
+`label(buran_flight, "Buran's flight").`
+`claims("my notes, conference talk", date(buran_flight, 1989)).`
+```
+
+A fact is a Prolog term: an atom or a compound, with no variables.
+Strings go in double quotes. A trailing full stop is optional.
+`claims(Source, Fact)` is what Source says. A `label(Entity, "words")`
+fact lets the memex write facts about Entity in words: in the
+inspector, Suppose's readings, timelines and answers to questions.
+Findings, and the marks of views, show terms as they are.
+
+**Constraints** are denials, `false :- …`. The prose before them is
+their name:
+
+```
+One date per event: `false :- date(E, D1), date(E, D2), D1 \= D2.`
 ```
 
 Before keeping it, the memex plants facts that should break it and checks
@@ -622,16 +745,18 @@ so is one with more than seven variables, which the check cannot try.
 Constraints are recomputed whenever the journal moves; only the parts that
 depend on what changed are recomputed.
 
-**Derived text.** `derive` makes the target show text computed from the
-facts. In the template, `{Var}` is a variable of the goal, and `{N:years}`
+**Derived text.** An item can show text computed from the facts: write
+the text with its blanks, and between backticks the goal that fills
+them. In the text, `{Var}` is a variable of the goal, and `{N:years}`
 writes a number of years in words ("a year", "two years"). The text is
 filled from the goal's first solution only:
 
 ```
-derive The flight came {N:years} after Energia's first launch. where date(buran_flight, B), date(energia_launch, E), N is B - E
+The flight came {N:years} after Energia's first launch. `date(buran_flight, B), date(energia_launch, E), N is B - E`
 ```
 
-`derive timeline where date(E, Y)` draws a timeline of the solutions, using
+`derive timeline where date(E, Y)`, a form of the old command `derive`
+that a text with blanks cannot write, draws a timeline of the solutions, using
 labels where there are any: one line, such as `1987 Energia's first launch
 ── 1988 Buran's flight`. Each solution must give exactly two values, an
 entity and then a whole-number year, in the order the goal first names
@@ -645,17 +770,17 @@ answer: type_error(evaluable, foo / 0))`.
 a rule, and then used like a fact:
 
 ```
-rule spent(S) :- box(rent, R), box(food, F), S is R + F.
-derive Spent: {S} where spent(S)
-constraint within income: false :- spent(S), box(income, I), S > I.
+`spent(S) :- box(rent, R), box(food, F), S is R + F.`
+Spent: {S} `spent(S)`
+Within income: `false :- spent(S), box(income, I), S > I.`
 ```
 
 A rule may not be recursive, directly or through other rules (the
 reasoner proves rules by plain recursion, which would not end); every
 variable in its head must be bound by its body; and its body may call
 only what a definition may (below). A violation found through a rule
-rests on the facts under the rule, so its marks appear on the items you
-would change.
+rests on the facts under the rule, so its findings appear on the items
+you would change.
 
 **What a definition may call.** A constraint, a derived goal and an
 adopted rule may only read facts, compare and compute. Besides your facts,
@@ -684,9 +809,9 @@ used in a definition: the definition is refused, naming it.
 Anything else, such as `shell/1`, `open/3`, `assertz/1`, `format/2` or
 `call/1`, is refused when the constraint or derived text is defined, with
 what is not allowed. The reasoner checks again each time it calls one, so
-a definition that arrives some other way cannot act either. `fact`,
-`claim` and `adopt` refuse `node_def/2` and `rule_def/3`, the forms
-definitions are stored in.
+a definition that arrives some other way cannot act either. A statement,
+and `adopt`, refuse `node_def/2` and `rule_def/3`, the forms definitions
+are stored in.
 
 ### 3.2 Worlds
 
@@ -707,7 +832,8 @@ unless you type it as Prolog.
 
 While you type, the line below checks the statement as controlled English
 (ACE), with the words of your notebook, as if it ended with a full stop.
-It does the same for any Command line that starts `ace `:
+It does the same for any Command line that starts `ace `, an old
+command:
 
 - `ACE:` and how APE, its parser, reads it back, when it is a sentence;
 - `next:` and what may come next, when it is not yet one but can go on:
@@ -761,8 +887,8 @@ worlds, "0 violations, 1 disagreement", a count above zero in its
 colour, and in the supposed world a count that differs is bold and
 underlined; under it, what it set aside.
 
-`close` returns to the actual world and keeps the supposition in the
-journal. `commit` makes the supposed world the actual one. While a
+`dismiss world` returns to the actual world and keeps the supposition in
+the journal. `adopt world` makes the supposed world the actual one. While a
 supposition is open, the foot says so, above any message.
 
 ### 3.3 Views
@@ -791,7 +917,7 @@ item that is to be the view; each `show` with a mark adds a layer
 reference line: `show refline(y(1500))` (`rule`, its old name, still draws one).
 
 The view is drawn under its item and changes as the facts do. With the
-cursor on it, the right pane lists its layers, with how many marks each
+cursor on it, the inspector lists its layers, with how many marks each
 draws. A mark that rests on a fact in a violation is drawn red; a bar
 keeps its plain fill, and its value above it is red, since each number
 may be right where only their sum breaks a rule (a grid box gains `!`).
@@ -801,7 +927,7 @@ chart whose plotting area is under six rows high keeps no such row, since giving
 same height; there the tallest bar's value is not drawn. With the mouse on (§ 2.3), a click on a mark goes to the
 item that states its fact. In a supposition, each world draws its own
 copy of every view, side by side. `retract` removes a layer, by its entry
-number, shown in the right pane. A layer whose goal raises an error is
+number, shown in the inspector. A layer whose goal raises an error is
 noted under the view, with its entry number and what went wrong, such as
 `(layer 10 cannot answer: type_error(evaluable, foo / 0))`.
 
@@ -835,40 +961,42 @@ makes a plot. Marks that do not fit are named under the view.
 
 #### Recipes
 
-Each is ordinary facts and rules, with layers over them.
+Each is ordinary facts and rules, with layers over them. A line in
+backticks is an item of your outline; a line that starts `show` is a
+command, run with the cursor on the item that is to be the view.
 
 A bar chart with a limit:
 
 ```
-layer bar(x(C), y(V)) where box(C, V)
-layer refline(y(I)) where box(income, I)
+show bar(x(C), y(V)) where box(C, V)
+show refline(y(I)) where box(income, I)
 ```
 
 A spreadsheet: boxes at places in a grid, one computed by a rule.
 
 ```
-fact at(income, b, 1)
-fact at(rent, b, 2)
-fact at(left, b, 4)
-rule value(B, V) :- box(B, V).
-rule value(left, L) :- box(income, I), box(rent, R), L is I - R.
-layer cell(x(a), y(R), text(B)) where at(B, _, R)
-layer cell(x(C), y(R), text(V)) where at(B, C, R), value(B, V)
+`at(income, b, 1).`
+`at(rent, b, 2).`
+`at(left, b, 4).`
+`value(B, V) :- box(B, V).`
+`value(left, L) :- box(income, I), box(rent, R), L is I - R.`
+show cell(x(a), y(R), text(B)) where at(B, _, R)
+show cell(x(C), y(R), text(V)) where at(B, C, R), value(B, V)
 ```
 
-A line chart, one line per series: `layer line(x(M), y(V), series(S))
+A line chart, one line per series: `show line(x(M), y(V), series(S))
 where spend(S, M, V)`.
 
-A timeline: `layer tick(x(Y), text(L)) where date(E, Y), label(E, L)`.
+A timeline: `show tick(x(Y), text(L)) where date(E, Y), label(E, L)`.
 
-A Gantt chart: `layer span(y(T), x1(A), x2(B), text(T)) where task(T, A, B)`.
+A Gantt chart: `show span(y(T), x1(A), x2(B), text(T)) where task(T, A, B)`.
 
 A flowchart:
 
 ```
-layer node(id(S), text(T)) where step(S, T)
-layer node(id(S), text(T), shape(decision)) where decision(S, T)
-layer edge(from(A), to(B), text(L)) where next(A, B, L)
+show node(id(S), text(T)) where step(S, T)
+show node(id(S), text(T), shape(decision)) where decision(S, T)
+show edge(from(A), to(B), text(L)) where next(A, B, L)
 ```
 
 Your own outline as a tree. The outline is offered to goals as four kinds
@@ -878,18 +1006,18 @@ of fact, `item_text(Item, Text)`, `item_under(Item, Parent)`,
 or made by `link`:
 
 ```
-layer node(id(I), text(T)) where item_text(I, T)
-layer edge(from(P), to(C)) where item_under(C, P)
+show node(id(I), text(T)) where item_text(I, T)
+show edge(from(P), to(C)) where item_under(C, P)
 ```
 
 Links between items work the same way. `link 2 to 5 as supports` states
 `supports(From, To)` between the two items, so with the node layer above,
-`layer edge(from(A), to(B), text(supports)) where supports(A, B)` draws
+`show edge(from(A), to(B), text(supports)) where supports(A, B)` draws
 an argument map. Every link at once, the graph of your notes:
 
 ```
-layer node(id(I), text(T)) where item_text(I, T), (item_link(I, _, _) ; item_link(_, I, _))
-layer edge(from(F), to(T)) where item_link(F, T, _)
+show node(id(I), text(T)) where item_text(I, T), (item_link(I, _, _) ; item_link(_, I, _))
+show edge(from(F), to(T)) where item_link(F, T, _)
 ```
 
 #### Refused
@@ -942,9 +1070,10 @@ The memex suggests these and more, without any language model:
   texts are taken as names (3 to 60 characters, six words at most, not
   ending in `.`, `?` or `!`). Accepting it writes the link.
 
-`pane suggestions` shows them, at most five, ranked by evidence, each with
-why it was offered. The pane never takes the keyboard: `accept N` adopts
-the Nth, with its evidence; `dismiss N` hides it until its evidence
+`find suggestions` lists them in the inspector's place, at most five,
+ranked by evidence, each with why it was offered. A suggestion is a claim
+whose source is the memex: `adopt suggestion N` adopts the Nth, with its
+evidence, and `dismiss suggestion N` sets it aside until its evidence
 changes. While they are listed, suggestions keep their places, so the
 number that adopts one stays its number.
 
@@ -979,8 +1108,8 @@ that document, so a later import under either name finds the same
 history.
 It opens a supposed world with each change as one entry: changed text,
 added items, deleted items, and items moved under another heading (when a
-heading changes its level, for one). `retract N` drops a change; `commit`
-accepts the rest; `close` rejects them all. Your own items stay where you
+heading changes its level, for one). `dismiss change N` drops a change;
+`adopt world` keeps the rest; `dismiss world` drops them all. Your own items stay where you
 put them.
 
 **Export** writes the outline, or one section, through Pandoc. The format
@@ -1216,13 +1345,13 @@ The hints on screen (such as "F3 adopts") follow your bindings.
   the sealer again; the entries written meanwhile are sealed then.
 - **"memex: configuration: …"**: the file and the reason are named; fix the
   line it names. `memex --print-config` shows a file that works.
-- **"no command …"**: `?` in Command lists the commands; `help` lists them
-  all.
+- **"no command …"**: `?` in Command lists the commands that match what you
+  typed; F1 lists them all.
 - **"not a Prolog fact" / "not a Prolog rule"**: check brackets, commas and
   quotes. Variables start with a capital letter; atoms with a small one.
 - **A constraint is "not kept"**: it did not fire on the planted violation,
   so it could never fire. Check that the body can be true.
-- **A message about Prolog, or no marks where you expect them:** SWI-Prolog
+- **A message about Prolog, or no findings where you expect them:** SWI-Prolog
   must be on the path (`swipl --version`). `./dev-shell` provides it.
 - **Plain `nix-shell` prints an error about `<nixpkgs>` and "uses bash
   from your environment":** nixpkgs is not on your `NIX_PATH`, or is there
@@ -1260,8 +1389,8 @@ This is a prototype, built for a one-month trial. Known limits:
 - Integers larger than 2^53 − 1 are refused in the journal.
 - Only the Wikidata subset tool exists; the full subset is not built.
 - A mouse's back and forward buttons are not driven by the window test;
-  `back` and `forward`, and F7 and F8, are.
-- The links pane looks for an item's unlinked mentions in every item's
+  `go back` and `go forward`, and F7 and F8, are.
+- The inspector looks for an item's unlinked mentions in every item's
   text each time it is drawn: on the 10,000-item timing test this added
   about 1–2 ms a keystroke, measured on items whose text is too long to
   be a name; on an item whose text is a name it was not timed alone.
