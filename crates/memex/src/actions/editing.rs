@@ -258,7 +258,13 @@ impl App {
     }
 
     pub(crate) fn cmd_follow(&mut self, words: &[&str], target: u64) -> Result<String, String> {
-        let k: usize = words.first().and_then(|w| w.parse().ok()).unwrap_or(1);
+        let k: usize = match words {
+            [] => 1,
+            [n] => n
+                .parse()
+                .map_err(|_| "follow, or follow and a link's number")?,
+            _ => return Err("follow, or follow and a link's number".into()),
+        };
         let ends = self.notebook.outline.neighbours(target);
         let to = *ends
             .get(k.wrapping_sub(1))

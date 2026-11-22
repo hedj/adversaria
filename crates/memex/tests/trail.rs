@@ -126,3 +126,15 @@ fn the_back_key_is_f7_and_forward_f8() {
     r.tap(&[Key::F(8)]);
     assert_eq!(r.app.cursor(), energia);
 }
+
+#[test]
+fn follow_with_no_number_is_refused_not_taken_for_one() {
+    // Catches `follow x`, or `follow link 2`, silently following link 1
+    // (the code review, F-B6).
+    let (mut r, [buran, _, _]) = linked("trail-follow-word");
+    for line in ["follow x", "follow link 2"] {
+        r.app.run_command(line);
+        assert_eq!(r.app.cursor(), buran, "{line}");
+        assert!(r.app.session.message.contains("number"), "{line}");
+    }
+}
