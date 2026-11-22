@@ -65,13 +65,17 @@ fn is_hash(v: &Value) -> bool {
 }
 
 /// Hash of a record: SHA-256 of its canonical JSON without `hash` (and `body`).
-fn record_hash(obj: &Map<String, Value>, drop_body: bool) -> String {
+/// Refused, not panicked on, for a value with no canonical form (an
+/// integer past 2^53 - 1), which only a record being made can hold.
+fn record_hash(obj: &Map<String, Value>, drop_body: bool) -> Result<String, String> {
     let mut m = obj.clone();
     m.remove("hash");
     if drop_body {
         m.remove("body");
     }
-    sha256_hex(&jcs::canonical_bytes(&Value::Object(m)).expect("a parsed line is canonical"))
+    Ok(sha256_hex(
+        &jcs::canonical_bytes(&Value::Object(m)).map_err(|e| e.0)?,
+    ))
 }
 
 /// The hash of an entry's body.
@@ -153,7 +157,7 @@ impl Fields {
     /// The record's own hash, which must be the hash of the record.
     fn own_hash(&self, drop_body: bool) -> Result<String, String> {
         let hash = self.hex("hash", 32, HASH)?;
-        if hash != record_hash(&self.0, drop_body) {
+        if hash != record_hash(&self.0, drop_body)? {
             return Err("hash does not match the record".into());
         }
         Ok(hash)
@@ -322,7 +326,7 @@ fn line_of(fields: Value) -> Result<String, String> {
 }
 
 /// The hash of a record made of these fields.
-fn hash_of(fields: &Value, drop_body: bool) -> String {
+fn hash_of(fields: &Value, drop_body: bool) -> Result<String, String> {
     let empty = Map::new();
     record_hash(fields.as_object().unwrap_or(&empty), drop_body)
 }
@@ -440,7 +444,7 @@ impl Entry {
     /// The entry with its hash, read back from its own line, so that a
     /// new entry passes every check a line makes on itself.
     fn hashed(mut self) -> Result<Entry, String> {
-        self.hash = hash_of(&self.fields(), true);
+        self.hash = hash_of(&self.fields(), true)?;
         Entry::parse(&self.to_line()?)
     }
 
@@ -533,7 +537,7 @@ impl Seal {
     }
 
     fn hashed(mut self) -> Result<Seal, String> {
-        self.hash = hash_of(&self.fields(), false);
+        self.hash = hash_of(&self.fields(), false)?;
         Seal::parse(&self.to_line()?)
     }
 
@@ -624,7 +628,7 @@ impl Key {
     pub fn new(public: &[u8; 32]) -> Result<Key, String> {
         let (key, fingerprint) = (to_hex(public), sha256_hex(public));
         let mut fields = json!({"alg": "ed25519", "key": key, "fingerprint": fingerprint});
-        fields["hash"] = json!(hash_of(&fields, false));
+        fields["hash"] = json!(hash_of(&fields, false)?);
         Key::parse(&line_of(fields)?)
     }
 
@@ -690,6 +694,22 @@ mod tests {
     }
 
     #[test]
+    fn a_number_past_the_safe_integers_is_refused_not_panicked_on() {
+        // Catches the constructors, which return Result, panicking on a
+        // value that has no canonical form (the code review, A4).
+        let too_big = 1 << 53;
+        let e = Entry::new(too_big, None, "edit", json!({}));
+        assert!(e.unwrap_err().contains("exceeds"));
+        let id = EntryId::new(too_big, &"0".repeat(64));
+        let stamp = Stamp {
+            date: "2026-01-01T00:00:00Z".into(),
+            author: "0".repeat(64),
+            sig: "0".repeat(128),
+        };
+        assert!(Seal::new(id, stamp, None).is_err());
+    }
+
+    #[test]
     fn unknown_fields_are_kept_and_hashed() {
         // Catches a reader that rejects later fields, ignores them in the
         // hash, or drops them when it writes the entry again, as a purge
@@ -697,7 +717,7 @@ mod tests {
         let e = Entry::new(1, None, "edit", json!({})).unwrap();
         let mut m: Map<String, Value> = serde_json::from_str(&e.to_line().unwrap()).unwrap();
         m.insert("zzz".into(), json!("later"));
-        let h = record_hash(&m, true);
+        let h = record_hash(&m, true).unwrap();
         m.insert("hash".into(), json!(h));
         let line = jcs::dumps(&Value::Object(m.clone())).unwrap();
         let read = Entry::parse(&line).unwrap();
@@ -807,7 +827,7 @@ mod tests {
         m.insert("prev".into(), Value::Null);
         m.insert("kind".into(), json!("edit"));
         m.insert("body_hash".into(), json!(body_hash(&body).unwrap()));
-        let h = record_hash(&m, true);
+        let h = record_hash(&m, true).unwrap();
         m.insert("body".into(), body);
         m.insert("hash".into(), json!(h));
         let line = jcs::dumps(&Value::Object(m)).unwrap();
@@ -824,7 +844,7 @@ mod tests {
     /// The line of a record made of these fields, with its hash added: a
     /// record that is wrong only in what a test puts in its fields.
     fn hashed_line(mut fields: Value, drop_body: bool) -> String {
-        fields["hash"] = json!(hash_of(&fields, drop_body));
+        fields["hash"] = json!(hash_of(&fields, drop_body).unwrap());
         line_of(fields).unwrap()
     }
 
