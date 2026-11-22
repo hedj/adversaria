@@ -48,7 +48,7 @@ main :-
 %   well-framed request with a bad body only gets an error reply.
 serve(In, Out) :-
     (   catch(read_message(In, Type, Req, Body), E, die(E))
-    ->  catch(handle(Type, Req, Body, Out), E2, reply_error(Out, Req, E2)),
+    ->  catch(request(Type, Req, Body, Out), E2, reply_error(Out, Req, E2)),
         serve(In, Out)
     ;   true
     ).
@@ -56,6 +56,12 @@ serve(In, Out) :-
 die(E) :-
     format(user_error, "prolog/server.pl: dying on a garbled message: ~q~n", [E]),
     halt(1).
+
+%   One request, handled with no choice point left, so serve/2's
+%   recursion is a last call; a type or body handle/4 has no clause for is
+%   refused.
+request(Type, Req, Body, Out) :-
+    (   handle(Type, Req, Body, Out) -> true ; throw(protocol_error(not_a_request(Type))) ).
 
 handle(query, Req, Body, _) :-
     cells_terms(Body, Terms, Vars),
@@ -83,8 +89,6 @@ handle(atom, Req, Body, Out) :-
     cells_terms(Body, [Name0], []),
     (   string(Name0) -> atom_string(Name, Name0) ; throw(protocol_error(atom_needs_string)) ),
     reply_atom(Out, Req, Name).
-handle(Type, _, _, _) :-
-    throw(protocol_error(not_a_request(Type))).
 
 %   Store a fact the memex states, by its entry's number.
 store_fact(Fact, Seq) :-
