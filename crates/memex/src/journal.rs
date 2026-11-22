@@ -78,16 +78,20 @@ impl Journal {
         let dir = Locked::take(dir)?;
         let bytes = fs::read(dir.join(JOURNAL))?;
         let keep = unfinished_from(&bytes).unwrap_or(bytes.len());
-        let entries = checked(&bytes[..keep])?;
-        let journal = Journal {
+        let journal = Journal::of(dir, checked(&bytes[..keep])?);
+        let torn = &bytes[keep..];
+        let note = (!torn.is_empty()).then(|| journal.set_aside(torn));
+        Ok((journal, note.transpose()?))
+    }
+
+    /// A journal of these entries, as opened: durable, and whole.
+    fn of(dir: Locked, entries: Vec<Entry>) -> Journal {
+        Journal {
             dir,
             entries,
             durable: true,
             broken: None,
-        };
-        let torn = &bytes[keep..];
-        let note = (!torn.is_empty()).then(|| journal.set_aside(torn));
-        Ok((journal, note.transpose()?))
+        }
     }
 
     /// Keep a line that was never finished beside the journal, durably,

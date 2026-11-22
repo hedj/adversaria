@@ -74,7 +74,9 @@ pub struct Revised {
 }
 
 impl Revised {
-    fn of(r: crate::docs::Revision, old: &[u64], home: u64, before: Option<u64>) -> Revised {
+    /// The alignment of a document's blocks with its old items, in items;
+    /// where it is, the outline says (Outline::revised).
+    fn of(r: crate::docs::Revision, old: &[u64], home: u64) -> Revised {
         let kept = r.kept.iter().map(|k| k.map(|o| old[o])).collect();
         let dropped = r.dropped.iter().map(|o| old[*o]).collect();
         Revised {
@@ -82,7 +84,7 @@ impl Revised {
             changed: r.changed,
             dropped,
             home,
-            before,
+            before: None,
         }
     }
 }
@@ -1017,12 +1019,18 @@ impl Outline {
         let home = self
             .parent(old.first().copied().unwrap_or(TOP))
             .unwrap_or(TOP);
-        let before = old.first().and_then(|first| {
-            let siblings = self.siblings(*first);
-            let at = siblings.iter().position(|s| s == first)?;
-            at.checked_sub(1).map(|i| siblings[i])
-        });
-        Revised::of(r, &old, home, before)
+        let before = old.first().and_then(|first| self.before(*first));
+        Revised {
+            before,
+            ..Revised::of(r, &old, home)
+        }
+    }
+
+    /// The item before one among its siblings, if it is not the first.
+    fn before(&self, id: u64) -> Option<u64> {
+        let siblings = self.siblings(id);
+        let at = siblings.iter().position(|s| *s == id)?;
+        at.checked_sub(1).map(|i| siblings[i])
     }
 
     /// Each item's style and text.

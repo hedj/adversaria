@@ -249,11 +249,7 @@ impl App {
         blocks: &[Block],
         import: u64,
     ) -> Result<(), String> {
-        let mut stack = Stack {
-            chain: vec![],
-            home: revised.home,
-            last_home: revised.before,
-        };
+        let mut stack = Stack::of(revised);
         for (b, kept) in blocks.iter().zip(&revised.kept) {
             let id = match kept {
                 Some(id) => self.write_kept(*id, b, &mut stack)?,
@@ -311,6 +307,15 @@ struct Stack {
 }
 
 impl Stack {
+    /// Nothing written yet, where a revision's document is.
+    fn of(revised: &Revised) -> Stack {
+        Stack {
+            chain: vec![],
+            home: revised.home,
+            last_home: revised.before,
+        }
+    }
+
     /// Where a block of a depth goes.
     fn spot(&mut self, depth: usize) -> Spot {
         let after = self.pop_to(depth);

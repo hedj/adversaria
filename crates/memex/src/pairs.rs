@@ -71,13 +71,18 @@ fn changes(earlier: &str, text: &str) -> Option<Vec<(String, String)>> {
     {
         once(&mut changed, o, n)?;
     }
-    let was_changed = |w: &String| changed.iter().any(|(f, _)| f.eq_ignore_ascii_case(w));
-    let kept = |(o, n): (&String, &String)| o.eq_ignore_ascii_case(n) && was_changed(o);
-    if old.iter().zip(&new).any(kept) {
+    if kept_elsewhere(&changed, &old, &new) {
         return None;
     }
     let few = changed.len() <= MOST_CHANGED && 2 * changed.len() < old.len();
     few.then_some(changed)
+}
+
+/// Whether a word changed in one place is kept in another.
+fn kept_elsewhere(changed: &[(String, String)], old: &[String], new: &[String]) -> bool {
+    let was_changed = |w: &String| changed.iter().any(|(f, _)| f.eq_ignore_ascii_case(w));
+    let kept = |(o, n): (&String, &String)| o.eq_ignore_ascii_case(n) && was_changed(o);
+    old.iter().zip(new).any(kept)
 }
 
 /// Note a change once; none if the word was already changed another way.

@@ -170,15 +170,20 @@ impl Fields {
         let parent = self.parent(seq)?;
         let content = self.content()?;
         let hash = self.own_hash(true)?;
-        let mut later = self.0.clone();
-        later.retain(|k, _| !ENTRY_FIELDS.contains(&k.as_str()));
         Ok(Entry {
             seq,
             parent,
             content,
             hash,
-            later,
+            later: self.later(),
         })
+    }
+
+    /// An entry's fields that this version of the format does not name.
+    fn later(&self) -> Map<String, Value> {
+        let mut later = self.0.clone();
+        later.retain(|k, _| !ENTRY_FIELDS.contains(&k.as_str()));
+        later
     }
 
     /// The entry before this one, which must have a lower number.

@@ -2122,15 +2122,25 @@ fn trail(outline: &Outline, id: u64) -> String {
 /// A small form has no fewer characters, so a match has no more than the
 /// pattern.
 fn match_at(text: &str, pattern: &str) -> Option<(usize, usize)> {
-    let p = pattern.to_lowercase();
-    let most = pattern.chars().count();
-    let at = |(i, _): (usize, char)| {
-        let ends = text[i..].char_indices().map(|(k, c)| i + k + c.len_utf8());
-        let mut ends = ends.take(most);
-        ends.find(|&j| text[i..j].to_lowercase() == p)
-            .map(|j| (i, j))
-    };
-    text.char_indices().find_map(at)
+    let starts = text.char_indices().map(|(i, _)| i);
+    starts
+        .into_iter()
+        .find_map(|i| Some((i, match_end(text, i, pattern)?)))
+}
+
+/// The end of a match of a pattern, ignoring case, that starts at a place
+/// in a text, if one does.
+fn match_end(text: &str, i: usize, pattern: &str) -> Option<usize> {
+    let small = pattern.to_lowercase();
+    let mut ends = ends_from(text, i).take(pattern.chars().count());
+    ends.find(|&j| text[i..j].to_lowercase() == small)
+}
+
+/// The ends of the stretches of a text from a place, each one character
+/// longer than the last.
+fn ends_from(text: &str, i: usize) -> impl Iterator<Item = usize> + '_ {
+    let chars = text[i..].char_indices();
+    chars.map(move |(k, c)| i + k + c.len_utf8())
 }
 
 /// A text with the part between two places bold.
