@@ -362,11 +362,6 @@ impl Upright {
 /// characters such as this one, and gives the wide character both cells.
 pub const COVERED: char = '\0';
 
-/// The columns a text takes on a terminal.
-fn width(s: &str) -> usize {
-    s.width()
-}
-
 /// What a view draws: rows of characters, where each mark landed, and
 /// notes (legends, and what could not be drawn).
 #[derive(Debug, Clone, Default)]
@@ -666,7 +661,7 @@ impl Canvas {
     /// Where a label goes: on the lowest row above `below` with room for
     /// it and a space after, as near x as the right edge allows.
     fn label_place(&self, x: usize, t: &str, below: usize) -> Option<Rect> {
-        let n = width(t) + 1;
+        let n = t.width() + 1;
         let start = x.min(self.w.saturating_sub(n));
         let y = (0..below).rev().find(|y| self.free(start, *y, n))?;
         Some(Rect::row(start, y, n - 1))
@@ -707,7 +702,7 @@ impl Canvas {
 
     /// Text at the first of these places where it has room; else none.
     fn text_where_free(&mut self, places: [(usize, usize); 2], text: &str, ink: Ink) {
-        let Some((x, y)) = self.first_free(places, width(text)) else {
+        let Some((x, y)) = self.first_free(places, text.width()) else {
             return;
         };
         self.text(x, y, text, ink);
@@ -830,7 +825,7 @@ fn junction(bits: u8) -> char {
 
 /// A text cut to n columns, with an ellipsis where it was cut.
 fn truncate(s: &str, n: usize) -> String {
-    if width(s) <= n {
+    if s.width() <= n {
         return s.to_string();
     }
     let Some(room) = n.checked_sub(1) else {
@@ -957,7 +952,7 @@ fn room_after_bars(ms: &[M]) -> usize {
 
 /// How wide a bar's value is, as drawn after it.
 fn value_width(m: &M) -> usize {
-    m.get("x").map_or(0, |x| width(&bar_label(m, x)))
+    m.get("x").map_or(0, |x| bar_label(m, x).width())
 }
 
 /// The scale that holds the marks' x values, from zero for bars across.
@@ -1183,7 +1178,7 @@ impl Frame {
     fn band_col_label(&self, s: &str) -> Option<(usize, String)> {
         let cols = self.col(&V::Cat(s.to_string()))?;
         let t = truncate(s, (cols.hi - cols.lo).max(1));
-        let x = (cols.lo + cols.hi + 1).saturating_sub(width(&t)) / 2;
+        let x = (cols.lo + cols.hi + 1).saturating_sub(t.width()) / 2;
         Some((x, t))
     }
 
@@ -1191,7 +1186,7 @@ impl Frame {
     /// high ending at its end.
     fn line_ends(&self, lo: f64, hi: f64) -> Vec<(usize, String)> {
         let high = self.xs.tick_text(hi);
-        let right = (self.columns().hi + 1).saturating_sub(width(&high));
+        let right = (self.columns().hi + 1).saturating_sub(high.width());
         vec![(self.x0(), self.xs.tick_text(lo)), (right, high)]
     }
 }
@@ -1204,7 +1199,7 @@ fn margin(ys: &Scale) -> usize {
         Scale::Line { lo, hi, .. } => vec![ys.tick_text(*lo), ys.tick_text(*hi)],
         Scale::None => vec![],
     };
-    let longest = labels.iter().map(|s| width(s)).max();
+    let longest = labels.iter().map(|s| s.width()).max();
     longest.map_or(0, |n| n + 1)
 }
 
@@ -1306,7 +1301,7 @@ impl Plot {
     /// The y labels, right-aligned in the margin.
     fn y_labels(&mut self) {
         for (text, y) in self.frame.y_label_places() {
-            let x = self.frame.left.saturating_sub(width(&text) + 1);
+            let x = self.frame.left.saturating_sub(text.width() + 1);
             self.cv.text(x, y, &text, Ink::Dim);
         }
     }
@@ -1426,7 +1421,7 @@ impl Plot {
 
     /// A label centred on a bar's columns, on a row.
     fn label_over(&mut self, bar: &Rect, row: usize, label: &str, ink: Ink) {
-        let left = bar.mid_x().saturating_sub(width(label) / 2);
+        let left = bar.mid_x().saturating_sub(label.width() / 2);
         self.cv.text(left, row, label, ink);
     }
 
@@ -1482,7 +1477,7 @@ impl Plot {
     fn span(&mut self, m: &M, cols: Run, row: usize) {
         self.cv.text(cols.lo, row, &"━".repeat(cols.len()), m.ink());
         if let Some(t) = m.get("text").map(V::text) {
-            let inside = width(&t) + 2 <= cols.len();
+            let inside = t.width() + 2 <= cols.len();
             let x = if inside { cols.lo + 1 } else { cols.hi + 2 };
             self.cv.text(x, row, &t, m.ink());
         }
@@ -1514,7 +1509,7 @@ impl Plot {
 
     fn text_mark(&mut self, m: &M, place: (usize, usize)) {
         let t = m.get("text").map(V::text).unwrap_or_default();
-        let at = Rect::row(place.0, place.1, width(&t));
+        let at = Rect::row(place.0, place.1, t.width());
         self.cv.text_in(at, &t, m.ink());
         self.cv.hit(at, &m.prov);
     }
@@ -1671,7 +1666,7 @@ impl Cell {
 
     /// The width the cell's text takes, with its mark if it is loud.
     fn width(&self) -> usize {
-        width(&self.text) + usize::from(self.loud)
+        self.text.width() + usize::from(self.loud)
     }
 
     /// The cell as shown in a column of a width: its text, cut to fit and
@@ -1696,7 +1691,7 @@ impl Cell {
     fn placed(&self, col: Run) -> (usize, String) {
         let t = self.shown(col.len());
         let x = if self.number {
-            col.hi + 1 - width(&t)
+            col.hi + 1 - t.width()
         } else {
             col.lo
         };
@@ -1741,12 +1736,12 @@ impl Table {
     /// The width a column needs: its widest cell or its name, from 1 to 20.
     fn column_width(&self, i: usize) -> usize {
         let content = self.cells.iter().map(|r| r[i].width()).max().unwrap_or(0);
-        content.max(width(&self.cols[i])).clamp(1, 20)
+        content.max(self.cols[i].width()).clamp(1, 20)
     }
 
     /// The width of the rows' names, at most 16.
     fn head(&self) -> usize {
-        let longest = self.rows.iter().map(|r| width(r)).max();
+        let longest = self.rows.iter().map(|r| r.width()).max();
         longest.unwrap_or(0).min(16)
     }
 
@@ -2394,7 +2389,7 @@ fn unplaced(g: &Graph, n: usize) -> Vec<Run> {
 /// no two leave or enter at one column; a dummy's is one.
 fn box_width(g: &Graph, v: usize) -> usize {
     let Some(n) = g.nodes.get(v) else { return 1 };
-    (width(&n.text).clamp(1, 22) + 4).max(ports(g, v) + 2)
+    (n.text.width().clamp(1, 22) + 4).max(ports(g, v) + 2)
 }
 
 /// The ports a vertex needs on its busier side: the edges drawn down from
