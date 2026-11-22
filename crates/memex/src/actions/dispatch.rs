@@ -52,9 +52,9 @@ pub const COMMANDS: &[Command] = &[
         name: "adopt",
         run: App::cmd_adopt,
         target: true,
-        slots: &[],
-        help: "make the target's claims beliefs, keeping their source",
-        brief: "make the target's claims beliefs",
+        slots: &[("suggestion", Slot::Suggestion)],
+        help: "make the target's claims beliefs, keeping their source; with a number, the suggestion shown with it, a claim the memex makes",
+        brief: "believe claims or a suggestion",
     },
     Command {
         name: "claim",
@@ -730,14 +730,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
     ("FACTS AND DEFINITIONS", &["set", "layer", "check"]),
     (
         "CLAIMS AND SUGGESTIONS",
-        &[
-            "adopt",
-            "interrogate",
-            "accept",
-            "dismiss",
-            "import",
-            "export",
-        ],
+        &["adopt", "interrogate", "dismiss", "import", "export"],
     ),
     (
         "WORLDS AND HISTORY",
@@ -752,7 +745,15 @@ pub const GROUPS: &[(&str, &[&str])] = &[
 /// (docs/concepts.md): they are in no group, so not listed, and only
 /// their whole name finds them. Statements are written in items instead,
 /// as sentences or in Prolog between backticks.
-pub const ALIASES: &[&str] = &["fact", "claim", "rule", "constraint", "ace", "derive"];
+pub const ALIASES: &[&str] = &[
+    "fact",
+    "claim",
+    "rule",
+    "constraint",
+    "ace",
+    "derive",
+    "accept",
+];
 
 /// A group of commands: its heading, and those of its commands listed.
 pub type Group = (&'static str, Vec<&'static Command>);
@@ -806,7 +807,7 @@ mod tests {
             ("retract ", Some(Slot::Entry)),
             ("accept ", Some(Slot::Suggestion)),
             ("query ", Some(Slot::Text)),
-            ("adopt ", None),
+            ("adopt ", Some(Slot::Suggestion)),
             ("nosuch ", None),
         ];
         for (line, want) in cases {

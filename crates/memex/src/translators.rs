@@ -186,8 +186,11 @@ fn change_offers(entry: u64) -> Vec<Offer> {
 
 /// What a suggestion offers: accepting or dismissing it.
 fn suggestion_offers(n: usize) -> Vec<Offer> {
-    let accept = offer("accept it", &format!("accept {n}"));
-    vec![accept, offer("dismiss it", &format!("dismiss {n}"))]
+    let adopt = offer("adopt it", &format!("adopt suggestion {n}"));
+    vec![
+        adopt,
+        offer("dismiss it", &format!("dismiss suggestion {n}")),
+    ]
 }
 
 /// An offer: the menu's words, and the command line.

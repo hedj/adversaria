@@ -46,7 +46,13 @@ impl App {
 
     // Adopting.
 
-    pub(crate) fn cmd_adopt(&mut self, _: &[&str], target: u64) -> Result<String, String> {
+    /// Adopt the target's claims, or, with a number, the suggestion shown
+    /// with it: a suggestion is a claim whose source is the memex, so
+    /// one verb holds either (docs/concepts.md).
+    pub(crate) fn cmd_adopt(&mut self, words: &[&str], target: u64) -> Result<String, String> {
+        if !words.is_empty() {
+            return self.cmd_accept(words, target);
+        }
         let claims = self.claims_of(target);
         check_adoptable(&claims)?;
         let new = self.not_adopted(claims);
@@ -111,8 +117,10 @@ impl App {
         self.write_view("dismiss", json!({"key": s.key()}));
     }
 
-    /// The suggestion shown with the number a command's words give.
+    /// The suggestion shown with the number a command's words give, after
+    /// the word "suggestion" if it is typed.
     fn suggestion(&self, words: &[&str], command: &str) -> Result<Suggestion, String> {
+        let words = words.strip_prefix(&["suggestion"]).unwrap_or(words);
         let n: usize = words
             .first()
             .and_then(|w| w.parse().ok())

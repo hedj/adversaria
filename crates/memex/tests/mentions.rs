@@ -100,3 +100,24 @@ fn only_whole_words_and_titles_are_mentions() {
         "{offers:?}"
     );
 }
+
+#[test]
+fn adopt_takes_a_suggestion_as_it_takes_a_claim() {
+    // Catches a suggestion that only `accept` adopts: a suggestion is a
+    // claim whose source is the memex, so `adopt` holds it as it holds any
+    // claim (docs/concepts.md).
+    let mut r = room(
+        "mention-adopt",
+        &["Buran flight", "Notes on the buran flight launch"],
+    );
+    offered(&mut r);
+    r.command("adopt suggestion 1");
+    let order = r.outline().in_order();
+    let (out, _) = r.outline().links_of(order[1]);
+    assert_eq!(out.iter().map(|l| l.to).collect::<Vec<_>>(), [order[0]]);
+    assert!(
+        r.app.session.message.starts_with("adopted: "),
+        "{}",
+        r.app.session.message
+    );
+}

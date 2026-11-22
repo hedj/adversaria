@@ -3765,7 +3765,7 @@ fn suggestion_lines(app: &App, mut column: Column) -> Column {
     if shown.is_empty() {
         column.lines.push(Line::styled("nothing to suggest", dim()));
     }
-    let hint = "accept N adopts · dismiss N dismisses";
+    let hint = "adopt N adopts · dismiss N dismisses";
     column
         .lines
         .extend([Line::raw(""), Line::styled(hint, dim())]);

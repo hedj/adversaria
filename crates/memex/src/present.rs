@@ -83,7 +83,7 @@ impl Presentation {
             P::Constraint { pane, item, .. } => item.map(|id| P::Item { pane: *pane, id }),
             P::Layer { view, .. } => Some(P::Item { pane: 0, id: *view }),
             P::Change(_) => None,
-            P::Suggestion(n) => Some(P::Command(format!("accept {n}"))),
+            P::Suggestion(n) => Some(P::Command(format!("adopt suggestion {n}"))),
         }
     }
 }

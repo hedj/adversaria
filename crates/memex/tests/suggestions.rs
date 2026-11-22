@@ -29,7 +29,7 @@ fn an_empty_pane_says_so_and_how_to_act_on_suggestions() {
     room.command("pane suggestions");
     assert!(room.shows("│  SUGGESTIONS · 0 OF 0"), "inset in its pane");
     assert!(room.shows("│  nothing to suggest"));
-    assert!(room.shows("│  accept N adopts · dismiss N dismisses"));
+    assert!(room.shows("│  adopt N adopts · dismiss N dismisses"));
 }
 
 #[test]
