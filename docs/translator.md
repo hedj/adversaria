@@ -27,16 +27,10 @@ Outsourcing to untrusted servers was considered and rejected for this task. With
 
 ### Risks, tests and open questions
 
-The largest risk is that the fixed reservoir, with no learned recurrence, is too weak for language; the copy task decides this before anything is built.
+The model's own risks, with their tests and null hypotheses, are in the reservoir repository (hedj/reservoir, `docs/design.md`). The risk that belongs to this use is the quality of the translation.
 
-| Risk | Test (one variable changed; same data, size and training budget) | Null hypothesis |
+| Risk | Test | Null hypothesis |
 | --- | --- | --- |
-| A fixed reservoir is weaker than a learned recurrence | Fixed reservoir against a learned Koopman front end; translation exact-match and byte perplexity | The fixed reservoir is no worse |
-| Recall at a distance fails | Copy an identifier after gaps of 8 to 4K bytes, with and without the copy window | The copy window adds nothing |
-| Two 48-value heads lack precision | Copy task with 1 head of 96 values against 2 heads of 48, with and without the hash | Heads and hash add nothing |
-| A quadratic readout is no better than a linear one | Linear against quadratic readout, recurrence fixed | No difference |
-| Phase carries no information | Modulus \|s\|² against the complex state (Re, Im) | No difference |
-| The hard argmax at inference mismatches the soft attention in training | Train with straight-through gradients; compare inference with soft and hard pointers | No difference |
 | Quality is too low at this size | Exact-match on held-out Prolog clauses and queries, after the check-and-resample loop | (a measurement, not a hypothesis) |
 
 Open questions:
@@ -69,97 +63,9 @@ Other figures are measured in this document's trials, or are estimates from this
 
 ## 2. The model
 
-### Model structure
+### Where the model is designed
 
-The model reads one byte at a time. A recurrence with fixed weights keeps the long-range statistics, two windows keep the exact recent text, and one learned polynomial readout combines them.
-
-*Diagram, kept in the living doc only: Complex Koopman Reservoir: data flow for one byte.*
-
-The reservoir's state is updated as s = λ·s + (1 − |λ|)·\[x = v\] for each byte value v and each of the 12 complex eigenvalues λ. The eigenvalues lie on a log scale of time constants, and no gradient flows through them.
-
-| Part | Parameters | Why this choice |
-| --- | --- | --- |
-| Fixed complex reservoir (256 × 12) | 0 | Koopman eigenvalues keep both magnitude and phase; fixed weights make training fully parallel, with no backpropagation through time |
-| Raw window (8 bytes, one-hot) | 1.05M | Exact local order. Because x² = x for one-hot inputs, the squares are dropped. |
-| Quadratic KAN input layer (\[Re s, Im s, squares\] → 512) | 6.29M | A quadratic KAN layer is a linear layer on \[x, x²\]; its squares give \|s\|² and, after a mix, gated products |
-| 4 quadratic KAN mixers (512 → 512) | 2.10M | Each layer doubles the degree of the polynomial |
-| Output layer (512 → 256) | 0.13M | Byte vocabulary: no large embedding table |
-| Copy window projections (query and keys) | about 0.07M | Exact recall of identifiers over a page |
-| **Total** | **about 9.6M** |  |
-
-The exact context is the 8 raw bytes plus the copy window. Beyond it the reservoir keeps only blurred statistics, out to about 2K bytes at the longest time constant.
-
-### Candidate refinements: loops and wavelets
-
-These are proposals, not measured; the sources are recalled, not checked.
-
-**Loop only around nonlinear parts.** Applying the reservoir's linear step n times equals one step with each eigenvalue raised to the nth power, so looping the linear part adds nothing. Looping helps only around a nonlinearity.
-
-| Idea | Source | Where it fits | Cost |
-| --- | --- | --- | --- |
-| One readout block applied k times instead of k distinct blocks | Universal Transformers (Dehghani et al. 2018); looped transformers (Giannou et al. 2023; Yang et al. 2023) | the KAN mixers: parameters fall about k-fold, and so do the bytes of weights read per step | k times the arithmetic per byte; backpropagation through the loops, which costs more and can be unstable |
-| Adaptive halting: easy bytes take one loop, hard ones several | adaptive computation time (Graves 2016) | the "do you mean?" round has time to spare | harder training |
-| Repeated wavelet and modulus | the scattering transform (Mallat); Glinsky's Heisenberg scattering transform | the reservoir is already complex, so the modulus is natural | a nonlinearity outside the model's linear-dynamics premise |
-
-**A wavelet pyramid over the reservoir states.** A mid/side split of adjacent pairs, mid = (a + b)/√2 and side = (a − b)/√2, is one Haar step; repeating it on the mids gives the Haar pyramid, log₂ n levels over n samples. The split applies to the reservoir states or to embedded vectors, never to raw byte codes, whose averages mean nothing. Level j updates once every 2ʲ bytes, so a streaming pyramid costs O(1) additions per byte, amortised, and keeps O(log n) state: coarse summaries of long context, beside the copy window's exact recall. It stays linear, so it keeps the model's cheap, parallel training.
-
-**Lifting, and Haar as its simplest case.** The lifting scheme (Daubechies and Sweldens 1998) splits samples into even and odd, predicts each odd sample from evens, and updates the evens. Haar is lifting with the simplest predictor: d = odd − even, then s = even + d/2.
-
-| | Haar | CDF 5/3 (JPEG 2000 lossless) | CDF 9/7 (JPEG 2000 lossy) | Learned lifting |
-| --- | --- | --- | --- | --- |
-| Predict and update from | one neighbour | neighbours on both sides | four lifting steps and a scale | small learned steps |
-| Operations per pair of samples | 1 addition, 1 subtraction, 1 shift | about 4 additions, 2 shifts | about 4–6 multiplications and additions | depends on the steps |
-| Vanishing moments (trends the detail channel cancels) | 1: constants only | 2: linear trends too | 4 | learned |
-| Separation of scales | poor: blocky, with leakage | better | good | as trained |
-| Causal, as left-to-right prediction needs | yes, one sample's delay per level | symmetric steps need one or two later samples per level; a causal predictor gives up the symmetry | more delay | causal by construction |
-| Exact inverse | yes | yes, integer to integer with rounding | yes | yes, whatever the predictor |
-
-The model only analyses its input and never reconstructs it, so lifting's exact inverse matters little here; causality and vanishing moments decide. The proposal is to build the pyramid from lifting steps with Haar's predictor, which is cheap and causal, and later try a causal two-sample predictor or a learned one without changing the rest. Reservoir states drift smoothly, and one vanishing moment leaves linear drift in the detail channel, so the test is whether a second vanishing moment improves prediction by enough to pay for its cost.
-
-**Looping changes the context only if each loop reads something new.** A looped readout that sees the same inputs every time gains depth, not context. If each loop reads one more level of the pyramid, the context becomes a pyramid: exact near the present, half the resolution at each step back, spanning about 2ᵏ times the base window after k loops. If each loop queries the copy window again, with a query updated by the previous loop, the context becomes a chain of up to k linked lookups through the text ("X is defined as Y; Y is defined at Z").
-
-### Trial: does looping widen the context?
-
-This trial tests the two shapes above. It sits outside stage A of `docs/plan.md`, which uses no model, and needs a GPU; its cost is not yet estimated.
-
-**Hypotheses.**
-
-* H0, the null: no form of looping lowers prediction loss on long-range text beyond the spread between training seeds, once compute is matched.
-* H1, the pyramid: when each loop reads one more pyramid level, loss falls on bytes whose evidence lies beyond the raw window, and falls more as k grows.
-* H2, multi-hop recall: when each loop re-queries the copy window, accuracy rises on references that need several hops, up to about k hops.
-
-**What varies, and what is held constant.**
-
-| Varies | Values |
-| --- | --- |
-| Form | base (no loop); looped readout on the same inputs; pyramid; multi-hop; pyramid and multi-hop |
-| Loops k | 1, 2, 4, 8 |
-
-Held constant: the training data and its order, the number of bytes seen in training, the optimiser and its schedule, the reservoir's eigenvalues, the raw and copy windows, and the number of learned parameters, since the looped block is weight-tied. Each cell runs with 3 seeds.
-
-**The compute control.** A looped model does k times the arithmetic. To separate "more context" from "more compute", each looped form is compared with an unlooped model whose readout is k times deeper, with untied layers and the same arithmetic per byte. A gain that the deeper model matches is a gain from compute, not from context.
-
-**Test sets.**
-
-1. Held-out text from the training corpora: the general case.
-2. Long-range text: Prolog programs in which a predicate is defined far from its use, and ACE texts in which a pronoun or a definite noun refers far back. Each byte is labelled with its distance to the evidence it needs.
-3. Synthetic chains: "a1 = a2. a2 = a3. … What is a1?", with the number of hops and the distance between links set by the generator, so the answer is known.
-
-**Measures.**
-
-* Bits per byte, overall and by distance bucket (within 8 bytes, within the copy window, beyond it).
-* On the synthetic chains, accuracy by number of hops and by distance.
-* Cost: arithmetic per byte, state carried per byte, and training time, each measured.
-
-**Checks that the trial itself is sound.**
-
-* Causality: changing any later byte must leave every earlier prediction unchanged. A test plants a change and checks.
-* The pyramid is used: replacing its levels with zeros at test time must raise the loss of the pyramid form; if it does not, the form learned to ignore it.
-* A planted fault: a version that leaks one future byte into the pyramid must score much better than it should, and the causality test must catch it.
-
-**Order.** Run a small model first (readout width 128 instead of 512), so a full grid trains quickly, and run the full 9.6M-parameter model only for the forms that beat their compute controls.
-
-**Decision.** Adopt a form only if it lowers bits per byte on the long-range set by more than twice the standard deviation across seeds, beats its compute control, and its cost per byte is acceptable for the "do you mean?" round. Report every cell, including those that show nothing.
+The model is the Complex Koopman Reservoir, a byte-level sequence model of about 9.6M parameters. Its design, its candidate refinements, the trial of looping, its training and its limits are kept in the reservoir repository (hedj/reservoir, `docs/design.md`), with a plan for testing it on standard benchmarks (`docs/benchmarks.md`). This document covers only its use here: what it is trained to do, on what data, and how its output is checked.
 
 ### Training and data
 
@@ -172,7 +78,7 @@ The model stays at 9.6M parameters but does a narrower job: it rewrites free Eng
 
 The extra capacity of 9.6M parameters, against about 3M for this task alone, goes into the hard part: reading free English and choosing the right controlled phrasing. The grammar keeps the output exact, and the Prolog checker catches what slips through.
 
-The reservoir is fixed, and no learned layer feeds back into it, so no gradient flows through the recurrence. Each position trains independently, as in a feedforward network, with no scan kernel. Compute follows the rule 6 × parameters × bytes, with N = 9.6M.
+Compute follows the rule 6 × parameters × bytes, with N = 9.6M; the reservoir repository explains why the model trains in parallel over positions.
 
 | Item | Assumption | Cost |
 | --- | --- | --- |
