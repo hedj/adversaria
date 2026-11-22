@@ -107,8 +107,26 @@ fn parse(line: &str) -> Result<Command, String> {
 
 /// Four whole numbers, as a move takes.
 fn numbers_of(words: &[&str]) -> Result<[u32; 4], String> {
-    let numbers: Vec<u32> = words.iter().filter_map(|w| w.parse().ok()).collect();
-    numbers
-        .try_into()
-        .map_err(|_| format!("move takes four whole numbers: {words:?}"))
+    let numbers: Option<Vec<u32>> = words.iter().map(|w| w.parse().ok()).collect();
+    let four = numbers.and_then(|n| n.try_into().ok());
+    four.ok_or_else(|| format!("move takes four whole numbers: {words:?}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_move_takes_four_whole_numbers_and_nothing_else() {
+        // Catches a word that is not a number dropped before the count is
+        // checked, so "move 10 x 20 30 40" was sent (the code review, B3).
+        assert_eq!(numbers_of(&["1", "2", "3", "4"]), Ok([1, 2, 3, 4]));
+        for bad in [
+            &["10", "x", "20", "30", "40"][..],
+            &["1", "2", "3", "4x"],
+            &["1", "2", "3"],
+        ] {
+            assert!(numbers_of(bad).is_err(), "{bad:?}");
+        }
+    }
 }

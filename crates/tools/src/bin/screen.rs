@@ -62,15 +62,16 @@ fn region_of(words: &[String]) -> Option<Region> {
     let numbers: Option<Vec<usize>> = words.iter().map(|w| w.parse().ok()).collect();
     let [x, y, width, height] = numbers?.try_into().ok()?;
     Some(Region {
-        columns: x..x + width,
-        rows: y..y + height,
+        columns: x..x.checked_add(width)?,
+        rows: y..y.checked_add(height)?,
     })
 }
 
 /// A colour in six hexadecimal digits, alone.
 fn colour_of(words: &[String]) -> Option<[u8; 3]> {
     let [word] = words else { return None };
-    let six = word.len() == 6;
+    // from_str_radix takes a sign: "+dcdc1" would be #0dcdc1.
+    let six = word.len() == 6 && word.bytes().all(|b| b.is_ascii_hexdigit());
     let [_, r, g, b] = u32::from_str_radix(word, 16)
         .ok()
         .filter(|_| six)?
@@ -298,6 +299,18 @@ mod tests {
     use super::*;
 
     /// Two pixels in a row, the stride padded to 12 bytes, in a format.
+    #[test]
+    fn a_colour_or_a_region_that_is_not_one_is_refused() {
+        // Catches "+dcdc1" read as #0dcdc1, and a region whose end
+        // overflows (the code review, B4).
+        let words = |w: &[&str]| w.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(colour_of(&words(&["0dcdc1"])), Some([0x0d, 0xcd, 0xc1]));
+        assert_eq!(colour_of(&words(&["+dcdc1"])), None);
+        let huge = usize::MAX.to_string();
+        assert!(region_of(&words(&["1", "2", "3", "4"])).is_some());
+        assert!(region_of(&words(&[&huge, "0", "1", "1"])).is_none());
+    }
+
     fn pixels(format: Format, bytes: [u8; 12]) -> Pixels {
         let shape = Shape {
             format,
