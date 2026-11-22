@@ -176,25 +176,25 @@ impl Atoms {
         self.by_number.get(&number).map(String::as_str)
     }
 
-    /// The names in these terms that have no number yet, each once.
+    /// The names in these terms that have no number yet, each once: a
+    /// compound's name before its arguments'. A stack, not recursion, so a
+    /// long list does not overflow it.
     pub fn missing(&self, terms: &[Term]) -> Vec<String> {
-        let mut out: Vec<String> = Vec::new();
-        for name in terms.iter().flat_map(names) {
+        let (mut out, mut todo): (Vec<String>, Vec<&Term>) = (vec![], terms.iter().rev().collect());
+        while let Some(t) = todo.pop() {
+            let name = match t {
+                Term::Atom(n) => n,
+                Term::Compound(n, args) => {
+                    todo.extend(args.iter().rev());
+                    n
+                }
+                _ => continue,
+            };
             if self.number(name).is_none() && !out.contains(name) {
                 out.push(name.clone());
             }
         }
         out
-    }
-}
-
-/// The names a term uses, its atoms and functors: a compound's own name
-/// after those of its arguments.
-fn names(t: &Term) -> Vec<&String> {
-    match t {
-        Term::Atom(n) => vec![n],
-        Term::Compound(n, args) => args.iter().flat_map(names).chain([n]).collect(),
-        _ => vec![],
     }
 }
 
@@ -302,10 +302,19 @@ impl<'a> Encoder<'a> {
         no.ok_or_else(|| ProtoError(format!("atom {n:?} has no number yet")))
     }
 
-    fn compound(&mut self, n: &str, args: &[Term]) -> Result<(), ProtoError> {
-        let functor = self.functor(n, args.len())?;
-        self.cells.push(functor);
-        args.iter().try_for_each(|a| self.term(a))
+    /// A compound, its last argument in a loop, not by recursion, so the
+    /// spine of a long list does not overflow the stack.
+    fn compound<'t>(&mut self, mut n: &'t str, mut args: &'t [Term]) -> Result<(), ProtoError> {
+        loop {
+            let functor = self.functor(n, args.len())?;
+            self.cells.push(functor);
+            let (last, rest) = args.split_last().expect("functor refuses arity 0");
+            rest.iter().try_for_each(|a| self.term(a))?;
+            match last {
+                Term::Compound(m, a) => (n, args) = (m, a),
+                other => return self.term(other),
+            }
+        }
     }
 
     /// The cell that opens a compound: its arity and its name's number.

@@ -167,7 +167,7 @@ fn unknown_atoms_are_listed_not_guessed() {
     );
     assert_eq!(
         a.missing(std::slice::from_ref(&t)),
-        vec!["q".to_string(), "p".to_string()]
+        vec!["p".to_string(), "q".to_string()]
     );
     assert!(encode(&[t], &a).is_err());
 }
@@ -237,6 +237,25 @@ fn a_long_list_decodes_without_deep_recursion() {
         len
     });
     assert_eq!(len, n);
+}
+
+#[test]
+fn a_long_list_encodes_without_deep_recursion() {
+    // Catches an encoder, or the search for unnumbered atoms, that recurses
+    // once per list element: a list within one message's size aborted a
+    // debug build at 6,000 elements (the code review, A2).
+    let len = on_a_stack_of(256 * 1024, || {
+        let a = atoms_for_tests();
+        let mut list = Term::Atom("[]".into());
+        for i in 0..30_000 {
+            list = Term::Compound(".".into(), vec![Term::Int(i % 1000), list]);
+        }
+        assert!(a.missing(std::slice::from_ref(&list)).is_empty());
+        let (cells, _) = encode(std::slice::from_ref(&list), &a).unwrap();
+        std::mem::forget(list); // dropping a long list recurses (a known limit)
+        cells.len()
+    });
+    assert_eq!(len, 60_001);
 }
 
 /// The number of cells along a list's spine.
