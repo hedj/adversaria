@@ -3,7 +3,7 @@
 //! Every entry is one user action or one observation the memex recorded.
 //! Actions by kind, after Licklider's count of his own work:
 //! * writing: edit (create, text, move, delete, facts, derive, constraint), link, name;
-//! * searching: view leap;
+//! * searching: view leap and find;
 //! * following links: view follow;
 //! * navigating: view move, fold, pane, scope;
 //! * deciding: adopt, retract, suppose, undo, redo, purge, view dismiss and world;
@@ -77,7 +77,7 @@ pub fn kind(e: &Entry) -> Option<&'static str> {
         | ("redo", _)
         | ("purge", _) => Some("deciding"),
         ("import", _) => Some("importing"),
-        ("view", "leap") => Some("searching"),
+        ("view", "leap" | "find") => Some("searching"),
         ("view", "follow") => Some("following links"),
         ("view", "move" | "fold" | "pane" | "scope") => Some("navigating"),
         ("view", "dismiss" | "world") => Some("deciding"),
@@ -324,6 +324,18 @@ mod tests {
             obs(&[], "actual"),
         ]);
         assert_eq!(measure(&es).violations_corrected, 1);
+    }
+
+    #[test]
+    fn a_find_is_searching_as_a_leap_is() {
+        // Catches the find command's view entry counted as no action, so
+        // searching by it was missing from the clerical share.
+        let view = |op: &str| ("view", json!({"op": op}));
+        let es = chain(&[("edit", json!({"op": "init"})), view("find"), view("leap")]);
+        assert_eq!(
+            (kind(&es[1]), kind(&es[2])),
+            (Some("searching"), Some("searching"))
+        );
     }
 
     #[test]
