@@ -618,12 +618,12 @@ impl App {
         };
         words.remove(0);
         let open = input.ends_with(' ');
-        if cmd.name == "link" {
-            return self.guided_link(&words, open);
-        }
         let asks = prompts(self, cmd, self.cursor());
-        match words.is_empty() && !asks.is_empty() {
-            true => format!("{}{asks}", cmd.name),
+        if words.is_empty() && !asks.is_empty() {
+            return format!("{}{}{asks}", cmd.name, self.link_from(cmd));
+        }
+        match cmd.name == "link" {
+            true => self.guided_link(&words, open),
             false => guided_slots(cmd, &words, open),
         }
     }
@@ -653,6 +653,14 @@ impl App {
         match addr.is_empty() {
             true => format!("link{from} (to)"),
             false => format!("link{from} (to) {}", addr.join(" ")),
+        }
+    }
+
+    /// For `link`, the from it takes, shown before its prompts.
+    fn link_from(&self, cmd: &Command) -> String {
+        match cmd.name == "link" {
+            true => self.default_from(),
+            false => String::new(),
         }
     }
 

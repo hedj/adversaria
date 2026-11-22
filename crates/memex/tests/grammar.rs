@@ -322,3 +322,16 @@ fn import_of_a_file_as_an_address_is_a_revision() {
     let said = &r.app.session.message;
     assert!(said.starts_with("revision of essay.md:"), "{said}");
 }
+
+#[test]
+fn link_held_alone_shows_its_from_and_its_defaults() {
+    // Catches link's own display left without the kinds and defaults
+    // every other verb alone shows.
+    let mut r = abc("grammar-link-foot");
+    r.command("go 1");
+    r.hold(Quasi::Command, "link");
+    assert_eq!(
+        foot(&r),
+        " COMMAND  link (from 1) (to) ‹item› [3] (as) ‹word› [link]"
+    );
+}
