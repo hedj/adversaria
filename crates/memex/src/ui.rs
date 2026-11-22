@@ -580,19 +580,14 @@ fn view_panel(app: &App, id: u64, layers: &[Layer]) -> Vec<Presented> {
     let mut lines = layers_head(layers);
     lines.extend(layers.iter().flat_map(|l| presented_layer(app, l, id)));
     lines.extend(plain(view_notes(app, id)));
-    lines.extend(plain(view_hint()));
+    let hint = "a click on a mark goes to the item that states its fact";
+    lines.extend(plain(vec![Line::raw(""), Line::styled(hint, dim())]));
     lines
 }
 
 /// The view panel's heading, and a blank line under it.
 fn layers_head(layers: &[Layer]) -> Vec<Presented> {
     plain(vec![layers_heading(layers), Line::raw("")])
-}
-
-/// What a click on a view's mark does, under its layers.
-fn view_hint() -> Vec<Line<'static>> {
-    let hint = "a click on a mark goes to the item that states its fact";
-    vec![Line::raw(""), Line::styled(hint, dim())]
 }
 
 /// A layer's lines, each presenting the layer of its view.
