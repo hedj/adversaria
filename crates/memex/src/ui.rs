@@ -2621,8 +2621,9 @@ fn status(e: &WorldEval) -> Line<'static> {
         ),
     ];
     let shown = counts.into_iter().filter(|(n, ..)| *n > 0);
-    let spans: Vec<Span<'static>> = shown.map(count_span).collect();
-    Line::from(interleaved(spans, Span::styled(" · ", dim())))
+    let spans = shown.map(count_span);
+    // A separator between each two.
+    Line::from_iter(spans.flat_map(|s| [Span::styled(" · ", dim()), s]).skip(1))
 }
 
 /// A count of findings of a kind, in its colour.
@@ -2634,18 +2635,6 @@ fn count_span((n, names, style): (usize, [&str; 2], Style)) -> Span<'static> {
 /// disagreements between sources".
 fn counted_finding(n: usize, [one, many]: [&str; 2]) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
-}
-
-/// Spans with a separator between each two.
-fn interleaved(spans: Vec<Span<'static>>, sep: Span<'static>) -> Vec<Span<'static>> {
-    let mut out = Vec::new();
-    for (i, s) in spans.into_iter().enumerate() {
-        if i > 0 {
-            out.push(sep.clone());
-        }
-        out.push(s);
-    }
-    out
 }
 
 /// The predicates a goal or body calls, by name, and through the world's
