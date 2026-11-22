@@ -708,11 +708,6 @@ impl Canvas {
         places.into_iter().find(|(x, y)| self.free(*x, *y, n))
     }
 
-    /// Text cut to the width of a rectangle, at its top left.
-    fn text_cut(&mut self, r: Rect, s: &str, ink: Ink) {
-        self.text_in(r, &truncate(s, r.w), ink);
-    }
-
     /// A rectangle of one character.
     fn fill(&mut self, r: Rect, c: char, ink: Ink) {
         for row in r.y..r.y + r.h {
@@ -1379,7 +1374,7 @@ impl Plot {
         };
         self.cv.fill(bar, '█', m.ink());
         if bar.y > 0 {
-            self.label_above(&bar, &bar_label(m, y), m.ink());
+            self.label_over(&bar, bar.y - 1, &bar_label(m, y), m.ink());
         }
         self.cv.hit(bar, &m.prov);
         true
@@ -1407,11 +1402,6 @@ impl Plot {
     /// A label after a bar, a space from its end.
     fn label_after(&mut self, bar: &Rect, label: &str, ink: Ink) {
         self.cv.text(bar.right() + 1, bar.y, label, ink);
-    }
-
-    /// A label centred over a bar, on the row above it.
-    fn label_above(&mut self, bar: &Rect, label: &str, ink: Ink) {
-        self.label_over(bar, bar.y - 1, label, ink);
     }
 
     /// A label centred on a bar's columns, on a row.
@@ -2648,7 +2638,8 @@ impl Node {
     fn draw(&self, cv: &mut Canvas, b: Rect) {
         let ink = self.ink();
         cv.frame(b, frame_of(&self.shape), ink);
-        cv.text_cut(b.inner(), &self.text, ink);
+        let inner = b.inner();
+        cv.text_in(inner, &truncate(&self.text, inner.w), ink);
         cv.hit(b, &self.prov);
     }
 }
