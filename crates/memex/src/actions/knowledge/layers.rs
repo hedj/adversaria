@@ -44,10 +44,12 @@ impl App {
 /// A layer's mark and goal: the mark one the views can draw, and each of
 /// its variables bound by the goal.
 fn layer_parts(t: &Term, names: &[String]) -> Result<(Term, Term), String> {
-    let Term::Compound(_, a) = t else {
-        unreachable!()
+    // Text can close the brackets the mark and goal are read in, or end
+    // them with a comment, so the term read need not be layer/2.
+    let (mark, goal) = match t {
+        Term::Compound(f, a) if f == "layer" && a.len() == 2 => (a[0].clone(), a[1].clone()),
+        _ => return Err("layer not kept: that is no mark and goal".into()),
     };
-    let (mark, goal) = (a[0].clone(), a[1].clone());
     channels(&mark).map_err(|e| format!("layer not kept: {e}"))?;
     all_bound(&mark, &goal, names, ("the mark", "the goal"))
         .map_err(|v| format!("layer not kept: {v}"))?;

@@ -214,6 +214,10 @@ fn a_layer_that_could_not_be_drawn_or_would_act_is_refused() {
             "layer bar(x(C), y(V)) where cell(C, V), shell(ls)",
             "shell/1 is not allowed",
         ),
+        // Text that closes the brackets the parts are read in, then
+        // comments the rest out, reads as layer/1: it panicked (the code
+        // review, F-B2).
+        ("layer x)) %", "no mark and goal"),
     ] {
         let m = run(&mut app, line);
         assert!(
