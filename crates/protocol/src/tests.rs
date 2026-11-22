@@ -189,8 +189,9 @@ fn message_round_trip() {
 
 #[test]
 fn malformed_messages_refused() {
-    // Catches a bad header, or a message cut short, accepted.
+    // Catches a bad header, or a message or a header cut short, accepted.
     for bytes in [
+        vec![7, 0],
         vec![7, 1, 0, 1, 0, 0, 0, 0],
         vec![99, 0, 0, 1, 0, 0, 0, 0],
         vec![7, 0, 0, 0],
@@ -198,6 +199,7 @@ fn malformed_messages_refused() {
     ] {
         assert!(read_message(&mut bytes.as_slice()).is_err(), "{bytes:?}");
     }
+    assert!(read_message(&mut [].as_slice()).unwrap().is_none(), "a clean end");
 }
 
 #[test]

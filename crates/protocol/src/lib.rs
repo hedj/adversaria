@@ -104,13 +104,17 @@ pub fn read_message(r: &mut impl Read) -> io::Result<Option<Message>> {
     Ok(Some(Message { kind, req, body }))
 }
 
-/// The next header word; None if the input ends before it.
+/// The next header word; None if the input ends cleanly before it. A
+/// header cut short is an error: the stream is out of step.
 fn read_header(r: &mut impl Read) -> io::Result<Option<u32>> {
-    let mut h = [0u8; 4];
-    match r.read_exact(&mut h) {
-        Ok(()) => Ok(Some(u32::from_be_bytes(h))),
-        Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => Ok(None),
-        Err(e) => Err(e),
+    let mut h = Vec::with_capacity(4);
+    match r.by_ref().take(4).read_to_end(&mut h)? {
+        0 => Ok(None),
+        4 => Ok(Some(u32::from_be_bytes([h[0], h[1], h[2], h[3]]))),
+        n => Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            format!("a header cut short after {n} bytes"),
+        )),
     }
 }
 
