@@ -126,11 +126,16 @@ impl Screen {
         Vec2::splat(self.cell_size.x)
     }
 
-    /// The cell at a point, by column and row; a point in the margin is
-    /// in the nearest cell.
+    /// The cell at a point, by column and row; a point in a margin, on
+    /// any side, is in the nearest cell.
     fn cell_at(&self, at: Vec2) -> (u16, u16) {
         let cell = (at - self.margin()) / self.cell_size;
-        (cell.x.max(0.0) as u16, cell.y.max(0.0) as u16)
+        let area = self.cells.backend().buffer.area;
+        let x = (cell.x.max(0.0) as u16).min(area.width.saturating_sub(1));
+        (
+            x,
+            (cell.y.max(0.0) as u16).min(area.height.saturating_sub(1)),
+        )
     }
 
     /// Lay the app out in as many cells as fit in a window of this size
@@ -141,6 +146,10 @@ impl Screen {
         let rows = ((fits.y / self.cell_size.y) as u16).max(1);
         if self.cells.backend().buffer.area.as_size() != (columns, rows).into() {
             self.cells = Terminal::new(Cells::new(columns, rows)).expect("cells in memory");
+            // A selection made on the old cells may lie outside the new.
+            let within = |(x, y): (u16, u16)| x < columns && y < rows;
+            let selection = &mut self.mouse.drag.selection;
+            selection.take_if(|s| !(within(s.from) && within(s.to)));
         }
         let selection = self.mouse.drag.selection;
         let mut hits = Presentations::default();
@@ -486,6 +495,23 @@ mod tests {
         );
         assert_eq!(screen.cell_at(Vec2::new(w - 1.0, w - 1.0)), (0, 0));
         assert_eq!(screen.cell_at(Vec2::new(1.0, 1.0)), (0, 0));
+    }
+
+    #[test]
+    fn a_point_past_the_last_cell_is_in_it_and_a_resize_drops_a_selection() {
+        // Catches a click in the bottom or right margin found in a cell
+        // outside the buffer, which panicked when the selection was
+        // marked, and a selection kept outside the cells after the window
+        // shrank (the code review, H1).
+        let (dir, app) = opened("window-margin");
+        let mut screen = Screen::new();
+        laid(&mut screen, &app);
+        assert_eq!(screen.cell_at(Vec2::new(5000.0, 5000.0)), (89, 19));
+        screen.mouse.drag.press(Some((80, 15)));
+        screen.mouse.drag.moved((89, 19));
+        screen.lay_out(&app, Vec2::new(10.0 * 9.0, 5.0 * 18.0));
+        assert!(screen.mouse.drag.selection.is_none());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
