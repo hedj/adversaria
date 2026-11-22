@@ -74,8 +74,8 @@ make run JOURNAL=$HOME/notes KEY=$HOME/.notes.key
 In the memex:
 
 - Type to write an item. Enter starts a new item; Tab indents it.
-- Hold Left Ctrl, type a command such as `help`, and release Left Ctrl to
-  run it.
+- Hold Left Ctrl, type a command such as `find draft`, and release Left
+  Ctrl to run it. F1 lists every command, with what it does.
 - Press F10 to quit.
 
 To run the tests:
