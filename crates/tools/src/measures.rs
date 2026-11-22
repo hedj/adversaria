@@ -50,18 +50,20 @@ pub struct Report {
     pub disagreements_seen: usize,
 }
 
+/// Whether a facts edit states a ruling: a fact ruling(...), not any
+/// fact that holds the word.
+fn states_a_ruling(body: &serde_json::Value) -> bool {
+    let facts = body["facts"].as_array().into_iter().flatten();
+    facts.into_iter().any(|f| f["f"] == "ruling")
+}
+
 /// The kind of action an entry is, or None for an observation (or the first
 /// entry, which the memex writes itself).
 pub fn kind(e: &Entry) -> Option<&'static str> {
     let op = e.body().and_then(|b| b["op"].as_str()).unwrap_or("");
     match (e.kind(), op) {
         ("edit", "init") => None,
-        ("edit", "facts")
-            if e.body()
-                .is_some_and(|b| b.to_string().contains("\"ruling\"")) =>
-        {
-            Some("checking")
-        }
+        ("edit", "facts") if e.body().is_some_and(states_a_ruling) => Some("checking"),
         ("edit", _) | ("link", _) | ("name", _)
             if e.body().is_some_and(|b| b.get("suggestion").is_some()) =>
         {
@@ -322,6 +324,19 @@ mod tests {
             obs(&[], "actual"),
         ]);
         assert_eq!(measure(&es).violations_corrected, 1);
+    }
+
+    #[test]
+    fn a_fact_is_checking_only_if_it_is_a_ruling() {
+        // Catches a fact that holds the word ruling, topic(x, ruling),
+        // taken for a check (the code review, B2).
+        let facts =
+            |f: serde_json::Value| ("edit", json!({"op": "facts", "item": 2, "facts": [f]}));
+        let ruling = json!({"f": "ruling", "args": [2, "doi", "found", "h"]});
+        let topic = json!({"f": "topic", "args": [{"a": "x"}, {"a": "ruling"}]});
+        let es = chain(&[("edit", json!({"op": "init"})), facts(ruling), facts(topic)]);
+        assert_eq!(kind(&es[1]), Some("checking"));
+        assert_eq!(kind(&es[2]), Some("writing"));
     }
 
     #[test]
