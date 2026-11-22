@@ -1645,7 +1645,6 @@ dependencies = [
  "protocol",
  "ratatui",
  "regex",
- "serde",
  "serde_json",
  "toml",
  "unicode-segmentation",

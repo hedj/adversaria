@@ -4,7 +4,6 @@
 pub mod ace;
 pub mod actions;
 pub mod app;
-pub mod body;
 pub mod checks;
 pub mod config;
 pub mod docs;
