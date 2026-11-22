@@ -16,7 +16,7 @@ impl App {
         let text = words.join(" ");
         let text = text.trim().trim_end_matches('.');
         if text.is_empty() {
-            return Err("query (goal) a Prolog goal, as member(X, [a, b])".into());
+            return Err("query (goal) a Prolog goal, as animal(X)".into());
         }
         let (goal, names) = self.parse_term(text, "not a Prolog goal")?;
         self.vet_definition(&goal, "not asked")?;

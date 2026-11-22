@@ -84,3 +84,16 @@ fn a_query_writes_nothing() {
     r.command("query animal(X)");
     assert_eq!(r.entry_count(), before);
 }
+
+#[test]
+fn the_usage_example_is_a_goal_query_accepts() {
+    // Catches the usage teaching a goal that query refuses, as
+    // member(X, [a, b]) was (the code review, F-B4).
+    let mut r = fish("query-usage");
+    r.app.run_command("query");
+    let usage = r.app.session.message.clone();
+    let example = usage.rsplit("as ").next().unwrap().to_string();
+    r.command(&format!("query {example}"));
+    let said = &r.app.session.message;
+    assert!(said.starts_with("2 answers"), "{usage} → {said}");
+}
