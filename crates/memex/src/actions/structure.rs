@@ -27,6 +27,22 @@ impl Along {
     }
 }
 
+/// A structural move, as a command runs it.
+type Move = fn(&mut App, &[&str], u64) -> Result<String, String>;
+
+/// The structural move a word names, as `go` takes it (`go next`).
+pub(crate) fn move_named(way: &str) -> Option<Move> {
+    Some(match way {
+        "next" => App::cmd_next,
+        "previous" => App::cmd_previous,
+        "first" => App::cmd_first,
+        "last" => App::cmd_last,
+        "parent" => App::cmd_parent,
+        "child" => App::cmd_child,
+        _ => return None,
+    })
+}
+
 impl App {
     pub(crate) fn cmd_next(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         self.move_along(target, Along::Next)

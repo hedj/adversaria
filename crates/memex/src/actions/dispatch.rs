@@ -237,8 +237,8 @@ pub const COMMANDS: &[Command] = &[
         run: App::cmd_go,
         target: false,
         slots: &[("text", Slot::Item)],
-        help: "go to the item an address names, else to the next that holds the text",
-        brief: "go to an address or a text",
+        help: "go to the item an address names, else to the next that holds the text; go link N follows the target's Nth link; go back and go forward walk the trail of jumps; go next, previous, first, last, parent or child moves by the outline's structure",
+        brief: "go to an address, link or place",
     },
     Command {
         name: "help",
@@ -727,13 +727,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
             "quit",
         ],
     ),
-    (
-        "FINDING AND MOVING",
-        &[
-            "find", "go", "follow", "back", "forward", "next", "previous", "first", "last",
-            "parent", "child",
-        ],
-    ),
+    ("FINDING AND MOVING", &["find", "go"]),
     ("FACTS AND DEFINITIONS", &["layer", "check"]),
     (
         "CLAIMS AND SUGGESTIONS",
@@ -764,6 +758,15 @@ pub const ALIASES: &[&str] = &[
     "query",
     "pane",
     "interrogate",
+    "follow",
+    "back",
+    "forward",
+    "next",
+    "previous",
+    "first",
+    "last",
+    "parent",
+    "child",
 ];
 
 /// A group of commands: its heading, and those of its commands listed.
@@ -865,10 +868,7 @@ mod tests {
         let heading = "FINDING AND MOVING";
         let (_, moving) = groups.iter().find(|(h, _)| *h == heading).unwrap();
         let names: Vec<&str> = moving.iter().map(|c| c.name).collect();
-        let moves = [
-            "find", "go", "follow", "back", "forward", "next", "previous", "first", "last",
-            "parent", "child",
-        ];
+        let moves = ["find", "go"];
         assert_eq!(names, moves);
         let (_, editing) = &groups[0];
         assert!(editing.iter().all(|c| !moves.contains(&c.name)));

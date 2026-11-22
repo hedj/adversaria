@@ -149,7 +149,36 @@ impl App {
 
     /// Go to the item words address, else to the next item that holds
     /// them, as Leap does; a plumbed text arrives here (crate::plumb).
-    pub(crate) fn cmd_go(&mut self, words: &[&str], _: u64) -> Result<String, String> {
+    /// Go anywhere (docs/concepts.md, decision 5): along the trail, along
+    /// a link, by the outline's structure, or to an address or a text.
+    pub(crate) fn cmd_go(&mut self, words: &[&str], target: u64) -> Result<String, String> {
+        match words {
+            ["back"] => self.cmd_back(&[], target),
+            ["forward"] => self.cmd_forward(&[], target),
+            ["link", n @ ..] => self.go_from(target, |a| a.cmd_follow(n, target)),
+            [way] => match super::structure::move_named(way) {
+                Some(step) => self.go_from(target, |a| step(a, &[], target)),
+                None => self.go_to_text(words),
+            },
+            _ => self.go_to_text(words),
+        }
+    }
+
+    /// A move from the target, which there must be.
+    fn go_from(
+        &mut self,
+        target: u64,
+        go: impl FnOnce(&mut Self) -> Result<String, String>,
+    ) -> Result<String, String> {
+        if target == crate::outline::TOP {
+            return Err("there is no item to go from".into());
+        }
+        go(self)
+    }
+
+    /// Go to the item an address names, else to the next that holds the
+    /// text, as a leap does.
+    fn go_to_text(&mut self, words: &[&str]) -> Result<String, String> {
         let text = words.join(" ");
         if let Some(id) = self.resolve(&text) {
             self.jump(id, "go", json!({}));

@@ -107,3 +107,28 @@ fn shift_and_an_arrow_home_or_end_make_the_six_moves() {
         assert_eq!(at(&r), lands, "{key:?}");
     }
 }
+
+#[test]
+fn go_and_a_way_moves_as_that_ways_command_did() {
+    // Catches `go next` and the rest taken for addresses or texts to look
+    // for, or moving otherwise than next and the rest did (docs/concepts.md,
+    // decision 5).
+    for way in ["next", "previous", "first", "last", "parent", "child"] {
+        let mut old = tree(&format!("structure-old-{way}"));
+        old.command(way);
+        let mut new = tree(&format!("structure-go-{way}"));
+        new.command(&format!("go {way}"));
+        assert_eq!(at(&new), at(&old), "{way}");
+    }
+}
+
+#[test]
+fn go_next_moves_by_structure_even_where_an_item_is_called_next() {
+    // Catches a way's word taken for an item's address: the words of the
+    // ways are kept for them, and such an item is reached by its number.
+    let mut r = tree("structure-go-named");
+    r.items(&["next"]);
+    r.put_cursor(r.outline().in_order()[0]);
+    r.command("go next");
+    assert_eq!(at(&r), "D", "from A, the next at its level");
+}

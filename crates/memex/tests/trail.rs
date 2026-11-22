@@ -138,3 +138,23 @@ fn follow_with_no_number_is_refused_not_taken_for_one() {
         assert!(r.app.session.message.contains("number"), "{line}");
     }
 }
+
+#[test]
+fn go_link_go_back_and_go_forward_do_as_follow_back_and_forward_did() {
+    // Catches the one verb for going (docs/concepts.md, decision 5) taking
+    // `back` or `link 1` for an address or a text to look for.
+    let (mut r, [buran, energia, _]) = linked("trail-go");
+    r.command("go link 1");
+    assert_eq!(r.app.cursor(), energia);
+    r.command("go back");
+    assert_eq!(r.app.cursor(), buran);
+    r.command("go forward");
+    assert_eq!(r.app.cursor(), energia);
+}
+
+#[test]
+fn go_link_with_no_item_to_go_from_says_so() {
+    let mut r = Room::new("trail-go-nothing");
+    r.command("go link 1");
+    assert_eq!(r.app.session.message, "there is no item to go from");
+}

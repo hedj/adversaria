@@ -440,12 +440,12 @@ impl ApplicationHandler for Memex {
                 state: ElementState::Pressed,
                 button: MouseButton::Back,
                 ..
-            } => self.side_button("back"),
+            } => self.side_button("go back"),
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: MouseButton::Forward,
                 ..
-            } => self.side_button("forward"),
+            } => self.side_button("go forward"),
             WindowEvent::Resized(s) => self.resized(s),
             _ => return,
         }
