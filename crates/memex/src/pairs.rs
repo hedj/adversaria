@@ -56,7 +56,8 @@ pub fn adapted(pair: &Pair, text: &str) -> Option<String> {
 /// The words in which a text differs from an earlier one, place by place
 /// (ignoring case and end marks), each once, if they may be swapped: a
 /// word changed the same way in two places is one change, and one
-/// changed two ways cannot be swapped.
+/// changed two ways, or changed in one place and kept in another, cannot
+/// be swapped: the swap puts it as the other word everywhere.
 fn changes(earlier: &str, text: &str) -> Option<Vec<(String, String)>> {
     let (old, new) = (words(earlier), words(text));
     if old.len() != new.len() || old.is_empty() {
@@ -69,6 +70,11 @@ fn changes(earlier: &str, text: &str) -> Option<Vec<(String, String)>> {
         .filter(|(o, n)| !o.eq_ignore_ascii_case(n))
     {
         once(&mut changed, o, n)?;
+    }
+    let was_changed = |w: &String| changed.iter().any(|(f, _)| f.eq_ignore_ascii_case(w));
+    let kept = |(o, n): (&String, &String)| o.eq_ignore_ascii_case(n) && was_changed(o);
+    if old.iter().zip(&new).any(kept) {
+        return None;
     }
     let few = changed.len() <= MOST_CHANGED && 2 * changed.len() < old.len();
     few.then_some(changed)
@@ -147,6 +153,10 @@ mod tests {
         assert_eq!(two_ways, None);
         let same = adapted(&pair("John waits", "John waits."), "john waits.");
         assert_eq!(same.as_deref(), Some("John waits."));
+        // Changed in one place and kept in another: swapping it everywhere
+        // says what was not typed (the code review, E4).
+        let p = pair("Buran waits for Buran", "Buran waits for Buran.");
+        assert_eq!(adapted(&p, "Energia waits for Buran"), None);
     }
 
     #[test]
