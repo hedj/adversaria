@@ -160,7 +160,7 @@ fn drawn(symbol: &str, brush: &Brush) -> Option<Vec<Shape>> {
 /// How a cell's text is drawn: its colour, italics, underline.
 fn format(cell: &Cell, fg: Color32) -> TextFormat {
     let m = cell.modifier;
-    let underline = match m.contains(Modifier::UNDERLINED) {
+    let line = |k| match m.contains(k) {
         true => Stroke::new(1.0, fg),
         false => Stroke::NONE,
     };
@@ -169,16 +169,12 @@ fn format(cell: &Cell, fg: Color32) -> TextFormat {
     } else {
         font()
     };
-    let strikethrough = match m.contains(Modifier::CROSSED_OUT) {
-        true => Stroke::new(1.0, fg),
-        false => Stroke::NONE,
-    };
     TextFormat {
         font_id,
         color: fg,
         italics: m.contains(Modifier::ITALIC),
-        underline,
-        strikethrough,
+        underline: line(Modifier::UNDERLINED),
+        strikethrough: line(Modifier::CROSSED_OUT),
         ..Default::default()
     }
 }
