@@ -394,3 +394,57 @@ fn which_things_are_animals_is_answered() {
     let r = asking("ask-plural", "Which things are animals?");
     assert!(r.shows("→ dory, nemo"), "{:#?}", r.lines());
 }
+
+// Statements written in Prolog, between backticks (docs/concepts.md): what
+// the statement commands typed, written in the item instead.
+
+#[test]
+fn a_fact_in_backticks_beside_prose_is_stated_by_its_item() {
+    // Catches backticked Prolog left as text, or the prose around it
+    // taken for the reason the item is not read.
+    let mut r = Room::new("formal-fact");
+    r.items(&["Buran flew once, in `date(buran_flight, 1988).` by our source"]);
+    r.app.idle();
+    let item = r.app.cursor();
+    assert_eq!(facts_of(&r.app, item), ["date(buran_flight, 1988)"]);
+    assert!(
+        !r.app.session.message.contains("not read"),
+        "{}",
+        r.app.session.message
+    );
+}
+
+#[test]
+fn a_rule_a_constraint_and_a_claim_in_backticks_are_kept_as_their_kinds() {
+    // Catches a clause stated as the wrong kind: a rule or a denial as a
+    // fact, or a source's claim as the user's belief.
+    let mut r = Room::new("formal-kinds");
+    r.items(&[
+        "`animal(X) :- fish(X).`",
+        "One date per event: `false :- date(E, A), date(E, B), A \\= B.`",
+        "`claims(\"Talk-notes\", date(buran_flight, 1989)).`",
+    ]);
+    r.app.idle();
+    let rule = |f: &Term| matches!(f, Term::Compound(n, _) if n == "rule_def");
+    assert!(stated(&r.app).iter().any(|(_, f)| rule(f)), "a rule");
+    let names: Vec<&String> = r.outline().constraints.values().map(|c| &c.name).collect();
+    assert_eq!(names, ["One date per event"], "named by the prose");
+    let claims = r.app.claims_of(r.app.cursor());
+    assert_eq!(claims.len(), 1, "{claims:?}");
+    assert_eq!(claims[0].1, "Talk-notes");
+}
+
+#[test]
+fn a_question_in_backticks_is_answered_and_a_template_is_filled() {
+    // Catches a written question or template not shown with its answer.
+    let mut r = Room::new("formal-asked");
+    r.items(&[
+        "`fish(nemo).`",
+        "`?- fish(Answer).`",
+        "The fish is {F}. `fish(F)`",
+    ]);
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    assert!(r.shows("→ nemo"), "{:#?}", r.lines());
+    assert!(r.shows("The fish is nemo."), "{:#?}", r.lines());
+}

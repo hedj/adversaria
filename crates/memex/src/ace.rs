@@ -66,6 +66,9 @@ pub enum Kind {
     Constraint,
     /// A question: a goal that binds Answer to its answer.
     Question,
+    /// Derived text: a template the item shows, each {Var} filled from
+    /// the goal (written in Prolog, actions::formal).
+    Template(String),
 }
 
 /// A message of APE's: an error or a warning, its kind (word, sentence,

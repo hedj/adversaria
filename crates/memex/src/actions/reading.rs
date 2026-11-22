@@ -50,6 +50,10 @@ impl App {
             self.session.set_prose(None);
             return self.unread(&w);
         }
+        let (formal, prose) = super::formal::read(&text);
+        if !formal.is_empty() {
+            return self.state_with_prose(&w, formal, &prose);
+        }
         let Ok(reading) = self.ace_read(&unbracketed(&text)) else {
             return;
         };
@@ -57,6 +61,18 @@ impl App {
             Reading::Read(_, said) => self.state_reading(&w, &said),
             not_read => self.unread_saying_why(&w, &not_read),
         }
+    }
+
+    /// Statements written in Prolog, and the sentences of the prose around
+    /// them, if it reads as controlled English; prose that does not is
+    /// notes, as any is.
+    fn state_with_prose(&mut self, w: &Written, mut said: Vec<Said>, prose: &str) {
+        if !prose.trim().is_empty()
+            && let Ok(Reading::Read(_, more)) = self.ace_read(&unbracketed(prose))
+        {
+            said.extend(more);
+        }
+        self.state_reading(w, &said);
     }
 
     /// A text not read, and the hint of why at the cursor.
@@ -147,6 +163,7 @@ impl App {
             Kind::Rule => self.cmd_rule(&[t], item),
             Kind::Constraint => self.cmd_constraint(&[&format!("{name}: {t}")], item),
             Kind::Question => self.ask(t, item),
+            Kind::Template(shown) => self.cmd_derive(&[&format!("{shown} where {t}")], item),
         }
     }
 
@@ -212,6 +229,7 @@ fn kind_word(kind: &Kind) -> String {
         Kind::Rule => "rule".into(),
         Kind::Constraint => "constraint".into(),
         Kind::Question => "question".into(),
+        Kind::Template(_) => "derived".into(),
     }
 }
 
@@ -238,11 +256,21 @@ fn named(text: &str, said: &[Said]) -> Vec<(Said, String)> {
 /// The names of a text's constraints: the text, and each one's place among
 /// them when there are more than one.
 fn constraint_names(text: &str, said: &[Said]) -> Vec<String> {
-    let read = unbracketed(text);
-    let base = read.trim().trim_end_matches('.');
+    let read = unbracketed(&name_part(text));
+    let base = read.trim().trim_end_matches(['.', ':']).trim();
     match said.iter().filter(|s| s.kind == Kind::Constraint).count() {
         1 => vec![base.to_string()],
         n => (1..=n).map(|k| format!("{base} ({k})")).collect(),
+    }
+}
+
+/// The part of a text that names its constraints: the prose outside its
+/// backticked Prolog, else, with none, the Prolog itself.
+fn name_part(text: &str) -> String {
+    let (_, outside) = super::formal::read(text);
+    match outside.trim().is_empty() {
+        true => text.replace('`', ""),
+        false => outside,
     }
 }
 
