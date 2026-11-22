@@ -149,8 +149,9 @@ pub struct Suggestions {
     pub dismissed: BTreeSet<String>,
     /// Identities of those recorded as offered (shown in the pane).
     offered: BTreeSet<String>,
-    /// While the suggestion pane has focus, its order is kept: a suggestion
-    /// never moves under the pointer. Not journaled, like a held key.
+    /// While the suggestions are listed, their order is kept: a suggestion
+    /// never moves under the pointer, and the number that adopts it stays
+    /// its number. Not journaled, like a held key.
     frozen: Option<Vec<String>>,
 }
 
@@ -174,9 +175,10 @@ impl Suggestions {
         order.filter_map(|k| self.list.iter().find(|s| &s.identity() == k))
     }
 
-    /// Hold the order shown while the pane has focus, and let it go after.
-    pub(crate) fn hold_order(&mut self, focused: bool) {
-        self.frozen = match (focused, self.frozen.take()) {
+    /// Hold the order shown while the suggestions are listed, and let it
+    /// go after.
+    pub(crate) fn hold_order(&mut self, listed: bool) {
+        self.frozen = match (listed, self.frozen.take()) {
             (true, Some(f)) => Some(f),
             (true, None) => Some(self.shown().iter().map(|s| s.identity()).collect()),
             (false, _) => None,

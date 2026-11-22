@@ -199,18 +199,12 @@ impl std::ops::DerefMut for Panes {
 }
 
 impl View {
-    /// The selected item: the cursor of the outline with focus, else of
-    /// the other pane. A pane that is not an outline has no cursor of its
-    /// own: it shows what is selected.
+    /// The selected item: the cursor of the outline with focus. Only an
+    /// outline takes focus; the pane beside it shows the selected item's
+    /// links, or a list, and has no cursor of its own (docs/concepts.md,
+    /// decision 4).
     pub(crate) fn selected(&self) -> u64 {
-        self.panes[self.selecting()].cursor
-    }
-
-    /// The pane whose cursor is the selection: the one with focus if it is
-    /// an outline, else the other.
-    fn selecting(&self) -> usize {
-        let outline = self.panes[self.focus].kind == PaneKind::Outline;
-        if outline { self.focus } else { 1 - self.focus }
+        self.panes[self.focus].cursor
     }
 
     /// What pane i shows.
@@ -230,8 +224,7 @@ impl View {
 
     /// Select an item, the text cursor at a place in it.
     pub(crate) fn set_cursor(&mut self, id: u64, pos: usize) {
-        let i = self.selecting();
-        self.panes[i].cursor = id;
+        self.panes[self.focus].cursor = id;
         self.pos = pos;
     }
 
@@ -259,15 +252,29 @@ impl View {
         p.cursor = at;
     }
 
-    /// Move focus to the other pane; it starts at this pane's cursor if it
-    /// has none.
-    pub(crate) fn switch_focus(&mut self) {
+    /// Move focus to the other pane if it is an outline, which starts at
+    /// this pane's cursor if it has none; else say what the other shows.
+    pub(crate) fn switch_focus(&mut self) -> Result<(), PaneKind> {
         let from = self.panes[self.focus].cursor;
-        self.focus = 1 - self.focus;
-        let p = &mut self.panes[self.focus];
-        if p.cursor == TOP {
-            p.cursor = from;
+        let other = &mut self.panes[1 - self.focus];
+        if other.kind != PaneKind::Outline {
+            return Err(other.kind);
         }
+        if other.cursor == TOP {
+            other.cursor = from;
+        }
+        self.focus = 1 - self.focus;
+        Ok(())
+    }
+
+    /// Focus on an outline: a journal written before only an outline took
+    /// focus may have left it on another pane, or shown no outline.
+    fn focus_an_outline(&mut self) {
+        if self.panes[self.focus].kind == PaneKind::Outline {
+            return;
+        }
+        self.focus = 1 - self.focus;
+        self.panes[self.focus].kind = PaneKind::Outline;
     }
 
     /// Interrogate a claim item: show it in the links pane.
@@ -301,6 +308,7 @@ impl View {
             }
         }
         self.focus = (b["focus"].as_u64().unwrap_or(0) as usize).min(1);
+        self.focus_an_outline();
         self.pos = b["pos"].as_u64().unwrap_or(0) as usize;
         self.folded = b["folded"]
             .as_array()
@@ -841,4 +849,25 @@ pub(crate) fn word_at(text: &[char], pos: usize) -> (usize, usize) {
         b += 1;
     }
     (a, b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_view_with_focus_on_another_pane_is_restored_with_focus_on_an_outline() {
+        // Catches a view entry written before only an outline took focus
+        // restoring focus on the links, where keys reach nothing.
+        for kinds in [["outline", "links"], ["links", "suggestions"]] {
+            let panes: Vec<Value> = kinds
+                .iter()
+                .map(|k| json!({"kind": k, "cursor": 2}))
+                .collect();
+            let mut view = View::default();
+            view.restore(&json!({"op": "pane", "panes": panes, "focus": 1}));
+            let focused = view.focused().kind;
+            assert_eq!(focused, PaneKind::Outline, "{kinds:?}");
+        }
+    }
 }

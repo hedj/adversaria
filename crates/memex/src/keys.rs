@@ -2,7 +2,7 @@
 //! items by their text (docs/design.md § Quasimodes).
 
 use crate::actions::dispatch::{complete_command, in_quotes};
-use crate::app::{Active, App, Event, Hold, Key, Kind, Mode, PaneKind, Press, Quasi};
+use crate::app::{Active, App, Event, Hold, Key, Kind, Mode, Press, Quasi};
 use crate::outline::TOP;
 use crate::reason;
 use crate::session::Answer;
@@ -45,12 +45,6 @@ impl App {
         }
         if let Some(line) = self.session.keys.command_for(ev.key) {
             return self.run_bound(&line);
-        }
-        let kind = self.session.view.focused().kind;
-        if kind != PaneKind::Outline {
-            let switch = self.session.keys.key_for("switch");
-            self.session.message = format!("this pane shows {}; {switch} to edit", kind.name());
-            return Mode::Normal;
         }
         self.session.message.clear();
         self.edit_key(ev.key);

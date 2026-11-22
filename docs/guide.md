@@ -123,9 +123,10 @@ Without the sealer, entries are written but not sealed until a sealer runs.
 - **Top bar:** the notebook's name (its journal directory's,
   `notebook …`) and the world (`world actual`, or `worlds actual |
   suppose: …`). On the right, a count of violations and disagreements.
-  In a narrow window the right side takes a row of its own. The pane
-  with focus, which takes the keys, has its heading bright; the other's
-  is dim.
+  In a narrow window the right side takes a row of its own. Only an
+  outline takes the keys; the outline with focus has its heading
+  bright, and the pane beside it, which shows links or a list, has its
+  heading dim.
 - **Left pane:** the outline. When it runs past the pane, the pane's
   last row says how many items lie above and below (`↑ 6 items above ·
   ↓ continues below`); the outline scrolls to keep the cursor in view.
@@ -278,7 +279,7 @@ at either end of the outline. It unfolds a folded branch to reach a match.
 F1 opens the command palette: Command, latched, with the list of
 commands open. F10 runs `quit`. F2, F3 and F4 question a claim, adopt it
 and take back the target's own last entry, an adoption, a fact or a
-layer (`retract`), F6 switches panes, and F7 and F8 go back and
+layer (`retract`), F6 switches between two outline panes, and F7 and F8 go back and
 forward along the trail of jumps; each runs the command of that name
 (§ 2.4), and § 4.3 lists every default.
 
@@ -405,10 +406,6 @@ A rule with a pattern that is not a regular expression, a command that
 does not exist, or an unknown setting is refused when the memex starts,
 as any configuration it would have to guess at is.
 
-While a pane that shows links or suggestions has focus, keys that are not
-bound to a command do nothing there but say `this pane shows links; F6 to
-edit` (or `suggestions`). Quasimodes and bound keys work as anywhere.
-
 A click does nothing while a quasimode or a confirmation is open, and
 nothing on a mark line, a heading or empty space. The middle button and
 the wheel do nothing. A click is recorded in the journal as the keyboard
@@ -451,7 +448,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | `name` | `name WORD` | names the target, so WORD addresses it; the name `title` also heads the outline. A name is also a marker, as NLS had: `go WORD` jumps to it from anywhere, and `back` returns |
 | `fold` | `fold` | hides the target's branch, or shows it if it is hidden |
 | `pane` | `pane outline`, `pane links`, `pane suggestions`, `pane matches` | sets what the other pane shows. `matches` lists every item that holds the last Leap's pattern, in the outline's order, numbered, with where the cursor is among them (`MATCHES OF “ener” · 14 · at 3 of 14`); a click on one jumps to it, so `back` returns, and the list stays as you edit |
-| `switch` | `switch` | moves focus to the other pane |
+| `switch` | `switch` | moves focus to the other pane if it is an outline; a pane that shows links or a list takes no keys, so `switch` there says so (`only an outline takes keys; the other pane shows links`) |
 | `help` | `help` | opens the list of every command, as F1 does |
 | `quit` | `quit` | writes what is pending and leaves |
 
@@ -934,9 +931,8 @@ The memex suggests these and more, without any language model:
 `pane suggestions` shows them, at most five, ranked by evidence, each with
 why it was offered. The pane never takes the keyboard: `accept N` adopts
 the Nth, with its evidence; `dismiss N` hides it until its evidence
-changes. While the pane has focus, suggestions keep their places, and a
-key that is not bound to a command does nothing but say so (§ 2.3), so
-nothing is typed where no text cursor is drawn.
+changes. While they are listed, suggestions keep their places, so the
+number that adopts one stays its number.
 
 ## 4. Around the memex
 

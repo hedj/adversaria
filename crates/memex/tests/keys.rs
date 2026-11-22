@@ -90,9 +90,9 @@ fn the_top_bar_names_the_notebook_and_its_world() {
 
 #[test]
 fn the_pane_with_focus_has_its_heading_bright() {
-    // Catches focus shown nowhere, or as text naming a pane not on the
-    // screen: the focused pane's heading is bold and not dim, the other's
-    // dim, and they change places with the focus.
+    // Catches focus shown nowhere, or given to the links: the focused
+    // outline's heading is bold and not dim, the links' dim, and F6 there
+    // leaves it as it was.
     let mut r = Room::new("focus-heading");
     r.items(&["Alpha"]);
     let lit = |r: &Room, text: &str| {
@@ -101,7 +101,7 @@ fn the_pane_with_focus_has_its_heading_bright() {
     };
     assert!(lit(&r, "OUTLINE") && !lit(&r, "LINKS OF 1"));
     r.tap(&[Key::F(6)]);
-    assert!(!lit(&r, "OUTLINE") && lit(&r, "LINKS OF 1"));
+    assert!(lit(&r, "OUTLINE") && !lit(&r, "LINKS OF 1"));
 }
 
 #[test]
@@ -185,46 +185,31 @@ fn an_item_made_from_leap_is_read_like_typed_text() {
 }
 
 #[test]
-fn a_pane_that_shows_links_or_suggestions_refuses_keys() {
-    // Catches keys pressed in such a pane editing the outline, where no
-    // text cursor is drawn, so a note changed unseen.
+fn a_pane_that_shows_links_or_suggestions_takes_no_focus() {
+    // Catches focus given to such a pane, where no text cursor is drawn:
+    // keys pressed there changed a note unseen, or nothing, and a list
+    // took the keyboard (docs/concepts.md, decision 4).
     for kind in ["links", "suggestions"] {
-        let mut r = focused_on(kind);
-        let cursor = r.app.cursor();
-        r.tap(&[
-            Key::Char('x'),
-            Key::Backspace,
-            Key::Up,
-            Key::Enter,
-            Key::Delete,
-        ]);
-        r.app.flush();
-        nothing_changed(&r, cursor, kind);
-        let said = format!("this pane shows {kind}; F6 to edit");
+        let mut r = beside(kind);
+        r.command("switch");
+        let said = format!("only an outline takes keys; the other pane shows {kind}");
         assert_eq!(r.app.session.message, said);
-        the_outline_takes_keys_again(r, cursor);
+        the_outline_takes_keys(r);
     }
 }
 
-/// Two items, and the other pane, showing this kind, in focus.
-fn focused_on(kind: &str) -> Room {
-    let mut r = Room::new(&format!("refuses-{kind}"));
+/// Two items, and the other pane showing this kind.
+fn beside(kind: &str) -> Room {
+    let mut r = Room::new(&format!("beside-{kind}"));
     r.items(&["first", "second"]);
     r.command(&format!("pane {kind}"));
-    r.command("switch");
     r
 }
 
-/// The text and the cursor as they were, and no item made.
-fn nothing_changed(r: &Room, cursor: u64, kind: &str) {
-    assert_eq!(r.text(cursor), "second", "{kind}");
-    assert_eq!(r.app.cursor(), cursor, "{kind}");
-    assert_eq!(r.outline().items.len(), 2, "{kind}");
-}
-
-/// Once the focus is back on the outline, a key types into it.
-fn the_outline_takes_keys_again(mut r: Room, cursor: u64) {
-    r.command("switch");
+/// The focus is on the outline, and a key types into it.
+fn the_outline_takes_keys(mut r: Room) {
+    assert_eq!(r.view().focus, 0);
+    let cursor = r.app.cursor();
     r.tap(&[Key::Char('x')]);
     r.app.flush();
     assert_eq!(r.text(cursor), "secondx");

@@ -305,7 +305,12 @@ impl App {
     }
 
     pub(crate) fn cmd_switch(&mut self, _: &[&str], _: u64) -> Result<String, String> {
-        self.session.view.switch_focus();
+        if let Err(kind) = self.session.view.switch_focus() {
+            return Err(format!(
+                "only an outline takes keys; the other pane shows {}",
+                kind.name()
+            ));
+        }
         self.write_view("pane", json!({}));
         Ok(String::new())
     }

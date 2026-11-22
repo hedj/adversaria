@@ -60,11 +60,10 @@ fn the_pane_shows_the_selected_items_links_with_the_outline_on_the_right() {
 }
 
 #[test]
-fn with_focus_on_the_links_pane_a_command_acts_on_the_item_it_shows() {
+fn a_command_acts_on_the_item_the_links_pane_shows() {
     let mut room = Room::new("links-focus");
     room.items(&["Alpha", "Beta", "Gamma"]);
     room.tap(&[Key::Up]);
-    room.command("switch");
     assert!(
         room.lines_at(160, 10)[3].trim_end().ends_with("  Beta"),
         "the pane shows Beta"
@@ -80,10 +79,9 @@ fn with_focus_on_the_links_pane_a_command_acts_on_the_item_it_shows() {
 }
 
 #[test]
-fn with_focus_on_the_links_pane_a_leap_selects_what_it_finds() {
+fn a_leap_selects_what_it_finds_and_the_links_pane_shows_it() {
     let mut room = Room::new("links-leap");
     room.items(&["Alpha", "Beta", "Gamma"]);
-    room.command("switch");
     room.leap(Quasi::LeapBack, "Alp");
     assert_eq!(room.here(), "Alpha");
     assert!(

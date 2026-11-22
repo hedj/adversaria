@@ -335,7 +335,7 @@ fn the_pane_keeps_its_rules() {
     app.flush();
     assert_eq!(app.notebook.outline.text(app.cursor()), "Places here");
     let first = dismissing_the_first(&mut app);
-    the_order_holds_while_the_pane_has_focus(&mut app);
+    the_order_holds_while_the_suggestions_are_listed(&mut app);
     a_replay_keeps_the_dismissal(&mut app, &first);
 }
 
@@ -378,11 +378,11 @@ fn dismissing_the_first(app: &mut App) -> String {
     first
 }
 
-/// With the pane in focus, the order holds while new evidence arrives;
-/// none is shown twice when one leaves; and once focus leaves, the order is
-/// the ranking again.
-fn the_order_holds_while_the_pane_has_focus(app: &mut App) {
-    focus_the_suggestions(app);
+/// While the suggestions are listed, the order holds as new evidence
+/// arrives; none is shown twice when one leaves; and once the list is
+/// closed, the order is the ranking again.
+fn the_order_holds_while_the_suggestions_are_listed(app: &mut App) {
+    list_the_suggestions(app);
     let before = described(app);
     for (x, y) in [("d", "w"), ("e", "v"), ("f", "u")] {
         command(app, &format!("fact p4({x}, {y})"));
@@ -391,14 +391,13 @@ fn the_order_holds_while_the_pane_has_focus(app: &mut App) {
     let during = described(app);
     kept_ahead(&before, &during);
     none_shown_twice(app);
-    ranked_once_focus_leaves(app, &during);
+    ranked_once_no_longer_listed(app, &during);
 }
 
-fn focus_the_suggestions(app: &mut App) {
-    command(app, "pane suggestions");
-    command(app, "switch");
+fn list_the_suggestions(app: &mut App) {
+    command(app, "find suggestions");
     let view = &app.session.view;
-    assert_eq!(view.panes[view.focus].kind, PaneKind::Suggestions);
+    assert_eq!(view.panes[1].kind, PaneKind::Suggestions);
 }
 
 /// A suggestion whose evidence no longer holds may leave; those that stay
@@ -419,16 +418,16 @@ fn none_shown_twice(app: &mut App) {
     assert_eq!((distinct.len(), after.len()), (5, 5), "{after:?}");
 }
 
-/// Once the pane loses focus, the order is the ranking again.
-fn ranked_once_focus_leaves(app: &mut App, during: &[String]) {
+/// Once the list is closed, the order is the ranking again.
+fn ranked_once_no_longer_listed(app: &mut App, during: &[String]) {
     let list = app.reason.suggestions.list.iter().take(5);
     let ranked: Vec<String> = list.map(|s| s.describe()).collect();
     assert_ne!(during, ranked, "the test needs the held order to differ");
-    command(app, "switch");
+    command(app, "find");
     assert_eq!(
         described(app),
         ranked,
-        "the order is held after focus leaves"
+        "the order is held after the list is closed"
     );
 }
 

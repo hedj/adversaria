@@ -160,10 +160,10 @@ impl App {
         Ok(adoption_preview(&raised))
     }
 
-    /// Keep the suggestion pane's order while it has focus.
+    /// Keep the suggestions' order while they are listed.
     pub(crate) fn update_frozen(&mut self) {
-        let focused = self.session.view.focused().kind == PaneKind::Suggestions;
-        self.reason.suggestions.hold_order(focused);
+        let listed = self.session.view.shows(PaneKind::Suggestions);
+        self.reason.suggestions.hold_order(listed);
     }
 }
 
