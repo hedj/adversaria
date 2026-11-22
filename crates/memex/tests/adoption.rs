@@ -111,3 +111,28 @@ fn a_fact_read_from_the_text_is_not_offered_but_a_layer_is() {
     let asks = matches!(r.app.session.mode, memex::app::Mode::ConfirmRetract { target, .. } if target == layer);
     assert!(asks, "{:?} (layer {layer})", r.app.session.mode);
 }
+
+#[test]
+fn retract_takes_an_entry_as_entry_n_and_as_before() {
+    // Catches `retract entry 12` refused, its guide word taken for the
+    // number, or the old forms lost (docs/concepts.md, decision 7).
+    let mut r = two_claims("retract-entry");
+    r.command("adopt");
+    let adoption = r.last("adopt");
+    for line in [
+        format!("retract entry {adoption}"),
+        format!("retract {adoption}"),
+        format!("retract #{adoption}"),
+    ] {
+        r.command(&line);
+        let asks = matches!(r.app.session.mode, memex::app::Mode::ConfirmRetract { target, .. } if target == adoption);
+        assert!(asks, "{line}: {:?}", r.app.session.mode);
+        r.tap(&[Key::Escape]);
+    }
+    r.command("retract entry");
+    assert!(
+        r.app.session.message.starts_with("retract (entry)"),
+        "{}",
+        r.app.session.message
+    );
+}

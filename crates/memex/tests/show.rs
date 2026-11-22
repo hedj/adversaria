@@ -30,8 +30,13 @@ fn show_as_chart_makes_the_target_a_bar_chart_of_the_cells() {
     assert_eq!(layers(&r, view), [bar]);
     r.app.evaluate().unwrap();
     let rows = r.lines_at(160, 40);
-    let axis = rows.iter().any(|l| l.contains("food") && l.contains("rent"));
-    assert!(axis && r.shows("████████"), "a bar for each cell: {rows:#?}");
+    let axis = rows
+        .iter()
+        .any(|l| l.contains("food") && l.contains("rent"));
+    assert!(
+        axis && r.shows("████████"),
+        "a bar for each cell: {rows:#?}"
+    );
     assert!(!r.shows("cannot answer"), "{:#?}", r.lines());
 }
 

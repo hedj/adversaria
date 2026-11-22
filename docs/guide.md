@@ -377,7 +377,7 @@ first:
 
 | The text | Offered |
 | --- | --- |
-| an address that names an item: `1.3`, `#28` | `go` to it |
+| an address that names an item: `1.3`, `draft` | `go` to it |
 | `#` and a number | `retract` that entry |
 | the path of a file that exists, ending in `.md`, `.docx`, `.odt`, `.tex`, `.html` (and others Pandoc reads), `.json` or `.pl` | `import document`, `import results` or `import wikidata` |
 | a Prolog goal, such as `date(E, Y)` | `query` it, state it as a `fact` here, or `set` it (stating it and setting aside what it contradicts) |
@@ -431,7 +431,7 @@ cursor.
 Where a command takes an ADDRESS, any of these name an item:
 
 - its number: `2`, or `1.4` for the fourth item under item 1;
-- `#` and its entry number: `#28`;
+- `#` and the number of the entry that made it, `#28`, an old form, kept;
 - a name given by `name`;
 - a label that it alone carries, with its `#` or without: `draft` or
   `#draft`, for the one item whose text has `#draft`. A `[[draft]]` link
@@ -539,7 +539,7 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 | `undo` | `undo` | undoes the last change on this branch |
 | `query` | `query GOAL` | runs a Prolog goal over this world's beliefs, through rules, as derived text does: `query animal(X)` says `2 answers: X = nemo · X = dory`; a goal without variables is answered `yes` or `no`. At most 20 answers are shown. The goal may only read facts, compare and compute, as a definition may; a query writes nothing to the journal |
 | `redo` | `redo` | redoes what undo undid, along the current branch |
-| `retract` | `retract [ENTRY]` (F4) | reverses one earlier entry, by its number (`12` or `#12`), keeping later work; lists what depends on it first, and Enter retracts. With no number, the target's own last entry that can be retracted: an adoption of its claims, a fact given it by `fact` or `claim` (not one its text was read as, which its text keeps), or a layer of its view. `adopt` writes one adoption for each claim, so an item with two claims needs two |
+| `retract` | `retract [entry N]` (F4) | reverses one earlier entry, by its number (`retract entry 12`; `retract 12` and `retract #12`, the old forms, still work), keeping later work; lists what depends on it first, and Enter retracts. With no number, the target's own last entry that can be retracted: an adoption of its claims, a fact given it by `fact` or `claim` (not one its text was read as, which its text keeps), or a layer of its view. `adopt` writes one adoption for each claim, so an item with two claims needs two |
 
 **Undo and retract.** `undo` and `redo` move along the current branch of
 the journal, as in any editor; undoing and then editing starts a new

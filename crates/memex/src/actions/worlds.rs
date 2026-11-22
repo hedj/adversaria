@@ -126,9 +126,14 @@ impl App {
     }
 }
 
-/// An entry's sequence number, as written after retract ("12" or "#12").
+/// An entry's sequence number, as written after retract: "entry 12"
+/// (docs/concepts.md, decision 7), or as before, "12" or "#12".
 fn entry_number(words: &[&str]) -> Option<u64> {
-    words.first()?.trim_start_matches('#').parse().ok()
+    let words = words.strip_prefix(&["entry"]).unwrap_or(words);
+    match words {
+        [n] => n.trim_start_matches('#').parse().ok(),
+        _ => None,
+    }
 }
 
 impl App {

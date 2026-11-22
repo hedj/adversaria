@@ -80,7 +80,10 @@ impl App {
             }
         }
         if let Some(last) = self.last_adoption(id) {
-            offers.push(offer("take back its adoption", &format!("retract {last}")));
+            offers.push(offer(
+                "take back its adoption",
+                &format!("retract entry {last}"),
+            ));
         }
         offers
     }
@@ -116,13 +119,13 @@ impl App {
     /// taking it back.
     fn constraint_offers(&self, entry: u64, item: Option<u64>) -> Vec<Offer> {
         let go = item.map(|i| self.go_offer(i, "the item that states the rule"));
-        let retract = offer("retract the constraint", &format!("retract {entry}"));
+        let retract = offer("retract the constraint", &format!("retract entry {entry}"));
         go.into_iter().chain([retract]).collect()
     }
 
     /// What a layer offers: its view, and taking it back.
     fn layer_offers(&self, entry: u64, view: u64) -> Vec<Offer> {
-        let retract = offer("retract this layer", &format!("retract {entry}"));
+        let retract = offer("retract this layer", &format!("retract entry {entry}"));
         vec![retract, self.go_offer(view, "its view")]
     }
 

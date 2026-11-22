@@ -3883,7 +3883,7 @@ fn revision_lines(name: &str, changes: &[(u64, String, bool)]) -> Vec<Presented>
 
 /// One change of a revision: its entry and what it does, dim if retracted.
 fn change_line((seq, what, retracted): &(u64, String, bool)) -> Presented {
-    let line = format!("#{seq}  {what}");
+    let line = format!("entry {seq}  {what}");
     let line = match retracted {
         true => Line::styled(format!("{line}  (retracted)"), dim()),
         false => Line::raw(line),
