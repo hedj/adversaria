@@ -461,7 +461,9 @@ impl Next {
     fn said(&self) -> String {
         match self {
             Next::Own(w) | Next::Word(w) => w.clone(),
-            Next::Kind(k) if k.starts_with(['a', 'e', 'i', 'o', 'u']) => format!("an {k}"),
+            // The kinds (prolog/ace_next.pl, kind_name/2) that start with a
+            // vowel sound; "unit" starts with a consonant's.
+            Next::Kind(k) if k.starts_with(['a', 'e', 'i', 'o']) => format!("an {k}"),
             Next::Kind(k) => format!("a {k}"),
         }
     }
@@ -662,6 +664,15 @@ fn is_word(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_kind_of_word_has_its_article() {
+        // Catches "an unit" (the code review, E7).
+        let said = |k: &str| Next::Kind(k.into()).said();
+        assert_eq!(said("unit"), "a unit");
+        assert_eq!(said("adverb"), "an adverb");
+        assert_eq!(said("noun"), "a noun");
+    }
 
     /// said(Kind, Text), as ace_read_text/2 gives a statement.
     fn said_term(kind: Term, text: &str) -> Term {
