@@ -52,6 +52,11 @@ pub struct Journal {
     entries: Vec<Entry>,
     /// Flush each write to the disk before returning (fsync). On by default.
     pub durable: bool,
+    /// A write failed, and may have left part of a line, or a whole line
+    /// not synced, that the entries do not hold: another would break the
+    /// chain for good, so none is written until the journal is reopened,
+    /// which sets a torn line aside or reads a whole one.
+    broken: bool,
 }
 
 impl Journal {
@@ -78,6 +83,7 @@ impl Journal {
             dir,
             entries,
             durable: true,
+            broken: false,
         };
         let torn = &bytes[keep..];
         let note = (!torn.is_empty()).then(|| journal.set_aside(torn));
@@ -137,10 +143,21 @@ impl Journal {
     }
 
     fn write(&mut self, parent: Option<u64>, kind: &str, body: Value) -> Result<Entry, Error> {
+        self.whole()?;
         let e = self.next_entry(parent, kind, body)?;
-        self.append_line(&e)?;
+        self.append_line(&e).inspect_err(|_| self.broken = true)?;
         self.entries.push(e.clone());
         Ok(e)
+    }
+
+    /// Refuse to write after a write failed.
+    fn whole(&self) -> Result<(), Error> {
+        match self.broken {
+            true => Err(Error::Refused(
+                "a write to the journal failed; reopen it".into(),
+            )),
+            false => Ok(()),
+        }
     }
 
     /// The entry to write next, after `parent`.
@@ -193,6 +210,7 @@ impl Journal {
     /// rename, so a crash leaves the old journal or the purged one: never a
     /// purge entry whose target keeps its body, which no check accepts.
     pub fn purge(&mut self, target: u64, reason: &str) -> Result<Entry, Error> {
+        self.whole()?;
         let t = self.entry(target)?;
         if t.kind() == "purge" {
             return Err(Error::Refused(format!(
@@ -323,6 +341,35 @@ mod tests {
         let d = std::env::temp_dir().join(format!("adversaria-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         d
+    }
+
+    #[test]
+    fn after_a_failed_write_nothing_is_written_until_reopened() {
+        // Catches an append after one that failed part-way, which could
+        // follow a torn line or reuse a number synced late, and break the
+        // chain for good (the code review, D-B1). The failure here is the
+        // file gone, so nothing was written; a full disk cannot be made.
+        let d = temp_dir("broken");
+        let mut j = Journal::open(&d).unwrap();
+        j.append("edit", json!({"t": "a"})).unwrap();
+        let (file, away) = (d.join(JOURNAL), d.join("away"));
+        fs::rename(&file, &away).unwrap();
+        fs::create_dir(&file).unwrap();
+        assert!(j.append("edit", json!({"t": "b"})).is_err());
+        fs::remove_dir(&file).unwrap();
+        fs::rename(&away, &file).unwrap();
+        let refused = j.append("edit", json!({"t": "c"})).unwrap_err().to_string();
+        assert!(refused.contains("reopen"), "{refused}");
+        drop(j);
+        assert_eq!(
+            Journal::open(&d)
+                .unwrap()
+                .append("edit", json!({}))
+                .unwrap()
+                .seq,
+            2
+        );
+        fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]
