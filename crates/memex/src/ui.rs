@@ -3644,11 +3644,9 @@ fn mark_changes(spans: &mut [Span<'static>; 3], actual: &ConstraintEval, c: &Con
 }
 
 /// A span marked as changed, bold and underlined, if it is.
-fn mark_changed(span: &mut Span<'static>, changed: bool) {
-    if changed {
-        span.style = span
-            .style
-            .add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
+fn mark_changed(span: &mut Span<'static>, is_changed: bool) {
+    if is_changed {
+        span.style = span.style.patch(changed());
     }
 }
 
