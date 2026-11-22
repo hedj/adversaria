@@ -277,8 +277,8 @@ at either end of the outline. It unfolds a folded branch to reach a match.
 
 F1 opens the command palette: Command, latched, with the list of
 commands open. F10 runs `quit`. F2, F3 and F4 question a claim, adopt it
-and take back the target's last entry (`retract`: its last adoption,
-first), F6 switches panes, and F7 and F8 go back and
+and take back the target's own last entry, an adoption, a fact or a
+layer (`retract`), F6 switches panes, and F7 and F8 go back and
 forward along the trail of jumps; each runs the command of that name
 (§ 2.4), and § 4.3 lists every default.
 
