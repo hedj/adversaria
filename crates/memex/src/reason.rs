@@ -651,7 +651,7 @@ fn claimed(fact: &Term) -> &Term {
 /// A text's words of three letters or more.
 fn words_of(text: &str) -> Vec<String> {
     let words = text.split(|c: char| !c.is_alphanumeric());
-    words.filter(|w| w.len() >= 3).map(String::from).collect()
+    words.filter(|w| w.chars().count() >= 3).map(String::from).collect()
 }
 
 /// A text's whole numbers, as written: a sign kept, a full stop that ends
@@ -841,6 +841,13 @@ fn others_beside(v: &Solution, new: u64) -> Option<Vec<u64>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_word_of_three_letters_is_counted_in_letters_not_bytes() {
+        // Catches "äb", two letters in three bytes, taken for a word of
+        // three letters (the code review, D-B6).
+        assert_eq!(words_of("äb äbc ab"), ["äbc"]);
+    }
 
     /// A constraint, by name, violated once on each of these sets of
     /// beliefs.
