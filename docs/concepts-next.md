@@ -8,11 +8,13 @@ A proposal for the author, 22 November 2026, after the fifth review
 As built, a learner holds about 76 items by docs/concepts.md's counting
 rule (an estimate). The fifth review's nine changes bring it to about 65.
 If the interface is not sacred, about 20 is reachable with no capability
-lost, and a first day needs about 9. Four structural moves do it (§ How
-far). Before them, twelve small changes make the command grammar regular
-(§ The small changes first). On their own they lower the count only a
-little, to about 71. They are worth doing either way, and the larger
-moves rest on them.
+lost, and a first day needs about 9. The author's rule for the grammar
+(§ The grammar) does most of it: a command is a verb and nouns, the
+first noun is the selection, and the rest are prompted for with
+defaults. That alone takes the count to about 48, within the budget.
+Four structural moves take it the rest of the way (§ How far). Twelve
+small changes, written before the rule, are kept below; the rule makes
+most of them follow (§ The small changes, without the grammar).
 
 All counts are estimates under concepts.md's rule. One assumption carries
 the most weight: an item recognised on the screen costs a learner little,
@@ -22,9 +24,112 @@ self-report and logs; research/concept-budget.md). Recognition still
 costs time (Hick's law), so menus must stay short and ranked. The journal
 can test the assumption (§ Measuring).
 
-## The small changes first
+## The grammar
 
-The grammar as it should read, in seven rules:
+The author's rule, 22 November 2026:
+
+> A command is a verb and nouns. The first noun is replaced with the
+> target if one is selected (via mouse-selection, key-selection, or
+> quasimode). Following arguments are prompted for, with defaults.
+
+Unfilled arguments are prompted for. So every command line works the same
+way:
+
+1. **Select, or not.** The selection is what you last chose: a range
+   dragged with the mouse, a range selected with the keys, a span leapt
+   over (Leap to one end, then the other), or a row of the inspector
+   clicked. If it is of the first noun's kind, it is the first noun.
+2. **Type the verb.** The memex prompts for each noun still unfilled, one
+   at a time, on the Command line: `link 2.1 (to) ‹item› [1.3]`. The guide
+   word is in brackets, the noun's kind in angle brackets, and its default
+   in square brackets.
+3. **Answer each prompt.** Type it, point at something of its kind (as
+   pointing at an argument does now), press Tab to complete, or `?` to list
+   the candidates. Enter takes the default; Esc abandons the command.
+
+A noun's kind decides how what you type is read. At an entry's prompt,
+`12` is entry 12; at an item's prompt, item 12; at a text's prompt, every
+word is text. So a number needs no rule of its own, and no word needs
+quoting.
+
+Each listed verb, its nouns in order, and their defaults:
+
+| Verb | First noun, from the selection | Prompted, with its default |
+| --- | --- | --- |
+| `new` | a place (an item) | after the selection; with none, at the end |
+| `delete` | an item, or a text range | — |
+| `move` | an item, or a text range | (after) a place: the item last jumped from |
+| `copy` | an item, or a text range, keeping where it came from | (after) a place: after itself |
+| `link` | an item | (to) an item: the item last jumped from; (as) a type: `link` |
+| `go` | a place: a clicked row, a selected address, or `next`, `parent` and the other ways | with nothing selected: back along the trail |
+| `find` | a text, a label or a question: the selected words | the last thing found |
+| `adopt` | an offer: a claim's item, a suggestion's row, a change's row, a fix's line, a world's heading | if it contradicts beliefs, (in place of) those beliefs: none, so it is adopted beside them |
+| `dismiss` | an offer, as for `adopt` | — |
+| `retract` | an entry: a presented fact, layer, change, constraint or adoption | the target's last that can be retracted; the prompt lists what depends on it, so it is the confirmation |
+| `undo`, `redo` | — | — |
+| `suppose` | a statement: the selected one, to edit | the target's statement |
+| `import` | a file: a selected path | (as revision of) an item, asked only if the file was imported before: that import |
+| `export` | an item: its section | (to) a file: the item's text, with `.md` |
+| `check` | an item | what to check, asked only if both apply: both |
+| `show` | an item | (as) a kind: `chart`; or, in the tail, a mark (where) a goal |
+| `fold` | an item | — |
+
+What it makes unnecessary, from the twelve small changes below:
+
+- **Object words.** `world`, `fix`, `suggestion`, `change`, `entry`,
+  `link`, `back`, `instead`, `word` and the kind words of `import`,
+  `check` and `find` become kinds of noun. A noun is filled from the
+  selection, or recognised from the prompt's list. Changes 3, 5, 7 and 9
+  follow from this.
+- **Guide-word rules.** The prompt shows each guide word, and you never
+  type one. Change 2 is half done by this; the other half is showing
+  kinds as placeholders.
+- **A separate confirmation.** `retract`'s prompt shows what it will take
+  back, and Enter takes the default; `adopt`'s prompt asks whether to
+  adopt in place of what a claim contradicts. Change 8 follows.
+- **`go` as a search.** `go`'s noun is a place; text is `find`'s noun.
+  Change 6 follows.
+- **The first noun is the selection.** `copy` and `transclude` become one
+  verb (change 10); `show 2 as chart` charts what item 2 states
+  (change 11); `export` takes an item (change 4).
+
+What remains needed: the verbs' nouns, kinds and defaults as one table in
+the code (change 1, now the core of the mechanism), and the act-on-this key
+(change 12).
+
+The count, by concepts.md's rule (estimates):
+
+- The object words leave recall. The prompt shows each noun's kind, its
+  default and its candidates.
+- The command shape becomes one rule, and the address forms one.
+- So the count falls from about 76 to about 48, within the budget of
+  about 50, with the twelve concepts and the verbs as they are.
+- The four moves of § How far then take it to about 20.
+
+Two consequences are for the author to decide:
+
+1. **Is the cursor's item a selection?** If it is, the item verbs never
+   prompt for their first noun, as the target works now. `go`, `find` and
+   `suppose`, whose first noun is a place or a text, then need the rule
+   that a selection fills a noun only if it is of the noun's kind. The
+   cursor's item is not a place to go to, nor a text to find. Recommended:
+   yes, with that rule, which the presentations already follow when you
+   point at an argument.
+2. **Which keys select?** Shift with an arrow is how most programs extend
+   a selection, but here it moves by the outline's structure (`go next`
+   and the rest).
+   - (a) Shift with an arrow selects; the structural moves go to Ctrl
+     with an arrow, through the chords Ctrl+Z already uses. Ctrl+Up and
+     Ctrl+Down move by paragraph in most editors, near enough to "the
+     next item at this level".
+   - (b) The structural moves keep Shift; keys select only by leaping
+     over a span.
+   Recommended: (a), since selecting with Shift is a habit and costs
+   nothing to learn.
+
+## The small changes, without the grammar
+
+Before the author set the rule above, I proposed the grammar as seven rules, and twelve changes where the memex breaks them. With the rule, most of them follow from it; they are kept here for the reasons each gives:
 
 1. A command is a verb, then what it acts on. With nothing named, it acts
    on the target, the item at the cursor.
@@ -143,7 +248,10 @@ The result, by concepts.md's rule (estimates):
 
 From 71 to 20: move 1 removes 40, move 3 removes 5, and move 4 removes 2.
 The last 4 come from counting Enter, Esc, Tab and the right-click as the
-habits they are, as concepts.md's rule allows.
+habits they are, as concepts.md's rule allows. With the grammar (§ The
+grammar), the start is 48: the object words and address forms are gone
+already, so move 1 removes the 19 verbs, and the sum is 48 − 19 − 5 − 2 −
+4 = 18, about 20 again.
 
 A first day: item, statement, offer and world; typing, Enter and Tab;
 Leap; the act key; and F3, which the screen shows. About 9.
