@@ -1065,9 +1065,12 @@ impl Outline {
         let next = order.iter().position(|x| *x == at).map_or(0, |i| i + 1);
         let mut round = [&order[next..], &order[..next]].concat();
         if !forward {
-            round.pop();
+            // Back: the items before it, nearest first; it comes last, if it
+            // is in the outline at all.
             round.reverse();
-            round.extend(order.iter().find(|x| **x == at));
+            if next > 0 {
+                round.rotate_left(1);
+            }
         }
         round
     }
@@ -1225,6 +1228,18 @@ mod tests {
         create(&mut o, 2, 1, None, "b");
         create(&mut o, 3, TOP, Some(1), "c");
         o
+    }
+
+    #[test]
+    fn a_round_back_from_outside_the_outline_holds_every_item() {
+        // Catches a backward round from TOP, or a deleted item, that
+        // dropped the last item, so a backward Leap from there never found
+        // a match in it (the code review, E3). Order: 1, 2, 3.
+        let o = branch();
+        assert_eq!(o.round_from(TOP, false), [3, 2, 1]);
+        assert_eq!(o.round_from(TOP, true), [1, 2, 3]);
+        assert_eq!(o.round_from(2, false), [1, 3, 2], "from an item, it last");
+        assert_eq!(o.round_from(2, true), [3, 1, 2]);
     }
 
     #[test]
