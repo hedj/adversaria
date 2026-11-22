@@ -206,11 +206,17 @@ impl App {
     // Links.
 
     pub(crate) fn cmd_link(&mut self, words: &[&str], target: u64) -> Result<String, String> {
-        let (addr, kind) = split_as(words);
+        let (addr, kind) = super::dispatch::split_kind(words);
+        let kind = kind
+            .filter(|k| !k.is_empty())
+            .unwrap_or_else(|| "link".into());
+        if kind.contains(' ') {
+            return Err(format!("a link's type is one word, not “{kind}”"));
+        }
         let (from, to) = self
             .link_ends(addr, target)
             .ok_or("link (from) an item (to) an item, (as) a type")?;
-        self.write_link(from, to, kind)
+        self.write_link(from, to, &kind)
     }
 
     /// The two ends words address, or the target and the one they address.
@@ -310,15 +316,6 @@ fn cut_word(mut text: Vec<char>, pos: usize) -> (Vec<char>, usize) {
     let (a, b) = word_at(&text, pos);
     text.drain(a..b);
     (text, a)
-}
-
-/// The addresses in a link command's words, and its type: the word after
-/// "as", or "link".
-fn split_as<'a>(words: &'a [&'a str]) -> (&'a [&'a str], &'a str) {
-    match words.iter().position(|w| *w == "as") {
-        Some(i) => (&words[..i], words.get(i + 1).copied().unwrap_or("link")),
-        None => (words, "link"),
-    }
 }
 
 /// The fact a link states: its type, of the two items' numbers.

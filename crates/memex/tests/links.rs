@@ -216,3 +216,19 @@ fn from_may_be_typed_before_a_links_first_end() {
     let (out, _) = room.outline().links_of(buran);
     assert_eq!(out.iter().map(|l| l.to).collect::<Vec<_>>(), [energia]);
 }
+
+#[test]
+fn a_type_of_two_words_is_refused_not_cut_to_one() {
+    // Catches `as supports strongly` written as the type supports, the
+    // second word dropped, while the line shown held both (the code
+    // review, F-B8).
+    let mut room = Room::new("links-two-word-type");
+    room.items(&["Claim", "Paper"]);
+    room.app.run_command("link 1 to 2 as supports strongly");
+    assert!(
+        room.app.session.message.contains("one word"),
+        "{}",
+        room.app.session.message
+    );
+    assert!(room.outline().links.is_empty());
+}

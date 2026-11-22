@@ -608,7 +608,7 @@ fn unguided<'a>(words: &[&'a str]) -> Vec<&'a str> {
 }
 
 /// A link command's addresses, and the words after "as", if there are any.
-fn split_kind<'a>(words: &'a [&'a str]) -> (&'a [&'a str], Option<String>) {
+pub(crate) fn split_kind<'a>(words: &'a [&'a str]) -> (&'a [&'a str], Option<String>) {
     match words.iter().position(|w| *w == "as") {
         Some(i) => (&words[..i], Some(words[i + 1..].join(" "))),
         None => (words, None),
