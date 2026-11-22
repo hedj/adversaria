@@ -30,6 +30,18 @@ fn a_link_goes_to_the_item_whose_text_it_names() {
 }
 
 #[test]
+fn a_link_ignores_case_beyond_ascii() {
+    // Catches [[élan]] not linked to "Élan": the text was compared
+    // ignoring ASCII case only, though `go élan` finds it (the code
+    // review, E2).
+    let mut r = Room::new("inline-unicode-case");
+    r.items(&["Élan", "See [[élan]]."]);
+    r.app.idle();
+    let from = titled(&r, "See [[élan]].");
+    assert_eq!(inline_to(&r, from), [titled(&r, "Élan")]);
+}
+
+#[test]
 fn a_name_of_a_deleted_item_gives_way_to_a_text() {
     // Catches a [[link]] resolved to a deleted item by the name it had:
     // the item whose text it is was never linked, and `make` said there

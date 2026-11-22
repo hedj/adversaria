@@ -689,10 +689,12 @@ impl Outline {
         self.by_name(name).or_else(|| self.titled(name))
     }
 
-    /// The first item whose text is this, ignoring case.
+    /// The first item whose text is this, ignoring case, as Leap and
+    /// addresses ignore it: in every script, not ASCII alone.
     fn titled(&self, name: &str) -> Option<u64> {
+        let name = name.to_lowercase();
         let mut order = self.in_order().into_iter();
-        order.find(|i| self.text(*i).trim().eq_ignore_ascii_case(name))
+        order.find(|i| self.text(*i).trim().to_lowercase() == name)
     }
 
     /// Whether one of an item's [[links]] uses this name.
