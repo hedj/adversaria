@@ -10,18 +10,20 @@ use tools::interactivity::*;
 const LIMIT: usize = 4;
 
 /// The Prolog files measured.
-const PROLOG: [&str; 6] = [
+const PROLOG: [&str; 7] = [
     "prolog/protocol.pl",
     "prolog/server.pl",
     "prolog/dataflow.pl",
     "prolog/ace.pl",
     "prolog/ace_server.pl",
     "prolog/ace_next.pl",
+    "prolog/ace_read.pl",
 ];
 
 /// The documents measured, where they are there.
-const DOCS: [&str; 8] = [
+const DOCS: [&str; 9] = [
     "README.md",
+    "docs/introduction.md",
     "docs/tutorial.md",
     "docs/guide.md",
     "docs/design.md",
@@ -154,7 +156,17 @@ fn prolog_units(root: &Path) -> Vec<Unit> {
         .args(&files)
         .output();
     match xref {
-        Ok(o) => from_root(root, parse_xref(&String::from_utf8_lossy(&o.stdout))),
+        Ok(o) if o.status.success() => {
+            from_root(root, parse_xref(&String::from_utf8_lossy(&o.stdout)))
+        }
+        Ok(o) => {
+            let why = String::from_utf8_lossy(&o.stderr);
+            eprintln!(
+                "interactivity: the Prolog cross-reference failed ({}): {why}",
+                o.status
+            );
+            vec![]
+        }
         Err(e) => {
             eprintln!("interactivity: cannot run swipl: {e}");
             vec![]
