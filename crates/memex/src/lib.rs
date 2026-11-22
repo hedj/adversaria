@@ -25,6 +25,7 @@ pub mod reason;
 pub mod reasoning;
 pub mod replay;
 pub mod results;
+pub mod selection;
 pub mod session;
 mod spare;
 pub mod store;

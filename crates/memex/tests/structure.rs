@@ -1,7 +1,7 @@
 //! Moving by the outline's structure (docs/design.md, N4): next,
 //! previous, first, last, parent and child.
 
-use memex::app::{Key, Special};
+use memex::app::{Key, Mode, Quasi};
 
 mod support;
 use support::Room;
@@ -90,22 +90,53 @@ fn a_structural_move_is_not_a_jump() {
 }
 
 #[test]
-fn shift_and_an_arrow_home_or_end_make_the_six_moves() {
+fn ctrl_and_an_arrow_home_or_end_make_the_six_moves() {
     // Catches the moves with no key, so each had to be typed: the fourth
-    // UX review's finding. From B2, by default bindings alone.
+    // UX review's finding. From B2, Command held throughout, with nothing
+    // typed: each key moves, and the release runs nothing.
     let mut r = tree("structure-keys");
-    let press = |r: &mut Room, s| r.tap(&[Key::Special(s)]);
+    r.hold(Quasi::Command, "");
     for (key, lands) in [
-        (Special::ShiftDown, "B3"),
-        (Special::ShiftUp, "B2"),
-        (Special::ShiftHome, "B1"),
-        (Special::ShiftEnd, "B3"),
-        (Special::ShiftLeft, "A"),
-        (Special::ShiftRight, "B1"),
+        (Key::Down, "B3"),
+        (Key::Up, "B2"),
+        (Key::Home, "B1"),
+        (Key::End, "B3"),
+        (Key::Left, "A"),
+        (Key::Right, "B1"),
     ] {
-        press(&mut r, key);
+        r.tap(&[key]);
         assert_eq!(at(&r), lands, "{key:?}");
     }
+    r.release(Quasi::Command);
+    assert_eq!(at(&r), "B1");
+    assert_eq!(r.app.session.mode, Mode::Normal);
+    assert_eq!(r.app.session.message, "");
+}
+
+#[test]
+fn a_move_refused_with_ctrl_held_still_says_why_after_its_release() {
+    // Catches the release running the empty line, which clears what the
+    // move said.
+    let mut r = tree("structure-refused");
+    r.command("go 1.2.1");
+    r.hold(Quasi::Command, "");
+    r.tap(&[Key::Right]);
+    r.release(Quasi::Command);
+    assert_eq!(r.app.session.message, "nothing is under it");
+}
+
+#[test]
+fn an_arrow_in_a_latched_or_typed_command_does_not_move() {
+    // Catches the moves taken in a Command line being typed, where an
+    // arrow is no structural move, or in one latched, where Ctrl is not
+    // held.
+    let mut r = tree("structure-latched");
+    r.tap(&[Key::Quasi(Quasi::Command), Key::Down]);
+    assert_eq!(at(&r), "B2", "latched");
+    r.tap(&[Key::Escape]);
+    r.hold(Quasi::Command, "g");
+    r.tap(&[Key::Down]);
+    assert_eq!(at(&r), "B2", "typed");
 }
 
 #[test]

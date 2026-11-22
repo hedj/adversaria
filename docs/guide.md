@@ -293,21 +293,34 @@ The defaults are below. All of them can be changed (§ 4.3).
 | Enter | makes a new item after the cursor's item |
 | Tab | makes the item the last child of the item before it at its level; in an open `[[`, completes the link (§ 2.4) |
 | Shift-Tab | makes the item a sibling of its parent |
-| Backspace, Delete | erase a character before or after the cursor |
+| Backspace, Delete | erase a character before or after the cursor; with text selected, erase it |
 | Up, Down | move to the item above or below |
 | Left, Right, Home, End | move within the item's text |
+| Shift with an arrow, Home or End | moves as the key does, and selects from where the cursor was |
+
+#### Selecting
+
+Shift with an arrow, Home or End selects, as in a desktop program: from
+where the cursor was to where it goes, drawn reversed. Within one item
+it selects characters: Backspace or Delete erases them, and a character
+typed replaces them. Up or Down with Shift selects whole items, from one
+to the cursor's; Backspace and Delete then refuse, so a key that erases
+a character does not delete a branch. A move without Shift, a click or
+a command ends the selection.
 
 #### Moving by structure
 
-Shift with an arrow, Home or End moves by the outline's structure, as
+Ctrl with an arrow, Home or End moves by the outline's structure, as
 `go next` and the other ways of § 2.4, Finding and moving, do: over the
-items under one, not line by line.
+items under one, not line by line. Ctrl is the Command quasimode's key:
+held with nothing typed, an arrow, Home or End moves, and you may move
+again before you let go.
 
 | Key | Does |
 | --- | --- |
-| Shift with Up, Down | move to the previous or next item at the cursor's level (`go previous`, `go next`) |
-| Shift with Left, Right | move to the item the cursor's is under, or the first under it (`go parent`, `go child`) |
-| Shift with Home, End | move to the first or last item at the cursor's level (`go first`, `go last`) |
+| Ctrl with Up, Down | move to the previous or next item at the cursor's level (`go previous`, `go next`) |
+| Ctrl with Left, Right | move to the item the cursor's is under, or the first under it (`go parent`, `go child`) |
+| Ctrl with Home, End | move to the first or last item at the cursor's level (`go first`, `go last`) |
 
 #### Quasimodes
 
@@ -563,7 +576,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | Command | Form | Does |
 | --- | --- | --- |
 | `find` | `find TEXT`, `find #LABEL`, `find violations`, `find disagreements`, `find suggestions`, `find QUESTION?`, `` find `GOAL` ``, `find` | lists in the inspector's place the items that hold TEXT, ignoring case (as Leap matches), that carry the label, or that a violation or a disagreement marks, in the outline's order, numbered, with where the cursor is among them (`LABELLED #draft · 2 · at 1 of 2`); a click on one jumps to it, so `go back` returns, and the list stays as you edit. `find suggestions` lists the suggestions. A question, in English or as a Prolog goal between backticks, is answered once over this world's beliefs, through rules: `` find `animal(X)` `` says `2 answers: X = nemo · X = dory`, a goal without variables `yes` or `no`, and an English question its answer alone (`1 answer: Answer = 1600`). At most 20 answers are shown; the goal may only read facts, compare and compute, as a definition may; nothing is written. `find` alone shows the inspector again |
-| `go` | `go TEXT`, `go link N`, `go back`, `go forward`, `go next`, `go previous`, `go first`, `go last`, `go parent`, `go child` | goes to the item TEXT addresses, else to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3). `go link N` goes to the other end of the target's Nth link (default 1). `go back` (F7, or the mouse's back button) goes back to where the last jump came from: `go`, Leap, or a click on a link, a mention or a match; `go forward` (F8) goes forward again, and a new jump empties the way forward, as in a browser. Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over. `go next`, `go previous`, `go first`, `go last`, `go parent` and `go child` move by the outline's structure, after NLS (Shift with an arrow, Home or End, § 2.3): `go next` passes over the items under the target, and `go child` shows a folded branch. These are moves, as arrow keys are, not jumps. The words of the ways are kept for them: an item whose text is `next` is reached by its number |
+| `go` | `go TEXT`, `go link N`, `go back`, `go forward`, `go next`, `go previous`, `go first`, `go last`, `go parent`, `go child` | goes to the item TEXT addresses, else to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3). `go link N` goes to the other end of the target's Nth link (default 1). `go back` (F7, or the mouse's back button) goes back to where the last jump came from: `go`, Leap, or a click on a link, a mention or a match; `go forward` (F8) goes forward again, and a new jump empties the way forward, as in a browser. Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over. `go next`, `go previous`, `go first`, `go last`, `go parent` and `go child` move by the outline's structure, after NLS (Ctrl with an arrow, Home or End, § 2.3): `go next` passes over the items under the target, and `go child` shows a folded branch. These are moves, as arrow keys are, not jumps. The words of the ways are kept for them: an item whose text is `next` is reached by its number |
 
 #### Labels
 
@@ -662,12 +675,12 @@ above), so habits, journals and scripts keep working. None is listed by
 | `follow` | `follow [N]` | `go link N` |
 | `back` | `back` | `go back` (F7) |
 | `forward` | `forward` | `go forward` (F8) |
-| `next` | `next` | `go next` (Shift+Down) |
-| `previous` | `previous` | `go previous` (Shift+Up) |
-| `first` | `first` | `go first` (Shift+Home) |
-| `last` | `last` | `go last` (Shift+End) |
-| `parent` | `parent` | `go parent` (Shift+Left) |
-| `child` | `child` | `go child` (Shift+Right) |
+| `next` | `next` | `go next` (Ctrl+Down) |
+| `previous` | `previous` | `go previous` (Ctrl+Up) |
+| `first` | `first` | `go first` (Ctrl+Home) |
+| `last` | `last` | `go last` (Ctrl+End) |
+| `parent` | `parent` | `go parent` (Ctrl+Left) |
+| `child` | `child` | `go child` (Ctrl+Right) |
 
 ## 3. Reasoning
 
@@ -1258,12 +1271,6 @@ F6 = "switch"
 F7 = "go back"
 F8 = "go forward"
 F10 = "quit"
-ShiftUp = "go previous"
-ShiftDown = "go next"
-ShiftLeft = "go parent"
-ShiftRight = "go child"
-ShiftHome = "go first"
-ShiftEnd = "go last"
 
 [mouse]
 enabled = true
@@ -1295,8 +1302,8 @@ built-in ones; there may be any number, in order. See § 2.3, Plumbing.
 - for bindings only: `ShiftUp`, `ShiftDown`, `ShiftLeft`, `ShiftRight`,
   `ShiftHome`, `ShiftEnd`, an arrow, Home or End with Shift held. A
   quasimode cannot use one: it is two keys, and if Shift is let go first,
-  the quasimode would not see its key's release. Unbound, one does
-  nothing.
+  the quasimode would not see its key's release. Unbound, one selects
+  (§ 2.3, Selecting).
 
 The editing keys (Enter, Tab, Backspace, Delete, Esc, the arrows, Home,
 End), Shift alone and printable characters cannot be configured.

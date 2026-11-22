@@ -8,6 +8,7 @@
 
 use crate::app::{Event, Key, Press, Quasi, Special};
 use crate::config::{Config, QuasiKey};
+use crate::selection::unshifted;
 use ratatui::buffer::Buffer;
 use ratatui::style::Modifier;
 use unicode_width::UnicodeWidthStr;
@@ -50,13 +51,15 @@ fn quasi_held_on(names: &[&'static str], config: &Config) -> Option<Quasi> {
 }
 
 /// What a key is under the configuration: a quasimode's key, or itself;
-/// none if it has no job and no binding.
+/// none if it has no job and no binding. An arrow, Home or End with Shift
+/// has a job: it selects.
 fn configured(key: Key, config: &Config) -> Option<Key> {
     if let Some(q) = config.quasi_for(QuasiKey::Key(key)) {
         return Some(Key::Quasi(q));
     }
     let bound = config.bindings.iter().any(|(b, _)| *b == key);
-    (bound || !matches!(key, Key::Special(_))).then_some(key)
+    let free = matches!(key, Key::Special(s) if unshifted(s).is_none());
+    (bound || !free).then_some(key)
 }
 
 impl From<&winit::event::KeyEvent> for KeyPress {
@@ -514,7 +517,7 @@ mod tests {
     #[test]
     fn shift_with_an_arrow_is_its_own_key() {
         // Catches Shift ignored on the arrows, so Shift+Down moved a line
-        // rather than to the next item at the cursor's level.
+        // rather than select it.
         let down = named_key(KeyCode::ArrowDown, NamedKey::ArrowDown);
         let key = map_key(&down, true, &Config::default()).unwrap().key;
         assert_eq!(key, Key::Special(Special::ShiftDown));
@@ -523,7 +526,7 @@ mod tests {
     #[test]
     fn shift_with_home_or_end_is_its_own_key() {
         // Catches Shift ignored on Home and End, so Shift+End moved within
-        // the text rather than to the last item at the cursor's level.
+        // the text rather than select to its end.
         let end = named_key(KeyCode::End, NamedKey::End);
         let key = map_key(&end, true, &Config::default()).unwrap().key;
         assert_eq!(key, Key::Special(Special::ShiftEnd));

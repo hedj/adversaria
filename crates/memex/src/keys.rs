@@ -52,8 +52,12 @@ impl App {
     }
 
     /// Hold a quasimode's key: Suppose's opens Command with `suppose ` typed.
+    /// A Leap moves the cursor, so it ends the selection.
     fn enter_quasi(&mut self, q: Quasi) -> Mode {
         self.flush();
+        if matches!(q, Quasi::LeapDown | Quasi::LeapUp) {
+            self.session.selection = None;
+        }
         let typed = if q == Quasi::Suppose { "suppose " } else { "" };
         Mode::Quasi(Active::held_on(q, Kind::of(q, self.cursor()), typed))
     }
@@ -100,8 +104,19 @@ impl App {
         std::mem::replace(&mut self.session.mode, Mode::Normal)
     }
 
-    /// A key that edits the outline or moves within it.
+    /// A key that edits the outline or moves within it. With Shift, a
+    /// move selects; a key that acts on a selection acts on it; any
+    /// other ends it.
     fn edit_key(&mut self, key: Key) {
+        if let Key::Special(s) = key
+            && self.select_by(s)
+        {
+            return;
+        }
+        if self.edit_selected(key) {
+            return;
+        }
+        self.session.selection = None;
         match key {
             Key::Char(c) => self.type_char(c),
             Key::Backspace => self.erase(true),
@@ -110,6 +125,14 @@ impl App {
             Key::Tab if self.link_completions().is_some() => self.complete_link(),
             Key::Tab => self.run_simple("indent"),
             Key::BackTab => self.run_simple("outdent"),
+            _ => self.move_by(key),
+        }
+    }
+
+    /// An arrow moves a line or a character; Home and End, to the ends of
+    /// the text.
+    pub(crate) fn move_by(&mut self, key: Key) {
+        match key {
             Key::Up | Key::Down => self.move_line(key == Key::Up),
             Key::Left | Key::Right | Key::Home | Key::End => self.move_in_text(key),
             _ => {}
@@ -207,6 +230,10 @@ impl App {
         }
         if a.hold == Hold::Down {
             a.hold = Hold::Used;
+        }
+        if let Some(way) = structural(&a, ev.key) {
+            self.run_command(&format!("go {way}"));
+            return Mode::Quasi(a);
         }
         match ev.key {
             Key::Char('?') if asks_help(&a) => a.listing = !a.listing,
@@ -353,6 +380,8 @@ impl App {
             Quasi::Command if a.hold == Hold::Used && a.input.chars().count() == 1 => {
                 return self.chord(&a.input);
             }
+            // Command held only to move by structure has nothing to run.
+            Quasi::Command if a.hold == Hold::Used && a.input.is_empty() => {}
             Quasi::Command | Quasi::Suppose => return self.run_command(&a.input),
         }
         Mode::Normal
@@ -553,6 +582,25 @@ fn continuation(text: &str, p: &str) -> String {
     let t = text.to_lowercase();
     let after = &t[t.find(p).unwrap() + p.len()..];
     after.chars().take_while(|c| !c.is_whitespace()).collect()
+}
+
+/// The structural move that an arrow, Home or End makes with Command
+/// held and nothing typed, as Ctrl with an arrow does in a desktop
+/// program: to the item before or after at the cursor's level, to its
+/// parent or first child, or to the first or last at its level.
+fn structural(a: &Active, key: Key) -> Option<&'static str> {
+    if a.q() != Quasi::Command || a.latched() || !a.input.is_empty() {
+        return None;
+    }
+    Some(match key {
+        Key::Up => "previous",
+        Key::Down => "next",
+        Key::Left => "parent",
+        Key::Right => "child",
+        Key::Home => "first",
+        Key::End => "last",
+        _ => return None,
+    })
 }
 
 /// Whether `?` asks what may come next: in Command, but not inside

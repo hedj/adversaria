@@ -398,7 +398,7 @@ cursor returns to your note. F8 (`go forward`) goes forward again.
 `go`, Leap and a click on a link are jumps, which `go back` retraces;
 arrow keys are not. `go` takes every way of moving: an address
 (`go 2.1`), a link (`go link 1`), the trail (`go back`), or the
-outline's structure (`go next`, `go parent`, also Shift with an arrow).
+outline's structure (`go next`, `go parent`, also Ctrl with an arrow).
 
 ## C. Boxes that compute
 

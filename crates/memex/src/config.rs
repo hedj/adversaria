@@ -25,7 +25,8 @@ pub const DEFAULT_TOML: &str = r#"# Adversaria: key configuration. Copy to ~/.co
 #   PrintScreen CapsLock NumLock.
 # Bound keys: F1 to F35, Insert PageUp PageDown Menu Pause ScrollLock
 #   PrintScreen CapsLock NumLock, and ShiftUp ShiftDown ShiftLeft ShiftRight
-#   ShiftHome ShiftEnd (an arrow, Home or End with Shift held).
+#   ShiftHome ShiftEnd (an arrow, Home or End with Shift held, which selects
+#   unless it is bound).
 # Reserved, for editing, and refused: Enter Tab Backspace Delete Esc, the
 #   arrows, Home End, Shift, and any printable character.
 
@@ -48,12 +49,6 @@ F6 = "switch"
 F7 = "go back"
 F8 = "go forward"
 F10 = "quit"
-ShiftUp = "go previous"
-ShiftDown = "go next"
-ShiftLeft = "go parent"
-ShiftRight = "go child"
-ShiftHome = "go first"
-ShiftEnd = "go last"
 
 # The mouse. A click on an item moves the cursor there, a click on a hint
 # such as "F3 adopts" runs its command, and a click on a suggestion accepts
@@ -592,9 +587,9 @@ mod tests {
     }
 
     #[test]
-    fn thirteen_default_bindings() {
+    fn seven_default_bindings() {
         // Catches a default binding added or lost unnoticed.
-        assert_eq!(Config::default().bindings.len(), 13);
+        assert_eq!(Config::default().bindings.len(), 7);
     }
 
     #[test]

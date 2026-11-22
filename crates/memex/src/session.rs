@@ -33,6 +33,8 @@ pub struct Session {
     pub found: Option<Found>,
     /// Where jumps came from, for back and forward.
     pub trail: Trail,
+    /// Where the selection begins, if there is one (crate::selection).
+    pub selection: Option<Selection>,
     pub keys: Keys,
     /// The plumbing rules a right-click asks (crate::plumb).
     pub plumber: crate::plumb::Plumber,
@@ -40,6 +42,14 @@ pub struct Session {
     /// The cell under the mouse pointer, if it is over the window.
     pub pointer: Option<(u16, u16)>,
     outside: Outside,
+}
+
+/// Where a selection begins: an item, and a place in its text, in
+/// characters. It ends at the cursor, so a move with Shift extends it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Selection {
+    pub item: u64,
+    pub pos: usize,
 }
 
 /// What a right-click offers (crate::plumb): the offers, the one chosen,

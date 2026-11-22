@@ -232,7 +232,7 @@ fn the_commands_listed_are_shown_whole_at_80_columns() {
     let starting = taught().filter(|c| c.name.starts_with('c'));
     for c in starting {
         let line = format!("{} — {}", c.name, c.brief);
-        // A bound command's key follows, after a gap (ShiftRight for child).
+        // A bound command's key follows, after a gap.
         let whole = |s: &String| *s == line || s.starts_with(&format!("{line}  "));
         assert!(shown.iter().any(whole), "{line:?} not whole in {shown:#?}");
     }

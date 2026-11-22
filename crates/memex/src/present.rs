@@ -134,6 +134,7 @@ impl App {
         }
         self.flush_text();
         self.session.message.clear();
+        self.session.selection = None;
         self.jump(to, "follow", json!({}));
     }
 
@@ -145,6 +146,7 @@ impl App {
         }
         self.flush_text();
         self.session.message.clear();
+        self.session.selection = None;
         if self.session.view.focus != pane {
             self.session.view.focus = pane;
             self.write_view("pane", json!({}));

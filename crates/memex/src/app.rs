@@ -86,8 +86,8 @@ pub enum Special {
     PrintScreen,
     CapsLock,
     NumLock,
-    /// An arrow, Home or End with Shift held: by default, the structural
-    /// moves (docs/guide.md § 2.4).
+    /// An arrow, Home or End with Shift held: unless bound, it selects
+    /// (crate::selection).
     ShiftUp,
     ShiftDown,
     ShiftLeft,

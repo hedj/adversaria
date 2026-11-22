@@ -31,6 +31,11 @@ pub fn cursor() -> Style {
     Style::default().bg(Color::Rgb(0x2c, 0x3c, 0x52))
 }
 
+/// What is selected: reversed, as a desktop program draws a selection.
+pub fn selected() -> Style {
+    Style::default().add_modifier(Modifier::REVERSED)
+}
+
 /// A violation: beliefs that break a rule. Red, as an error is.
 pub fn violation() -> Style {
     Style::default().fg(Color::Rgb(0xf0, 0x50, 0x50))
@@ -732,7 +737,7 @@ fn untitled(text: &str) -> String {
 /// in view.
 fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Presentations {
     let rows = outline_frame(f, app, pane, area);
-    let outline = OutlinePane { app, pane, rows };
+    let outline = OutlinePane::new(app, pane, rows);
     outline.drawn().show(f, &outline)
 }
 
@@ -764,9 +769,26 @@ struct OutlinePane<'a> {
     app: &'a App,
     pane: usize,
     rows: Rect,
+    /// The items selected, if the pane has focus (crate::selection).
+    selected: Vec<u64>,
 }
 
 impl<'a> OutlinePane<'a> {
+    /// A pane of the outline, on rows of the screen; the pane with focus
+    /// shows the items selected.
+    fn new(app: &'a App, pane: usize, rows: Rect) -> OutlinePane<'a> {
+        let selected = match pane == app.session.view.focus {
+            true => app.selected_items(),
+            false => vec![],
+        };
+        OutlinePane {
+            app,
+            pane,
+            rows,
+            selected,
+        }
+    }
+
     fn outline(&self) -> &'a Outline {
         &self.app.notebook.outline
     }
@@ -849,7 +871,10 @@ impl<'a> OutlinePane<'a> {
     fn item_line(&self, id: u64, depth: usize) -> Line<'static> {
         let at_cursor = id == self.cursor();
         let mut spans = self.item_head(id, depth);
-        spans.extend(item_spans(self.app, id));
+        spans.extend(
+            self.selected_spans(id)
+                .unwrap_or_else(|| item_spans(self.app, id)),
+        );
         spans.extend(self.folded_count(id));
         let line = Line::from(spans);
         if at_cursor {
@@ -857,6 +882,27 @@ impl<'a> OutlinePane<'a> {
         } else {
             line
         }
+    }
+
+    /// An item's text with what is selected in it reversed, if anything
+    /// is: all of it, among items selected; or characters of the
+    /// cursor's, drawn as typed, as text being edited is.
+    fn selected_spans(&self, id: u64) -> Option<Vec<Span<'static>>> {
+        if self.selected.contains(&id) {
+            let spans = item_spans(self.app, id).into_iter();
+            return Some(spans.map(|s| s.patch_style(selected())).collect());
+        }
+        let at = (id == self.cursor() && self.has_focus()).then_some(id)?;
+        let range = self.app.selected_range()?;
+        let text = self.app.text_of(at);
+        let part = |r: std::ops::Range<usize>| text[r].iter().collect::<String>();
+        let picked = Span::styled(part(range.clone()), selected());
+        let after = part(range.end..text.len());
+        Some(vec![
+            Span::raw(part(0..range.start)),
+            picked,
+            Span::raw(after),
+        ])
     }
 
     /// How many cells an item's head takes: the column its text starts at,

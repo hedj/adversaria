@@ -460,10 +460,12 @@ impl App {
         self.session.mode = m;
     }
 
-    /// Run a command line, as typed in the Command quasimode.
+    /// Run a command line, as typed in the Command quasimode. The command
+    /// takes the selection, and ends it.
     pub fn run_command(&mut self, line: &str) -> Mode {
         self.flush();
         let mode = self.command_or_message(line.trim());
+        self.session.selection = None;
         self.flush();
         self.update_frozen();
         mode
