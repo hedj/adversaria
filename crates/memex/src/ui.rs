@@ -2116,14 +2116,21 @@ fn trail(outline: &Outline, id: u64) -> String {
     format!("{number}. {names}")
 }
 
-/// Where a pattern is in a text, ignoring case: its start and end, if
-/// both fall between characters of the text as written (a letter's small
-/// form can take more bytes, as "İ" does).
+/// Where a pattern is in a text, ignoring case: the first stretch of the
+/// text, between its own characters, whose small form is the pattern's.
+/// (Offsets in the small form are not the text's: "İ" grows, "K" shrinks.)
+/// A small form has no fewer characters, so a match has no more than the
+/// pattern.
 fn match_at(text: &str, pattern: &str) -> Option<(usize, usize)> {
-    let (lt, p) = (text.to_lowercase(), pattern.to_lowercase());
-    let i = lt.find(&p).filter(|_| lt.len() == text.len())?;
-    let j = i + p.len();
-    (text.is_char_boundary(i) && text.is_char_boundary(j)).then_some((i, j))
+    let p = pattern.to_lowercase();
+    let most = pattern.chars().count();
+    let at = |(i, _): (usize, char)| {
+        let ends = text[i..].char_indices().map(|(k, c)| i + k + c.len_utf8());
+        let mut ends = ends.take(most);
+        ends.find(|&j| text[i..j].to_lowercase() == p)
+            .map(|j| (i, j))
+    };
+    text.char_indices().find_map(at)
 }
 
 /// A text with the part between two places bold.
@@ -3926,6 +3933,20 @@ fn undo_step(app: &App) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_match_is_found_between_the_texts_own_letters() {
+        // Catches the bold put on the wrong letters where small forms
+        // change byte lengths: in "İİabcK" (a Kelvin sign last), "a" was
+        // found at "c" (the code review, G-B3).
+        let text = "İİabc\u{212A}";
+        let (i, j) = match_at(text, "a").unwrap();
+        assert_eq!(&text[i..j], "a");
+        let (i, j) = match_at("Buran ENERGIA", "energia").unwrap();
+        assert_eq!(&"Buran ENERGIA"[i..j], "ENERGIA");
+        assert_eq!(match_at("Buran", ""), None);
+        assert_eq!(match_at("Buran", "x"), None);
+    }
 
     #[test]
     fn what_lies_beyond_the_window_is_counted_in_items() {
