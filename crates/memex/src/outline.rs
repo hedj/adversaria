@@ -479,9 +479,11 @@ impl Outline {
 
     fn spans_valid(&self, spans: &[Span]) -> bool {
         spans.iter().all(|s| {
-            self.added
-                .get(&s.seq)
-                .is_some_and(|cs| s.start + s.len <= cs.len())
+            self.added.get(&s.seq).is_some_and(|cs| {
+                s.start
+                    .checked_add(s.len)
+                    .is_some_and(|end| end <= cs.len())
+            })
         })
     }
 
@@ -1228,6 +1230,17 @@ mod tests {
         create(&mut o, 2, 1, None, "b");
         create(&mut o, 3, TOP, Some(1), "c");
         o
+    }
+
+    #[test]
+    fn a_span_too_long_for_any_text_does_not_apply() {
+        // Catches a span from the journal whose start and length overflow
+        // when added: a panic in a debug build, a wrapped sum accepted in
+        // a release build (the code review, E6).
+        let mut o = branch();
+        let b = json!({"op":"text","item":2,"add":"","spans":[[2,1,u64::MAX]]});
+        assert!(!o.apply(4, "edit", &b));
+        assert_eq!(o.text(2), "b");
     }
 
     #[test]
