@@ -263,6 +263,32 @@ on every row (side by side) and in the top bar, so it is seen, not held.
 No task is left without a route. The capabilities kept only in the tail
 are listed above; none is removed.
 
+## Each command of the guide, and where it goes
+
+| Command | Becomes |
+| --- | --- |
+| `new`, `delete`, `move`, `copy`, `link`, `go`, `adopt`, `dismiss`, `retract`, `undo`, `redo`, `suppose`, `import`, `export`, `check` | verbs, as now |
+| `indent`, `outdent` | Tab, Shift+Tab; `move` |
+| `fold` | a click on an item's bullet, or its key; `fold` an alias |
+| `transclude` | `link … (as) shows` |
+| `name` | a label one item alone holds |
+| `make`, `split` | fixes offered on findings |
+| `follow`, `back`, `forward` | `go link N`, `go back`, `go forward`; F7, F8 |
+| `next`, `previous`, `first`, `last`, `parent`, `child` | `go next` and so on; Shift with an arrow |
+| `fact`, `claim`, `rule`, `constraint`, `ace`, `derive` | sentences in items; backticks for Prolog |
+| `query` | `find` with a question |
+| `set` | the fix "adopt this, retracting that" on a disagreement |
+| `layer` | `show … (as) …`, the view grammar in the tail |
+| `interrogate` | the inspector, at a claim |
+| `accept` | `adopt` (a suggestion) |
+| `commit`, `close` | `adopt world`, `dismiss world` |
+| `pane`, `switch` | the inspector and `find`; two outline panes in the tail |
+| `help` | `?` and F1, the list |
+| `quit` | F10, or closing the window (a habit) |
+| `purge` | the tail |
+
+Every name in the left column stays as a one-way alias.
+
 ## What it changes
 
 - **Commands.** 48 become 17 verbs. The old names stay as one-way aliases
