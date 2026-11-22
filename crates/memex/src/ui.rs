@@ -517,8 +517,8 @@ fn draw_pane(f: &mut Frame, app: &App, i: usize, area: Rect) -> Presentations {
 }
 
 /// The top bar: on the left the room, its world and the journal; on the
-/// right what reasoning found, or the pane in focus. When the right does
-/// not fit beside the left, it takes a row of its own.
+/// right what reasoning found. When the right does not fit beside the
+/// left, it takes a row of its own.
 fn top_lines(app: &App, width: u16) -> Top {
     let left = top_left(app);
     let right = top_right(app);
@@ -569,14 +569,9 @@ fn world_spans(app: &App) -> Vec<Span<'static>> {
     }
 }
 
-/// The top bar's right: the world's status, else the pane with focus,
-/// The top bar's right, dim: what reasoning found, or else the pane in
-/// focus.
+/// The top bar's right: what reasoning found, if anything.
 fn top_right(app: &App) -> Line<'static> {
-    match app.reason.eval[0].as_ref().map(status) {
-        Some(found) if !found.spans.is_empty() => found,
-        _ => Line::default(),
-    }
+    app.reason.eval[0].as_ref().map(status).unwrap_or_default()
 }
 
 /// A view's panel: its layers, each presenting itself, with its entry and
