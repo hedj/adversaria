@@ -119,6 +119,8 @@ impl App {
     }
 
     /// Record what reasoning shows of the current world, when it changes.
+    /// Applying the entry records it as observed, so a write that fails is
+    /// tried again.
     fn record_shown(&mut self) {
         let Some(now) = self.reason.eval[0].as_ref().map(WorldEval::observed) else {
             return;
@@ -129,7 +131,6 @@ impl App {
         let world = self.reason.world().to_string();
         let body = json!({"violations": now.0, "disagreements": now.1, "world": world});
         self.write_view("observed", body);
-        self.session.set_observed(now);
     }
 
     /// Record the suggestions shown for the first time, while the pane
@@ -143,7 +144,6 @@ impl App {
             return;
         }
         self.write_view("offer", json!({"keys": new}));
-        self.reason.suggestions.offer(new);
     }
 
     /// What adopting an item's claims would raise, computed in a spare
