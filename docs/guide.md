@@ -789,7 +789,7 @@ This draws one bar for each `cell(C, V)` fact, at category C, V high:
 it is what `show as chart` writes. Run `show` with the cursor on the
 item that is to be the view; each `show` with a mark adds a layer
 (`layer`, its old name, does the same). A layer without `where` is drawn once, as a
-reference line: `layer rule(y(1500))`.
+reference line: `show refline(y(1500))` (`rule`, its old name, still draws one).
 
 The view is drawn under its item and changes as the facts do. With the
 cursor on it, the right pane lists its layers, with how many marks each
@@ -815,7 +815,7 @@ Each mark is written with its channels, `channel(Value)`:
 | `dot` | x, y; text | a point, labelled |
 | `bar` | x, y; text | a bar from zero: upright if x is a category, across if y is. An upright bar of a value not below zero is drawn to the eighth of a cell (`▁` to `▇` at its top), so its height is in proportion; zero draws none |
 | `line` | x, y; series | points joined in order of x, one line and one symbol per series |
-| `rule` | x or y | a line across the plot at that value |
+| `refline` | x or y | a reference line across the plot at that value (`rule` until 22 November 2026, still read) |
 | `text` | x, y, text | a label at a point |
 | `tick` | x; y, text | a mark on the axis with its label above: a timeline. With y, on that lane |
 | `span` | x1, x2; y, text | an interval from x1 to x2, on lane y: a Gantt chart |
@@ -842,7 +842,7 @@ A bar chart with a limit:
 
 ```
 layer bar(x(C), y(V)) where cell(C, V)
-layer rule(y(I)) where cell(income, I)
+layer refline(y(I)) where cell(income, I)
 ```
 
 A spreadsheet: boxes at places in a grid, one computed by a rule.

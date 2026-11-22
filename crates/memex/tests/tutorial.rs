@@ -528,8 +528,8 @@ fn a_chart_with_a_limit(t: &mut T) -> u64 {
     t.tap(Key::Enter);
     t.tap(Key::BackTab);
     t.typ("Spending chart");
-    t.command("layer bar(x(C), y(V)) where cell(C, V)");
-    t.command("layer rule(y(I)) where cell(income, I)");
+    t.command("show as chart");
+    t.command("show refline(y(I)) where cell(income, I)");
     t.look("chart");
     t.shows("VIEW · 2 LAYERS");
     let chart = find(&t.app, "Spending chart");
@@ -657,7 +657,7 @@ fn loud_columns(fig: &memex::view::Figure) -> Vec<usize> {
 fn the_dates_as_a_timeline(t: &mut T) {
     t.tap(Key::Enter);
     t.typ("Timeline of the programme");
-    t.command("layer tick(x(Y), text(L)) where date(E, Y), label(E, L)");
+    t.command("show tick(x(Y), text(L)) where date(E, Y), label(E, L)");
     t.look("timeline");
     let tl = find(&t.app, "Timeline of the programme");
     let fig = view_of(t, tl).text().join("\n");

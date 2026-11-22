@@ -450,8 +450,8 @@ Leap to `what is the rest`, press Enter, and Shift-Tab to the top level.
 Type `Spending chart`. Then run two commands, which draw it in layers, a
 mark for each answer to a query:
 
-- `layer bar(x(C), y(V)) where cell(C, V)`
-- `layer rule(y(I)) where cell(income, I)`
+- `show as chart`, which writes the layer `bar(x(C), y(V)) where cell(C, V)`
+- `show refline(y(I)) where cell(income, I)`
 
 The first draws a bar for each box, as high as its value; the second, a
 line across the chart at the income. The chart is drawn under the item,
@@ -489,7 +489,7 @@ It finds every date the notebook believes, and says:
 
 Press Enter, type `Timeline of the programme`, then run:
 
-`layer tick(x(Y), text(L)) where date(E, Y), label(E, L)`
+`show tick(x(Y), text(L)) where date(E, Y), label(E, L)`
 
 Each event is a tick on a line of years, labelled in words:
 `Energia's first launch` in 1987, then `Buran's flight` in 1988. The

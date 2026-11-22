@@ -71,8 +71,8 @@ fn show_with_an_address_makes_that_item_the_view() {
 fn show_with_a_mark_adds_that_layer_as_layer_did() {
     let mut r = budget("show-mark");
     let view = r.app.cursor();
-    r.command("show rule(y(1500))");
-    let rule = ("rule(y(1500))".to_string(), "true".to_string());
+    r.command("show refline(y(1500))");
+    let rule = ("refline(y(1500))".to_string(), "true".to_string());
     assert_eq!(layers(&r, view), [rule]);
 }
 

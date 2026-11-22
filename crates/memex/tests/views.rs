@@ -118,8 +118,8 @@ fn a_layer_gives_one_mark_per_solution_and_follows_the_facts() {
     );
     each_mark_rests_on_the_fact_it_shows(&app, chart);
     // A second layer, constant: a reference line.
-    command(&mut app, "layer rule(y(1500))");
-    assert_eq!(marks(&app, chart).last().unwrap(), "rule(y(1500))");
+    command(&mut app, "layer refline(y(1500))");
+    assert_eq!(marks(&app, chart).last().unwrap(), "refline(y(1500))");
     // Change a fact: the layer follows.
     command(&mut app, "set cell(food, 900)");
     assert!(marks(&app, chart).contains(&"bar(x(food), y(900))".to_string()));
@@ -288,7 +288,7 @@ fn a_view_is_drawn_under_its_item_and_its_marks_lead_to_their_facts() {
     );
     item(&mut app, "Budget chart");
     command(&mut app, "layer bar(x(C), y(V)) where cell(C, V)");
-    command(&mut app, "layer rule(y(I)) where cell(income, I)");
+    command(&mut app, "layer refline(y(I)) where cell(income, I)");
     the_chart_is_drawn_under_its_item(&app);
     the_food_bar_leads_to_its_fact(&mut app);
     // Break the rule: a bar on a fact in the violation keeps its plain

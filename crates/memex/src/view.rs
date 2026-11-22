@@ -39,7 +39,7 @@ pub const MARKS: &[(&str, &[&str], &[&str])] = &[
     ("dot", &["x", "y"], &["text"]),
     ("bar", &["x", "y"], &["text"]),
     ("line", &["x", "y"], &["series"]),
-    ("rule", &[], &["x", "y"]),
+    ("refline", &[], &["x", "y"]),
     ("text", &["x", "y", "text"], &[]),
     ("tick", &["x"], &["y", "text"]),
     ("span", &["x1", "x2"], &["y", "text"]),
@@ -78,6 +78,9 @@ struct Kind {
 
 impl Kind {
     fn named(name: &str) -> Result<Kind, String> {
+        // `rule` is refline's old name (docs/concepts.md, decision 7): the
+        // layers journals hold still draw.
+        let name = if name == "rule" { "refline" } else { name };
         let found = MARKS.iter().find(|(k, _, _)| *k == name);
         let Some(&(name, required, optional)) = found else {
             let names: Vec<&str> = MARKS.iter().map(|(k, _, _)| *k).collect();
@@ -117,14 +120,14 @@ impl Kind {
         Ok((c.clone(), v[0].clone()))
     }
 
-    /// A mark has every channel its kind requires; a rule has one only.
+    /// A mark has every channel its kind requires; a refline has one only.
     fn check_complete(&self, given: &Channels) -> Result<(), String> {
         let has = |r: &&&str| given.iter().any(|(k, _)| k == **r);
         if let Some(missing) = self.required.iter().find(|r| !has(r)) {
             return Err(format!("{} needs {missing}(…)", self.name));
         }
-        if self.name == "rule" && given.len() != 1 {
-            return Err("rule needs exactly one of x(…) or y(…)".into());
+        if self.name == "refline" && given.len() != 1 {
+            return Err("refline needs exactly one of x(…) or y(…)".into());
         }
         Ok(())
     }
@@ -132,7 +135,7 @@ impl Kind {
 
 // ---------------------------------------------------------------------
 // Drawing. A view's marks become a figure of characters: a plot (dot, bar,
-// line, rule, text, tick, span), a grid (cell) or a graph (node, edge).
+// line, refline, text, tick, span), a grid (cell) or a graph (node, edge).
 // The marks choose: any node or edge makes a graph; cells alone, a grid;
 // anything else, a plot.
 
@@ -915,7 +918,7 @@ fn plot(ms: &[M], space: (usize, usize)) -> Figure {
     p.y_labels();
     p.x_labels();
     // Rules first, under the other marks; then each kind in turn.
-    p.rules(ms);
+    p.reflines(ms);
     p.bars(ms);
     p.lines(ms);
     p.spans(ms);
@@ -1305,24 +1308,24 @@ impl Plot {
     }
 
     /// Reference lines across the plot, at a y or at an x.
-    fn rules(&mut self, ms: &[M]) {
-        for m in ms.iter().filter(|m| m.kind == "rule") {
+    fn reflines(&mut self, ms: &[M]) {
+        for m in ms.iter().filter(|m| m.kind == "refline") {
             let ink = if m.loud { Ink::Loud } else { Ink::Dim };
             if let Some(v) = m.get("y") {
-                self.rule_across(v, ink);
+                self.refline_across(v, ink);
             } else if let Some(v) = m.get("x") {
-                self.rule_down(v, ink);
+                self.refline_down(v, ink);
             }
         }
     }
 
-    fn rule_across(&mut self, v: &V, ink: Ink) {
+    fn refline_across(&mut self, v: &V, ink: Ink) {
         if let Some(y) = self.frame.mid_row(v) {
             self.cv.hline(self.frame.columns(), y, ink);
         }
     }
 
-    fn rule_down(&mut self, v: &V, ink: Ink) {
+    fn refline_down(&mut self, v: &V, ink: Ink) {
         if let Some(x) = self.frame.mid_col(v) {
             let rows = Run::of(0, self.frame.axis_row() - 1);
             self.cv.vline(x, rows, ink);
@@ -2845,7 +2848,7 @@ mod tests {
             "bar x:income y:2000",
             "bar x:rent y:1200",
             "bar x:food y:400",
-            "rule y:1500",
+            "refline y:1500",
         ];
         draw(&specs, 40, 10)
     }
@@ -2889,9 +2892,9 @@ mod tests {
     }
 
     #[test]
-    fn a_rule_runs_across_the_bars() {
+    fn a_refline_runs_across_the_bars() {
         let l = budget_bars();
-        assert!(l.iter().any(|x| x.contains("────────────")), "the rule");
+        assert!(l.iter().any(|x| x.contains("────────────")), "the refline");
     }
 
     #[test]
@@ -3126,7 +3129,7 @@ mod tests {
         // Catches a mark accepted with a missing, unknown or doubled channel.
         let c = |n: &str| t(n, vec![Term::Var(0)]);
         assert!(channels(&t("bar", vec![c("x"), c("y")])).is_ok());
-        assert!(channels(&t("rule", vec![c("y")])).is_ok());
+        assert!(channels(&t("refline", vec![c("y")])).is_ok());
         let cases = [
             (t("pie", vec![c("x")]), "no mark “pie”"),
             (t("bar", vec![c("x")]), "bar needs y(…)"),
@@ -3135,8 +3138,8 @@ mod tests {
                 "no channel colour",
             ),
             (t("bar", vec![c("x"), c("x"), c("y")]), "x is given twice"),
-            (t("rule", vec![]), "exactly one"),
-            (t("rule", vec![c("x"), c("y")]), "exactly one"),
+            (t("refline", vec![]), "exactly one"),
+            (t("refline", vec![c("x"), c("y")]), "exactly one"),
             (
                 t("bar", vec![Term::Atom("x".into()), c("y")]),
                 "channel(Value)",
@@ -3152,8 +3155,17 @@ mod tests {
     fn a_channel_takes_one_value() {
         // Catches x(1, 2) read as x(1).
         let two = t("x", vec![Term::Int(1), Term::Int(2)]);
-        let said = channels(&t("rule", vec![two])).unwrap_err();
-        assert_eq!(said, "rule: x takes one value");
+        let said = channels(&t("refline", vec![two])).unwrap_err();
+        assert_eq!(said, "refline: x takes one value");
+    }
+
+    #[test]
+    fn rule_is_reflines_old_name() {
+        // Catches a layer a journal holds as rule(y(1500)) no longer drawn
+        // after the rename (docs/concepts.md, decision 7).
+        let y = t("y", vec![Term::Int(1500)]);
+        let (kind, _) = channels(&t("rule", vec![y])).unwrap();
+        assert_eq!(kind, "refline");
     }
 
     #[test]
@@ -3174,8 +3186,8 @@ mod tests {
     }
 
     #[test]
-    fn a_rule_at_an_x_runs_down_the_plot() {
-        // Catches a rule given an x not drawn, or drawn across. The top
+    fn a_refline_at_an_x_runs_down_the_plot() {
+        // Catches a refline given an x not drawn, or drawn across. The top
         // row is kept, so the dots' scale starts on the second.
         let want = [
             "   │          │",
@@ -3188,7 +3200,7 @@ mod tests {
             "    0                 10",
         ];
         assert_eq!(
-            draw(&["dot x:0 y:0", "dot x:10 y:10", "rule x:5"], 24, 8),
+            draw(&["dot x:0 y:0", "dot x:10 y:10", "refline x:5"], 24, 8),
             want
         );
     }
@@ -4048,7 +4060,7 @@ mod tests {
             .into_iter()
             .filter(|l| l.starts_with("note"))
             .collect();
-        let first = "note: no mark “blob”; the marks are dot, bar, line, rule, text, tick, span, cell, node, edge";
+        let first = "note: no mark “blob”; the marks are dot, bar, line, refline, text, tick, span, cell, node, edge";
         assert_eq!(notes, [first, "note: ● s1", "note: ○ s2"]);
     }
 
@@ -4072,9 +4084,14 @@ mod tests {
         // Catches a crossing drawn in the ink of the last line through it.
         // The inks are what the code drew before the plot's lines were
         // given runs.
-        let mut loud = mk("rule y:2");
+        let mut loud = mk("refline y:2");
         loud.loud = true;
-        let marks = [loud, mk("rule x:2"), mk("dot x:1 y:1"), mk("dot x:3 y:3")];
+        let marks = [
+            loud,
+            mk("refline x:2"),
+            mk("dot x:1 y:1"),
+            mk("dot x:3 y:3"),
+        ];
         let want = [
             "dpdppppppppdpppppppp",
             "ppdLLLLLLLLLLLLLLLLL",
