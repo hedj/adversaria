@@ -8,7 +8,8 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Widget};
-use unicode_width::UnicodeWidthChar;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 /// A line wrapped: its rows, the column of the line at which each row
 /// starts, the indent of every row after the first, and the width.
@@ -19,11 +20,12 @@ pub struct Wrapped {
     width: usize,
 }
 
-/// A character of a line: the character, its style, its cells, and the
-/// column of the line at which it starts.
+/// A character of a line, as it is drawn: a grapheme ("❤️" is two
+/// characters, drawn as one two cells wide), its style, its cells, and
+/// the column of the line at which it starts.
 #[derive(Clone)]
 struct Cell {
-    c: char,
+    c: String,
     style: Style,
     cells: usize,
     col: usize,
@@ -114,13 +116,13 @@ fn cells(line: &Line<'static>) -> Vec<Cell> {
 }
 
 /// A span's characters, each with the span's style.
-fn span_chars<'a>(span: &'a Span<'static>) -> impl Iterator<Item = (char, Style)> + 'a {
-    span.content.chars().map(move |c| (c, span.style))
+fn span_chars<'a>(span: &'a Span<'static>) -> impl Iterator<Item = (&'a str, Style)> + 'a {
+    span.content.graphemes(true).map(move |c| (c, span.style))
 }
 
 /// A character at a column, which then moves past its cells.
-fn cell(c: char, style: Style, col: &mut usize) -> Cell {
-    let cells = c.width().unwrap_or(0);
+fn cell(c: &str, style: Style, col: &mut usize) -> Cell {
+    let (c, cells) = (c.to_string(), c.width());
     let at = std::mem::replace(col, *col + cells);
     Cell {
         c,
@@ -167,7 +169,7 @@ fn break_row(rows: &mut Vec<Vec<Cell>>, hang: usize) {
 /// What a full row hands to the next: the characters after its last
 /// space past the hang, or nothing, if it has none.
 fn carry(row: &mut Vec<Cell>, hang: usize) -> Vec<Cell> {
-    let space = row.iter().rposition(|c| c.c == ' ' && c.col >= hang);
+    let space = row.iter().rposition(|c| c.c == " " && c.col >= hang);
     match space {
         Some(at) => row.split_off(at + 1),
         None => Vec::new(),
@@ -193,7 +195,7 @@ fn runs(row: &[Cell]) -> impl Iterator<Item = Span<'static>> + '_ {
 
 /// A run of characters of one style as a span.
 fn run(cells: &[Cell]) -> Span<'static> {
-    let text: String = cells.iter().map(|c| c.c).collect();
+    let text: String = cells.iter().map(|c| c.c.as_str()).collect();
     Span::styled(text, cells[0].style)
 }
 
@@ -305,6 +307,16 @@ mod tests {
         let w = wrap(&Line::raw("aaaaaaaaaa bbbbbbbbb日 x"), 10, 0);
         assert!(w.rows.iter().all(|r| r.width() <= 10), "{:?}", text(&w));
         assert_eq!(text(&w).concat(), "aaaaaaaaaa bbbbbbbbb日 x");
+    }
+
+    #[test]
+    fn a_character_of_two_code_points_is_measured_as_it_is_drawn() {
+        // Catches widths summed per code point: "❤️" (a heart and a
+        // variation selector) counted as one cell, drawn as two, so six
+        // hearts made one row 12 cells wide (the code review, G-B2).
+        let w = wrap(&Line::raw("❤️❤️❤️❤️❤️❤️"), 10, 0);
+        assert!(w.rows.iter().all(|r| r.width() <= 10), "{:?}", text(&w));
+        assert_eq!(text(&w).concat(), "❤️❤️❤️❤️❤️❤️");
     }
 
     #[test]

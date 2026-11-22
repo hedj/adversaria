@@ -1647,6 +1647,7 @@ dependencies = [
  "regex",
  "serde_json",
  "toml",
+ "unicode-segmentation",
  "unicode-width",
  "winit",
 ]

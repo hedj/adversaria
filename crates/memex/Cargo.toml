@@ -24,3 +24,6 @@ egui-wgpu = { version = "0.37.0", features = ["winit"] }
 winit = "0.30.13"
 pollster = "0.4.0"
 unicode-width = "0.2.3"
+# The graphemes ratatui draws by (it depends on the same version), so a
+# wrapped row is measured as it is drawn.
+unicode-segmentation = "1.13.3"
