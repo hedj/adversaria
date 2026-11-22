@@ -288,3 +288,37 @@ fn text_selected_fills_no_noun_after_the_target() {
     r.command("show");
     assert_eq!(r.app.session.message, "shown as a chart");
 }
+
+/// What importing a file of this name and text, named alone, says.
+fn import_alone(r: &mut Room, name: &str, text: &str) -> String {
+    let file = r.dir.join(name);
+    std::fs::write(&file, text).unwrap();
+    r.command(&format!("import {}", file.display()));
+    r.app.session.message.clone()
+}
+
+#[test]
+fn import_reads_a_file_as_the_kind_its_name_ends_in() {
+    // Catches the kind still needed as a word of its own, or a file read
+    // as another kind than its ending says.
+    let mut r = Room::new("grammar-import-kinds");
+    let said = import_alone(&mut r, "a.md", "# A\n\nText.\n");
+    assert_eq!(said, "imported a.md: 2 items; losses: none");
+    let said = import_alone(&mut r, "r.json", r#"{"format": "other"}"#);
+    assert_eq!(said, "not a results file: its format is not memex-results");
+    let said = import_alone(&mut r, "w.pl", "not prolog (");
+    assert!(said.contains("is not a Wikidata subset"), "{said}");
+}
+
+#[test]
+fn import_of_a_file_as_an_address_is_a_revision() {
+    // Catches `as ADDRESS` lost when the kind is not named, so the copy
+    // arrived as a document of its own.
+    let mut r = Room::new("grammar-import-revision");
+    import_alone(&mut r, "essay.md", "# Essay\n\nOne.\n");
+    let copy = r.dir.join("essay-v2.md");
+    std::fs::write(&copy, "# Essay\n\nOne, revised.\n").unwrap();
+    r.command(&format!("import {} as 1", copy.display()));
+    let said = &r.app.session.message;
+    assert!(said.starts_with("revision of essay.md:"), "{said}");
+}

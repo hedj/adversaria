@@ -7,11 +7,16 @@ use serde_json::json;
 use std::path::Path;
 
 impl App {
+    /// Import a file, of the kind named first, or else of the kind its
+    /// name ends in (kind_of).
     pub(crate) fn cmd_import(&mut self, words: &[&str], _: u64) -> Result<String, String> {
-        let usage = "import (from) wikidata and a file made by the wikidata tool";
+        let usage = "import (from) a file: a document, results (.json) or a Wikidata subset (.pl); a document as ADDRESS is a revision of the one that item came from";
         let (what, rest) = words.split_first().ok_or(usage)?;
-        let file = rest.join(" ");
-        match *what {
+        let (what, file) = match *what {
+            "document" | "results" | "wikidata" => (*what, rest.join(" ")),
+            _ => (kind_of(&words.join(" ")), words.join(" ")),
+        };
+        match what {
             "document" => match file.rsplit_once(" as ") {
                 Some((file, at)) => self.import_revision_of(file.trim(), at.trim()),
                 None => self.import_document(&file),
@@ -99,5 +104,17 @@ impl App {
             _ => return Err("check quote, or check source".into()),
         };
         Ok(format!("{} check: {ruling}", words[0]))
+    }
+}
+
+/// The kind of file a name ends in: a Wikidata subset (`.pl`, as the
+/// wikidata tool writes), results (`.json`), and else a document, which
+/// Pandoc reads or refuses. A name followed by `as ADDRESS` ends in the
+/// address, so it is a document's, the one kind that has revisions.
+fn kind_of(file: &str) -> &'static str {
+    match Path::new(file.trim()).extension().and_then(|e| e.to_str()) {
+        Some("pl") => "wikidata",
+        Some("json") => "results",
+        _ => "document",
     }
 }
