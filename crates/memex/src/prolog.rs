@@ -322,7 +322,14 @@ impl Prolog {
         while answers.len() < n as usize {
             let m = self.reply(q.req)?;
             match m.kind {
-                Kind::Answer => answers.push(self.answer(&m, q.vars.len())?),
+                Kind::Answer => match self.answer(&m, q.vars.len()) {
+                    Ok(values) => answers.push(values),
+                    Err(e) => {
+                        // The server would keep the query's engine for good.
+                        let _ = self.cancel(q);
+                        return Err(e);
+                    }
+                },
                 Kind::Done => return Ok((answers, Some(self.done(&m)?))),
                 k => return Err(Error::Server(format!("unexpected {k:?}"))),
             }
@@ -399,6 +406,28 @@ impl Prolog {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_answer_that_cannot_be_decoded_cancels_its_query() {
+        // Catches the server left holding the engine of a query whose
+        // answer the client refused (an integer over 64 bits): each such
+        // query leaked one (the code review, C-B10).
+        let mut p = Prolog::start().unwrap();
+        let c = |n: &str, args| Term::Compound(n.into(), args);
+        let x = Term::Var(0);
+        let big = c("**", vec![Term::Int(2), Term::Int(100)]);
+        assert!(p.all(&c("is", vec![x.clone(), big]), 1).is_err());
+        let engines = c("query_engine", vec![Term::Var(1), Term::Var(2)]);
+        let count = c(
+            "aggregate_all",
+            vec![Term::Atom("count".into()), engines, x],
+        );
+        assert_eq!(
+            p.all(&count, 1).unwrap(),
+            [[Term::Int(1)]],
+            "this query's own"
+        );
+    }
 
     #[test]
     fn a_goal_that_never_ends_stops_the_server_so_it_can_restart() {
