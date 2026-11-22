@@ -447,10 +447,24 @@ fn screen_areas(area: Rect, edges: &Edges) -> [Rect; 4] {
 
 /// The body: the two worlds while a supposition is open, else the panes.
 fn draw_body(f: &mut Frame, app: &App, area: Rect) -> Presentations {
-    if app.reason.supposition.is_some() {
-        return draw_worlds(f, app, area);
+    match &app.reason.supposition {
+        Some(sup) => draw_worlds(f, app, &sup.name, area),
+        None => draw_panes(f, app, area),
     }
-    draw_panes(f, app, area)
+}
+
+/// A supposition, by its name: the actual world and the supposed one side
+/// by side, row for row; or a revision's world: each change, one entry
+/// each, to keep or retract (retract N) before the world is committed or
+/// closed.
+fn draw_worlds(f: &mut Frame, app: &App, name: &str, area: Rect) -> Presentations {
+    if name.starts_with("revision of ") {
+        return draw_presented(f, revision_lines(name, &app.revision_changes()), area);
+    }
+    if let Some(sides) = Sides::of(app) {
+        sides.draw(f, area);
+    }
+    Presentations::default()
 }
 
 /// The two panes, and a quasimode's list over the left one: no click
@@ -3160,28 +3174,6 @@ fn leaving_hint(app: &App) -> Option<String> {
     (!sup.name.starts_with("revision of ")).then(|| leave.to_string())
 }
 
-/// A supposition: the actual world and the supposed one side by side, row
-/// for row; or a revision, as its own pane draws it.
-fn draw_worlds(f: &mut Frame, app: &App, area: Rect) -> Presentations {
-    let Some(sup) = &app.reason.supposition else {
-        return Presentations::default();
-    };
-    match sup.name.starts_with("revision of ") {
-        true => draw_revision(f, app, area),
-        false => {
-            draw_sides(f, app, area);
-            Presentations::default()
-        }
-    }
-}
-
-/// The open supposition side by side, if there is one.
-fn draw_sides(f: &mut Frame, app: &App, area: Rect) {
-    if let Some(sides) = Sides::of(app) {
-        sides.draw(f, area);
-    }
-}
-
 /// A world's column, by its place, in its half.
 fn draw_column(f: &mut Frame, k: usize, area: Rect, rows: Vec<Line<'static>>) {
     f.render_widget(Paragraph::new(rows).block(ruled(k)), area);
@@ -3872,21 +3864,6 @@ impl Column {
 fn wrapped_height(lines: &[Line<'static>], width: u16) -> u16 {
     let p = Paragraph::new(lines.to_vec()).wrap(Wrap { trim: false });
     p.line_count(width) as u16
-}
-
-/// A document revision's world: each change, one entry each, to keep or
-/// retract (retract N) before the world is committed or closed.
-fn draw_revision(f: &mut Frame, app: &App, area: Rect) -> Presentations {
-    let Some(lines) = revision_panel(app) else {
-        return Presentations::default();
-    };
-    draw_presented(f, lines, area)
-}
-
-/// The panel of the world a supposition opened, if one is open.
-fn revision_panel(app: &App) -> Option<Vec<Presented>> {
-    let sup = app.reason.supposition.as_ref()?;
-    Some(revision_lines(&sup.name, &app.revision_changes()))
 }
 
 /// The lines of a revision's panel: its name, each change, and how to
