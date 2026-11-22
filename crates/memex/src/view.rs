@@ -987,12 +987,6 @@ fn plotting_size(space: (usize, usize), beside: usize) -> (usize, usize) {
     )
 }
 
-/// The rows a scale keeps at the top of a plotting area so many rows
-/// high: one on a number scale, if enough are left for the values.
-fn headroom(ys: &Scale, rows: usize) -> usize {
-    usize::from(!ys.is_band() && rows > MIN_VALUE_ROWS)
-}
-
 /// Whether a plot's bars lie along the x axis: all have a category for y.
 fn horizontal_bars(ms: &[M]) -> bool {
     let mut bars = ms.iter().filter(|m| m.is_bar()).peekable();
@@ -1036,9 +1030,10 @@ impl Frame {
     }
 
     /// The rows kept at the top of the plotting area, so that a value
-    /// drawn above its bar has a row even for the tallest bar.
+    /// drawn above its bar has a row even for the tallest bar: one on a
+    /// number scale, if enough are left for the values.
     fn top(&self) -> usize {
-        headroom(&self.ys, self.size.1)
+        usize::from(!self.ys.is_band() && self.size.1 > MIN_VALUE_ROWS)
     }
 
     /// The first column of the plotting area.
