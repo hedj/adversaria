@@ -160,6 +160,7 @@ terms_cells(Terms, Cells, Vars, NewAtoms) :-
     next_atom(First),
     catch(phrase(seq_cells(Terms, 0, s([], 0, []), s(VarsR, _, NewR)), Cells),
           E, ( forget_atoms_from(First), throw(E) )),
+    unnumber_vars(VarsR),
     reverse(VarsR, Vars),
     reverse(NewR, NewAtoms).
 
@@ -226,15 +227,19 @@ compound_cells(T, D, S0, S) -->
     { D1 is D + 1 },
     seq_cells(Args, D1, S1, S).
 
+%   A variable's number is kept on it, as an attribute, while its term is
+%   encoded, so finding it takes constant time; a search of the variables
+%   met took 65 s for 30,000.
 var_cell(T, s(Vs, N, New), S) -->
-    (   { var_number(Vs, T, K) }
+    (   { get_attr(T, protocol, K) }
     ->  { S = s(Vs, N, New) }
-    ;   { K = N, N1 is N + 1, S = s([T|Vs], N1, New) }
+    ;   { K = N, put_attr(T, protocol, K), N1 is N + 1, S = s([T|Vs], N1, New) }
     ),
     { cell(var, K, C) },
     [C].
 
-var_number(Vs, T, K) :- reverse(Vs, Fwd), nth0(K, Fwd, V), V == T, !.
+%   An exception undoes the attributes with every other binding.
+unnumber_vars(Vs) :- maplist([V]>>del_attr(V, protocol), Vs).
 
 atom_number_new(Name, No, s(Vs, N, New0), s(Vs, N, New)) :-
     intern(Name, No, IsNew),

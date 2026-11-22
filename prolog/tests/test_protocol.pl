@@ -118,4 +118,15 @@ test(a_cyclic_term_is_refused, [throws(protocol_error(cyclic_term))]) :-
     X = [a|X],
     call_with_time_limit(5, terms_cells([X], _, _, _)).
 
+test(many_variables_are_numbered_in_linear_time) :-
+    % Catches variable numbering that searches the variables met: 20,000
+    % took about 28 s, 30,000 took 65 s, past the client's 60 s wait (the
+    % code review, C-B8). The variables come back numbered in order, and
+    % none keeps the encoder's attribute.
+    length(L, 20000),
+    call_with_time_limit(10, terms_cells([L, L], Cells, Vars, _)),
+    Vars == L,
+    cells_terms(Cells, [L2, L3], _), L2 == L3, length(L2, 20000),
+    \+ ( member(V, L), attvar(V) ).
+
 :- end_tests(protocol).
