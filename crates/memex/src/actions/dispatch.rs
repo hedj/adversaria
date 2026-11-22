@@ -505,25 +505,18 @@ impl App {
         self.notebook.outline.addressed(addr.trim())
     }
 
-    /// The one item that words address.
+    /// The one item that words address, guide words left out.
     pub(crate) fn address(&self, words: &[&str]) -> Option<u64> {
-        self.addresses(words, 1).map(|a| a[0])
+        self.resolve(&unguided(words).join(" "))
     }
 
-    /// Split words into addresses: the first split where every part resolves.
-    pub(crate) fn addresses(&self, words: &[&str], n: usize) -> Option<Vec<u64>> {
-        let words: Vec<&str> = words
-            .iter()
-            .copied()
-            .filter(|w| !["to", "from", "after", "as"].contains(w))
-            .collect();
-        if n == 1 {
-            return self.resolve(&words.join(" ")).map(|a| vec![a]);
-        }
+    /// The two items that words address, guide words left out, and where
+    /// those words divide: the first split where both parts resolve.
+    pub(crate) fn two_addresses(&self, words: &[&str]) -> Option<(usize, u64, u64)> {
+        let words = unguided(words);
         (1..words.len()).find_map(|k| {
             let a = self.resolve(&words[..k].join(" "))?;
-            let b = self.resolve(&words[k..].join(" "))?;
-            Some(vec![a, b])
+            Some((k, a, self.resolve(&words[k..].join(" "))?))
         })
     }
 
@@ -552,13 +545,13 @@ impl App {
     /// The link command's line: its two ends, then its type.
     fn guided_link(&self, words: &[&str], open: bool) -> String {
         let (addr, kind) = split_kind(words);
-        // "to", typed, is the guide word the line shows in its place.
-        let addr: Vec<&str> = addr.iter().copied().filter(|w| *w != "to").collect();
-        let two = self.addresses(&addr, 2).is_some();
-        let shown = self.guided_ends(&addr, two);
+        // A guide word typed is shown in its place, in parentheses.
+        let addr = unguided(addr);
+        let split = self.two_addresses(&addr).map(|(k, _, _)| k);
+        let shown = self.guided_ends(&addr, split);
         match kind {
             Some(k) => format!("{shown} (as) {k}"),
-            None if open && two => format!("{shown} (as)"),
+            None if open && split.is_some() => format!("{shown} (as)"),
             None => shown,
         }
     }
@@ -566,9 +559,8 @@ impl App {
     /// The link's two ends: both as typed, or the one typed as its to,
     /// after the from it takes from the target, in its parentheses since
     /// it is not typed ("link (from 1) (to) 2").
-    fn guided_ends(&self, addr: &[&str], two: bool) -> String {
-        if two {
-            let k = self.split_point(addr);
+    fn guided_ends(&self, addr: &[&str], split: Option<usize>) -> String {
+        if let Some(k) = split {
             return format!("link {} (to) {}", addr[..k].join(" "), addr[k..].join(" "));
         }
         let from = self.default_from();
@@ -588,16 +580,6 @@ impl App {
             false => String::new(),
         }
     }
-
-    /// Where words that address two items divide.
-    fn split_point(&self, addr: &[&str]) -> usize {
-        (1..addr.len())
-            .find(|k| {
-                self.resolve(&addr[..*k].join(" ")).is_some()
-                    && self.resolve(&addr[*k..].join(" ")).is_some()
-            })
-            .unwrap()
-    }
 }
 
 /// A command's words, and its first slot's guide word before them.
@@ -613,6 +595,16 @@ fn guided_slots(cmd: &Command, words: &[&str], open: bool) -> String {
         }
     }
     out
+}
+
+/// Words without the guide words that may come before an address.
+fn unguided<'a>(words: &[&'a str]) -> Vec<&'a str> {
+    let guides = ["to", "from", "after", "as"];
+    words
+        .iter()
+        .copied()
+        .filter(|w| !guides.contains(w))
+        .collect()
 }
 
 /// A link command's addresses, and the words after "as", if there are any.

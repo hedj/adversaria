@@ -215,9 +215,9 @@ impl App {
 
     /// The two ends words address, or the target and the one they address.
     fn link_ends(&self, words: &[&str], target: u64) -> Option<(u64, u64)> {
-        match self.addresses(words, 2) {
-            Some(e) => Some((e[0], e[1])),
-            None => self.addresses(words, 1).map(|t| (target, t[0])),
+        match self.two_addresses(words) {
+            Some((_, from, to)) => Some((from, to)),
+            None => self.address(words).map(|to| (target, to)),
         }
     }
 

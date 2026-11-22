@@ -202,3 +202,17 @@ fn a_link_of_a_type_of_ones_own_reads_back_as_a_sentence() {
     assert!(right.contains("precedes this ←"), "{right}");
     assert!(!right.contains("(from)"), "{right}");
 }
+
+#[test]
+fn from_may_be_typed_before_a_links_first_end() {
+    // Catches the command line panicking as `link from 1 to 2` is typed:
+    // the line shown dropped `from` to find the two ends, then split the
+    // words that still held it, and unwrapped (the code review, F-B1).
+    let mut room = Room::new("links-from");
+    room.items(&["Buran", "Energia"]);
+    assert_eq!(room.app.guided("link from 1 to 2"), "link 1 (to) 2");
+    room.command("link from 1 to 2");
+    let [buran, energia] = [0, 1].map(|i| room.outline().in_order()[i]);
+    let (out, _) = room.outline().links_of(buran);
+    assert_eq!(out.iter().map(|l| l.to).collect::<Vec<_>>(), [energia]);
+}
