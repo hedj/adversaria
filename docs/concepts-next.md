@@ -108,7 +108,7 @@ but for drag to move:
 | Move | Held after it | Cost | What it needs |
 | --- | --- | --- | --- |
 | 2. Editing by habit: Backspace deletes an empty item; Ctrl+X, Ctrl+C and Ctrl+V on items and text; drag to move | about 47 as proposed, with `new`, `delete`, `move`, `copy`, `undo` and `redo` habits; about 48 as built, since `delete` stays | small to medium | three chords on the path Ctrl+Z uses, and a clipboard of the session's. A cut marks its items until they are pasted, as a spreadsheet's cut does, so a moved item keeps its identity and its entries |
-| 1. The act key: Menu at the cursor offers the verbs that apply to the target, ranked, each with its key | about 30: the other 15 verbs, `delete` among them, and 3 address forms, since pointing fills an argument | large | for each verb, a test of whether it applies and a rank; the menu itself exists (the right-click's) |
+| 1. The right-click offers every verb that applies to what is under the pointer, ranked, each with its key; the Menu key, the keyboard's own right-click, opens the same menu at the cursor | about 30: the other 15 verbs, `delete` among them, and 3 address forms, since pointing fills an argument | large | for each verb, a test of whether it applies and a rank; the menu itself exists (the right-click's) |
 | 4. One reader for every line | about 28 | medium | a line that is no command but reads as a statement is supposed, a question is answered, and the foot says which, before Enter. Risk: a mistyped command read as a statement, so only a line with a reading is taken |
 | 3. Seven concepts | about 23 | large | labels as links and the five kinds of offer change the guide's vocabulary throughout; labels as links need a decision on the journal's meaning |
 | Enter, Esc, Tab and the right-click counted as habits | about 19 | none | a decision on the counting rule, for the author |
@@ -189,8 +189,8 @@ What it makes unnecessary, from the twelve small changes below:
   (change 11); `export` takes an item (change 4).
 
 What remains needed: the verbs' nouns, kinds and defaults as one table in
-the code (change 1, now the core of the mechanism), and the act-on-this key
-(change 12).
+the code (change 1, now the core of the mechanism), and the Menu key as
+the keyboard's route to the right-click's menu (change 12).
 
 The count, by concepts.md's rule (estimates):
 
@@ -266,9 +266,12 @@ memex can show, not something the learner must remember.
 Four structural moves, each keeping every capability:
 
 **1. Object first, then action.**
-- **How:** one gesture acts on anything: the Menu key at the cursor, or a
-  right-click under the pointer (change 12). It offers the verbs that
-  apply to that thing, each with its key. A typed command stays the fast
+- **How:** one gesture acts on anything: the right-click, which exists
+  and is held already. It now offers only some of what acts on a thing
+  (for an item: question, adopt, take back, split, fold); it would offer
+  every verb that applies, each with its key. The Menu key, which PC
+  keyboards have for this job, opens the same menu at the cursor, so the
+  keyboard reaches every offer too (change 12). A typed command stays the fast
   path, found by its name with `?`.
 - **Effect:** the 17 verbs and 27 object words move from recall to
   recognition, and the menu teaches the keys, as it already names them
@@ -341,6 +344,11 @@ The result, by concepts.md's rule (estimates):
 | Shift with an arrow; right-click | 2 | 2 | 1 |
 | **total** | **about 76** | **about 71** | **about 20** |
 
+The act key in the last two columns is no new thing to hold: the
+right-click is the gesture, counted in its own row, and the Menu key is
+the keyboard's right-click. Without it the totals are about 70 and
+about 19.
+
 From 71 to 20: move 1 removes 40, move 3 removes 5, and move 4 removes 2.
 The last 4 come from counting Enter, Esc, Tab and the right-click as the
 habits they are, as concepts.md's rule allows. With the grammar (§ The
@@ -351,7 +359,7 @@ are not yet read by kind; § Built, and the count now, tables the rest of
 the way from there, to about 19.
 
 A first day: item, statement, offer and world; typing, Enter and Tab;
-Leap; the act key; and F3, which the screen shows. About 9.
+Leap; the right-click; and F3, which the screen shows. About 9.
 
 ## What it costs, and what could go wrong
 
