@@ -2412,10 +2412,15 @@ fn unplaced(g: &Graph, n: usize) -> Vec<Run> {
 /// no two leave or enter at one column; a dummy's is one.
 fn box_width(g: &Graph, v: usize) -> usize {
     let Some(n) = g.nodes.get(v) else { return 1 };
+    (width(&n.text).clamp(1, 22) + 4).max(ports(g, v) + 2)
+}
+
+/// The ports a vertex needs on its busier side: the edges drawn down from
+/// it, or into it.
+fn ports(g: &Graph, v: usize) -> usize {
     let down = g.edges.iter().filter(|e| !e.reversed);
     let side = |end: fn(&Edge) -> usize| down.clone().filter(|e| end(e) == v).count();
-    let ports = side(|e| e.ends.0).max(side(|e| e.ends.1));
-    (width(&n.text).clamp(1, 22) + 4).max(ports + 2)
+    side(|e| e.ends.0).max(side(|e| e.ends.1))
 }
 
 /// Where each part of an edge drawn down leaves its upper vertex and

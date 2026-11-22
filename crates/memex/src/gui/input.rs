@@ -397,14 +397,25 @@ fn word_span(row: &[char], at: usize) -> (usize, usize) {
 /// The characters of the pane's row that holds a cell, and where in them
 /// the cell is.
 fn row_around(buf: &Buffer, (x, y): (u16, u16)) -> (Vec<char>, usize) {
+    place_in(drawn(buf, y, pane_of(buf, (x, y))), x)
+}
+
+/// The characters of cells, each with its column, and where among them
+/// is the character drawn at a column.
+fn place_in<'a>(cells: impl Iterator<Item = (u16, &'a str)>, x: u16) -> (Vec<char>, usize) {
     let (mut row, mut at) = (Vec::new(), None);
-    for (col, symbol) in drawn(buf, y, pane_of(buf, (x, y))) {
-        let width = (symbol.width() as u16).max(1);
-        at = at.or((x < col + width).then_some(row.len()));
+    for (col, symbol) in cells {
+        at = at.or(reaches(col, symbol, x).then_some(row.len()));
         row.extend(symbol.chars());
     }
     let at = at.unwrap_or(row.len());
     (row, at)
+}
+
+/// Whether a cell at a column, holding a symbol, reaches another column:
+/// a wide one takes two.
+fn reaches(col: u16, symbol: &str, x: u16) -> bool {
+    x < col + (symbol.width() as u16).max(1)
 }
 
 #[cfg(test)]

@@ -3965,7 +3965,11 @@ mod tests {
             )],
             at: (0, 0),
         };
-        assert_eq!(menu.inner_width(), 19 + 2, "the title: 15 characters, 19 cells");
+        assert_eq!(
+            menu.inner_width(),
+            19 + 2,
+            "the title: 15 characters, 19 cells"
+        );
         let line = &menu.lines()[0];
         assert_eq!(line.width(), menu.inner_width(), "{line:?}");
     }
