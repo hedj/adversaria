@@ -199,18 +199,22 @@ fn malformed_messages_refused() {
     ] {
         assert!(read_message(&mut bytes.as_slice()).is_err(), "{bytes:?}");
     }
-    assert!(read_message(&mut [].as_slice()).unwrap().is_none(), "a clean end");
+    assert!(
+        read_message(&mut [].as_slice()).unwrap().is_none(),
+        "a clean end"
+    );
 }
 
 #[test]
 fn malformed_cells_refused() {
-    // Catches a truncated term, an unknown tag, a short blob, or variables
-    // that skip a number, accepted.
+    // Catches a truncated term, a struct of arity 0, an unknown tag (5), a
+    // short blob, or variables that skip a number, accepted.
     let a = atoms_for_tests();
     let f = (STRUCT << 29) | (1 << 21) | 108; // f/1 with no argument
     for cells in [
         vec![f],
         vec![0x6000_0001],
+        vec![0xa000_0000],
         vec![(BLOB << 29) | 5, 0x7300_0000],
         vec![1],
         vec![(BLOB << 29) | 2, 0x7841_0000],
