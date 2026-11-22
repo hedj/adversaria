@@ -898,14 +898,7 @@ impl Scale {
     fn band(values: &[&V]) -> Scale {
         let mut cats: Vec<&V> = values.to_vec();
         cats.sort_by(|a, b| a.axis_order(b));
-        let mut out: Vec<String> = Vec::new();
-        for c in cats {
-            let t = c.text();
-            if !out.contains(&t) {
-                out.push(t);
-            }
-        }
-        Scale::Band(out)
+        Scale::Band(each_once(cats.iter().map(|c| c.text())))
     }
 
     /// A value's place in 0..n: a single cell for a line scale, the band
@@ -1598,13 +1591,13 @@ fn series_of(m: &M) -> String {
 
 /// The series of a plot's lines, each once, in order of first appearance.
 fn series_names(ms: &[M]) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for s in ms.iter().filter(|m| m.kind == "line").map(series_of) {
-        if !out.contains(&s) {
-            out.push(s);
-        }
-    }
-    out
+    each_once(ms.iter().filter(|m| m.kind == "line").map(series_of))
+}
+
+/// Texts, each once, in the order given.
+fn each_once(texts: impl Iterator<Item = String>) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    texts.filter(|t| seen.insert(t.clone())).collect()
 }
 
 /// The cells strictly between two points, along a straight line.
@@ -1655,13 +1648,7 @@ fn axis_names(ms: &[M], channel: &str) -> Vec<String> {
 fn distinct(mut values: Vec<&V>) -> Vec<String> {
     let num = |v: &V| v.num().unwrap_or(0.0);
     values.sort_by(|a, b| num(a).total_cmp(&num(b)).then(a.text().cmp(&b.text())));
-    let mut out: Vec<String> = Vec::new();
-    for t in values.iter().map(|v| v.text()) {
-        if !out.contains(&t) {
-            out.push(t);
-        }
-    }
-    out
+    each_once(values.iter().map(|v| v.text()))
 }
 
 /// One cell of a grid: the texts of its marks, whether any is loud, the
