@@ -74,6 +74,9 @@ pub struct Prolog {
     atoms: Atoms,
     next_req: u32,
     dead: Option<String>,
+    /// How long to wait for a reply before the server is taken for stuck,
+    /// in a goal that never ends, and killed, so that it can be restarted.
+    pub patience: Duration,
 }
 
 /// The server's process: the child, what it is sent, and what it says,
@@ -170,6 +173,7 @@ impl Prolog {
             atoms: Atoms::default(),
             next_req: 1,
             dead: None,
+            patience: Duration::from_secs(60),
         })
     }
 
@@ -180,6 +184,13 @@ impl Prolog {
         let reason = format!("{reason}{status}");
         self.dead = Some(reason.clone());
         Error::Dead(reason)
+    }
+
+    /// No reply in time: the server is busy for good, as in a goal that
+    /// never ends, and every later request would wait behind it.
+    fn stuck(&mut self) -> Error {
+        let secs = self.patience.as_secs_f64();
+        self.die(format!("no reply in {secs} s, so it was stopped"))
     }
 
     /// Whether the connection is dead, or the server has ended though no
@@ -257,9 +268,9 @@ impl Prolog {
     /// replies of requests already finished.
     fn reply(&mut self, req: u32) -> Result<Message, Error> {
         loop {
-            let m = self
-                .receive(Duration::from_secs(60))?
-                .ok_or_else(|| Error::Server("no reply in 60 s".into()))?;
+            let Some(m) = self.receive(self.patience)? else {
+                return Err(self.stuck());
+            };
             if m.req == req && m.kind != Kind::AtomIs {
                 return Ok(m);
             }
@@ -281,8 +292,9 @@ impl Prolog {
     /// learned the number.
     fn await_atom(&mut self, req: u32) -> Result<(), Error> {
         loop {
-            let m = self.receive(Duration::from_secs(60))?;
-            let m = m.ok_or_else(|| Error::Server("no ATOM_IS".into()))?;
+            let Some(m) = self.receive(self.patience)? else {
+                return Err(self.stuck());
+            };
             match (m.req == req, m.kind) {
                 (true, Kind::AtomIs) => return Ok(()),
                 (true, kind) => return Err(Error::Server(format!("ATOM got {kind:?}"))),
@@ -387,6 +399,25 @@ impl Prolog {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_goal_that_never_ends_stops_the_server_so_it_can_restart() {
+        // Catches a client that gave up waiting but left the server
+        // computing, alive, so every later request waited behind it and
+        // nothing restarted it (the code review, C-B6).
+        let mut p = Prolog::start().unwrap();
+        p.patience = Duration::from_millis(500);
+        let c = |n: &str, args| Term::Compound(n.into(), args);
+        let x = Term::Var(0);
+        let between = c(
+            "between",
+            vec![Term::Int(1), Term::Atom("inf".into()), x.clone()],
+        );
+        let never = c(",", vec![between, c("<", vec![x, Term::Int(0)])]);
+        let err = p.all(&never, 1).unwrap_err().to_string();
+        assert!(err.contains("no reply"), "{err}");
+        assert!(p.is_dead(), "stopped, so the engine restarts it");
+    }
 
     #[test]
     fn a_retracted_fact_is_gone_from_the_server() {
