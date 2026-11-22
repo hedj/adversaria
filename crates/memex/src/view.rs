@@ -2398,13 +2398,15 @@ fn unplaced(g: &Graph, n: usize) -> Vec<Run> {
     (0..n).map(|v| Run::of(0, box_width(g, v) - 1)).collect()
 }
 
-/// A box's width: its text, cut at 22, and two columns either side; a
-/// dummy's is one.
+/// A box's width: its text, cut at 22, and two columns either side, and
+/// room inside for a port of each edge drawn down from it, or into it, so
+/// no two leave or enter at one column; a dummy's is one.
 fn box_width(g: &Graph, v: usize) -> usize {
-    match g.nodes.get(v) {
-        Some(n) => width(&n.text).clamp(1, 22) + 4,
-        None => 1,
-    }
+    let Some(n) = g.nodes.get(v) else { return 1 };
+    let down = g.edges.iter().filter(|e| !e.reversed);
+    let side = |end: fn(&Edge) -> usize| down.clone().filter(|e| end(e) == v).count();
+    let ports = side(|e| e.ends.0).max(side(|e| e.ends.1));
+    (width(&n.text).clamp(1, 22) + 4).max(ports + 2)
 }
 
 /// Where each part of an edge drawn down leaves its upper vertex and
@@ -3767,6 +3769,22 @@ mod tests {
             ),
             want
         );
+    }
+
+    #[test]
+    fn four_edges_leave_a_narrow_box_apart() {
+        // Catches ports spread inside a box too narrow for them: four
+        // edges out of a box 5 wide took columns 0, 1, 1, 2, and two were
+        // drawn as one (the code review, H5).
+        let lines = [
+            "edge from:a to:b",
+            "edge from:a to:c",
+            "edge from:a to:d",
+            "edge from:a to:e",
+        ];
+        let picture = draw(&lines, 60, 0);
+        let foot = picture.iter().find(|l| l.contains('┬')).unwrap();
+        assert_eq!(foot.matches('┬').count(), 4, "{picture:#?}");
     }
 
     /// Each cell's ink: p plain, d dim, L loud.
