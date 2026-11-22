@@ -12,6 +12,7 @@ use crate::present::Presentation;
 use crate::ui::Presentations;
 use ratatui::buffer::Buffer;
 use ratatui::style::Modifier;
+use unicode_width::UnicodeWidthStr;
 use winit::keyboard::{Key as Logical, KeyCode, NamedKey, PhysicalKey};
 
 /// A key as winit gives it: its place, what the layout makes of it, its
@@ -349,8 +350,21 @@ fn pane_of(buf: &Buffer, (x, y): (u16, u16)) -> Columns {
 }
 
 /// The characters of a row's columns.
-fn symbols(buf: &Buffer, y: u16, (first, last): Columns) -> String {
-    (first..last).map(|x| buf[(x, y)].symbol()).collect()
+fn symbols(buf: &Buffer, y: u16, cols: Columns) -> String {
+    drawn(buf, y, cols).map(|(_, s)| s).collect()
+}
+
+/// A row's cells in some columns, each with its column, and none that a
+/// wide character before it covers: ratatui leaves a space there, which
+/// is not in the text.
+fn drawn(buf: &Buffer, y: u16, (first, last): Columns) -> impl Iterator<Item = (u16, &str)> {
+    let mut x = first;
+    std::iter::from_fn(move || {
+        let at = x;
+        let symbol = buf.cell((at, y)).filter(|_| at < last)?.symbol();
+        x += (symbol.width() as u16).max(1);
+        Some((at, symbol))
+    })
 }
 
 /// The word under a cell: the run of characters around it that are not
@@ -383,9 +397,13 @@ fn word_span(row: &[char], at: usize) -> (usize, usize) {
 /// The characters of the pane's row that holds a cell, and where in them
 /// the cell is.
 fn row_around(buf: &Buffer, (x, y): (u16, u16)) -> (Vec<char>, usize) {
-    let pane = pane_of(buf, (x, y));
-    let row: Vec<char> = symbols(buf, y, pane).chars().collect();
-    let at = usize::from(x.saturating_sub(pane.0)).min(row.len());
+    let (mut row, mut at) = (Vec::new(), None);
+    for (col, symbol) in drawn(buf, y, pane_of(buf, (x, y))) {
+        let width = (symbol.width() as u16).max(1);
+        at = at.or((x < col + width).then_some(row.len()));
+        row.extend(symbol.chars());
+    }
+    let at = at.unwrap_or(row.len());
     (row, at)
 }
 
@@ -569,7 +587,7 @@ mod selection_tests {
 
     /// A buffer of these rows, each as wide as the first.
     fn screen(rows: &[&str]) -> Buffer {
-        let width = rows[0].chars().count() as u16;
+        let width = rows[0].width() as u16;
         let mut buf = Buffer::empty(Rect::new(0, 0, width, rows.len() as u16));
         for (y, r) in rows.iter().enumerate() {
             buf.set_string(0, y as u16, r, ratatui::style::Style::default());
@@ -622,6 +640,22 @@ mod selection_tests {
         assert_eq!(word_at(&buf, (20, 1)), "itself");
         assert_eq!(word_at(&buf, (27, 2)), "#12");
         assert_eq!(word_at(&buf, (21, 2)), "");
+    }
+
+    #[test]
+    fn a_wide_word_is_read_without_the_cells_it_covers() {
+        // Catches the space ratatui leaves in the cell a wide character
+        // covers read as text: "日本" read as "日 本", and a click on 日
+        // taking "日" (the code review, H3).
+        let buf = screen(&["日本 x"]);
+        assert_eq!(word_at(&buf, (0, 0)), "日本");
+        assert_eq!(word_at(&buf, (3, 0)), "日本", "the cell 本 covers");
+        assert_eq!(word_at(&buf, (5, 0)), "x");
+        let all = Selection {
+            from: (0, 0),
+            to: (5, 0),
+        };
+        assert_eq!(all.text(&buf), "日本 x");
     }
 
     #[test]
