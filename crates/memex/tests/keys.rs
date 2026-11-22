@@ -269,11 +269,10 @@ fn another_ctrl_chord_runs_no_command_by_surprise() {
 fn a_latched_command_still_takes_one_letter() {
     let mut r = Room::new("chord-latched");
     r.items(&["Alpha", "Beta"]);
-    r.tap(&[Key::Tab]);
     r.tap(&[Key::Quasi(Quasi::Command)]);
-    r.typ("o");
+    r.typ("n");
     r.tap(&[Key::Enter]);
-    assert_eq!(r.outline().number(r.app.cursor()), "2", "outdented");
+    assert_eq!(r.outline().items.len(), 3, "a new item");
 }
 
 #[test]
@@ -310,16 +309,15 @@ fn esc_cancels_a_leap_and_puts_the_cursor_back() {
 fn esc_cancels_a_command_and_tab_completes_it() {
     let mut r = Room::new("esc-command");
     r.items(&["Alpha", "Beta"]);
-    r.tap(&[Key::Tab]);
     r.tap(&[Key::Quasi(Quasi::Command)]);
-    r.typ("outd");
+    r.typ("dele");
     r.tap(&[Key::Tab]);
     assert!(
-        matches!(&r.app.session.mode, Mode::Quasi(a) if a.input == "outdent "),
+        matches!(&r.app.session.mode, Mode::Quasi(a) if a.input == "delete "),
         "{:?}",
         r.app.session.mode
     );
     r.tap(&[Key::Escape]);
     assert_eq!(r.app.session.mode, Mode::Normal);
-    assert_eq!(r.outline().number(r.app.cursor()), "1.1", "nothing ran");
+    assert_eq!(r.outline().items.len(), 2, "nothing ran");
 }
