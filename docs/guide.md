@@ -514,7 +514,8 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 | `set` | `set FACT` | states FACT and retracts the beliefs it directly contradicts (each that breaks a constraint with it and nothing else); the fact goes on the item that held the one it replaces, else on the target. A violation it leaves is named, not resolved |
 | `constraint` | `constraint NAME: false :- BODY.` | adds a constraint, after checking it fires on a planted violation |
 | `derive` | `derive TEMPLATE where GOAL` | the target shows text computed from facts (§ 3.1) |
-| `layer` | `layer MARK where GOAL` | adds a layer to the target's view: one mark for each solution of GOAL (§ 3.3) |
+| `show` | `show as chart`, `show as table`, `show as graph`, `show ADDRESS as chart`, `show MARK where GOAL` | makes the target, or the item ADDRESS names, a view of the world's facts (§ 3.3): a bar for each `cell` fact, a table of them, or the graph of the items and their links. With a mark, it adds that layer, as `layer` did |
+| `layer` | `layer MARK where GOAL` | an old name, kept: `show MARK where GOAL` adds a layer to the target's view: one mark for each solution of GOAL (§ 3.3) |
 | `check` | `check quote`, `check source` | checks the target's text against the document it came from, or its `doi` fact against Crossref |
 
 #### Claims and suggestions
@@ -772,16 +773,22 @@ never a claim you have not adopted, and shows in red what breaks a
 constraint.
 
 A view is an item that draws something: a chart, a timeline, a grid, a
-flowchart, a tree. There are no chart types. A view is made of layers,
-and each layer is a mark drawn once for each solution of a goal:
+flowchart, a tree. `show as chart` makes the item at the cursor a bar
+chart of the `cell` facts (`The rent is 1200.` states `cell(rent,
+1200)`); `show as table` a table of them; `show as graph` the graph of
+your items and their links. Each writes the layers of a recipe below.
+
+Behind `show` is the grammar views are made in. A view is made of
+layers, and each layer is a mark drawn once for each solution of a goal:
 
 ```
-layer bar(x(C), y(V)) where cell(C, V)
+show bar(x(C), y(V)) where cell(C, V)
 ```
 
-This draws one bar for each `cell(C, V)` fact, at category C, V high.
-Run `layer` with the cursor on the item that is to be the view; each
-`layer` adds a layer. A layer without `where` is drawn once, as a
+This draws one bar for each `cell(C, V)` fact, at category C, V high:
+it is what `show as chart` writes. Run `show` with the cursor on the
+item that is to be the view; each `show` with a mark adds a layer
+(`layer`, its old name, does the same). A layer without `where` is drawn once, as a
 reference line: `layer rule(y(1500))`.
 
 The view is drawn under its item and changes as the facts do. With the

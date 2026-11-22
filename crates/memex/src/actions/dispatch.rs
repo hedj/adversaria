@@ -409,6 +409,14 @@ pub const COMMANDS: &[Command] = &[
         brief: "move to the other pane",
     },
     Command {
+        name: "show",
+        run: App::cmd_show,
+        target: true,
+        slots: &[("as", Slot::Text)],
+        help: "make an item a view of the world's facts: show (as) chart, a bar for each cell; show (as) table, a row for each; show (as) graph, the items and their links; with an address first, that item (show 2 as chart); else a mark, where a goal, as one layer",
+        brief: "show an item as a chart",
+    },
+    Command {
         name: "split",
         run: App::cmd_split,
         target: true,
@@ -721,7 +729,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
         ],
     ),
     ("FINDING AND MOVING", &["find", "go"]),
-    ("FACTS AND DEFINITIONS", &["layer", "check"]),
+    ("FACTS AND DEFINITIONS", &["show", "check"]),
     (
         "CLAIMS AND SUGGESTIONS",
         &["adopt", "dismiss", "import", "export"],
@@ -752,6 +760,7 @@ pub const ALIASES: &[&str] = &[
     "pane",
     "interrogate",
     "name",
+    "layer",
     "indent",
     "outdent",
     "help",
