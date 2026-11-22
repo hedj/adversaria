@@ -75,6 +75,15 @@ test(serving_leaves_no_choice_point) :-
     % over 400,000 messages (the code review, C-B5).
     served([query-1-[true], next-1-[1], cancel-2-[], atom-3-["x"]], _).
 
+test(an_encoding_that_fails_leaves_no_atom_unannounced) :-
+    % Catches atoms numbered by an encoding that then failed: the answer
+    % 1r3 cannot be encoded, nor can the error that holds it, but
+    % protocol_error was numbered on the way, so the next error used it
+    % unannounced and the client could never decode it (the code review,
+    % C-B1).
+    served([query-1-[_ is 1 rdiv 3], next-1-[1], next-9-[1]], Rs),
+    announced(Rs).
+
 :- end_tests(server).
 
 %   server.pl's own main serves standard input; this file's runs the tests.

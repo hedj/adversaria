@@ -156,9 +156,20 @@ intern(Name, No, New) :-
 %   in the order of their numbers; NewAtoms the names numbered on the way.
 
 terms_cells(Terms, Cells, Vars, NewAtoms) :-
-    phrase(seq_cells(Terms, 0, s([], 0, []), s(VarsR, _, NewR)), Cells),
+    next_atom(First),
+    catch(phrase(seq_cells(Terms, 0, s([], 0, []), s(VarsR, _, NewR)), Cells),
+          E, ( forget_atoms_from(First), throw(E) )),
     reverse(VarsR, Vars),
     reverse(NewR, NewAtoms).
+
+%   Forget the atoms numbered since First, as an encoding that failed
+%   numbered them: no message carried them, so none was announced, and a
+%   later one that used them would leave the client unable to decode it.
+forget_atoms_from(First) :-
+    forall(( no_atom(No, Name), No >= First ),
+           ( retract(no_atom(No, Name)), retract(atom_no(Name, No)) )),
+    retractall(next_atom(_)),
+    assertz(next_atom(First)).
 
 %   The deepest a term may nest, in compounds: an argument is one level
 %   below its compound, a list's elements one below the list however long
