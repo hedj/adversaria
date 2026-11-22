@@ -142,17 +142,23 @@ declare(Fact) :-
     functor(Fact, N, A),
     (   current_predicate(user:N/A) -> true ; dynamic([user:N/A], [incremental(true)]) ).
 
+%   Up to N answers. A query that ends, or whose answer cannot be found,
+%   encoded or sent (one too long for a message), is finished, so its
+%   engine is not left behind.
 next_answers(0, _, _, _) :- !.
 next_answers(N, Req, E, Out) :-
-    (   catch(engine_next(E, Vals), Err, (finish(Req, E), throw(Err)))
-    ->  catch(terms_cells(Vals, Cells, _, New), EncErr, (finish(Req, E), throw(EncErr))),
-        announce(Out, Req, New),
-        send(Out, answer, Req, Cells),
-        N1 is N - 1,
+    (   catch(send_answer(E, Req, Out), Err, (finish(Req, E), throw(Err)))
+    ->  N1 is N - 1,
         next_answers(N1, Req, E, Out)
     ;   finish(Req, E),
         done(Out, Req, 0)
     ).
+
+send_answer(E, Req, Out) :-
+    engine_next(E, Vals),
+    terms_cells(Vals, Cells, _, New),
+    announce(Out, Req, New),
+    send(Out, answer, Req, Cells).
 
 finish(Req, E) :-
     retractall(query_engine(Req, _)),

@@ -84,6 +84,15 @@ test(an_encoding_that_fails_leaves_no_atom_unannounced) :-
     served([query-1-[_ is 1 rdiv 3], next-1-[1], next-9-[1]], Rs),
     announced(Rs).
 
+test(an_answer_too_long_to_send_finishes_its_query) :-
+    % Catches the engine of a query whose answer is too long for one
+    % message left alive for good: the send was outside the catch that
+    % finishes the query (the code review, C-B4).
+    served([query-1-[findall(a, between(1, 70000, _), _)], next-1-[1]], Rs),
+    last(Rs, done-1-[_|Error]),
+    cells_terms(Error, [protocol_error(message_too_long(_))], _),
+    \+ query_engine(1, _).
+
 :- end_tests(server).
 
 %   server.pl's own main serves standard input; this file's runs the tests.
