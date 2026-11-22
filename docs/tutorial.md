@@ -4,18 +4,40 @@ This tutorial takes about forty minutes (an estimate), in four parts, in
 one session. docs/introduction.md says in a page what the notebook is
 for; this is the same, done.
 
+Part A is all you need for a first day. It teaches five ideas, each
+used before the next:
+
+- an **item**, a line of your outline, which keeps its place and its
+  address;
+- a **statement**, a sentence the notebook reads and can reason with;
+- a **claim**, what a source says, kept apart from what you believe
+  until you adopt it;
+- a **finding**, a line under an item that says what one of your rules
+  found there;
+- a **world**, a "what if" beside the actual one.
+
+and a few keys: typing, Enter and Tab; Left Ctrl for a command, with `?`
+to list and Esc to cancel; F3 to adopt and F4 to take back; Super to
+suppose. Ctrl+Z undoes, as in any program. Every command has one shape,
+a verb and then what it acts on: `adopt world`, `dismiss change 52`,
+`go link 1`, `show as chart`.
+
 - A. A claim, checked (about ten minutes): you write a fact, record what
   a speaker said against it, and see the notebook catch the conflict.
   You question the claim, try adopting it, and try what follows if the
   speaker were right, without changing what you believe.
 - B. Your documents: you import a draft, take in a co-author's revision
-  change by change, and catch a quotation that no longer says what its
-  source says.
+  change by change, find words anywhere in your notes, and catch a
+  quotation that no longer says what its source says.
 - C. Boxes that compute: a small budget, written in sentences, that
-  answers a question and checks itself every time a number changes.
+  answers questions and checks itself every time a number changes.
 - D. Views, and leaving: the budget as a chart that shows what breaks a
   rule, a sentence and a timeline computed from part A's dates, and why
   the record is signed.
+
+The rest of the notebook, such as link types, labels as addresses and
+the view's marks, is listed where you need it: press `?` in Command, or
+right-click what is on the screen.
 
 The notes are about the Soviet Buran space shuttle, after the design's
 user story (docs/design.md, § A user story). The key names are the
@@ -106,8 +128,10 @@ where the reading stopped:
 Nothing is wrong: most of a notebook is prose. Only short, plain
 sentences such as the first become facts.
 
-Press Up to put the cursor on the fact. The right pane shows, under
-`READ AS`, what the notebook read, in Prolog, the language it reasons in:
+Press Up to put the cursor on the fact. The right pane is the
+inspector: it shows what is known about the item the cursor is on, and
+follows the cursor. Here it shows, under `READ AS`, what the notebook
+read, in Prolog, the language it reasons in:
 
     fact  date(buran_flight, 1988)
     fact  label(buran_flight, "Buran's flight")
@@ -142,7 +166,7 @@ would give false comfort, so such a rule is refused. This one fires, so
 it is kept.
 
 The top bar now says `1 disagreement between sources`, and under your
-fact is a mark:
+fact is a finding, a line that says what the rule found there:
 
     ? sources disagree under constraint 1.4: 1988 here; 1989 in 1.3
 
@@ -164,10 +188,9 @@ says what the mouse does there:
 
 What the screen shows stands for your notes themselves, so the mouse
 acts on them: a right-click offers what can be done with this claim.
-The keys do the same. Press Up to put the cursor on the claim. The right
-pane, the inspector, shows what is known about the item the cursor is
-on. Here it shows the constraint the claim's mark comes from, then five
-questions about the claim:
+The keys do the same. Press Up to put the cursor on the claim. The
+inspector shows the constraint the claim's finding comes from, then
+five questions about the claim:
 
     CLAIMS OF 1.3 · WHO SAYS THEM
 
@@ -177,7 +200,7 @@ source's record, and what adopting it would do:
     adopting it would raise 1 violation of Nothing has more than 1 date
 
 Press **F3** to adopt the claim. It is now a belief, with its source kept.
-The top bar says `1 constraint violation`, and the mark is loud:
+The top bar says `1 constraint violation`, and the finding is loud:
 
     ‼ breaks constraint 1.4: 1988 here; 1989 in 1.3
 
@@ -242,7 +265,9 @@ While a supposition is open, the foot says how to leave it:
 
 Now run a command. Tap **Left Ctrl**, type `dismiss world`, and press Enter:
 what you type after the tap is a command, shown at the foot of the
-screen. You are back in the actual world. The supposition stays in the
+screen. A command is a verb and then what it acts on: `dismiss` sets
+something aside, here the world, and `adopt` holds it, as F3 held the
+claim. You are back in the actual world. The supposition stays in the
 journal; the notebook says so: `it stays in the journal`. (`adopt world`
 would instead make the supposed world the actual one.)
 
@@ -310,12 +335,17 @@ remember, not by arrowing.*
 Hold **Right Alt** (Leap down), type `fully automatic`, and release.
 As you type, the cursor goes to the next item holding what you have
 typed so far, past the end and round to the top, and stays when you
-let go: on the chief designer's words. Left Alt leaps backward; `?`
-while holding lists every match, and `pane matches` keeps that list in
-the right pane, numbered, with where the cursor is among them. If no
-item holds what you typed, Enter makes an item of it; when an item holds
-something a letter or two away, the first Enter only warns, and names
-it.
+let go: on the chief designer's words. Left Alt leaps up; `?` while
+holding lists every match. If no item holds what you typed, Enter makes
+an item of it; when an item holds something a letter or two away, the
+first Enter only warns, and names it.
+
+To see every item that holds some words, run `find automatic`. The
+inspector's place beside the outline now lists them, numbered, under
+`MATCHES OF “automatic”`, each a click away. `find` also lists the
+items that carry a label (`find #draft`), and those that a rule's
+findings mark (`find violations`). Run `find` alone to have the
+inspector back.
 
 ### 9. A quotation checked
 
@@ -357,15 +387,18 @@ selected item's links, under its address:
     link →
       2. How Buran’s flight software was reviewed  1
 
-Run `follow 1` (or click that line). The cursor goes to the heading,
-and its pane lists your note among the items that link to it:
+Run `go link 1` (or click that line). The cursor goes to the heading,
+and the inspector lists your note among the items that link to it:
 
     link this ←
       2.1.3. Check this against [[How Buran’s flight software was reviewed]]  1
 
-Press **F7** (back; a mouse's back button does the same): the cursor
-returns to your note. F8 goes forward again. `follow`, Leap, `go` and a
-click on a link are jumps, which back retraces; arrow keys are not.
+Press **F7** (`go back`; a mouse's back button does the same): the
+cursor returns to your note. F8 (`go forward`) goes forward again.
+`go`, Leap and a click on a link are jumps, which `go back` retraces;
+arrow keys are not. `go` takes every way of moving: an address
+(`go 2.1`), a link (`go link 1`), the trail (`go back`), or the
+outline's structure (`go next`, `go parent`, also Shift with an arrow).
 
 ## C. Boxes that compute
 
@@ -393,6 +426,10 @@ set; rules compute them. The question is answered on the line under it:
 
     → 400
 
+A question written in an item stays, and its answer follows the facts.
+To ask once without keeping it, run `find What is the cost?`. The foot
+says `1 answer: Answer = 1600`, and nothing is written.
+
 ### 12. Rules between the boxes
 
 Spending must not exceed income, and a box holds one value. Press Enter
@@ -415,8 +452,8 @@ It says of boxes what step 3 said of dates.
 To change a value, change its sentence. Leap to `food is 4`, press End,
 erase `400.` with Backspace, type `900.`, and stop for a second. The old
 food value is taken back and the new one read. The answer follows,
-`→ -100`, and the top bar says `1 constraint violation`, marked under
-the boxes involved. The notebook does not choose how to repair it (lower
+`→ -100`, and the top bar says `1 constraint violation`, with a finding
+under each box involved. The notebook does not choose how to repair it (lower
 the rent? the food?); that is yours. Leap to `food is 9`, and in the
 same way make it `500.` Now `→ 300`, and the violation is gone.
 
@@ -471,19 +508,23 @@ Leap to `buran flew once, unmanned`, press Enter, and type a second date:
 
 `The date of Energia-launch is 1987. The label of Energia-launch is "Energia's first launch".`
 
-Stop for a second; it turns cyan. Press Enter and type a placeholder,
-such as `gap`. Then run (all one line):
+Stop for a second; it turns cyan. Press Enter and type a sentence with a
+blank, `{N:years}`, and, between backticks, the Prolog that fills it (all
+one item):
 
-`derive The flight came {N:years} after Energia's first launch. where date(buran_flight, B), date(energia_launch, E), N is B - E`
+`` The flight came {N:years} after Energia's first launch. `date(buran_flight, B), date(energia_launch, E), N is B - E` ``
 
-The `where` part is a query: it finds the two dates and their
-difference. The item now shows text computed from the facts:
+The part in backticks is a query: it finds the two dates and their
+difference. Stop for a second. The item now shows text computed from
+the facts:
 
     The flight came a year after Energia's first launch. [derived]
 
 If a date changes, the sentence changes with it; in a supposition, each
-world shows its own. To run a query by itself, run `query date(E, Y)`.
-It finds every date the notebook believes, and says:
+world shows its own. Prolog in backticks is how to say what controlled
+English cannot; a fact, a rule or a constraint can be written that way
+too. To run a query once, run `` find `date(E, Y)` ``. It finds every
+date the notebook believes, and says:
 
     2 answers: E = buran_flight, Y = 1988 · E = energia_launch, Y = 1987
 
@@ -520,13 +561,14 @@ When you are done, delete `$HOME/adversaria-tutorial` and
 
 docs/guide.md describes every command, the files the notebook keeps, the
 tools around it, and how to change the keys. Things this tutorial did not
-show: links made by command, with a type (`link to 2 as supports`),
-moving by the outline's structure (Shift with an arrow: `next`,
-`parent`), the list of a
-Leap's matches (`pane matches`), `#tags`, splitting an item into
-sentences, Wikidata as a public source to check dates against, and
-results from a Python analysis, which are marked when their input data
-changes (§ 4.1).
+show: links made by command, with a type (`link to 2 as supports`);
+labels, `#draft` in an item's text, which `find #draft` lists and which
+address the one item that carries them (`go draft`); a table or a graph
+of your notes (`show as table`, `show as graph`); the marks a view is
+drawn with, for timelines, Gantt charts and flowcharts (docs/guide.md,
+§ 3.3); splitting an item into sentences (right-click it); Wikidata as
+a public source to check dates against; and results from a Python
+analysis, which are marked when their input data changes (§ 4.1).
 
 A test performs every step above and checks every screen text quoted
 here (`crates/memex/tests/tutorial.rs`). If the notebook changes and this

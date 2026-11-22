@@ -339,6 +339,9 @@ fn part_b(t: &mut T) {
     t.hold(Quasi::LeapDown, "fully automatic");
     t.look("leap");
     assert!(t.here().starts_with("The chief designer wrote"));
+    t.command("find automatic");
+    t.shows("MATCHES OF “automatic”");
+    t.command("find");
     a_quotation_checked(t);
     a_note_linked(t);
 }
@@ -357,7 +360,7 @@ fn a_note_linked(t: &mut T) {
     t.shows("LINKS OF 2.1.3");
     t.shows("link →");
     t.shows("2. How Buran’s flight software was reviewed  1");
-    t.command("follow 1");
+    t.command("go link 1");
     t.look("followed");
     t.shows("link this ←");
     t.shows("2.1.3. Check this against [[How Buran’s flight software was reviewed]]  1");
@@ -456,6 +459,8 @@ fn boxes_and_rules(t: &mut T) {
     t.read("The food is 400.");
     t.read("What is the rest?");
     t.shows("→ 400");
+    t.command("find What is the cost?");
+    t.says("1 answer: Answer = 1600");
 }
 
 /// Step 12: rules between the boxes, both in sentences.
@@ -514,11 +519,11 @@ fn a_sentence_computed(t: &mut T) {
     t.pause();
     t.read("The date of Energia-launch is 1987.");
     t.tap(Key::Enter);
-    t.typ("gap");
-    t.command("derive The flight came {N:years} after Energia's first launch. where date(buran_flight, B), date(energia_launch, E), N is B - E");
+    t.typ("The flight came {N:years} after Energia's first launch. `date(buran_flight, B), date(energia_launch, E), N is B - E`");
+    t.pause();
     t.look("derived");
     t.shows("The flight came a year after Energia's first launch. [derived]");
-    t.command("query date(E, Y)");
+    t.command("find `date(E, Y)`");
     t.says("2 answers: E = buran_flight, Y = 1988 · E = energia_launch, Y = 1987");
 }
 
