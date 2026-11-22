@@ -226,7 +226,7 @@ fn a_selection_is_plumbed_whatever_is_presented_under_it() {
     let mut r = dated("translate-selected");
     let (at, hits) = (r.find("Talk-notes says"), r.hits());
     r.app.right_click(&hits, at, "1989", true);
-    assert_eq!(offered(&r), ["go 1989"]);
+    assert_eq!(offered(&r), ["find 1989"]);
 }
 
 /// Command on, latched, with a line typed.

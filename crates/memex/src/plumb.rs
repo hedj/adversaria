@@ -62,8 +62,8 @@ run = "go $0"
 
 [[plumb]]
 name = "retract entry $1"
-match = '#(\d+)'
-run = "retract $1"
+match = '(?:#|entry )(\d+)'
+run = "retract entry $1"
 
 [[plumb]]
 name = "import the document $0"
@@ -84,9 +84,9 @@ if = "file"
 run = "import wikidata $0"
 
 [[plumb]]
-name = "run the query $0"
+name = "answer $0"
 match = '[a-z]\w*\(.*\)'
-run = "query $0"
+run = "find `$0`"
 
 [[plumb]]
 name = "state $0 here"
@@ -109,11 +109,6 @@ match = '[^\s()]+(?:\s+[^\s()]+)+'
 run = "ace $0"
 
 [[plumb]]
-name = "name this item $0"
-match = '[\p{L}_][\p{L}\p{N}_-]*'
-run = "name $0"
-
-[[plumb]]
 name = "link here to $0"
 match = '\S.*'
 if = "item"
@@ -128,7 +123,7 @@ run = "transclude from $0"
 [[plumb]]
 name = "find $0"
 match = '\S.*'
-run = "go $0"
+run = "find $0"
 "#;
 
 /// The default rules.
@@ -253,23 +248,22 @@ mod tests {
     }
 
     #[test]
-    fn every_rule_that_matches_is_offered_in_order_once() {
+    fn every_pattern_that_matches_is_offered_in_order_once() {
         // Catches the first match alone offered (Plan 9's dispatch), the
-        // order lost, or one command line offered twice ("go 1.3" by the
-        // address and by "find").
+        // order lost, or a command line offered twice.
         let p = Plumber::new(&[]).unwrap();
         assert_eq!(
             lines(&p, "1.3", &["1.3"]),
-            ["go 1.3", "link to 1.3", "transclude from 1.3"]
+            ["go 1.3", "link to 1.3", "transclude from 1.3", "find 1.3"]
         );
         assert_eq!(
             lines(&p, "date(E, Y)", &[]),
             [
-                "query date(E, Y)",
+                "find `date(E, Y)`",
                 "fact date(E, Y)",
                 "set date(E, Y)",
                 "suppose date(E, Y)",
-                "go date(E, Y)"
+                "find date(E, Y)"
             ]
         );
         assert_eq!(
@@ -277,7 +271,7 @@ mod tests {
             [
                 "suppose Nemo is a fish.",
                 "ace Nemo is a fish.",
-                "go Nemo is a fish."
+                "find Nemo is a fish."
             ]
         );
     }
@@ -293,7 +287,7 @@ mod tests {
         let long =
             "Talk-notes says that the date of Buran-flight is 1989. And it was the only flight.";
         let offered = lines(&p, long, &[long]);
-        for c in ["ace", "link to", "go"] {
+        for c in ["ace", "link to", "find"] {
             assert!(offered.contains(&format!("{c} {long}")), "{c}: {offered:?}");
         }
         assert!(lines(&p, "rent is 1200", &[]).contains(&"ace rent is 1200".to_string()));
@@ -307,8 +301,8 @@ mod tests {
     #[test]
     fn each_command_that_takes_text_is_offered_for_text_it_takes() {
         // Catches a command that acts on text offered for none: suppose a
-        // statement or a fact, set a fact, name the item by a word, show
-        // an item here in place.
+        // statement or a fact, set a fact, show an item here in place; or
+        // naming offered, which labels replace (docs/concepts.md).
         let p = Plumber::new(&[]).unwrap();
         let offers = |text: &str, items: &[&str]| lines(&p, text, items);
         assert!(
@@ -317,7 +311,7 @@ mod tests {
         );
         assert!(offers("cell(rent, 1600)", &[]).contains(&"suppose cell(rent, 1600)".into()));
         assert!(offers("cell(rent, 1600)", &[]).contains(&"set cell(rent, 1600)".into()));
-        assert_eq!(offers("rent", &[]), ["name rent", "go rent"]);
+        assert_eq!(offers("rent", &[]), ["find rent"]);
         assert!(offers("1.2", &["1.2"]).contains(&"transclude from 1.2".into()));
         assert!(
             !offers("1.2", &[]).iter().any(|o| o.starts_with("name")),
@@ -330,8 +324,10 @@ mod tests {
         // Catches a pattern found inside the text: "#12 and more" is not
         // an entry, and "x1.3" is no address.
         let p = Plumber::new(&[]).unwrap();
-        assert!(!lines(&p, "#12 and more", &[]).contains(&"retract 12".to_string()));
-        assert_eq!(lines(&p, "#12", &[]), ["retract 12", "go #12"]);
+        let retract = "retract entry 12".to_string();
+        assert!(!lines(&p, "#12 and more", &[]).contains(&retract));
+        assert_eq!(lines(&p, "#12", &[]), [retract.as_str(), "find #12"]);
+        assert_eq!(lines(&p, "entry 12", &[])[0], retract);
         assert!(!lines(&p, "x1.3", &["1.3"]).contains(&"go 1.3".to_string()));
     }
 
@@ -340,8 +336,8 @@ mod tests {
         // Catches a test ignored: an address of no item, or a file that
         // does not exist, offered.
         let p = Plumber::new(&[]).unwrap();
-        assert_eq!(lines(&p, "9.9", &[]), ["go 9.9"]);
-        assert_eq!(lines(&p, "no-such-file.md", &[]), ["go no-such-file.md"]);
+        assert_eq!(lines(&p, "9.9", &[]), ["find 9.9"]);
+        assert_eq!(lines(&p, "no-such-file.md", &[]), ["find no-such-file.md"]);
         let manifest = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
         let p = user("name = \"show $0\"\nmatch = '\\S+\\.toml'\nif = \"file\"\nrun = \"go $0\"");
         let shown = p.offers(manifest, &|_| false).remove(0).label;

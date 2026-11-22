@@ -378,14 +378,13 @@ specific first:
 | The text | Offered |
 | --- | --- |
 | an address that names an item: `1.3`, `draft` | `go` to it |
-| `#` and a number | `retract` that entry |
+| `entry` and a number, or `#` and a number | `retract entry` it |
 | the path of a file that exists, ending in `.md`, `.docx`, `.odt`, `.tex`, `.html` (and others Pandoc reads), `.json` or `.pl` | `import document`, `import results` or `import wikidata` |
-| a Prolog goal, such as `date(E, Y)` | `query` it, state it as a `fact` here, or `set` it (stating it and setting aside what it contradicts) |
+| a Prolog goal, such as `date(E, Y)` | `find` its answers (`` find `date(E, Y)` ``), state it here as a fact, or state it and set aside what it contradicts |
 | a Prolog fact, or two or more words without brackets | `suppose` it, as the Suppose key does |
 | two or more words, without brackets | read them with `ace`, which says why if it cannot |
-| one word, not a number | `name` this item by it |
 | text that names an item | `link to` it from here, or `transclude` it: show its text here, in place |
-| any text | `go` to the next item holding it (find) |
+| any text | `find` the items that hold it |
 
 The other commands act on the item, not on text (`adopt`, `split`,
 `delete` and the rest), so the menu does not offer them; run

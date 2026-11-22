@@ -29,7 +29,10 @@ fn a_menu_offers_what_matches_and_enter_runs_the_first() {
     // Catches a menu not opened, an offer missing, or Enter not running
     // the one chosen.
     let mut r = menu_on_two("menu-enter");
-    assert_eq!(offered(&r), ["go 2", "link to 2", "transclude from 2"]);
+    assert_eq!(
+        offered(&r),
+        ["go 2", "link to 2", "transclude from 2", "find 2"]
+    );
     assert!(
         r.shows("act on “2”"),
         "the title names the text: {:#?}",
@@ -94,7 +97,7 @@ fn nothing_offered_says_so_and_a_retract_still_asks() {
     r.app.plumb("#2", (0, 0));
     assert_eq!(
         offered(&r)[..2],
-        ["go #2", "retract 2"],
+        ["go #2", "retract entry 2"],
         "#2 is an address too"
     );
     r.tap(&[Key::Char('2')]);
