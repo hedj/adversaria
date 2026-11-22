@@ -51,15 +51,9 @@ fn described_group(app: &App, (heading, cs): &Group, width: usize) -> Vec<Line<'
 
 /// Each of a group's commands, by name, described.
 fn described_each(app: &App, cs: &[&'static Command], width: usize) -> Vec<Line<'static>> {
-    let each = by_name(cs).into_iter();
-    each.map(|c| described(app, c, width)).collect()
-}
-
-/// Commands in the order of their names.
-fn by_name(cs: &[&'static Command]) -> Vec<&'static Command> {
     let mut cs = cs.to_vec();
     cs.sort_by_key(|c| c.name);
-    cs
+    cs.iter().map(|c| described(app, c, width)).collect()
 }
 
 /// A command with what it does and, at the right edge of a width, its
