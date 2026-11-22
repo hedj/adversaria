@@ -55,8 +55,8 @@ pub struct Journal {
     /// A write failed, and may have left part of a line, or a whole line
     /// not synced, that the entries do not hold: another would break the
     /// chain for good, so none is written until the journal is reopened,
-    /// which sets a torn line aside or reads a whole one.
-    broken: bool,
+    /// which sets a torn line aside or reads a whole one. Why it failed.
+    broken: Option<String>,
 }
 
 impl Journal {
@@ -83,7 +83,7 @@ impl Journal {
             dir,
             entries,
             durable: true,
-            broken: false,
+            broken: None,
         };
         let torn = &bytes[keep..];
         let note = (!torn.is_empty()).then(|| journal.set_aside(torn));
@@ -145,18 +145,19 @@ impl Journal {
     fn write(&mut self, parent: Option<u64>, kind: &str, body: Value) -> Result<Entry, Error> {
         self.whole()?;
         let e = self.next_entry(parent, kind, body)?;
-        self.append_line(&e).inspect_err(|_| self.broken = true)?;
+        self.append_line(&e)
+            .inspect_err(|why| self.broken = Some(why.to_string()))?;
         self.entries.push(e.clone());
         Ok(e)
     }
 
     /// Refuse to write after a write failed.
     fn whole(&self) -> Result<(), Error> {
-        match self.broken {
-            true => Err(Error::Refused(
-                "a write to the journal failed; reopen it".into(),
-            )),
-            false => Ok(()),
+        match &self.broken {
+            Some(why) => Err(Error::Refused(format!(
+                "a write to the journal failed ({why}); reopen it"
+            ))),
+            None => Ok(()),
         }
     }
 
@@ -349,7 +350,7 @@ mod tests {
         // follow a torn line or reuse a number synced late, and break the
         // chain for good (the code review, D-B1). The failure here is the
         // file gone, so nothing was written; a full disk cannot be made.
-        let d = temp_dir("broken");
+        let d = temp_dir("write-failed");
         let mut j = Journal::open(&d).unwrap();
         j.append("edit", json!({"t": "a"})).unwrap();
         let (file, away) = (d.join(JOURNAL), d.join("away"));
