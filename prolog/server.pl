@@ -176,11 +176,12 @@ atom_is(Out, Req, Name, No) :-
 send(Out, Type, Req, Body) :- write_message(Out, Type, Req, Body).
 
 %   An error goes back as DONE 1 with the error term. A term that cannot be
-%   encoded (it holds a stream, say) goes back as its printed text.
+%   encoded (it holds a stream, say), or is too long for a message, goes
+%   back as its printed text, cut short where it nests deep or long.
 reply_error(Out, Req, E) :-
-    (   catch(terms_cells([E], Cells, _, New), _, fail)
+    (   catch(terms_cells([E], Cells, _, New), _, fail), length(Cells, N), N < 0xfff0
     ->  true
-    ;   format(string(S), "~q", [E]),
+    ;   format(string(S), "~W", [E, [quoted(true), max_depth(20)]]),
         terms_cells([S], Cells, _, New)
     ),
     announce(Out, Req, New),

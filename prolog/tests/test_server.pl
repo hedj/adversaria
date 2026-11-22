@@ -93,6 +93,15 @@ test(an_answer_too_long_to_send_finishes_its_query) :-
     cells_terms(Error, [protocol_error(message_too_long(_))], _),
     \+ query_engine(1, _).
 
+test(an_error_too_long_to_send_is_sent_short) :-
+    % Catches an error term over 0xffff words, which the server tried to
+    % send whole, so message_too_long escaped serve/2 and killed the
+    % server: query 3 was never served (the code review, C-B3).
+    served([query-2-[(findall(a, between(1, 70000, _), L), _ is L + 1)], next-2-[1],
+            query-3-[true], next-3-[1]], Rs),
+    memberchk(done-2-[_|Error], Rs), cells_terms(Error, [Text], _), string(Text),
+    memberchk(answer-3-_, Rs).
+
 :- end_tests(server).
 
 %   server.pl's own main serves standard input; this file's runs the tests.
