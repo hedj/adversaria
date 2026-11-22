@@ -679,7 +679,8 @@ pub(crate) fn find_command(w: &str) -> Option<&'static Command> {
     if let Some(c) = COMMANDS.iter().find(|c| c.name == w) {
         return Some(c);
     }
-    let hits: Vec<&Command> = COMMANDS.iter().filter(|c| c.name.starts_with(&w)).collect();
+    let taught = COMMANDS.iter().filter(|c| !ALIASES.contains(&c.name));
+    let hits: Vec<&Command> = taught.filter(|c| c.name.starts_with(&w)).collect();
     (hits.len() == 1).then(|| hits[0])
 }
 
@@ -726,20 +727,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
             "child",
         ],
     ),
-    (
-        "FACTS AND DEFINITIONS",
-        &[
-            "fact",
-            "claim",
-            "rule",
-            "ace",
-            "set",
-            "constraint",
-            "derive",
-            "layer",
-            "check",
-        ],
-    ),
+    ("FACTS AND DEFINITIONS", &["set", "layer", "check"]),
     (
         "CLAIMS AND SUGGESTIONS",
         &[
@@ -758,6 +746,13 @@ pub const GROUPS: &[(&str, &[&str])] = &[
         ],
     ),
 ];
+
+/// Commands kept by their old names, for those who learnt them and for
+/// the journals and tests that use them, but no longer taught
+/// (docs/concepts.md): they are in no group, so not listed, and only
+/// their whole name finds them. Statements are written in items instead,
+/// as sentences or in Prolog between backticks.
+pub const ALIASES: &[&str] = &["fact", "claim", "rule", "constraint", "ace", "derive"];
 
 /// A group of commands: its heading, and those of its commands listed.
 pub type Group = (&'static str, Vec<&'static Command>);
@@ -822,13 +817,32 @@ mod tests {
     #[test]
     fn each_command_is_in_one_group() {
         // Catches a command added to the table but to no group, so the
-        // list of commands would never show it, or put in two.
+        // list of commands would never show it, or put in two. An alias is
+        // in none, on purpose.
         for c in COMMANDS {
             let groups = GROUPS.iter().filter(|(_, ns)| ns.contains(&c.name)).count();
-            assert_eq!(groups, 1, "{} is in {groups} groups", c.name);
+            let want = usize::from(!ALIASES.contains(&c.name));
+            assert_eq!(groups, want, "{} is in {groups} groups", c.name);
         }
         let listed: usize = GROUPS.iter().map(|(_, ns)| ns.len()).sum();
-        assert_eq!(listed, COMMANDS.len(), "a group names no command");
+        assert_eq!(
+            listed + ALIASES.len(),
+            COMMANDS.len(),
+            "a group names no command"
+        );
+    }
+
+    #[test]
+    fn an_alias_runs_by_its_whole_name_and_is_neither_listed_nor_a_prefix() {
+        // Catches an old name taught again: listed beside what replaced
+        // it, or found by a prefix, so that "con" was ambiguous.
+        for alias in ALIASES {
+            assert_eq!(find_command(alias).map(|c| c.name), Some(*alias));
+            let listed = GROUPS.iter().any(|(_, ns)| ns.contains(alias));
+            assert!(!listed, "{alias} is listed");
+        }
+        assert!(find_command("con").is_none(), "no taught command starts so");
+        assert!(find_command("fac").is_none());
     }
 
     #[test]

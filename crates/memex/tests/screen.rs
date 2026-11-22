@@ -214,6 +214,14 @@ fn listed(room: &Room) -> Vec<String> {
         .collect()
 }
 
+/// The commands the list teaches: all but the aliases kept for old names.
+fn taught() -> impl Iterator<Item = &'static memex::actions::Command> {
+    let aliases = memex::actions::ALIASES;
+    memex::actions::COMMANDS
+        .iter()
+        .filter(|c| !aliases.contains(&c.name))
+}
+
 #[test]
 fn the_commands_listed_are_shown_whole_at_80_columns() {
     // Catches a command's line cut off at the box's edge, as each was
@@ -221,9 +229,7 @@ fn the_commands_listed_are_shown_whole_at_80_columns() {
     let mut room = Room::new("screen-list");
     room.hold(Quasi::Command, "c");
     let shown = listed(&room);
-    let starting = memex::actions::COMMANDS
-        .iter()
-        .filter(|c| c.name.starts_with('c'));
+    let starting = taught().filter(|c| c.name.starts_with('c'));
     for c in starting {
         let line = format!("{} — {}", c.name, c.brief);
         // A bound command's key follows, after a gap (ShiftRight for child).
@@ -246,7 +252,7 @@ fn the_whole_list_names_every_command_under_its_group() {
     );
     let shown = listed(&room);
     let words: Vec<&str> = shown.iter().flat_map(|l| l.split_whitespace()).collect();
-    for c in memex::actions::COMMANDS {
+    for c in taught() {
         assert!(
             words.contains(&c.name),
             "{} not named in {shown:#?}",
@@ -269,18 +275,15 @@ fn a_list_that_fits_says_what_each_does_under_its_group() {
     // Catches the described list not grouped, not in the order of the
     // names within a group, or a bound key not at the box's right edge.
     let mut room = Room::new("screen-described");
-    room.hold(Quasi::Command, "a");
+    room.hold(Quasi::Command, "s");
     let shown = listed(&room);
     let at = |l: &str| shown.iter().position(|s| s.starts_with(l));
+    let editing = at("EDITING THE OUTLINE").expect("its heading");
     let facts = at("FACTS AND DEFINITIONS").expect("its heading");
-    let claims = at("CLAIMS AND SUGGESTIONS").expect("its heading");
-    assert_eq!(
-        at("ace — what APE makes of a sentence"),
-        Some(facts + 1),
-        "{shown:#?}"
-    );
-    assert_eq!(at("accept — "), Some(claims + 1), "by name: {shown:#?}");
-    let adopt = &shown[at("adopt — make the target's claims beliefs").expect("adopt")];
+    assert_eq!(at("set — "), Some(facts + 1), "{shown:#?}");
+    assert_eq!(at("split — "), Some(editing + 1), "by name: {shown:#?}");
+    assert_eq!(at("switch — "), Some(editing + 2), "by name: {shown:#?}");
+    let switch = &shown[at("switch — ").expect("switch")];
     let rows = room.lines_at(80, 30);
     let edge = rows
         .iter()
@@ -288,11 +291,11 @@ fn a_list_that_fits_says_what_each_does_under_its_group() {
         .and_then(|r| r.chars().position(|c| c == '┐'))
         .map(|i| i + 1);
     let inner = edge.expect("the box's top") - 2;
-    assert!(adopt.ends_with(" F3"), "{adopt:?}");
+    assert!(switch.ends_with(" F6"), "{switch:?}");
     assert_eq!(
-        adopt.chars().count(),
+        switch.chars().count(),
         inner,
-        "the key at the right edge: {adopt:?}"
+        "the key at the right edge: {switch:?}"
     );
 }
 
