@@ -950,12 +950,13 @@ mod tests {
 
     /// Blocks written as Markdown, then read back: (depth, style, text).
     fn through_markdown(blocks: &[Block]) -> Vec<(usize, String, String)> {
-        let dir = std::env::temp_dir().join(format!("adversaria-md-{}", std::process::id()));
+        let id = (std::process::id(), blocks.len());
+        let dir = std::env::temp_dir().join(format!("adversaria-md-{}-{}", id.0, id.1));
         std::fs::create_dir_all(&dir).unwrap();
-        let file = dir.join(format!("{}.md", blocks.len()));
+        let file = dir.join("out.md");
         std::fs::write(&file, markdown(blocks)).unwrap();
         let (back, _, _) = read(&file).unwrap();
-        std::fs::remove_file(&file).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
         back.into_iter()
             .map(|b| (b.depth, b.style, b.text))
             .collect()

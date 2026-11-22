@@ -213,10 +213,35 @@ impl Drop for Room {
     }
 }
 
+/// A memex on a copy of a room's directory, which goes with it.
+pub struct Replayed {
+    home: PathBuf,
+    app: App,
+}
+
+impl std::ops::Deref for Replayed {
+    type Target = App;
+    fn deref(&self) -> &App {
+        &self.app
+    }
+}
+
+impl std::ops::DerefMut for Replayed {
+    fn deref_mut(&mut self) -> &mut App {
+        &mut self.app
+    }
+}
+
+impl Drop for Replayed {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.home);
+    }
+}
+
 /// A room's journal opened afresh, as replay builds it. The room stays open
 /// in its own memex, which holds it alone, so a copy of its directory is
 /// opened: the same journal, under the same name.
-pub fn replayed(dir: &Path) -> App {
+pub fn replayed(dir: &Path) -> Replayed {
     static COPIES: AtomicUsize = AtomicUsize::new(0);
     let n = COPIES.fetch_add(1, Ordering::Relaxed);
     let id = std::process::id();
@@ -224,7 +249,8 @@ pub fn replayed(dir: &Path) -> App {
     let copy = home.join(dir.file_name().expect("a room has a name"));
     let _ = std::fs::remove_dir_all(&home);
     copy_dir(dir, &copy);
-    App::open(&copy).unwrap()
+    let app = App::open(&copy).unwrap();
+    Replayed { home, app }
 }
 
 /// Copy a directory and what it holds.

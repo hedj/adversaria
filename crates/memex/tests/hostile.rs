@@ -458,17 +458,21 @@ fn a_results_file_cannot_make_the_memex_read_forever() {
     let marked: Vec<String> = stale.values().flatten().cloned().collect();
     assert!(marked.iter().any(|p| p.ends_with("pipe")), "{marked:?}");
     assert!(marked.iter().any(|p| p == "/dev/zero"), "{marked:?}");
+    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// Run a command in a memex of its own: the message it leaves, if it is
 /// done within 20 s.
 fn done_in_time(name: &str, line: String) -> String {
     let dir = temp(name);
-    let task = move || command(&mut open(&dir), &line);
+    let room = dir.clone();
+    let task = move || command(&mut open(&room), &line);
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || tx.send(task()));
     let waited = rx.recv_timeout(std::time::Duration::from_secs(20));
-    waited.expect("the memex was still reading after 20 s")
+    let said = waited.expect("the memex was still reading after 20 s");
+    std::fs::remove_dir_all(&dir).unwrap();
+    said
 }
 
 /// A named pipe at a path; nothing ever writes to it.
@@ -488,6 +492,7 @@ fn an_import_refuses_a_pipe_rather_than_wait_on_it() {
         let said = done_in_time(&format!("import-pipe-{kind}"), line);
         assert!(said.ends_with("not a regular file"), "{kind}: {said}");
     }
+    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]

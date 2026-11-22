@@ -229,10 +229,10 @@ fn the_tutorial_works_as_written() {
     t.key(Key::F(10));
     assert!(t.app.session.quit);
     t.app.flush();
-    let mut app = replayed(&dir);
-    app.set_durable(false);
-    app.evaluate().unwrap();
-    let t = T { app, dump: t.dump };
+    let mut again = replayed(&dir);
+    again.set_durable(false);
+    again.evaluate().unwrap();
+    std::mem::swap(&mut t.app, &mut again);
     t.shows("→ 300");
     std::fs::remove_dir_all(&dir).unwrap();
 }
