@@ -166,11 +166,14 @@ impl Fields {
         let parent = self.parent(seq)?;
         let content = self.content()?;
         let hash = self.own_hash(true)?;
+        let mut later = self.0.clone();
+        later.retain(|k, _| !ENTRY_FIELDS.contains(&k.as_str()));
         Ok(Entry {
             seq,
             parent,
             content,
             hash,
+            later,
         })
     }
 
@@ -403,7 +406,13 @@ pub struct Entry {
     pub parent: Option<EntryId>,
     pub content: Content,
     pub hash: String,
+    /// Fields a later version of the format added, which this reader does
+    /// not know: kept, so the entry's line, and its hash, survive a purge.
+    later: Map<String, Value>,
 }
+
+/// The fields of an entry that this version of the format names.
+const ENTRY_FIELDS: [&str; 7] = ["seq", "parent", "prev", "kind", "body", "body_hash", "hash"];
 
 impl Entry {
     /// Make a new entry after a parent, given by its number and hash; the
@@ -417,11 +426,13 @@ impl Entry {
         let content = Content::new(kind, body)?;
         let parent = parent.map(|(seq, hash)| EntryId::new(seq, hash));
         let hash = String::new();
+        let later = Map::new();
         Entry {
             seq,
             parent,
             content,
             hash,
+            later,
         }
         .hashed()
     }
@@ -454,11 +465,13 @@ impl Entry {
     /// The entry's fields, as the format names them.
     fn fields(&self) -> Value {
         let prev = self.parent.as_ref().map(|p| &p.hash);
-        json!({
+        let mut fields = json!({
             "seq": self.seq, "parent": self.parent_seq(), "prev": prev,
             "kind": self.content.kind, "body": self.content.body,
             "body_hash": self.content.hash, "hash": self.hash,
-        })
+        });
+        fields.as_object_mut().unwrap().extend(self.later.clone());
+        fields
     }
 
     /// The entry as one line of canonical JSON, without its newline.
@@ -678,14 +691,18 @@ mod tests {
 
     #[test]
     fn unknown_fields_are_kept_and_hashed() {
-        // Catches a reader that rejects later fields, or ignores them in the hash.
+        // Catches a reader that rejects later fields, ignores them in the
+        // hash, or drops them when it writes the entry again, as a purge
+        // does: the line written would then fail its own hash.
         let e = Entry::new(1, None, "edit", json!({})).unwrap();
         let mut m: Map<String, Value> = serde_json::from_str(&e.to_line().unwrap()).unwrap();
         m.insert("zzz".into(), json!("later"));
         let h = record_hash(&m, true);
         m.insert("hash".into(), json!(h));
         let line = jcs::dumps(&Value::Object(m.clone())).unwrap();
-        assert!(Entry::parse(&line).is_ok());
+        let read = Entry::parse(&line).unwrap();
+        assert_eq!(read.to_line().unwrap(), line, "written back as read");
+        assert!(Entry::parse(&read.purged().to_line().unwrap()).is_ok());
         m.insert("zzz".into(), json!("altered"));
         assert!(Entry::parse(&jcs::dumps(&Value::Object(m)).unwrap()).is_err());
     }
