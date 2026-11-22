@@ -234,12 +234,22 @@ fn an_open_link_lists_the_names_that_fit() {
 
 #[test]
 fn tab_completes_as_far_as_the_names_agree_then_to_one() {
-    let mut r = completing("complete-esc", "See [[ener");
+    let mut r = completing("complete-tab", "See [[ener");
     r.tap(&[Key::Tab]);
     assert_eq!(r.here(), "See [[Energ");
     r.typ("i");
     r.tap(&[Key::Tab]);
     assert_eq!(r.here(), "See [[Energia]]", "one name: closed");
+}
+
+#[test]
+fn tab_inside_a_closed_link_does_not_close_it_again() {
+    // Catches `]]` added before a `]]` already there, when the text cursor
+    // is moved back into a closed link: "See [[Energia]]]]" (the code
+    // review, F-B5).
+    let mut r = completing("complete-inside", "See [[Energi]]");
+    r.tap(&[Key::Left, Key::Left, Key::Tab]);
+    assert_eq!(r.here(), "See [[Energia]]");
 }
 
 #[test]

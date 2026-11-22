@@ -32,10 +32,19 @@ impl App {
                 self.session.message = format!("no item is named “{typed}…”");
                 return;
             }
+            [one] if self.closed_after_cursor() => one.clone(),
             [one] => format!("{one}]]"),
             many => shared_start(many),
         };
         self.replace_typed(typed.chars().count(), &completed);
+    }
+
+    /// Whether `]]` follows the text cursor: a link already closed, as
+    /// when the cursor is moved back into one.
+    fn closed_after_cursor(&self) -> bool {
+        let text = self.text_of(self.cursor());
+        let after = &text[self.session.view.pos.min(text.len())..];
+        after.starts_with(&[']', ']'])
     }
 
     /// What is typed after an open `[[` before the text cursor, if the
