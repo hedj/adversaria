@@ -1823,12 +1823,7 @@ fn completions_said(typed: &str, found: &[String]) -> String {
 
 /// The first five names, apart by " · ", then how many more.
 fn listed_names(names: &[String]) -> String {
-    let first = names
-        .iter()
-        .take(5)
-        .cloned()
-        .collect::<Vec<_>>()
-        .join(" · ");
+    let first = names[..names.len().min(5)].join(" · ");
     match names.len().saturating_sub(5) {
         0 => first,
         more => format!("{first} · {more} more"),
