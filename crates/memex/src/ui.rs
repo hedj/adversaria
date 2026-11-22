@@ -1279,8 +1279,7 @@ fn runs_past(rows: &[(usize, usize)], row: usize) -> bool {
 /// below", each side only if any do; "↓ continues below" when only the
 /// last item in view runs on.
 fn beyond_text(b: Beyond) -> String {
-    let side =
-        |n: usize, arrow: &str, side: &str| format!("{arrow} {n} {} {side}", plural(n, "item"));
+    let side = |n: usize, arrow: &str, side: &str| format!("{arrow} {} {side}", counted(n, "item"));
     let mut said = vec![];
     if b.above > 0 {
         said.push(side(b.above, "↑", "above"));
@@ -1291,15 +1290,6 @@ fn beyond_text(b: Beyond) -> String {
         (n, _) => said.push(side(n, "↓", "below")),
     }
     said.join(" · ")
-}
-
-/// "1 item", "2 items".
-fn plural(n: usize, one: &str) -> String {
-    if n == 1 {
-        one.to_string()
-    } else {
-        format!("{one}s")
-    }
 }
 
 /// The rows of an outline pane shown in its area: from the first, its
