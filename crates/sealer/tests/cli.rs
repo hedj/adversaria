@@ -137,3 +137,26 @@ fn a_key_that_others_can_read_is_refused() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("readable by others"));
     remove(&dir, &key);
 }
+
+#[test]
+fn a_second_sealer_on_one_journal_is_refused() {
+    // Catches two sealers running at once, as a second `make run` starts
+    // one: both could append the same next seal (the code review, A6).
+    let (dir, key) = initialised("second");
+    let held = fs::File::open(dir.join("keys.jsonl")).unwrap();
+    held.lock().unwrap();
+    let out = sealer("run", &dir, &key, &["--once"]).output().unwrap();
+    let why = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && why.contains("another sealer"),
+        "{why}"
+    );
+    drop(held);
+    let out = sealer("run", &dir, &key, &["--once"]).output().unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    remove(&dir, &key);
+}

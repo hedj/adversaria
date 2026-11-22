@@ -75,6 +75,15 @@ fn millis(text: &str) -> Option<Duration> {
 
 fn run(dir: &Path, key: &Path, polling: Polling) -> Result<(), sealer::Error> {
     let key = sealer::load_key(key)?;
+    // Two sealers on one journal could each append the same next seal,
+    // and the seals file would be refused for good; keys.jsonl, which only
+    // the sealer writes, is locked while one runs.
+    let keys = std::fs::File::open(dir.join(format::record::KEYS))?;
+    if keys.try_lock().is_err() {
+        return Err(sealer::Error::Refused(
+            "another sealer is running on this journal".into(),
+        ));
+    }
     loop {
         let n = sealer::seal_pending(dir, &key, &SystemTime::now)?;
         if n > 0 {
