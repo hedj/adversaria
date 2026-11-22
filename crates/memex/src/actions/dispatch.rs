@@ -53,7 +53,7 @@ pub const COMMANDS: &[Command] = &[
         run: App::cmd_adopt,
         target: true,
         slots: &[("suggestion", Slot::Suggestion)],
-        help: "make the target's claims beliefs, keeping their source; with a number, the suggestion shown with it, a claim the memex makes",
+        help: "make the target's claims beliefs, keeping their source (`adopt instead`: retracting what they contradict); `adopt world`, the supposed world as the actual one; with a number, the suggestion shown with it, a claim the memex makes",
         brief: "believe claims or a suggestion",
     },
     Command {
@@ -125,8 +125,8 @@ pub const COMMANDS: &[Command] = &[
         run: App::cmd_dismiss,
         target: false,
         slots: &[("suggestion", Slot::Suggestion)],
-        help: "dismiss the nth suggestion shown; it returns only if its evidence changes",
-        brief: "dismiss the nth suggestion",
+        help: "set aside what is offered: the nth suggestion shown, which returns only if its evidence changes; `dismiss world`, the supposed world, back to the actual one; `dismiss change N`, one change of a revision",
+        brief: "set a suggestion or world aside",
     },
     Command {
         name: "derive",
@@ -727,16 +727,14 @@ pub const GROUPS: &[(&str, &[&str])] = &[
             "child",
         ],
     ),
-    ("FACTS AND DEFINITIONS", &["set", "layer", "check"]),
+    ("FACTS AND DEFINITIONS", &["layer", "check"]),
     (
         "CLAIMS AND SUGGESTIONS",
         &["adopt", "interrogate", "dismiss", "import", "export"],
     ),
     (
         "WORLDS AND HISTORY",
-        &[
-            "suppose", "close", "commit", "undo", "query", "redo", "retract",
-        ],
+        &["suppose", "undo", "query", "redo", "retract"],
     ),
 ];
 
@@ -753,6 +751,9 @@ pub const ALIASES: &[&str] = &[
     "ace",
     "derive",
     "accept",
+    "commit",
+    "close",
+    "set",
 ];
 
 /// A group of commands: its heading, and those of its commands listed.

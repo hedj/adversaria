@@ -197,10 +197,10 @@ fn a_mark_under_a_claim_offers_the_claims_actions_first_on_its_item() {
     let offers = right_click_on(&mut r, "1989 here");
     assert_eq!(
         offers,
-        ["interrogate", "adopt", "go 3", &offers[3]],
-        "the claim's, then the rule's"
+        ["interrogate", "adopt", "adopt instead", "go 3", &offers[4]],
+        "the claim's (disputed, so adopting it instead), then the rule's"
     );
-    assert!(offers[3].starts_with("retract "), "{offers:?}");
+    assert!(offers[4].starts_with("retract "), "{offers:?}");
     assert!(
         r.here().starts_with("Talk-notes says"),
         "the cursor on the claim"
@@ -218,8 +218,8 @@ fn a_change_offers_rejecting_it_which_asks_first() {
     std::fs::write(&file, "# A\n\nTwo.\n").unwrap();
     r.command(&format!("import document {}", file.display()));
     let offers = right_click_on(&mut r, "changed");
-    assert!(offers[0].starts_with("retract "), "{offers:?}");
-    assert_eq!(offers[1], "commit");
+    assert!(offers[0].starts_with("dismiss change "), "{offers:?}");
+    assert_eq!(offers[1], "adopt world");
     r.tap(&[memex::app::Key::Enter]);
     let asks = matches!(r.app.session.mode, memex::app::Mode::ConfirmRetract { .. });
     assert!(asks, "{:?}", r.app.session.mode);
@@ -334,7 +334,7 @@ fn the_foot_says_what_the_mouse_does_over_what_is_under_it() {
     let said = foot(&r);
     assert_eq!(
         said[0],
-        "click: go to 2 · right-click for: question its claim; adopt its claims"
+        "click: go to 2 · right-click for: question its claim; adopt its claims; adopt them instead of what they contradict"
     );
     assert_eq!(said[1], "a message stays");
     r.app.session.pointer = None;

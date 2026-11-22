@@ -236,12 +236,12 @@ each world would show its own way.
 
 While a supposition is open, the foot says how to leave it:
 
-    close returns to the actual world · commit makes this world the actual one
+    dismiss world returns to the actual world · adopt world makes this one actual
 
-Now run a command. Tap **Left Ctrl**, type `close`, and press Enter:
+Now run a command. Tap **Left Ctrl**, type `dismiss world`, and press Enter:
 what you type after the tap is a command, shown at the foot of the
 screen. You are back in the actual world. The supposition stays in the
-journal; the notebook says so: `it stays in the journal`. (`commit`
+journal; the notebook says so: `it stays in the journal`. (`adopt world`
 would instead make the supposed world the actual one.)
 
 While Command is on, `?` lists the commands that match what you have
@@ -292,9 +292,9 @@ changes in a world of their own, one entry each:
 
 Say your own sources name two teams. Reject that change: right-click it,
 and the menu offers `reject this change`; or run, by its number,
-`retract 53`. The foot of the screen says
+`dismiss change 53`. The foot of the screen says
 `nothing depends on it · Enter retracts · Esc keeps it`; press Enter.
-Then run `commit` to accept the rest. The essay keeps
+Then run `adopt world` to keep the rest. The essay keeps
 `Two teams reviewed the flight software.` and gains
 `Each team wrote its findings in the DRAKON language.` If your numbers
 differ (they count every entry, so a typo adds one), use the numbers on
@@ -435,7 +435,7 @@ The old rent is set aside, because a box holds one value. Income and
 food stay: with them, the new rent breaks the cost rule, but any of the
 three could be the one to change, so the notebook leaves that to you.
 
-Run `close`; the actual budget still says `→ 300`.
+Run `dismiss world`; the actual budget still says `→ 300`.
 
 ## D. Views, and leaving
 

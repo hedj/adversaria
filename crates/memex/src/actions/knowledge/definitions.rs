@@ -237,7 +237,10 @@ impl App {
 
     /// The beliefs a fact directly contradicts that can be retracted, and
     /// the violations it leaves, tried in the spare engine.
-    fn replaced_by(&mut self, fact: &Term) -> Result<(Vec<Contradicted>, Vec<String>), String> {
+    pub(crate) fn replaced_by(
+        &mut self,
+        fact: &Term,
+    ) -> Result<(Vec<Contradicted>, Vec<String>), String> {
         let trial = self.notebook.trial(fact)?;
         let evals = self.reason.try_out(&trial)?;
         let (mut replaced, left) = direct_conflicts(&evals, trial.by);

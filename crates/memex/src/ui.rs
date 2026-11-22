@@ -3129,7 +3129,7 @@ fn hint(app: &App) -> Option<(String, String)> {
 /// its own.
 fn leaving_hint(app: &App) -> Option<String> {
     let sup = app.reason.supposition.as_ref()?;
-    let leave = "close returns to the actual world · commit makes this world the actual one";
+    let leave = "dismiss world returns to the actual world · adopt world makes this one actual";
     (!sup.name.starts_with("revision of ")).then(|| leave.to_string())
 }
 
@@ -3832,7 +3832,7 @@ fn revision_lines(name: &str, changes: &[(u64, String, bool)]) -> Vec<Presented>
     if changes.is_empty() {
         lines.push((Line::styled("no changes", dim()), None));
     }
-    let how = "retract N undoes one change here · commit makes the rest real · close leaves the actual world as it was";
+    let how = "dismiss change N rejects one change · adopt world keeps the rest · dismiss world drops them all";
     lines.extend(plain(vec![Line::raw(""), Line::styled(how, dim())]));
     lines
 }

@@ -75,11 +75,22 @@ impl App {
         if !self.claims_of(id).is_empty() {
             offers.push(offer("question its claim", "interrogate"));
             offers.push(offer("adopt its claims", "adopt"));
+            if self.disputed(id) {
+                let instead = "adopt them instead of what they contradict";
+                offers.push(offer(instead, "adopt instead"));
+            }
         }
         if let Some(last) = self.last_adoption(id) {
             offers.push(offer("take back its adoption", &format!("retract {last}")));
         }
         offers
+    }
+
+    /// Whether findings are marked under an item: its claim disagrees
+    /// with a belief, or with another claim.
+    fn disputed(&self, id: u64) -> bool {
+        let e = self.reason.eval[0].as_ref();
+        e.is_some_and(|e| !crate::ui::item_marks(e, &self.notebook.outline, id).is_empty())
     }
 
     /// Its branch folded or shown, if it has items under it.
@@ -180,8 +191,11 @@ fn suggestion_of(p: &Presentation) -> Option<usize> {
 
 /// What a revision's change offers: rejecting it, or keeping the rest.
 fn change_offers(entry: u64) -> Vec<Offer> {
-    let reject = offer("reject this change", &format!("retract {entry}"));
-    vec![reject, offer("keep the changes not rejected", "commit")]
+    let reject = offer("reject this change", &format!("dismiss change {entry}"));
+    vec![
+        reject,
+        offer("keep the changes not rejected", "adopt world"),
+    ]
 }
 
 /// What a suggestion offers: accepting or dismissing it.

@@ -269,7 +269,7 @@ fn the_supposed_world_shows_what_it_supposes_first_with_the_actual_beside_it_bla
 fn in_a_supposition_the_foot_says_how_to_leave_it_above_the_message() {
     // Catches a supposed world with no word of how to get out of it: the
     // second review did not know that close returns and commit keeps.
-    let leave = "close returns to the actual world · commit makes this world the actual one";
+    let leave = "dismiss world returns to the actual world · adopt world makes this one actual";
     let mut r = rent_alone_supposed("worlds-leave-hint", &[]);
     let rows = r.lines_at(160, 40);
     assert!(rows[38].starts_with(leave), "{rows:#?}");
@@ -427,16 +427,22 @@ fn a_fact_retracted_by_hand_is_named_on_a_line_of_its_own() {
     assert_eq!((on_constraint, own), (false, 1), "{lines:#?}");
 }
 
+/// A room in the supposition "the ant 2", with an item typed only there.
+fn typed_in_a_supposition(name: &str) -> Room {
+    let mut r = Room::new(name);
+    r.items(&["ants"]);
+    r.command("fact date(ant, 1)");
+    suppose(&mut r, "the ant 2");
+    r.items(&["", "only in the supposition"]);
+    r
+}
+
 #[test]
 fn redo_after_close_does_not_bring_the_supposition_back() {
     // Catches the redo list kept across `close`: an edit undone in the
     // supposition was redone after it, onto the supposition's branch,
     // and the actual world showed it (the code review, D-B3).
-    let mut r = Room::new("redo-after-close");
-    r.items(&["ants"]);
-    r.command("fact date(ant, 1)");
-    suppose(&mut r, "the ant 2");
-    r.items(&["", "only in the supposition"]);
+    let mut r = typed_in_a_supposition("redo-after-close");
     r.command("undo");
     r.command("close");
     r.app.run_command("redo");
@@ -462,4 +468,24 @@ fn undoing_a_supposition_leaves_its_world_and_redo_returns() {
     r.app.run_command("close");
     assert_eq!(r.app.reason.world(), "actual");
     assert!(r.shows("typed after the undo"), "{:#?}", r.lines());
+}
+
+#[test]
+fn adopt_world_makes_the_supposition_actual_with_what_was_typed_in_it() {
+    // Catches a world that only `commit` acts on: adopt holds anything
+    // offered, a world too (docs/concepts.md).
+    let mut r = typed_in_a_supposition("adopt-world");
+    r.command("adopt world");
+    assert_eq!(r.app.reason.world(), "actual");
+    assert!(r.shows("only in the supposition"), "{:#?}", r.lines());
+}
+
+#[test]
+fn dismiss_world_returns_to_the_actual_world_without_what_was_typed() {
+    // Catches a world that only `close` acts on: dismiss sets aside
+    // anything offered, a world too (docs/concepts.md).
+    let mut r = typed_in_a_supposition("dismiss-world");
+    r.command("dismiss world");
+    assert_eq!(r.app.reason.world(), "actual");
+    assert!(!r.shows("only in the supposition"), "{:#?}", r.lines());
 }

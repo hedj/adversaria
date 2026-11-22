@@ -321,11 +321,11 @@ fn the_claim_supposed(t: &mut T) {
     t.shows("WORLD · SUPPOSE THE FLIGHT WAS IN 1989");
     t.shows("worlds actual | suppose: the flight was in 1989");
     t.shows("supposed: date(buran_flight, 1989)");
-    t.shows("close returns to the actual world · commit makes this world the actual one");
+    t.shows("dismiss world returns to the actual world · adopt world makes this one actual");
     t.shows("0 violations, 0 disagreements");
     t.shows("(1.1 set");
     t.shows("aside here: date(buran_flight, 1988))"); // the note wraps there
-    t.command("close");
+    t.command("dismiss world");
     t.says("it stays in the journal");
     assert_eq!(t.app.reason.world(), "actual");
 }
@@ -390,11 +390,11 @@ fn a_revision_taken_in(t: &mut T) {
     t.right_click_on("#53");
     t.shows("reject this change");
     t.key(Key::Escape);
-    t.command("retract 53");
+    t.command("dismiss change 53");
     t.shows("nothing depends on it · Enter retracts · Esc keeps it");
     t.key(Key::Enter);
     t.look("retracted");
-    t.command("commit");
+    t.command("adopt world");
     t.look("committed");
     assert_eq!(t.app.reason.world(), "actual");
     t.shows("Two teams reviewed the flight software.");
@@ -485,7 +485,7 @@ fn a_what_if(t: &mut T) {
     t.shows("→ -100");
     t.shows("(2.2 set aside here)");
     t.shows("1 violation");
-    t.command("close");
+    t.command("dismiss world");
     t.shows("→ 300");
 }
 

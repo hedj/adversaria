@@ -279,8 +279,8 @@ fn a_list_that_fits_says_what_each_does_under_its_group() {
     let shown = listed(&room);
     let at = |l: &str| shown.iter().position(|s| s.starts_with(l));
     let editing = at("EDITING THE OUTLINE").expect("its heading");
-    let facts = at("FACTS AND DEFINITIONS").expect("its heading");
-    assert_eq!(at("set — "), Some(facts + 1), "{shown:#?}");
+    let worlds = at("WORLDS AND HISTORY").expect("its heading");
+    assert_eq!(at("suppose — "), Some(worlds + 1), "{shown:#?}");
     assert_eq!(at("split — "), Some(editing + 1), "by name: {shown:#?}");
     assert_eq!(at("switch — "), Some(editing + 2), "by name: {shown:#?}");
     let switch = &shown[at("switch — ").expect("switch")];

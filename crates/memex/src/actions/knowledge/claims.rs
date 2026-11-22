@@ -2,6 +2,7 @@
 //! as a belief, and taking up or dismissing suggestions.
 
 use super::{encoded, functor_of, node_def, reserved};
+use crate::actions::worlds::with_left;
 use crate::app::App;
 use crate::reason::{Suggestion, show};
 use format::record::Entry;
@@ -46,21 +47,52 @@ impl App {
 
     // Adopting.
 
-    /// Adopt the target's claims, or, with a number, the suggestion shown
-    /// with it: a suggestion is a claim whose source is the memex, so
-    /// one verb holds either (docs/concepts.md).
+    /// Hold what is offered (docs/concepts.md): the target's claims; with
+    /// `instead`, retracting first the beliefs each directly contradicts;
+    /// the supposed world, as the actual one; or, with a number, the
+    /// suggestion shown with it, a claim whose source is the memex.
     pub(crate) fn cmd_adopt(&mut self, words: &[&str], target: u64) -> Result<String, String> {
-        if !words.is_empty() {
-            return self.cmd_accept(words, target);
+        match words {
+            [] => self.adopt_claims(target, false),
+            ["instead"] => self.adopt_claims(target, true),
+            ["world"] => self.cmd_commit(&[], target),
+            _ => self.cmd_accept(words, target),
         }
+    }
+
+    /// Set aside what is offered: a suggestion; the supposed world, back
+    /// to the actual one; or a revision's change, which is retracted.
+    pub(crate) fn cmd_dismiss(&mut self, words: &[&str], target: u64) -> Result<String, String> {
+        match words {
+            ["world"] => self.cmd_close(&[], target),
+            ["change", n] => self.cmd_retract(&[n], target),
+            _ => {
+                let s = self.suggestion(words, "dismiss")?;
+                self.dismiss_suggestion(&s);
+                Ok(format!("dismissed: {}", s.describe()))
+            }
+        }
+    }
+
+    /// Adopt the target's claims, keeping their sources; `instead` first
+    /// retracts what each directly contradicts, as `set` did for a fact
+    /// typed, and names a violation that adopting still leaves.
+    fn adopt_claims(&mut self, target: u64, instead: bool) -> Result<String, String> {
         let claims = self.claims_of(target);
         check_adoptable(&claims)?;
         let new = self.not_adopted(claims);
         if new.is_empty() {
             return Err("the target's claims are beliefs already".into());
         }
+        let mut left = vec![];
+        for (_, _, fact) in new.iter().filter(|_| instead) {
+            let (replaced, still) = self.replaced_by(fact)?;
+            self.retract_all(&replaced)?;
+            left.extend(still);
+        }
         self.write_adoptions(target, new)?;
-        Ok("adopted: a belief now, with its source kept".into())
+        let said = "adopted: a belief now, with its source kept".to_string();
+        Ok(with_left(said, &left))
     }
 
     /// The claims with no adoption in effect on this branch.
@@ -105,12 +137,6 @@ impl App {
         let s = self.suggestion(words, "accept")?;
         self.accept(&s)?;
         Ok(format!("adopted: {}", s.describe()))
-    }
-
-    pub(crate) fn cmd_dismiss(&mut self, words: &[&str], _: u64) -> Result<String, String> {
-        let s = self.suggestion(words, "dismiss")?;
-        self.dismiss_suggestion(&s);
-        Ok(format!("dismissed: {}", s.describe()))
     }
 
     fn dismiss_suggestion(&mut self, s: &Suggestion) {
