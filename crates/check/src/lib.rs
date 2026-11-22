@@ -157,7 +157,9 @@ impl<'a> Seals<'a> {
 /// Whether a signature is the key's signature of a hash; both are
 /// hexadecimal of a length that their records have checked.
 fn signed(key: &Key, hash: &str, sig: &str) -> bool {
-    let key = VerifyingKey::from_bytes(&key.bytes()).expect("checked in check_keys");
+    let Ok(key) = VerifyingKey::from_bytes(&key.bytes()) else {
+        return false;
+    };
     let sig: [u8; 64] = record::from_hex(sig, 64).unwrap().try_into().unwrap();
     let hash = record::from_hex(hash, 32).unwrap();
     key.verify_strict(&hash, &Signature::from_bytes(&sig))
@@ -225,4 +227,25 @@ pub fn check_dir(dir: &Path) -> Result<Report, LineError> {
         seals,
         blobs,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_key_that_is_no_curve_point_verifies_nothing() {
+        // Catches a panic in the public checker on a key that Key::parse
+        // accepts (any 32 bytes) but that is no Ed25519 point.
+        let bytes = (0..=255u8).map(|b| [b; 32]);
+        let bad = bytes
+            .into_iter()
+            .find(|k| VerifyingKey::from_bytes(k).is_err());
+        let key = Key {
+            key: record::to_hex(&bad.expect("some 32 bytes are no point")),
+            fingerprint: String::new(),
+            hash: String::new(),
+        };
+        assert!(!signed(&key, &"0".repeat(64), &"0".repeat(128)));
+    }
 }
