@@ -1,7 +1,7 @@
 //! The command line: the table of commands, finding a command from what
 //! was typed, and running it on the target (docs/guide.md, § 2.4).
 
-use super::nouns::{Alone, Noun, alone, asking, noun, prompts};
+use super::nouns::{Alone, Noun, alone, asking, noun, prompts, takes_text};
 use crate::app::{Active, App, Mode};
 use crate::outline::TOP;
 
@@ -45,7 +45,7 @@ pub struct Command {
     pub name: &'static str,
     run: Handler,
     /// It acts on the target item, so needs one.
-    target: bool,
+    pub(crate) target: bool,
     pub(crate) slots: &'static [Noun],
     pub help: &'static str,
     /// What it does, short enough for the list of commands that match
@@ -534,8 +534,12 @@ impl App {
 
     /// A command typed alone: run with its nouns' defaults, or, for a
     /// noun with none, ask for it, Command latched with the verb typed.
+    /// The text selected fills a first noun that takes text.
     fn command_alone(&mut self, cmd: &'static Command) -> Result<Mode, String> {
         let target = self.target_for(cmd)?;
+        if let Some(text) = self.selected_text().filter(|_| takes_text(cmd)) {
+            return self.command(&format!("{} {text}", cmd.name));
+        }
         match alone(self, cmd, target) {
             Alone::Ask(n) => {
                 self.session.message = asking(cmd, &n);
@@ -552,11 +556,20 @@ impl App {
     }
 
     /// The item a command acts on: the cursor's, which it must have if the
-    /// command needs one.
+    /// command needs one. With several items selected, only `delete`
+    /// takes them; another command that acts on an item refuses, rather
+    /// than act on one of them.
     fn target_for(&self, cmd: &Command) -> Result<u64, String> {
         let target = self.cursor();
         if cmd.target && target == TOP {
             return Err("there is no item to act on".into());
+        }
+        let n = self.selected_items().len();
+        if cmd.target && n > 1 && cmd.name != "delete" {
+            let name = cmd.name;
+            return Err(format!(
+                "{name} acts on one item, and {n} are selected; delete takes them all"
+            ));
         }
         Ok(target)
     }

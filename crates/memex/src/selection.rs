@@ -9,6 +9,7 @@
 
 use crate::app::{Active, App, Key, Mode, Special};
 use crate::session::Selection;
+use serde_json::json;
 use std::ops::Range;
 
 /// The arrow, Home or End that a key with Shift held is.
@@ -116,7 +117,7 @@ impl App {
         match key {
             Key::Backspace | Key::Delete if self.erase_selected() => true,
             Key::Backspace | Key::Delete if other => {
-                let said = "Backspace and Delete erase text selected with Shift in one item";
+                let said = "Backspace and Delete erase text selected with Shift in one item; the command delete deletes items selected";
                 self.session.message = said.into();
                 true
             }
@@ -126,6 +127,50 @@ impl App {
             }
             _ => false,
         }
+    }
+
+    /// The text selected: text dragged, or the characters selected in one
+    /// item. What a command whose first noun is text takes, typed alone.
+    pub fn selected_text(&self) -> Option<String> {
+        if let Some(text) = self.dragged_text() {
+            return Some(text.into());
+        }
+        let range = self.selected_range()?;
+        Some(self.text_of(self.cursor())[range].iter().collect())
+    }
+
+    /// Delete what is selected, as `delete` alone does: the items, each
+    /// with its branch, or the characters selected in one item. None if
+    /// nothing is selected; a refusal for text dragged, which is no place
+    /// in an item's text.
+    pub(crate) fn delete_selected(&mut self) -> Option<Result<String, String>> {
+        let items = self.selected_items();
+        if !items.is_empty() {
+            return Some(self.delete_items(&items));
+        }
+        if self.erase_selected() {
+            return Some(Ok(String::new()));
+        }
+        let refused = "delete takes items, or text selected with Shift in one item";
+        self.dragged_text().map(|_| Err(refused.into()))
+    }
+
+    /// Delete items shown in a run, each with its branch. One whose parent
+    /// is among them goes with its parent's branch: in a run of rows, an
+    /// item's selected ancestor has its parent selected too.
+    fn delete_items(&mut self, items: &[u64]) -> Result<String, String> {
+        let outline = &self.notebook.outline;
+        let heads = items
+            .iter()
+            .filter(|i| !items.contains(&outline.parent_or_top(**i)));
+        let heads: Vec<u64> = heads.copied().collect();
+        for item in &heads {
+            self.write_here("edit", json!({"op": "delete", "item": item}))?;
+        }
+        let n = heads.len();
+        Ok(format!(
+            "deleted {n} items with their branches; undo takes back one at a time"
+        ))
     }
 
     /// Erase the characters selected within an item, the text cursor

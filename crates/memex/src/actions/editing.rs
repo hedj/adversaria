@@ -27,8 +27,14 @@ impl App {
         Ok(String::new())
     }
 
-    /// Delete the word at the cursor, or the target's branch.
+    /// Delete what is selected, the word at the cursor, or the target's
+    /// branch.
     pub(crate) fn cmd_delete(&mut self, words: &[&str], target: u64) -> Result<String, String> {
+        if words.is_empty()
+            && let Some(done) = self.delete_selected()
+        {
+            return done;
+        }
         match words {
             [] => {}
             ["word"] => return self.delete_word(target).map(|_| String::new()),

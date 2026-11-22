@@ -142,3 +142,11 @@ pub(crate) fn asking(cmd: &Command, n: &Noun) -> String {
         _ => format!("{noun}: {how}"),
     }
 }
+
+/// Whether a command's first noun takes text, so that the text selected
+/// fills it: a command with no target whose first noun is text, or an
+/// item it reads from an address or a text (`go`).
+pub(crate) fn takes_text(cmd: &Command) -> bool {
+    let first = cmd.slots.first().map(|n| n.kind);
+    !cmd.target && matches!(first, Some(Slot::Text | Slot::Item))
+}

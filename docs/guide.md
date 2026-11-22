@@ -146,12 +146,17 @@ A command is a verb, then what it acts on, each part after its guide
 word: `link 3.2 (to) source 9 (as) cites`. The memex shows the guide
 words in parentheses as you type; § 2.4 says which you may type. Unless
 it names an item, a command acts on the **target**, the item the cursor
-is on. The seventeen verbs:
+is on. Typed alone, a command takes what is selected (§ 2.3, Selecting)
+for its first part, if that part is of its kind: `delete` deletes the
+items or the characters selected, and `find`, `go`, `suppose` and
+`import` take the text selected. The cursor's item is no text, so it
+fills none of those. A command that acts on one item refuses when
+several are selected. The seventeen verbs:
 
 | Verb | Acts on | Its opposite |
 | --- | --- | --- |
 | `new` | an item | `delete` |
-| `delete` | an item, or the word at the text cursor | `new` |
+| `delete` | the items or text selected, an item, or the word at the text cursor | `new` |
 | `move` | an item, after a place | |
 | `copy` | an item, after a place | |
 | `link` | an item, to an item, as a type | |
@@ -315,6 +320,9 @@ typed replaces them. Up or Down with Shift selects whole items, from one
 to the cursor's; Backspace and Delete then refuse, so a key that erases
 a character does not delete a branch. A move without Shift, a click or
 a command ends the selection.
+
+A command typed alone takes the selection for its first part (§ 1.5):
+select three items and type `delete`, or select a word and type `find`.
 
 A Leap selects too: leap to one end, then hold a Leap key, type the
 other end, and press the other Leap key. The items from where that Leap

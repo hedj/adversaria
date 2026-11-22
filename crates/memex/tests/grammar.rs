@@ -192,3 +192,99 @@ fn a_verb_with_no_target_refuses_before_it_asks() {
     assert_eq!(asked(&r), None);
     assert_eq!(r.app.session.message, "there is no item to act on");
 }
+
+/// Shift with a key, some times.
+fn shift(r: &mut Room, s: memex::app::Special, times: usize) {
+    (0..times).for_each(|_| r.tap(&[Key::Special(s)]));
+}
+
+#[test]
+fn delete_alone_deletes_the_items_selected_each_with_its_branch() {
+    // Catches delete taking the cursor's item alone, or deleting an item
+    // twice, once with its parent's branch and once of its own.
+    let mut r = abc("grammar-delete-items");
+    r.command("go 2");
+    r.command("indent");
+    r.command("go 1");
+    shift(&mut r, memex::app::Special::ShiftDown, 2);
+    r.command("delete");
+    assert_eq!(texts(&r), [] as [&str; 0]);
+    let said = &r.app.session.message;
+    assert!(
+        said.starts_with("deleted 2 items with their branches"),
+        "{said}"
+    );
+}
+
+#[test]
+fn delete_alone_erases_characters_selected_and_refuses_text_dragged() {
+    let mut r = abc("grammar-delete-text");
+    shift(&mut r, memex::app::Special::ShiftLeft, 3);
+    r.command("delete");
+    assert_eq!(texts(&r), ["Alder", "Birch", "Ce"]);
+    r.app.select_text("Birch");
+    r.command("delete");
+    assert_eq!(texts(&r), ["Alder", "Birch", "Ce"], "nothing deleted");
+    let said = &r.app.session.message;
+    assert_eq!(
+        said,
+        "delete takes items, or text selected with Shift in one item"
+    );
+}
+
+#[test]
+fn find_alone_takes_the_characters_selected() {
+    // Catches the selection not taken for a text noun, so find alone
+    // showed the links.
+    let mut r = abc("grammar-find-noun");
+    r.command("go 2");
+    select_first(&mut r, 3);
+    r.command("find");
+    assert_eq!(found(&r).as_deref(), Some("Bir"));
+}
+
+/// Select the first characters of the cursor's item, with Shift.
+fn select_first(r: &mut Room, n: usize) {
+    r.tap(&[Key::Home]);
+    shift(r, memex::app::Special::ShiftRight, n);
+}
+
+/// The words of what the list beside the outline lists, if find listed it.
+fn found(r: &Room) -> Option<String> {
+    r.app.session.found.as_ref().map(|f| f.words())
+}
+
+#[test]
+fn go_alone_takes_the_text_dragged() {
+    // Catches the text dragged not taken for go's place, so go alone went
+    // back along the trail.
+    let mut r = abc("grammar-go-noun");
+    r.app.select_text("Alder");
+    r.command("go");
+    assert_eq!(r.text(r.app.cursor()), "Alder");
+}
+
+#[test]
+fn a_verb_on_one_item_refuses_several_selected() {
+    // Catches move taking the cursor's item from among those selected,
+    // so the others stayed where they were.
+    let mut r = abc("grammar-several");
+    shift(&mut r, memex::app::Special::ShiftUp, 1);
+    r.command("move after 1");
+    assert_eq!(texts(&r), ["Alder", "Birch", "Cedar"]);
+    let said = &r.app.session.message;
+    assert_eq!(
+        said,
+        "move acts on one item, and 2 are selected; delete takes them all"
+    );
+}
+
+#[test]
+fn text_selected_fills_no_noun_after_the_target() {
+    // Catches the text selected taken for show's (as), which follows its
+    // first noun, the target: the selection fills a first noun alone.
+    let mut r = abc("grammar-text-target");
+    shift(&mut r, memex::app::Special::ShiftLeft, 3);
+    r.command("show");
+    assert_eq!(r.app.session.message, "shown as a chart");
+}
