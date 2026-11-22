@@ -30,6 +30,25 @@ fn a_link_goes_to_the_item_whose_text_it_names() {
 }
 
 #[test]
+fn a_name_of_a_deleted_item_gives_way_to_a_text() {
+    // Catches a [[link]] resolved to a deleted item by the name it had:
+    // the item whose text it is was never linked, and `make` said there
+    // was nothing to make (the code review, E1).
+    let mut r = Room::new("inline-deleted-name");
+    r.items(&["The rocket", "Energia"]);
+    let rocket = titled(&r, "The rocket");
+    r.put_cursor(rocket);
+    r.command("name energia");
+    r.command("delete");
+    r.put_cursor(titled(&r, "Energia"));
+    r.tap(&[Key::Enter]);
+    r.typ("See [[energia]].");
+    r.app.idle();
+    let from = titled(&r, "See [[energia]].");
+    assert_eq!(inline_to(&r, from), [titled(&r, "Energia")]);
+}
+
+#[test]
 fn a_link_goes_to_the_item_named_so_first() {
     let mut r = Room::new("inline-named");
     r.items(&["The shuttle", "buran"]);

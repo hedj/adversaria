@@ -683,14 +683,10 @@ impl Outline {
         Some(())
     }
 
-    /// Links that leave or reach an item and its target or source still
-    /// exist, each grouped by kind in the order the kinds first appear:
-    /// the order the links pane lists them and `follow` numbers them.
-    /// The item a [[link]] of this name goes to: the one named so, else
-    /// the first whose text it is, ignoring case.
+    /// The item a [[link]] of this name goes to: the one named so, if it
+    /// still exists, else the first whose text it is, ignoring case.
     pub fn resolve(&self, name: &str) -> Option<u64> {
-        let named = self.names.get(name).copied();
-        named.or_else(|| self.titled(name))
+        self.by_name(name).or_else(|| self.titled(name))
     }
 
     /// The first item whose text is this, ignoring case.
@@ -728,6 +724,9 @@ impl Outline {
             .collect()
     }
 
+    /// Links that leave or reach an item and its target or source still
+    /// exist, each grouped by kind in the order the kinds first appear:
+    /// the order the links pane lists them and `follow` numbers them.
     pub fn links_of(&self, id: u64) -> (Vec<&Link>, Vec<&Link>) {
         let live = |l: &&Link| self.items.contains_key(&l.from) && self.items.contains_key(&l.to);
         let out = self
