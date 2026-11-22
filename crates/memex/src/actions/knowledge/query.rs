@@ -41,7 +41,9 @@ fn answered(names: &[String], answers: &[Vec<Term>]) -> String {
     if answers.is_empty() {
         return "no".into();
     }
-    if names.is_empty() {
+    // A variable named with a leading _ is not shown, so a goal with no
+    // other has nothing to show but that it holds.
+    if names.iter().all(|n| n.starts_with('_')) {
         return "yes".into();
     }
     let listed = listed(names, &answers[..answers.len().min(SHOWN)]);

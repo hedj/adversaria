@@ -37,6 +37,10 @@ fn a_goal_without_variables_is_answered_yes_or_no() {
     assert_eq!(r.app.session.message, "yes");
     r.command("query fish(bubbles)");
     assert_eq!(r.app.session.message, "no");
+    // Catches a goal whose only variables are _ ones answered with blank
+    // answers, "2 answers:  · " (the code review, F-B3).
+    r.command("query fish(_)");
+    assert_eq!(r.app.session.message, "yes");
 }
 
 #[test]
