@@ -33,7 +33,7 @@ pub struct Session {
     pub found: Option<Found>,
     /// Where jumps came from, for back and forward.
     pub trail: Trail,
-    /// Where the selection begins, if there is one (crate::selection).
+    /// What is selected, if anything.
     pub selection: Option<Selection>,
     pub keys: Keys,
     /// The plumbing rules a right-click asks (crate::plumb).
@@ -44,12 +44,14 @@ pub struct Session {
     outside: Outside,
 }
 
-/// Where a selection begins: an item, and a place in its text, in
-/// characters. It ends at the cursor, so a move with Shift extends it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Selection {
-    pub item: u64,
-    pub pos: usize,
+/// What is selected (crate::selection).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Selection {
+    /// From an item and a place in its text, in characters, to the
+    /// cursor, so a move with Shift extends it.
+    From { item: u64, pos: usize },
+    /// Text a drag of the mouse covers, as drawn.
+    Drawn(String),
 }
 
 /// What a right-click offers (crate::plumb): the offers, the one chosen,

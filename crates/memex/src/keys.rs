@@ -55,7 +55,7 @@ impl App {
     /// A Leap moves the cursor, so it ends the selection.
     fn enter_quasi(&mut self, q: Quasi) -> Mode {
         self.flush();
-        if matches!(q, Quasi::LeapDown | Quasi::LeapUp) {
+        if leaps(q) {
             self.session.selection = None;
         }
         let typed = if q == Quasi::Suppose { "suppose " } else { "" };
@@ -228,6 +228,9 @@ impl App {
         if ev.press == Press::Up {
             return Mode::Quasi(a);
         }
+        if leaps(a.q()) && matches!(ev.key, Key::Quasi(q) if leaps(q)) {
+            return self.leap_select(a);
+        }
         if a.hold == Hold::Down {
             a.hold = Hold::Used;
         }
@@ -259,7 +262,7 @@ impl App {
                 self.session.message.clear();
                 return self.leave(a);
             }
-            Key::Enter if matches!(a.q(), Quasi::LeapDown | Quasi::LeapUp) => {
+            Key::Enter if leaps(a.q()) => {
                 return self.leap_or_create(a);
             }
             Key::Enter => return self.finish(a),
@@ -342,7 +345,7 @@ impl App {
     }
 
     /// End a quasimode: do what it was for.
-    fn finish(&mut self, a: Active) -> Mode {
+    pub(crate) fn finish(&mut self, a: Active) -> Mode {
         self.leap_return(&a);
         match a.q() {
             Quasi::LeapDown | Quasi::LeapUp => {
@@ -582,6 +585,11 @@ fn continuation(text: &str, p: &str) -> String {
     let t = text.to_lowercase();
     let after = &t[t.find(p).unwrap() + p.len()..];
     after.chars().take_while(|c| !c.is_whitespace()).collect()
+}
+
+/// Whether a quasimode is a Leap, down or up.
+fn leaps(q: Quasi) -> bool {
+    matches!(q, Quasi::LeapDown | Quasi::LeapUp)
 }
 
 /// The structural move that an arrow, Home or End makes with Command

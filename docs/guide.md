@@ -308,6 +308,13 @@ to the cursor's; Backspace and Delete then refuse, so a key that erases
 a character does not delete a branch. A move without Shift, a click or
 a command ends the selection.
 
+A Leap selects too: leap to one end, then hold a Leap key, type the
+other end, and press the other Leap key. The items from where that Leap
+began to the item it reached are selected. A drag of the mouse selects
+the text it covers (§ 2.3, The mouse), until a click without a drag, or
+a key, ends it; Backspace and Delete leave it, since they erase only text
+selected with Shift in one item.
+
 #### Moving by structure
 
 Ctrl with an arrow, Home or End moves by the outline's structure, as

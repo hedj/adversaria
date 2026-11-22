@@ -1,11 +1,13 @@
 //! The selection: what a command takes for its first noun
 //! (docs/concepts-next.md § The grammar). Shift with an arrow, Home or End
-//! selects from where the cursor was to where it goes. A plain move ends
-//! the selection; a command takes it and ends it.
+//! selects from where the cursor was to where it goes; the other Leap key,
+//! pressed while one is held, selects the items the Leap went over; a drag
+//! of the mouse selects the text it covers. A plain move ends the
+//! selection; a command takes it and ends it.
 //!
 //! It is the session's, not the view's: no entry records it.
 
-use crate::app::{App, Key, Special};
+use crate::app::{Active, App, Key, Mode, Special};
 use crate::session::Selection;
 use std::ops::Range;
 
@@ -30,58 +32,91 @@ impl App {
         let Some(key) = unshifted(s) else {
             return false;
         };
-        let begun = self.session.selection.take().unwrap_or(self.place());
+        let (item, pos) = self.begins().unwrap_or(self.place());
         self.move_by(key);
-        self.session.selection = Some(begun);
-        self.session.view_dirty = true;
+        self.session.selection = Some(Selection::From { item, pos });
         true
     }
 
     /// Where the cursor is: its item, and the text cursor in it.
-    fn place(&self) -> Selection {
-        Selection {
-            item: self.cursor(),
-            pos: self.session.view.pos,
+    fn place(&self) -> (u64, usize) {
+        (self.cursor(), self.session.view.pos)
+    }
+
+    /// The other Leap key, pressed while one is held: leap, and select
+    /// from the item where the Leap began to the item it reached. So a
+    /// span is selected by leaping to one end, then to the other.
+    pub(crate) fn leap_select(&mut self, a: Active) -> Mode {
+        let from = a.leap_from();
+        let mode = self.finish(a);
+        if let Some(item) = from.filter(|f| *f != self.cursor()) {
+            self.session.selection = Some(Selection::From { item, pos: 0 });
+        }
+        mode
+    }
+
+    /// Text a drag of the mouse selected. With none, a drag's selection
+    /// ends, as a click ends it; one made with keys stays.
+    pub fn select_text(&mut self, text: &str) {
+        let drawn = matches!(self.session.selection, Some(Selection::Drawn(_)));
+        match text.trim() {
+            "" if drawn => self.session.selection = None,
+            "" => {}
+            t => self.session.selection = Some(Selection::Drawn(t.to_string())),
+        }
+    }
+
+    /// The text a drag of the mouse selected, if it is the selection.
+    pub fn dragged_text(&self) -> Option<&str> {
+        match &self.session.selection {
+            Some(Selection::Drawn(text)) => Some(text),
+            _ => None,
+        }
+    }
+
+    /// Where a selection made with keys or a Leap begins: an item, and a
+    /// place in its text.
+    fn begins(&self) -> Option<(u64, usize)> {
+        match self.session.selection {
+            Some(Selection::From { item, pos }) => Some((item, pos)),
+            _ => None,
         }
     }
 
     /// The characters selected within the cursor's item, if the selection
     /// begins in it; none if it holds no character.
     pub fn selected_range(&self) -> Option<Range<usize>> {
-        let s = self.selection_here()?;
-        let len = self.text_of(s.item).len();
-        between(s.pos, self.place().pos, len)
+        let ((item, pos), (here, at)) = (self.begins()?, self.place());
+        let len = self.text_of(item).len();
+        between(pos, at, len).filter(|_| item == here)
     }
 
     /// The items selected, as shown, from the one the selection begins in
     /// to the cursor's; none if it begins in the cursor's item, or in one
     /// not shown.
     pub fn selected_items(&self) -> Vec<u64> {
-        let Some(s) = self.session.selection else {
+        let Some((item, _)) = self.begins() else {
             return vec![];
         };
         let rows: Vec<u64> = self.visible().into_iter().map(|(id, _)| id).collect();
         let at = |id| rows.iter().position(|r| *r == id);
-        match (at(s.item), at(self.cursor())) {
+        match (at(item), at(self.cursor())) {
             (Some(a), Some(b)) if a != b => rows[a.min(b)..=a.max(b)].to_vec(),
             _ => vec![],
         }
     }
 
-    /// The selection, if it begins in the cursor's item.
-    fn selection_here(&self) -> Option<Selection> {
-        self.session.selection.filter(|s| s.item == self.cursor())
-    }
-
-    /// A key that acts on a selection: Backspace or Delete deletes the
+    /// A key that acts on a selection: Backspace or Delete erases the
     /// characters selected, and a character typed replaces them. With
-    /// items selected, Backspace and Delete refuse, so a key that deletes
-    /// a character does not delete a branch. True if the key is done.
+    /// items selected, or text dragged, Backspace and Delete refuse, so a
+    /// key that erases a character neither deletes a branch nor erases
+    /// beside what is shown selected. True if the key is done.
     pub(crate) fn edit_selected(&mut self, key: Key) -> bool {
+        let other = self.dragged_text().is_some() || !self.selected_items().is_empty();
         match key {
             Key::Backspace | Key::Delete if self.erase_selected() => true,
-            Key::Backspace | Key::Delete if !self.selected_items().is_empty() => {
-                let said = "Backspace and Delete delete text selected in one item";
+            Key::Backspace | Key::Delete if other => {
+                let said = "Backspace and Delete erase text selected with Shift in one item";
                 self.session.message = said.into();
                 true
             }
@@ -93,7 +128,7 @@ impl App {
         }
     }
 
-    /// Delete the characters selected within an item, the text cursor
+    /// Erase the characters selected within an item, the text cursor
     /// where they were. False if none are selected.
     pub(crate) fn erase_selected(&mut self) -> bool {
         let Some(range) = self.selected_range() else {

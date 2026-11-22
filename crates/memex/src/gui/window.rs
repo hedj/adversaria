@@ -138,10 +138,27 @@ impl Screen {
         )
     }
 
+    /// The left button up: the text a drag selected is the app's
+    /// selection, and a click ends a drag's.
+    fn released(&mut self, app: &mut App) {
+        self.mouse.drag.release();
+        app.select_text(&self.dragged().unwrap_or_default());
+    }
+
+    /// The text a drag selected, if one did.
+    fn dragged(&self) -> Option<String> {
+        let buf = &self.cells.backend().buffer;
+        self.mouse.drag.selection.map(|s| s.text(buf))
+    }
+
     /// Lay the app out in as many cells as fit in a window of this size
     /// (in points), noting where clicks land; the selection is drawn in
     /// the frame, so that the cells it leaves are drawn again unmarked.
+    /// A drag's selection is drawn until the app's ends, as a key ends it.
     fn lay_out(&mut self, app: &App, fits: Vec2) {
+        if app.dragged_text().is_none() && !self.mouse.drag.dragging {
+            self.mouse.drag.selection = None;
+        }
         let columns = ((fits.x / self.cell_size.x) as u16).max(1);
         let rows = ((fits.y / self.cell_size.y) as u16).max(1);
         if self.cells.backend().buffer.area.as_size() != (columns, rows).into() {
@@ -430,7 +447,7 @@ impl ApplicationHandler for Memex {
                 state: ElementState::Released,
                 button: MouseButton::Left,
                 ..
-            } => self.screen.mouse.drag.release(),
+            } => self.screen.released(&mut self.app),
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: MouseButton::Right,
@@ -544,6 +561,23 @@ mod tests {
             ctx.run_ui(input, |_| {}).textures_delta.clear();
         }
         assert_eq!(ctx.zoom_factor(), 1.0);
+    }
+
+    #[test]
+    fn a_drag_released_is_the_apps_selection_until_a_key_ends_it() {
+        // Catches the text dragged kept from the app, so a command could
+        // not take it, or its mark left after the app's selection ended.
+        let (dir, mut app) = opened("window-drag");
+        let mut screen = Screen::new();
+        laid(&mut screen, &app);
+        screen.mouse.drag.press(Some((0, 0)));
+        screen.mouse.drag.moved((7, 0));
+        screen.released(&mut app);
+        assert_eq!(app.dragged_text(), Some("notebook"));
+        assert_eq!(laid(&mut screen, &app), [true; 4]);
+        app.handle(Event::down(crate::app::Key::Left));
+        assert_eq!(laid(&mut screen, &app), [false; 4], "the mark is gone");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
