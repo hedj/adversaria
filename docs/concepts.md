@@ -1,6 +1,8 @@
 # Concepts: a budget, and the memex factored to fit it
 
-A proposal for the author, 22 November 2026. Nothing here is built yet.
+A proposal for the author, 22 November 2026. The author took all seven
+decisions (§ Decisions for the author), and they were built the same
+day; § Status says what was built and where it differs.
 
 ## The answer
 
@@ -328,3 +330,37 @@ vocabulary levels off near 30–50 while the tasks done keep growing.
 Each is its own series of commits, with the guide and tutorial changed
 in the same series, and the count above checked against the guide after
 each.
+
+## Status
+
+Built on 22 November 2026, one commit for each change (ea1d81e to
+72e34c5 on the branch, with one merge of main between). Counted from crates/memex/src/actions/dispatch.rs:
+50 commands, of which 20 are listed and taught (the 17 verbs, and
+`transclude`, `fold` and `switch`) and 30 run only as old names, typed
+whole. docs/tutorial.md and docs/guide.md teach the listed ones; the
+guide's last command table gives each old name and what replaces it.
+
+Where it differs from the proposal above:
+
+- `transclude` and `fold` stay listed: a link of type `shows` does not
+  yet transclude, and neither a key nor a click on a bullet folds.
+  `switch` stays listed, for two outlines side by side.
+- `adopt` takes no revision change; changes are kept with `adopt world`,
+  and one is rejected with `dismiss change N`.
+- `set` is not a fix offered on a disagreement: `adopt instead`, at a
+  disputed claim, adopts it and retracts what it contradicts, and a fact
+  is changed by editing its sentence.
+- `split` is not a fix of a finding: no finding names an item of several
+  sentences, so a right-click on one offers the split, as before.
+- `derive timeline` has no form in an item's text, which needs a blank;
+  it stays as the old command's form.
+- F2 is no longer bound: the inspector asks a claim's questions at the
+  claim's item, with no key. The measures report, which counted
+  `interrogate` as checking, now also counts a move whose view entry
+  records the claim item the inspector shows (`inspects`). This changes
+  what "checking" measures, from a key pressed to questions shown; the
+  author may want to judge it.
+- Two journal format revisions (docs/design.md): a view entry's `op` may
+  be `find`, and it records `inspects`; and a box is stored as
+  `box(Name, Value)`, an older journal's `cell(Name, Value)` read as one.
+
