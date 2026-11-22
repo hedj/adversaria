@@ -156,6 +156,7 @@ intern(Name, No, New) :-
 %   in the order of their numbers; NewAtoms the names numbered on the way.
 
 terms_cells(Terms, Cells, Vars, NewAtoms) :-
+    (   acyclic_term(Terms) -> true ; throw(protocol_error(cyclic_term)) ),
     next_atom(First),
     catch(phrase(seq_cells(Terms, 0, s([], 0, []), s(VarsR, _, NewR)), Cells),
           E, ( forget_atoms_from(First), throw(E) )),

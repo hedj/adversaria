@@ -6,6 +6,7 @@
 :- use_module(gen_terms).
 
 :- use_module(library(plunit)).
+:- use_module(library(time)).
 :- use_module(library(memfile)).
 :- use_module(library(random)).
 
@@ -109,5 +110,12 @@ test(malformed, [forall(member(Cells, [[], [0x60000001], [0x80000005, 0x73000000
 test(variable_numbers_must_be_dense, [throws(protocol_error(variable_numbers_not_dense(1, 0)))]) :-
     % Catches VAR 1 accepted without VAR 0, which would misalign the answers.
     cells_terms([1], _, _).
+
+test(a_cyclic_term_is_refused, [throws(protocol_error(cyclic_term))]) :-
+    % Catches the encoder looping for ever on a cyclic list, whose tail is
+    % at the list's own depth, so the depth limit never stops it: `query
+    % X = [a|X]` hung the server (the code review, C-B7).
+    X = [a|X],
+    call_with_time_limit(5, terms_cells([X], _, _, _)).
 
 :- end_tests(protocol).
