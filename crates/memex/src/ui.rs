@@ -275,11 +275,13 @@ impl MenuBox {
     }
 
     /// Each entry's line, cut to 60 characters and filled to the box's
-    /// width, the chosen one reversed.
+    /// width in cells, the chosen one reversed.
     fn lines(&self) -> Vec<Line<'static>> {
         let inner = self.inner_width();
         let line = |(text, chosen, _): &(String, bool, Presentation)| {
-            let shown = format!(" {:<w$}", shortened(text, 62), w = inner - 1);
+            let text = shortened(text, 62);
+            let fill = " ".repeat((inner - 1).saturating_sub(cells_of(&text)));
+            let shown = format!(" {text}{fill}");
             let style = if *chosen {
                 reversed()
             } else {
@@ -290,13 +292,13 @@ impl MenuBox {
         self.entries.iter().map(line).collect()
     }
 
-    /// The width inside the border: the widest entry with a space each
-    /// side, or the title with a rule and a space each side.
+    /// The width inside the border, in cells: the widest entry with a
+    /// space each side, or the title with a rule and a space each side.
     fn inner_width(&self) -> usize {
         let entry =
-            |(text, _, _): &(String, bool, Presentation)| shortened(text, 62).chars().count() + 2;
+            |(text, _, _): &(String, bool, Presentation)| cells_of(&shortened(text, 62)) + 2;
         let widest = self.entries.iter().map(entry).max().unwrap_or(0);
-        widest.max(self.title.chars().count() + 2)
+        widest.max(cells_of(&self.title) + 2)
     }
 
     /// The box's width and height, with its border, within the screen.
@@ -354,6 +356,11 @@ fn top_of(height: u16, y: u16, h: u16) -> u16 {
 }
 
 /// A text cut to so many characters, with an ellipsis if it was longer.
+/// The cells a text takes on the screen: two for a wide character.
+fn cells_of(text: &str) -> usize {
+    Span::raw(text).width()
+}
+
 fn shortened(text: &str, most: usize) -> String {
     match text.chars().count() > most {
         true => text.chars().take(most - 1).chain(['…']).collect(),
@@ -3943,6 +3950,25 @@ fn undo_step(app: &App) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_menu_of_wide_text_is_as_wide_as_its_cells() {
+        // Catches the menu box sized by characters: a title quoting wide
+        // text was cut, and an entry ran past the border (the code review,
+        // G-B5).
+        let menu = MenuBox {
+            title: " act on “東京大学” ".into(),
+            entries: vec![(
+                "go 東京大学".into(),
+                false,
+                Presentation::Command("go".into()),
+            )],
+            at: (0, 0),
+        };
+        assert_eq!(menu.inner_width(), 19 + 2, "the title: 15 characters, 19 cells");
+        let line = &menu.lines()[0];
+        assert_eq!(line.width(), menu.inner_width(), "{line:?}");
+    }
 
     #[test]
     fn a_match_is_found_between_the_texts_own_letters() {
