@@ -33,8 +33,19 @@ impl Results {
         if v["format"] != "memex-results" {
             return Err("not a results file: its format is not memex-results".into());
         }
-        let results = v["results"].as_array().into_iter().flatten();
-        let measured = results.map(Measured::parse).collect::<Result<_, _>>()?;
+        if v["version"] != 1 {
+            return Err(format!(
+                "results of version {} are not known here",
+                v["version"]
+            ));
+        }
+        let results = v["results"]
+            .as_array()
+            .ok_or("not a results file: no list of results")?;
+        let measured = results
+            .iter()
+            .map(Measured::parse)
+            .collect::<Result<_, _>>()?;
         Ok(Results {
             source: source_of(&v["prov"]["activity"]),
             prov: v["prov"].clone(),
@@ -145,4 +156,23 @@ fn directory_of(file: &str) -> String {
     let path = std::fs::canonicalize(file).ok();
     let dir = path.and_then(|p| p.parent().map(|d| d.to_string_lossy().into_owned()));
     dir.unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_file_without_results_or_of_another_version_is_refused() {
+        // Catches a file with no results list imported as no results, a
+        // heading and nothing under it, and a version the reader does not
+        // know read as if it were known (the code review, D-B5).
+        let parsed = |v: Value| Results::parse(v.to_string().as_bytes()).map(|r| r.measured.len());
+        let kept = serde_json::json!({"format": "memex-results", "version": 1, "results": []});
+        assert_eq!(parsed(kept), Ok(0));
+        let no_list = serde_json::json!({"format": "memex-results", "version": 1});
+        assert!(parsed(no_list).unwrap_err().contains("no list of results"));
+        let later = serde_json::json!({"format": "memex-results", "version": 2, "results": []});
+        assert!(parsed(later).unwrap_err().contains("version 2"));
+    }
 }
