@@ -482,6 +482,24 @@ struct Writer<'a> {
     out: String,
 }
 
+/// A text with the mark escaped that would make Markdown read it as
+/// another block: "1988. The flight" as a list from 1988, "# Note" as a
+/// heading, "- x" as a list, "| a" as lines, "> x" as a quote. Inline
+/// marks, such as *emphasis*, are the text's own and stay.
+fn escaped(text: &str) -> String {
+    let digits = text.bytes().take_while(u8::is_ascii_digit).count();
+    let hashes = text.bytes().take_while(|b| *b == b'#').count();
+    let spaced = |at: usize| text[at..].is_empty() || text[at..].starts_with(' ');
+    let at = match text[digits..].chars().next() {
+        Some('.' | ')') if digits > 0 && spaced(digits + 1) => digits,
+        Some('#') if spaced(hashes) => 0,
+        Some('-' | '+' | '*' | '|') if digits == 0 && spaced(1) => 0,
+        Some('>') if digits == 0 => 0,
+        _ => return text.to_string(),
+    };
+    format!("{}\\{}", &text[..at], &text[at..])
+}
+
 fn is_list_item(b: &Block) -> bool {
     matches!(b.style.as_str(), "bullet" | "ordered")
 }
@@ -494,11 +512,11 @@ impl<'a> Writer<'a> {
             "bullet" | "ordered" => return self.list(b.depth),
             "table" => return self.table(b),
             "heading" => self.say(format!("{} {}\n\n", "#".repeat(b.depth + 1), b.text)),
-            "quote" => self.say(format!("> {}\n\n", b.text)),
+            "quote" => self.say(format!("> {}\n\n", escaped(&b.text))),
             "code" => self.say(format!("```\n{}\n```\n\n", b.text)),
             "math" => self.say(format!("$${}$$\n\n", b.text)),
             "row" => self.say(format!("| {} |\n", b.text)),
-            _ => self.say(format!("{}\n\n", b.text)),
+            _ => self.say(format!("{}\n\n", escaped(&b.text))),
         }
         self.at += 1;
     }
@@ -519,7 +537,7 @@ impl<'a> Writer<'a> {
         while let Some(x) = self.next_if(|x| is_list_item(x) && x.depth >= base) {
             let mark = if x.style == "bullet" { "-" } else { "1." };
             let nest = "    ".repeat(x.depth - base);
-            self.say(format!("{nest}{mark} {}\n", x.text));
+            self.say(format!("{nest}{mark} {}\n", escaped(&x.text)));
         }
         self.say("\n".into());
     }
@@ -923,6 +941,42 @@ mod tests {
         blocks
             .map(|b| (b.depth, b.style.as_str(), b.text.as_str()))
             .collect()
+    }
+
+    #[test]
+    fn text_that_looks_like_a_block_comes_back_as_its_text() {
+        // Catches a paragraph exported as Markdown that reads back as
+        // another block: "1988. The flight year." became a list from 1988,
+        // "# Note" a heading (the code review, E5). Emphasis stays.
+        let texts = [
+            "1988. The flight year.",
+            "2) second",
+            "# Note to self",
+            "## Two",
+            "- minus",
+            "+ plus",
+            "* star",
+            "| a | b |",
+            "> not a quote",
+            "*emphasis* stays",
+            "#tag stays",
+            "1988.5 is a number",
+        ];
+        let blocks: Vec<Block> = texts
+            .iter()
+            .map(|t| Block::plain(0, "para", t.to_string()))
+            .collect();
+        let dir = std::env::temp_dir().join(format!("adversaria-escaped-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("out.md");
+        std::fs::write(&file, markdown(&blocks)).unwrap();
+        let (back, _, _) = read(&file).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        let read: Vec<(&str, &str)> = back
+            .iter()
+            .map(|b| (b.style.as_str(), b.text.as_str()))
+            .collect();
+        assert_eq!(read, texts.map(|t| ("para", t)));
     }
 
     #[test]
