@@ -136,7 +136,9 @@ fn cell(c: char, style: Style, col: &mut usize) -> Cell {
 fn rows(cells: Vec<Cell>, shape: (usize, usize)) -> Vec<Vec<Cell>> {
     let mut rows = vec![Vec::new()];
     for cell in cells {
-        if !fits(&rows, &cell, shape) {
+        // A word carried to the new row can leave too little room for a
+        // wide character after it, so break again; an empty row takes any.
+        while !fits(&rows, &cell, shape) {
             break_row(&mut rows, shape.1);
         }
         rows.last_mut().expect("one row at least").push(cell);
@@ -294,6 +296,15 @@ mod tests {
     fn a_word_longer_than_a_row_is_cut_where_the_row_ends() {
         let w = wrap(&Line::raw("ab abcdefghijklmnop"), 10, 0);
         assert_eq!(text(&w), ["ab ", "abcdefghij", "klmnop"]);
+    }
+
+    #[test]
+    fn a_wide_character_after_a_carried_word_goes_to_a_row_of_its_own() {
+        // Catches a row one cell too wide, the wide character clipped at
+        // the pane's edge and not drawn (the code review, G-B1).
+        let w = wrap(&Line::raw("aaaaaaaaaa bbbbbbbbb日 x"), 10, 0);
+        assert!(w.rows.iter().all(|r| r.width() <= 10), "{:?}", text(&w));
+        assert_eq!(text(&w).concat(), "aaaaaaaaaa bbbbbbbbb日 x");
     }
 
     #[test]
