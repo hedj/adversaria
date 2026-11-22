@@ -331,14 +331,23 @@ impl Gfx {
     }
 }
 
+/// egui's context, with the memex's fonts, and no zoom by keyboard: Ctrl
+/// is held for Command, and Ctrl with - or = would zoom the cells, so
+/// that clicks land on the wrong cell.
+fn context() -> egui::Context {
+    let ctx = egui::Context::default();
+    ctx.set_fonts(super::paint::fonts());
+    ctx.options_mut(|o| o.zoom_with_keyboard = false);
+    ctx
+}
+
 /// A window, egui's view of it, and a painter that draws on it.
 fn open_window(el: &ActiveEventLoop) -> Result<Gfx, String> {
     let attributes = Window::default_attributes()
         .with_title("memex")
         .with_inner_size(winit::dpi::LogicalSize::new(1280.0, 800.0));
     let window = Arc::new(el.create_window(attributes).map_err(|e| e.to_string())?);
-    let ctx = egui::Context::default();
-    ctx.set_fonts(super::paint::fonts());
+    let ctx = context();
     let mut painter = pollster::block_on(egui_wgpu::winit::Painter::new(
         ctx.clone(),
         Default::default(),
@@ -512,6 +521,29 @@ mod tests {
         screen.lay_out(&app, Vec2::new(10.0 * 9.0, 5.0 * 18.0));
         assert!(screen.mouse.drag.selection.is_none());
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn ctrl_and_minus_typed_in_command_do_not_zoom() {
+        // Catches egui's keyboard zoom left on: Ctrl, held for Command,
+        // with - typed, zoomed the window (the code review, H4).
+        let ctx = context();
+        let minus = egui::Event::Key {
+            key: egui::Key::Minus,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        };
+        let input = egui::RawInput {
+            events: vec![minus],
+            ..Default::default()
+        };
+        // A zoom asked for in one pass takes effect in the next.
+        for input in [input, egui::RawInput::default()] {
+            ctx.run_ui(input, |_| {}).textures_delta.clear();
+        }
+        assert_eq!(ctx.zoom_factor(), 1.0);
     }
 
     #[test]
