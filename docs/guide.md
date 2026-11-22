@@ -369,11 +369,11 @@ a click would type (`click: type “2” into the line`).
 #### Plumbing
 
 What a right-click offers for text is plumbing, after Plan 9's plumber (Rob Pike, "Plumbing and Other
-Utilities"). Rules say what can act on a text: each has a regular
+Utilities"). Patterns say what can act on a text: each has a regular
 expression that the whole text must match, and a command line to offer.
-Plan 9 runs the first rule that matches; here every rule that matches is
-offered, in order, each command once. The built-in rules, most specific
-first:
+Plan 9 runs the first that matches; here every pattern that matches is
+offered, in order, each command once. The built-in patterns, most
+specific first:
 
 | The text | Offered |
 | --- | --- |
@@ -406,7 +406,7 @@ match = 'Q\d+'
 run = "query wd('$0', P, V)"
 ```
 
-A rule with a pattern that is not a regular expression, a command that
+A pattern whose `match` is not a regular expression, a command that
 does not exist, or an unknown setting is refused when the memex starts,
 as any configuration it would have to guess at is.
 
@@ -1152,7 +1152,7 @@ Command, such as `"pane suggestions"` or `"export draft.md"`; or to
 **`[mouse]`** has one setting, `enabled`: `true` (the default) or `false`.
 See § 2.3, The mouse.
 
-**`[[plumb]]`** adds a plumbing rule, offered on a right-click before the
+**`[[plumb]]`** adds a plumbing pattern, offered on a right-click before the
 built-in ones; there may be any number, in order. See § 2.3, Plumbing.
 
 **Key names:**

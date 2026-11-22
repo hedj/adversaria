@@ -63,13 +63,14 @@ ShiftEnd = "go last"
 [mouse]
 enabled = true
 
-# Plumbing: a right-click offers the commands whose rules match the text
-# selected (or, with none, the word under the pointer). Your rules come
-# before the built-in ones (docs/guide.md § 2.3). Each has a name, the
-# menu's words; a pattern, a regular expression the whole text must match;
-# a command line, as typed in Command, with $0 for the text and $1 to $9
-# for the pattern's groups; and, if it needs one, a test: "file" (a file
-# that exists) or "item" (the text names an item). For example:
+# Plumbing: a right-click offers the commands whose patterns match the
+# text selected (or, with none, the word under the pointer). Your
+# patterns come before the built-in ones (docs/guide.md § 2.3). Each has
+# a name, the menu's words; match, a regular expression the whole text
+# must match; run, a command line, as typed in Command, with $0 for the
+# text and $1 to $9 for match's groups; and, if it needs one, a test:
+# "file" (a file that exists) or "item" (the text names an item). For
+# example:
 #
 # [[plumb]]
 # name = "show Wikidata's statements about $0"
@@ -286,8 +287,8 @@ fn plumb_rules(value: &toml::Value) -> Result<Vec<Rule>, String> {
         .as_array()
         .ok_or("plumb must be a list of tables, each as [[plumb]]")?;
     let rule = |(n, r): (usize, &toml::Value)| {
-        let t = r.as_table().ok_or("each rule is a table")?;
-        plumb_rule(t).map_err(|e| format!("[[plumb]] rule {}: {e}", n + 1))
+        let t = r.as_table().ok_or("each pattern is a table")?;
+        plumb_rule(t).map_err(|e| format!("[[plumb]] pattern {}: {e}", n + 1))
     };
     rules.iter().enumerate().map(rule).collect()
 }
@@ -677,7 +678,7 @@ mod tests {
     }
 
     #[test]
-    fn plumbing_rules_are_read_in_order() {
+    fn plumbing_patterns_are_read_in_order() {
         // Catches the example in the defaults' comments not a rule that
         // parses, the order lost, or "if" not read.
         let example: String = DEFAULT_TOML
@@ -697,13 +698,13 @@ mod tests {
     }
 
     #[test]
-    fn a_plumbing_rule_it_would_guess_at_is_refused() {
+    fn a_plumbing_pattern_it_would_guess_at_is_refused() {
         // Catches a pattern that is no regular expression, a command that
         // does not exist, an unknown test or setting, or a missing part,
         // taken without a word.
         let rule = |body: &str| Config::parse(&format!("[[plumb]]\n{body}\n")).unwrap_err();
         let ok = "name = \"n\"\nmatch = 'x'\nrun = \"go $0\"";
-        assert!(rule(&ok.replace("'x'", "'('")).contains("match"));
+        assert!(rule(&ok.replace("'x'", "'('")).contains("[[plumb]] pattern 1: match"));
         assert!(rule(&ok.replace("go $0", "fly $0")).contains("no command “fly”"));
         assert!(rule(&format!("{ok}\nif = \"dir\"")).contains("if"));
         assert!(rule(&format!("{ok}\nwhen = 1")).contains("no setting when"));

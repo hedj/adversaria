@@ -45,13 +45,14 @@ ShiftEnd = "go last"
 [mouse]
 enabled = true
 
-# Plumbing: a right-click offers the commands whose rules match the text
-# selected (or, with none, the word under the pointer). Your rules come
-# before the built-in ones (docs/guide.md § 2.3). Each has a name, the
-# menu's words; a pattern, a regular expression the whole text must match;
-# a command line, as typed in Command, with $0 for the text and $1 to $9
-# for the pattern's groups; and, if it needs one, a test: "file" (a file
-# that exists) or "item" (the text names an item). For example:
+# Plumbing: a right-click offers the commands whose patterns match the
+# text selected (or, with none, the word under the pointer). Your
+# patterns come before the built-in ones (docs/guide.md § 2.3). Each has
+# a name, the menu's words; match, a regular expression the whole text
+# must match; run, a command line, as typed in Command, with $0 for the
+# text and $1 to $9 for match's groups; and, if it needs one, a test:
+# "file" (a file that exists) or "item" (the text names an item). For
+# example:
 #
 # [[plumb]]
 # name = "show Wikidata's statements about $0"
