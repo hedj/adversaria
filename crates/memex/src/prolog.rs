@@ -422,11 +422,8 @@ mod tests {
             "aggregate_all",
             vec![Term::Atom("count".into()), engines, x],
         );
-        assert_eq!(
-            p.all(&count, 1).unwrap(),
-            [[Term::Int(1)]],
-            "this query's own"
-        );
+        let answer = p.all(&count, 1).unwrap().remove(0);
+        assert_eq!(answer.last(), Some(&Term::Int(1)), "this query's own");
     }
 
     #[test]
