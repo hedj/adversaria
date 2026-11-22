@@ -350,11 +350,6 @@ impl Upright {
             _ => self.drawn().y.checked_sub(1),
         }
     }
-
-    /// Each of its columns.
-    fn columns(&self) -> Vec<usize> {
-        (self.cols.lo..=self.cols.hi).collect()
-    }
 }
 
 /// The cell after a character two columns wide, which that character
@@ -1405,7 +1400,7 @@ impl Plot {
     fn blocks(&mut self, bar: &Upright, ink: Ink) {
         self.cv.fill(bar.full(), '█', ink);
         if let Some((row, block)) = bar.part() {
-            self.cv.put_each(&bar.columns(), row, block, ink);
+            self.cv.fill(bar.cols.on_row(row), block, ink);
         }
     }
 
