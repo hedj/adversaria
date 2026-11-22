@@ -10,6 +10,7 @@ pub mod docs;
 pub mod documents;
 pub mod engine;
 mod evaluation;
+pub mod found;
 pub mod gui;
 pub mod journal;
 pub mod keys;

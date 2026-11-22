@@ -91,7 +91,7 @@ impl App {
     }
 
     /// What the notebook reads in a text, with the current world's words.
-    fn ace_read(&mut self, text: &str) -> Result<Reading, String> {
+    pub(crate) fn ace_read(&mut self, text: &str) -> Result<Reading, String> {
         let facts = self.notebook.facts_now()?;
         let ace = self.reason.ace()?;
         ace.read_with(words_of(&facts), text).map_err(told)

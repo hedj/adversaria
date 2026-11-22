@@ -4,6 +4,7 @@ mod complete;
 pub mod dispatch;
 mod editing;
 mod english;
+mod find;
 mod formal;
 mod inline;
 mod knowledge;

@@ -177,6 +177,14 @@ pub const COMMANDS: &[Command] = &[
         brief: "previous at this level",
     },
     Command {
+        name: "find",
+        run: App::cmd_find,
+        target: false,
+        slots: &[("what", Slot::Text)],
+        help: "list beside the outline the items that hold a text, carry a #label, or are marked by violations or disagreements; find suggestions lists those; a question (What is the rest?, or Prolog in backticks) is answered once; find alone shows the links again",
+        brief: "list what matches, or answer",
+    },
+    Command {
         name: "first",
         run: App::cmd_first,
         target: true,
@@ -714,17 +722,16 @@ pub const GROUPS: &[(&str, &[&str])] = &[
             "link",
             "name",
             "fold",
-            "pane",
             "switch",
             "help",
             "quit",
         ],
     ),
     (
-        "MOVING",
+        "FINDING AND MOVING",
         &[
-            "go", "follow", "back", "forward", "next", "previous", "first", "last", "parent",
-            "child",
+            "find", "go", "follow", "back", "forward", "next", "previous", "first", "last",
+            "parent", "child",
         ],
     ),
     ("FACTS AND DEFINITIONS", &["layer", "check"]),
@@ -734,7 +741,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
     ),
     (
         "WORLDS AND HISTORY",
-        &["suppose", "undo", "query", "redo", "retract"],
+        &["suppose", "undo", "redo", "retract"],
     ),
 ];
 
@@ -754,6 +761,8 @@ pub const ALIASES: &[&str] = &[
     "commit",
     "close",
     "set",
+    "query",
+    "pane",
 ];
 
 /// A group of commands: its heading, and those of its commands listed.
@@ -852,11 +861,12 @@ mod tests {
         // Catches the moves mixed in with the edits again: a reader looking
         // for how to get somewhere finds every way under one heading.
         let groups = command_groups("");
-        let (_, moving) = groups.iter().find(|(h, _)| *h == "MOVING").unwrap();
+        let heading = "FINDING AND MOVING";
+        let (_, moving) = groups.iter().find(|(h, _)| *h == heading).unwrap();
         let names: Vec<&str> = moving.iter().map(|c| c.name).collect();
         let moves = [
-            "go", "follow", "back", "forward", "next", "previous", "first", "last", "parent",
-            "child",
+            "find", "go", "follow", "back", "forward", "next", "previous", "first", "last",
+            "parent", "child",
         ];
         assert_eq!(names, moves);
         let (_, editing) = &groups[0];

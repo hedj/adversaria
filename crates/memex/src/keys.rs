@@ -335,7 +335,7 @@ impl App {
                     a.input.clone()
                 };
                 let found = self.leap_matches(&pattern, forward).first().copied();
-                self.session.last_leap = Some((pattern.clone(), forward));
+                self.session.leapt(&pattern, forward);
                 let leap = json!({"pattern": pattern, "forward": forward, "found": found});
                 match found {
                     Some(id) => {
@@ -569,9 +569,16 @@ fn asks_help(a: &Active) -> bool {
         return sentence.is_empty() || sentence.ends_with(' ');
     }
     match a.q() {
-        Quasi::Command => !in_quotes(&a.input),
+        Quasi::Command => !in_quotes(&a.input) && !ends_a_question(&a.input),
         _ => true,
     }
+}
+
+/// Whether a `?` typed now ends a question to find: after `find` and a
+/// word, it is typed; after a space, it asks for help.
+fn ends_a_question(input: &str) -> bool {
+    let question = input.strip_prefix("find ");
+    question.is_some_and(|q| !q.trim().is_empty() && !q.ends_with(' '))
 }
 
 /// A supposition entry's body: its name, the free English it was mended

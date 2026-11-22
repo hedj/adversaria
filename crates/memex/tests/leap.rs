@@ -241,7 +241,7 @@ fn before_any_leap_the_matches_pane_says_how_to_fill_it() {
     let (mut r, _) = ener("leap-matches-empty");
     r.command("pane matches");
     let rows = r.lines_at(160, 40);
-    let said = "(Leap, and its matches are listed here)";
+    let said = "(find, or Leap, and what it finds is listed here)";
     assert!(rows.iter().any(|l| l.contains(said)), "{rows:#?}");
 }
 

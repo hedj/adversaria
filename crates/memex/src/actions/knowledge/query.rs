@@ -18,10 +18,17 @@ impl App {
         if text.is_empty() {
             return Err("query (goal) a Prolog goal, as animal(X)".into());
         }
+        self.query(text, |_| true)
+    }
+
+    /// A goal's answers, in words, by the variables that `shows` keeps.
+    pub(crate) fn query(&mut self, text: &str, shows: fn(&str) -> bool) -> Result<String, String> {
         let (goal, names) = self.parse_term(text, "not a Prolog goal")?;
         self.vet_definition(&goal, "not asked")?;
         self.sync_engine()?;
         let answers = self.answers(goal)?;
+        let hidden = |n: String| if shows(&n) { n } else { format!("_{n}") };
+        let names: Vec<String> = names.into_iter().map(hidden).collect();
         Ok(answered(&names, &answers))
     }
 

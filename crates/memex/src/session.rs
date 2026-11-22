@@ -3,6 +3,7 @@
 //! it has noticed outside the journal (docs/structure.md § The code's structure).
 
 use crate::app::{Active, Event, Key, Mode, PendingText, Press, Quasi, View};
+use crate::found::Found;
 use crate::notebook::strings;
 use crate::plumb::Offer;
 use crate::present::Presentation;
@@ -27,6 +28,9 @@ pub struct Session {
     pub(crate) view_dirty: bool,
     /// The last leap's pattern and direction, for leaping again.
     pub(crate) last_leap: Option<(String, bool)>,
+    /// What the list beside the outline lists: the last find's, or the
+    /// last leap's matches.
+    pub found: Option<Found>,
     /// Where jumps came from, for back and forward.
     pub trail: Trail,
     pub keys: Keys,
@@ -186,6 +190,12 @@ fn leap_of(b: &Value) -> Option<(String, bool)> {
     Some((pattern.to_string(), b["forward"] != false))
 }
 
+/// What a find entry lists, if it names a list.
+fn found_of(b: &Value) -> Option<Found> {
+    let filter = b["filter"].as_str().filter(|f| !f.is_empty())?;
+    Some(Found::of(filter))
+}
+
 /// The violations and the disagreements an observed entry records.
 fn observed_of(b: &Value) -> Observed {
     (strings(&b["violations"]), strings(&b["disagreements"]))
@@ -331,10 +341,22 @@ impl Session {
         self.view.restore(b);
         self.trail.apply(b);
         match b["op"].as_str() {
-            Some("leap") => self.last_leap = leap_of(b),
+            Some("leap") => {
+                if let Some((pattern, forward)) = leap_of(b) {
+                    self.leapt(&pattern, forward);
+                }
+            }
+            Some("find") => self.found = found_of(b).or(self.found.take()),
             Some("observed") => self.set_observed(observed_of(b)),
             _ => {}
         }
+    }
+
+    /// A leap for a pattern: leaping again finds it, and the list beside
+    /// the outline lists its matches.
+    pub(crate) fn leapt(&mut self, pattern: &str, forward: bool) {
+        self.last_leap = Some((pattern.to_string(), forward));
+        self.found = Some(Found::Text(pattern.to_string()));
     }
 
     /// Show what went wrong, if anything did.

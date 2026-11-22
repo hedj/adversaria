@@ -459,6 +459,7 @@ Where a command takes an ADDRESS, any of these name an item:
 
 | Command | Form | Does |
 | --- | --- | --- |
+| `find` | `find TEXT`, `find #LABEL`, `find violations`, `find disagreements`, `find suggestions`, `find QUESTION?`, `` find `GOAL` ``, `find` | lists in the other pane the items that hold TEXT, ignoring case (as Leap matches), that carry the label, or that a violation or a disagreement marks, in the outline's order, numbered, with where the cursor is among them (`LABELLED #draft · 2 · at 1 of 2`); a click on one jumps to it. `find suggestions` lists the suggestions. A question, in English or in Prolog between backticks, is answered once, as `query` answers it, and nothing is written. `find` alone shows the links again |
 | `go` | `go TEXT` | goes to the item TEXT addresses, else to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3) |
 | `follow` | `follow [N]` | goes to the other end of the target's Nth link (default 1) |
 | `back` | `back` (F7, or the mouse's back button, when no quasimode, menu or question is open) | goes back to where the last jump came from: `follow`, Leap, `go`, or a click on a link, a mention or a match in the right pane (the foot says `click: follow to 2`). Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over |
