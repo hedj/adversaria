@@ -1360,42 +1360,51 @@ impl Plot {
     /// labelled with its text or its number.
     fn bars(&mut self, ms: &[M]) {
         let horizontal = horizontal_bars(ms);
+        let mut missed = 0;
         for m in ms.iter().filter(|m| m.is_bar()) {
             let (Some(x), Some(y)) = (m.get("x"), m.get("y")) else {
                 continue;
             };
-            if horizontal {
-                self.bar_across(m, x, y);
-            } else {
-                self.bar_up(m, x, y);
-            }
+            let drawn = match horizontal {
+                true => self.bar_across(m, x, y),
+                false => self.bar_up(m, x, y),
+            };
+            missed += usize::from(!drawn);
+        }
+        if missed > 0 {
+            let s = if missed == 1 { "" } else { "s" };
+            let why = "a bar runs from zero along an axis of numbers";
+            self.notes.push(format!("{missed} bar{s} not drawn: {why}"));
         }
     }
 
     /// A bar along a row, from zero to its x, its label after it.
-    fn bar_across(&mut self, m: &M, x: &V, y: &V) {
+    fn bar_across(&mut self, m: &M, x: &V, y: &V) -> bool {
         let Some(bar) = self.frame.bar_across(x, y) else {
-            return;
+            return false;
         };
         self.cv.fill(bar, '█', m.ink());
         self.label_after(&bar, &bar_label(m, x), m.ink());
         self.cv.hit(bar, &m.prov);
+        true
     }
 
     /// A bar up a column, from zero to its y, its label above it if there
     /// is room: to the eighth of a cell where the scale starts at zero.
-    fn bar_up(&mut self, m: &M, x: &V, y: &V) {
+    fn bar_up(&mut self, m: &M, x: &V, y: &V) -> bool {
         if let Some(bar) = self.frame.upright(x, y) {
-            return self.upright(m, &bar, y);
+            self.upright(m, &bar, y);
+            return true;
         }
         let Some(bar) = self.frame.bar_up(x, y) else {
-            return;
+            return false;
         };
         self.cv.fill(bar, '█', m.ink());
         if bar.y > 0 {
             self.label_above(&bar, &bar_label(m, y), m.ink());
         }
         self.cv.hit(bar, &m.prov);
+        true
     }
 
     /// A bar drawn to the eighth of a cell: its full cells, the block that
@@ -3769,6 +3778,15 @@ mod tests {
             ),
             want
         );
+    }
+
+    #[test]
+    fn bars_with_no_axis_of_numbers_are_noted_not_dropped() {
+        // Catches bars on two axes of categories drawn nowhere and named
+        // nowhere, though a mark not drawn is named (the code review, H6).
+        let picture = draw(&["bar x:a y:b", "bar x:c y:d"], 40, 10);
+        let note = "note: 2 bars not drawn: a bar runs from zero along an axis of numbers";
+        assert!(picture.iter().any(|l| l == note), "{picture:#?}");
     }
 
     #[test]
