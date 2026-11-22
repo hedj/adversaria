@@ -61,15 +61,19 @@ impl Engine {
         self.p.is_dead()
     }
 
-    /// Make the loaded facts equal these, by difference.
+    /// Make the loaded facts equal these, by difference. Each change is
+    /// recorded as it is made, so a fact the server refuses leaves the
+    /// record true of what the server holds, and a retry repeats nothing.
     pub fn sync(&mut self, facts: &[(u64, Term)]) -> Result<(), Error> {
-        for (seq, gone) in absent(&self.loaded, facts) {
-            self.p.retract_fact(gone, *seq)?;
+        let gone: Vec<(u64, Term)> = absent(&self.loaded, facts).into_iter().cloned().collect();
+        for fact in gone {
+            self.p.retract_fact(&fact.1, fact.0)?;
+            self.loaded.retain(|f| key(f) != key(&fact));
         }
-        for (seq, new) in absent(facts, &self.loaded) {
-            self.p.assert_fact(new, *seq)?;
+        for fact in absent(facts, &self.loaded) {
+            self.p.assert_fact(&fact.1, fact.0)?;
+            self.loaded.push(fact.clone());
         }
-        self.loaded = facts.to_vec();
         Ok(())
     }
 
@@ -299,6 +303,24 @@ mod tests {
         let mut engine = Engine::start().unwrap();
         let (term, _) = engine.parse(text).unwrap();
         check(&mut engine, term).unwrap_err()
+    }
+
+    #[test]
+    fn a_refused_fact_leaves_the_facts_before_it_known() {
+        // Catches sync recording nothing when one fact is refused: the
+        // facts asserted before it were then asserted again on each retry,
+        // and taking them away later left them on the server (the code
+        // review, C-B2). append/3 is a library's, so it is refused.
+        let mut engine = Engine::start().unwrap();
+        let atom = |a: &str| Term::Atom(a.into());
+        let foo = Term::Compound("foo".into(), vec![atom("a")]);
+        let reserved = Term::Compound("append".into(), vec![atom("x"), atom("y"), atom("z")]);
+        let both = [(1, foo.clone()), (2, reserved)];
+        assert!(engine.sync(&both).is_err());
+        assert!(engine.sync(&both).is_err(), "a retry is refused again");
+        engine.sync(&[]).unwrap();
+        let foo_x = Term::Compound("foo".into(), vec![Term::Var(0)]);
+        assert_eq!(engine.p.all(&foo_x, 2).unwrap(), Vec::<Vec<Term>>::new());
     }
 
     #[test]
