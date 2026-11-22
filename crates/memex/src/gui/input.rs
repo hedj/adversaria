@@ -8,8 +8,6 @@
 
 use crate::app::{Event, Key, Press, Quasi, Special};
 use crate::config::{Config, QuasiKey};
-use crate::present::Presentation;
-use crate::ui::Presentations;
 use ratatui::buffer::Buffer;
 use ratatui::style::Modifier;
 use unicode_width::UnicodeWidthStr;
@@ -209,11 +207,6 @@ fn function(n: NamedKey) -> Option<Key> {
     ];
     let at = KEYS.iter().position(|k| *k == n)?;
     Some(Key::F(at as u8 + 1))
-}
-
-/// What a click on a cell acts on, if anything.
-pub fn clicked(hits: &Presentations, (column, row): (u16, u16)) -> Option<Presentation> {
-    hits.at(column, row).cloned()
 }
 
 // Text selected with the mouse, as the window shows it: the cells from
