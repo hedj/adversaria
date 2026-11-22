@@ -443,3 +443,23 @@ fn redo_after_close_does_not_bring_the_supposition_back() {
     assert_eq!(r.app.reason.world(), "actual");
     assert!(!r.shows("only in the supposition"), "{:#?}", r.lines());
 }
+
+#[test]
+fn undoing_a_supposition_leaves_its_world_and_redo_returns() {
+    // Catches the supposition kept open when its suppose entry was
+    // undone: the bar still named it, and a later close dropped what was
+    // typed meanwhile from the actual world (the code review, D-B4).
+    let mut r = Room::new("undo-suppose");
+    r.items(&["ants"]);
+    r.command("fact date(ant, 1)");
+    suppose(&mut r, "the ant 2");
+    r.command("undo");
+    assert_eq!(r.app.reason.world(), "actual");
+    r.command("redo");
+    assert_eq!(r.app.reason.world(), "the ant 2", "redo opens it again");
+    r.command("undo");
+    r.items(&["", "typed after the undo"]);
+    r.app.run_command("close");
+    assert_eq!(r.app.reason.world(), "actual");
+    assert!(r.shows("typed after the undo"), "{:#?}", r.lines());
+}

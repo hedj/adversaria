@@ -17,6 +17,8 @@ pub struct Supposition {
     pub name: String,
     /// The head of the actual world it was sprouted from.
     pub actual: u64,
+    /// The suppose entry that opened it.
+    opened: u64,
 }
 
 impl Supposition {
@@ -24,7 +26,11 @@ impl Supposition {
     fn of(e: &Entry, b: &Value) -> Supposition {
         let name = b["name"].as_str().unwrap_or("supposed").to_string();
         let actual = e.parent_seq().unwrap_or(1);
-        Supposition { name, actual }
+        Supposition {
+            name,
+            actual,
+            opened: e.seq,
+        }
     }
 }
 
@@ -32,6 +38,9 @@ impl Supposition {
 #[derive(Default)]
 pub struct Reasoning {
     pub supposition: Option<Supposition>,
+    /// The supposition the last undo left, which a redo of its suppose
+    /// entry opens again.
+    undone_supposition: Option<Supposition>,
     /// The current world's engine, the actual world's while a supposition
     /// is open, and one for previews.
     engines: [Option<Engine>; 3],
@@ -50,7 +59,18 @@ impl Reasoning {
     /// dismissed or offered.
     pub(crate) fn apply(&mut self, e: &Entry) {
         let Some(b) = e.body() else { return };
+        let opened = |s: &Option<Supposition>, key: &str| {
+            s.as_ref()
+                .is_some_and(|s| b[key].as_u64() == Some(s.opened))
+        };
         match (e.kind(), b["op"].as_str()) {
+            // Undoing the suppose leaves its world; redoing it returns.
+            ("undo", _) if opened(&self.supposition, "undoes") => {
+                self.undone_supposition = self.supposition.take();
+            }
+            ("redo", _) if opened(&self.undone_supposition, "redoes") => {
+                self.supposition = self.undone_supposition.take();
+            }
             ("view", Some("world")) => self.supposition = None,
             ("view", Some("dismiss")) => self.suggestions.dismiss(b["key"].as_str()),
             ("view", Some("offer")) => self.suggestions.offer(strings(&b["keys"])),
