@@ -2,8 +2,8 @@
 
 A proposal for the author, 22 November 2026, after the fifth review
 (docs/research/notes/ux-review-5-regularity.md). The grammar is built,
-and so are the lists of each verb's words (§ Built, and the count now);
-the four moves of § How far are not.
+and so are the lists of each verb's words and most of move 2, editing
+by habit (§ Built, and the count now); moves 1, 3 and 4 are not.
 
 ## The answer
 
@@ -43,6 +43,7 @@ Built on 22 November 2026, one change a commit:
 | `import` reads the kind from the file's ending | 1782194 |
 | `?` after a verb lists the words its first noun may be; Tab completes | 3b9e805 |
 | the tutorial teaches the grammar where it is first used | 5a68a1f |
+| move 2, editing by habit: Backspace deletes an empty item; Ctrl+X, Ctrl+C and Ctrl+V | ea2ead5 |
 
 Where the build differs from § The grammar:
 
@@ -82,9 +83,16 @@ mine, as in the fifth review):
 | quasimodes and tap | 3 | 3 |
 | `?` and the in-quasimode keys | 4 | 4 |
 | keys with an arrow; right-click | 2 | 2: Shift selects, a habit; Ctrl with an arrow moves by structure; right-click |
-| **total** | **about 76** | **about 53** |
+| **total** | **about 76** | **about 53**; with move 2, **about 48** |
 
-All 23 of the fall come from the lists, and rest on one assumption: that
+Move 2 makes five verbs habits: `new` (Enter, and Backspace takes an
+empty item back), `move` (Ctrl+X, Ctrl+V), `copy` (Ctrl+C, Ctrl+V),
+`undo` and `redo` (Ctrl+Z, Ctrl+Y). `delete` stays a verb to recall,
+since an item with text, or a branch, still needs it; drag to move is
+not built. The count falls from about 53 to about 48, within the budget
+of about 50.
+
+All 23 of the fall to 53 come from the lists, and rest on one assumption: that
 a list shown by `?` after the verb is recognition, as the fifth review's
 first suggestion assumed. The grammar itself removes nothing by the rule.
 It changes how a noun is given, not what must be recalled; its gain is
@@ -93,18 +101,19 @@ fewer words typed and fewer refusals, which the journal can measure
 
 ### The rest of the way
 
-From about 53 to about 20, each move keeping every capability (§ How far
-gives each in full):
+From about 48 to about 20, each move keeping every capability (§ How far
+gives each in full); move 2's row is what was proposed, and it is built
+but for drag to move:
 
 | Move | Held after it | Cost | What it needs |
 | --- | --- | --- | --- |
-| 2. Editing by habit: Backspace deletes an empty item; Ctrl+X, Ctrl+C and Ctrl+V on items and text; drag to move | about 47: `new`, `delete`, `move`, `copy`, `undo`, `redo` become habits | small to medium | three chords on the path Ctrl+Z uses, and a clipboard of the session's. A cut marks its items until they are pasted, as a spreadsheet's cut does, so a moved item keeps its identity and its entries |
-| 1. The act key: Menu at the cursor offers the verbs that apply to the target, ranked, each with its key | about 30: the other 14 verbs, and 3 address forms, since pointing fills an argument | large | for each verb, a test of whether it applies and a rank; the menu itself exists (the right-click's) |
+| 2. Editing by habit: Backspace deletes an empty item; Ctrl+X, Ctrl+C and Ctrl+V on items and text; drag to move | about 47 as proposed, with `new`, `delete`, `move`, `copy`, `undo` and `redo` habits; about 48 as built, since `delete` stays | small to medium | three chords on the path Ctrl+Z uses, and a clipboard of the session's. A cut marks its items until they are pasted, as a spreadsheet's cut does, so a moved item keeps its identity and its entries |
+| 1. The act key: Menu at the cursor offers the verbs that apply to the target, ranked, each with its key | about 30: the other 15 verbs, `delete` among them, and 3 address forms, since pointing fills an argument | large | for each verb, a test of whether it applies and a rank; the menu itself exists (the right-click's) |
 | 4. One reader for every line | about 28 | medium | a line that is no command but reads as a statement is supposed, a question is answered, and the foot says which, before Enter. Risk: a mistyped command read as a statement, so only a line with a reading is taken |
 | 3. Seven concepts | about 23 | large | labels as links and the five kinds of offer change the guide's vocabulary throughout; labels as links need a decision on the journal's meaning |
 | Enter, Esc, Tab and the right-click counted as habits | about 19 | none | a decision on the counting rule, for the author |
 
-Recommended order: 2, then 1, then 4, then 3. Move 2 is the cheapest,
+Recommended order: 2 (built), then 1, then 4, then 3. Move 2 is the cheapest,
 and costs nothing to learn, since the keys are habits already. Move 1
 removes the most. Move 3 changes what the learner is told the notebook
 is, so it is the author's to choose, and it is best done last, when the
