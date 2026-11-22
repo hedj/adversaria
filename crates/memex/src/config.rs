@@ -159,7 +159,7 @@ fn bound_key(name: &str) -> Result<Key, String> {
     if let Some(n) = name
         .strip_prefix('F')
         .and_then(|n| n.parse::<u8>().ok())
-        .filter(|n| (1..=35).contains(n))
+        .filter(|n| (1..=35).contains(n) && name == format!("F{n}"))
     {
         return Ok(Key::F(n));
     }
@@ -606,6 +606,15 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(example, DEFAULT_TOML);
+    }
+
+    #[test]
+    fn a_function_key_is_named_one_way() {
+        // Catches "F+1" and "F01" read as F1, a name the file would then
+        // write back otherwise (the code review, D-B7).
+        for name in ["F+1", "F01", "F0", "F36"] {
+            assert!(bound_key(name).is_err(), "{name}");
+        }
     }
 
     #[test]
