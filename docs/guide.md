@@ -54,7 +54,7 @@ For connecting items. `[[Buran flight]]` in an item's text, or `link to 9 as cit
 
 #### Label
 
-For grouping items, and naming one. `#draft` in an item's text; `find #draft` lists the items that carry it, and a label one item alone carries addresses it: `go draft`.
+For grouping items, and naming one. `#draft` in an item's text links it to the page `draft`, as `[[draft]]` does; `find #draft` lists the items that link to it, and a page one item alone links to addresses it: `go draft`.
 
 #### Entry
 
@@ -180,7 +180,7 @@ second one beside the first). Every older command name still runs,
 typed whole; § 2.4 lists them with what replaces each.
 
 An **address** names an item in three forms: its number (`1.2`), the
-start of its text or a label it alone carries (`Energia`, `draft`), or,
+start of its text or a page's name (`Energia`, `draft`), or,
 for an entry, `entry 12`.
 
 Type a verb alone, and the memex fills in what it can. The foot shows
@@ -665,10 +665,11 @@ Where a command takes an ADDRESS, any of these name an item:
 - its number: `2`, or `1.4` for the fourth item under item 1;
 - `#` and the number of the entry that made it, `#28`, an old form, kept;
 - a name given by `name`, an old command (§ 2.4, Old names);
-- a label that it alone carries, with its `#` or without: `draft` or
-  `#draft`, for the one item whose text has `#draft`. A `[[draft]]` link
-  goes there too, and is made when the label is written; the item
-  labelled `#title` heads the outline;
+- the name of a page, with its `#` or without: `draft` or `#draft`
+  (§ 2.4, Labels): the page's item, if it has one, else the one item
+  that links to the page, by `#draft` or by `[[draft]]`. A page two or
+  more items link to addresses none of them; `go draft` lists them. The
+  item labelled `#title` heads the outline;
 - the start of its text, if only one item starts that way: `Energia`.
 
 #### Editing the outline
@@ -688,8 +689,8 @@ Where a command takes an ADDRESS, any of these name an item:
 
 | Command | Form | Does |
 | --- | --- | --- |
-| `find` | `find TEXT`, `find #LABEL`, `find violations`, `find disagreements`, `find suggestions`, `find QUESTION?`, `` find `GOAL` ``, `find` | lists in the inspector's place the items that hold TEXT, ignoring case (as Leap matches), that carry the label, or that a violation or a disagreement marks, in the outline's order, numbered, with where the cursor is among them (`LABELLED #draft · 2 · at 1 of 2`); a click on one jumps to it, so `go back` returns, and the list stays as you edit. `find suggestions` lists the suggestions. A question, in English or as a Prolog goal between backticks, is answered once over this world's beliefs, through rules: `` find `animal(X)` `` says `2 answers: X = nemo · X = dory`, a goal without variables `yes` or `no`, and an English question its answer alone (`1 answer: Answer = 1600`). At most 20 answers are shown; the goal may only read facts, compare and compute, as a definition may; nothing is written. `find` alone shows the inspector again |
-| `go` | `go TEXT`, `go link N`, `go back`, `go forward`, `go next`, `go previous`, `go first`, `go last`, `go parent`, `go child` | goes to the item TEXT addresses, else to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3). `go link N` goes to the other end of the target's Nth link (default 1). `go back` (F7, or the mouse's back button) goes back to where the last jump came from: `go`, Leap, or a click on a link, a mention or a match; `go forward` (F8) goes forward again, and a new jump empties the way forward, as in a browser. Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over. `go next`, `go previous`, `go first`, `go last`, `go parent` and `go child` move by the outline's structure, after NLS (Ctrl with an arrow, Home or End, § 2.3): `go next` passes over the items under the target, `go parent` from the top level goes to the notebook, whose inspector lists what waits for you to decide (§ 2.2), and `go child` shows a folded branch. These are moves, as arrow keys are, not jumps. The words of the ways are kept for them: an item whose text is `next` is reached by its number |
+| `find` | `find TEXT`, `find #LABEL`, `find violations`, `find disagreements`, `find suggestions`, `find QUESTION?`, `` find `GOAL` ``, `find` | lists in the inspector's place the items that hold TEXT, ignoring case (as Leap matches), that link to the label's page (by `#draft` or `[[draft]]`, § 2.4, Labels), or that a violation or a disagreement marks, in the outline's order, numbered, with where the cursor is among them (`LINKED TO #draft · 2 · at 1 of 2`); a click on one jumps to it, so `go back` returns, and the list stays as you edit. `find suggestions` lists the suggestions. A question, in English or as a Prolog goal between backticks, is answered once over this world's beliefs, through rules: `` find `animal(X)` `` says `2 answers: X = nemo · X = dory`, a goal without variables `yes` or `no`, and an English question its answer alone (`1 answer: Answer = 1600`). At most 20 answers are shown; the goal may only read facts, compare and compute, as a definition may; nothing is written. `find` alone shows the inspector again |
+| `go` | `go TEXT`, `go link N`, `go back`, `go forward`, `go next`, `go previous`, `go first`, `go last`, `go parent`, `go child` | goes to the item TEXT addresses; else, if two or more items link to the page TEXT names, lists them, as `find #TEXT` does; else goes to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3). `go link N` goes to the other end of the target's Nth link (default 1). `go back` (F7, or the mouse's back button) goes back to where the last jump came from: `go`, Leap, or a click on a link, a mention or a match; `go forward` (F8) goes forward again, and a new jump empties the way forward, as in a browser. Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over. `go next`, `go previous`, `go first`, `go last`, `go parent` and `go child` move by the outline's structure, after NLS (Ctrl with an arrow, Home or End, § 2.3): `go next` passes over the items under the target, `go parent` from the top level goes to the notebook, whose inspector lists what waits for you to decide (§ 2.2), and `go child` shows a folded branch. These are moves, as arrow keys are, not jumps. The words of the ways are kept for them: an item whose text is `next` is reached by its number |
 
 #### Labels
 
@@ -697,7 +698,18 @@ A `#` at the start of a text or after a space, then a word,
 tags the item: `Buran #reusable #Soviet-space` gives `item_tag(Item,
 reusable)` and `item_tag(Item, soviet_space)` (lower case, hyphens made
 underscores, as the reader writes names). Tags follow the text: there is
-nothing to write or take back. Views, derived text and constraints read
+nothing to write or take back.
+
+A label is a link, to the page of its name: `#draft` and `[[draft]]`
+link to one page, `draft`, and so do `[[Draft]]` and, for a name of two
+words, `#buran_flight`, `[[Buran flight]]` and `[[buran-flight]]` (case
+aside, a space and a hyphen are an underscore). A page is the item named
+so, or else the first whose text is its name; with neither, the page is
+virtual, made of the items that link to it. `find #draft` lists them, by
+either spelling (`LINKED TO #draft · 3`). Each label also gives
+`item_link(Item, Page, label)`, and a `[[link]]` to a virtual page
+`item_link(Item, Page, link)`, with the page by its item's number, else
+by its name: `item_link(4, draft, label)`. Views, derived text and constraints read
 them, as `constraint not both draft and final: false :- item_tag(I,
 draft), item_tag(I, final).` does. `C#`, `#1`, a heading's `# ` and a web
 address's `/#anchor` are not tags.
@@ -705,8 +717,9 @@ address's `/#anchor` are not tags.
 #### Links typed in text
 
 Write `[[Buran flight]]` in an item's text and,
-at the pause, the item links to the item named so, else to the first
-whose text it is (ignoring case). While the text cursor is after an open
+at the pause, the item links to the page's item: the item named so, else
+the first whose text it is (ignoring case, with a space and a hyphen
+alike). While the text cursor is after an open
 `[[`, a dim line under the item lists the names that fit what you have
 typed (`[[ Energia · Energy launch · Tab completes`): the names that
 `name` gave, and the texts short enough to be names (3 to 60 characters, six
@@ -715,9 +728,7 @@ they agree, and, when one fits, closes the link with `]]`. A link that names no 
 nothing: at the cursor a dim line says `not yet items: Buran flight ·
 adopt fix makes them`, and `adopt fix` (or `make`, its old name) makes
 each at the foot of the top level and links it; one `undo` takes that back. If you make such an item yourself
-(by typing it, or with Leap and Enter), or an item comes to carry the
-link's text as its label alone (`#buran-flight` for `[[buran-flight]]`),
-the link is made at the pause, and one `undo` takes the text and its
+(by typing it, or with Leap and Enter), the link is made at the pause, and one `undo` takes the text and its
 links back together. A name given by `name` links at once; a name moved
 to another item takes its links with it. Take the brackets out, and the link goes. The reader reads
 the text without its brackets, so `The date of [[Buran-flight]] is

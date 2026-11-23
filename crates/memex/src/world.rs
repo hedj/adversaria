@@ -2,10 +2,10 @@
 //! (docs/design.md § Dataflow).
 
 use crate::engine::{Engine, told};
-use crate::outline::Outline;
+use crate::outline::{Outline, page_key};
 use crate::reason::{ConstraintEval, Nodes, WorldEval, marks};
 use format::terms::Term;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 /// A world: the facts stated in it, its outline, the Wikidata subset
@@ -144,8 +144,52 @@ pub fn started(slot: &mut Option<Engine>) -> Result<&mut Engine, String> {
 /// item_tag(Id, Tag) for each #tag in its text, and item_link(From, To,
 /// Type) for each link between two of its items.
 pub fn outline_facts(o: &Outline) -> Vec<(u64, Term)> {
+    let pages = o.page_items();
     let items = o.in_order().into_iter().flat_map(|id| item_facts(o, id));
-    items.chain(link_facts(o)).collect()
+    let links = o
+        .in_order()
+        .into_iter()
+        .flat_map(|id| page_facts(o, &pages, id));
+    items.chain(links).chain(link_facts(o)).collect()
+}
+
+/// item_link(Id, Page, label) for each label in an item's text, and
+/// item_link(Id, Page, link) for each [[link]] to a page that is no item
+/// (one that is has a link entry, and its fact, once the text is read):
+/// the page by its item, else by its key (docs/concepts-seven.md,
+/// change 4).
+fn page_facts(o: &Outline, pages: &HashMap<String, u64>, id: u64) -> Vec<(u64, Term)> {
+    let linked = linked_pages(&o.text(id), pages);
+    linked
+        .into_iter()
+        .map(|(page, kind)| (id, page_link(id, page, kind)))
+        .collect()
+}
+
+/// The pages a text links to that no link entry records, each with how:
+/// each label's, and each [[link]]'s that is no item.
+fn linked_pages(text: &str, pages: &HashMap<String, u64>) -> Vec<(Term, &'static str)> {
+    let labels = crate::outline::tags(text).into_iter().map(|k| (k, "label"));
+    let unmade = unmade_links(text, pages).into_iter().map(|k| (k, "link"));
+    labels
+        .chain(unmade)
+        .map(|(k, kind)| (page_term(pages, k), kind))
+        .collect()
+}
+
+/// The keys of a text's [[links]] to pages that are no items.
+fn unmade_links(text: &str, pages: &HashMap<String, u64>) -> Vec<String> {
+    let keys = crate::actions::bracketed(text)
+        .into_iter()
+        .map(|n| page_key(&n));
+    keys.filter(|k| !pages.contains_key(k)).collect()
+}
+
+/// A page as a fact names it: by its item, else by its key.
+fn page_term(pages: &HashMap<String, u64>, key: String) -> Term {
+    pages
+        .get(&key)
+        .map_or(Term::Atom(key), |i| Term::Int(*i as i64))
 }
 
 /// item_link(From, To, Type) for each link whose ends are both items,
@@ -159,11 +203,13 @@ fn link_facts(o: &Outline) -> impl Iterator<Item = (u64, Term)> + '_ {
 }
 
 fn item_link(from: u64, to: u64, kind: &str) -> Term {
-    let args = vec![
-        Term::Int(from as i64),
-        Term::Int(to as i64),
-        Term::Atom(kind.into()),
-    ];
+    page_link(from, Term::Int(to as i64), kind)
+}
+
+/// item_link(From, Page, Type): a link from an item to a page, which is
+/// an item's number or a name.
+fn page_link(from: u64, page: Term, kind: &str) -> Term {
+    let args = vec![Term::Int(from as i64), page, Term::Atom(kind.into())];
     Term::Compound("item_link".into(), args)
 }
 

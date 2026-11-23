@@ -1,6 +1,8 @@
 //! Labels address (docs/concepts.md, decision 5): a label that one item
-//! alone carries names it, as `name` did, in commands and in [[links]];
-//! `#title` heads the outline.
+//! alone carries names it in commands, as `name` did; `#title` heads the
+//! outline. A [[link]] of the label's name goes to the label's page, not
+//! to the item that carries it (docs/concepts-seven.md, change 4;
+//! tests/pages.rs).
 
 mod support;
 
@@ -50,21 +52,16 @@ fn a_label_two_items_carry_addresses_neither() {
 }
 
 #[test]
-fn a_label_written_later_links_the_links_that_use_it_and_undo_takes_them_back() {
-    // Catches a [[link]] left unresolved after an item comes to carry the
-    // label it names, or kept after the label's text is undone.
-    let mut r = Room::new("label-later");
-    r.items(&["See [[draft]].", "The essay"]);
+fn a_label_and_a_link_of_one_name_go_to_its_page_not_to_each_other() {
+    // Catches a [[link]] still written to the item that carries the label
+    // it names, as decision 5 had it before labels became links.
+    let mut r = Room::new("label-and-link");
+    r.items(&["See [[draft]].", "The essay #draft"]);
     r.app.idle();
     let from = titled(&r, "See [[draft]].");
     assert_eq!(inline_to(&r, from), [] as [u64; 0]);
-    r.typ(" #draft");
-    r.app.idle();
-    let essay = titled(&r, "The essay #draft");
-    assert_eq!(inline_to(&r, from), [essay]);
-    r.command("undo");
-    r.app.idle();
-    assert_eq!(inline_to(&r, from), [] as [u64; 0], "{:#?}", r.lines());
+    r.command("go draft");
+    assert!(r.shows("LINKED TO #draft · 2"), "{:#?}", r.lines());
 }
 
 #[test]

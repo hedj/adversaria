@@ -10,7 +10,8 @@ use crate::ui::item_marks;
 pub enum Found {
     /// The items whose text holds it, in any case.
     Text(String),
-    /// The items whose text carries the label, as `tags` reads it.
+    /// The items that link to a page, by a label or a [[link]]: the page,
+    /// by its key (docs/concepts-seven.md, change 4).
     Label(String),
     /// The items a violation marks if loud, else a disagreement.
     Marked { loud: bool },
@@ -44,7 +45,7 @@ impl Found {
     pub fn heading(&self) -> String {
         match self {
             Found::Text(t) => format!("MATCHES OF “{t}”"),
-            Found::Label(l) => format!("LABELLED #{l}"),
+            Found::Label(l) => format!("LINKED TO #{l}"),
             Found::Marked { loud: true } => "MARKED BY A VIOLATION".into(),
             Found::Marked { loud: false } => "MARKED BY A DISAGREEMENT".into(),
         }
@@ -56,19 +57,11 @@ impl Found {
         let order = outline.in_order();
         match (self, eval) {
             (Found::Text(t), _) => outline.holding(order, t),
-            (Found::Label(l), _) => labelled(outline, order, l),
+            (Found::Label(l), _) => outline.page_linkers(l),
             (Found::Marked { loud }, Some(e)) => marked(outline, order, e, *loud),
             (Found::Marked { .. }, None) => vec![],
         }
     }
-}
-
-/// The items, of those given, whose text carries a label.
-fn labelled(outline: &Outline, items: Vec<u64>, label: &String) -> Vec<u64> {
-    items
-        .into_iter()
-        .filter(|id| tags(&outline.text(*id)).contains(label))
-        .collect()
 }
 
 /// The items, of those given, that a violation marks if loud, else a

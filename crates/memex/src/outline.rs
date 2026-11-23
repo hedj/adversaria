@@ -691,13 +691,53 @@ impl Outline {
         Some(())
     }
 
-    /// The item a [[link]] of this name goes to: the one named so, if it
-    /// still exists, else the first whose text it is, ignoring case, else
-    /// the one that alone carries it as a label.
+    /// The item a [[link]] of this name goes to: its page's item, if the
+    /// page is one (docs/concepts-seven.md, change 4). A label of the name
+    /// links to the same page, not to the item that carries it.
     pub fn resolve(&self, name: &str) -> Option<u64> {
-        self.by_name(name)
-            .or_else(|| self.titled(name))
-            .or_else(|| self.by_label(name))
+        let key = page_key(name);
+        let titled = || {
+            self.in_order()
+                .into_iter()
+                .find(|id| same_page(&self.text(*id), &key))
+        };
+        self.named_page(&key).or_else(titled)
+    }
+
+    /// The item named for a page by `name`, if one is: of two names of one
+    /// page ("Draft", "draft"), the first in the names' sorted order, so
+    /// that it is the same each time.
+    fn named_page(&self, key: &str) -> Option<u64> {
+        let live = self
+            .names
+            .iter()
+            .filter(|(_, id)| self.items.contains_key(id));
+        let named = live.filter(|(name, _)| page_key(name) == key);
+        named.map(|(_, id)| *id).next()
+    }
+
+    /// Each page that is an item, by its key, as `resolve` finds it: the
+    /// item named so, else the first, in the outline's order, whose text
+    /// is the page's name. All at once, for the facts of every label.
+    pub fn page_items(&self) -> HashMap<String, u64> {
+        let titled = self.in_order().into_iter().rev();
+        let keyed = titled.map(|id| (page_key(&self.text(id)), id));
+        let mut pages: HashMap<String, u64> = keyed.collect();
+        let keys: BTreeSet<String> = self.names.keys().map(|n| page_key(n)).collect();
+        let named = keys
+            .into_iter()
+            .filter_map(|k| Some((self.named_page(&k)?, k)));
+        pages.extend(named.map(|(id, k)| (k, id)));
+        pages
+    }
+
+    /// The items that link to a page, by a label or a [[link]], in the
+    /// outline's order.
+    pub fn page_linkers(&self, key: &str) -> Vec<u64> {
+        let order = self.in_order().into_iter();
+        order
+            .filter(|id| links_to_page(&self.text(*id), key))
+            .collect()
     }
 
     /// The item that alone carries the label `title`, which heads the
@@ -705,14 +745,6 @@ impl Outline {
     /// for each evaluation, not at each frame.
     pub fn labelled_title(&self) -> Option<u64> {
         self.by_label("title")
-    }
-
-    /// The first item whose text is this, ignoring case, as Leap and
-    /// addresses ignore it: in every script, not ASCII alone.
-    fn titled(&self, name: &str) -> Option<u64> {
-        let name = name.to_lowercase();
-        let mut order = self.in_order().into_iter();
-        order.find(|i| self.text(*i).trim().to_lowercase() == name)
     }
 
     /// Whether one of an item's [[links]] uses this name.
@@ -905,12 +937,44 @@ impl Outline {
         self.by_seq(a)
             .or_else(|| self.by_number(a))
             .or_else(|| self.by_name(a))
-            .or_else(|| self.by_label(a))
+            .or_else(|| self.by_page(a))
             .or_else(|| self.by_prefix(a))
     }
 
-    /// The one item that carries a label, written with its # or without
-    /// (docs/concepts.md, decision 5: a label addresses as a name did).
+    /// The item a page's name addresses, written with its # or without:
+    /// the page's item, if it is one, else the one item that links to it,
+    /// by a label or a [[link]] (docs/concepts.md, decision 5: a label
+    /// addresses as a name did; concepts-seven.md, change 4). A page two
+    /// items link to addresses neither: `go` shows the page.
+    fn by_page(&self, a: &str) -> Option<u64> {
+        let key = page_key(a.strip_prefix('#').unwrap_or(a));
+        if key.is_empty() {
+            return None;
+        }
+        self.named_page(&key)
+            .or_else(|| self.titled_or_linked(&key))
+    }
+
+    /// In one pass over the items, as each text is costly to build: the
+    /// first whose text is a page's name, else the one that links to it.
+    fn titled_or_linked(&self, key: &str) -> Option<u64> {
+        let mut linking = Vec::new();
+        for id in self.in_order() {
+            let text = self.text(id);
+            if same_page(&text, key) {
+                return Some(id);
+            }
+            if links_to_page(&text, key) {
+                linking.push(id);
+            }
+        }
+        match linking.as_slice() {
+            [one] => Some(*one),
+            _ => None,
+        }
+    }
+
+    /// The one item that carries a label, written with its # or without.
     fn by_label(&self, a: &str) -> Option<u64> {
         let word = a.strip_prefix('#').unwrap_or(a);
         let label = tags(&format!("#{word}")).pop()?;
@@ -1160,6 +1224,46 @@ pub fn reads_as_number(a: &str) -> bool {
     a.split('.').all(digits)
 }
 
+/// A page's key: its name in lower case, a run of spaces or a hyphen as an
+/// underscore, as a label is read (`tags`), so that `#buran_flight`,
+/// `[[Buran flight]]` and `[[buran-flight]]` name one page.
+pub fn page_key(name: &str) -> String {
+    page_chars(name).collect()
+}
+
+/// A name's characters as its page's key has them.
+fn page_chars(name: &str) -> impl Iterator<Item = char> + '_ {
+    let words = name.split_whitespace().enumerate();
+    let joined = words.flat_map(|(i, w)| (i > 0).then_some('_').into_iter().chain(w.chars()));
+    joined
+        .flat_map(char::to_lowercase)
+        .map(|c| if c == '-' { '_' } else { c })
+}
+
+/// Whether a text is a page's name, compared a character at a time, so
+/// that most texts are told apart at their first.
+fn same_page(text: &str, key: &str) -> bool {
+    page_chars(text).eq(key.chars())
+}
+
+/// Whether a text links to a page: by a label, or by a [[link]].
+pub fn links_to_page(text: &str, key: &str) -> bool {
+    labels_page(text, key) || brackets_page(text, key)
+}
+
+/// Whether a text carries a page's label; one with no `#` is passed
+/// over unread.
+fn labels_page(text: &str, key: &str) -> bool {
+    text.contains('#') && tags(text).iter().any(|t| t == key)
+}
+
+/// Whether a text's [[links]] name a page; one with no `[[` is passed
+/// over unread.
+fn brackets_page(text: &str, key: &str) -> bool {
+    let named = |n: &String| page_key(n) == key;
+    text.contains("[[") && crate::actions::bracketed(text).iter().any(named)
+}
+
 /// A text's #tags, each once, in order: a # at the start or after a space,
 /// then a letter, then letters, digits, hyphens and underscores; in lower
 /// case, hyphens made underscores, as the reader writes names. Not C#,
@@ -1182,7 +1286,7 @@ fn tag_of(rest: &str) -> Option<String> {
         .take_while(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
         .collect();
     let starts = tag.chars().next().is_some_and(char::is_alphabetic);
-    starts.then(|| tag.to_lowercase().replace('-', "_"))
+    starts.then(|| page_key(&tag))
 }
 
 /// A read record's reading: the text, its entries and its statements.

@@ -2,7 +2,7 @@
 //! (docs/guide.md, § 2.4, Editing the outline).
 
 use crate::app::{App, PaneKind, word_at};
-use crate::outline::{Outline, reads_as_number};
+use crate::outline::{Outline, page_key, reads_as_number};
 use format::terms::{self, Term};
 use serde_json::{Value, json};
 
@@ -164,9 +164,9 @@ impl App {
             ["link", n @ ..] => self.go_from(target, |a| a.cmd_follow(n, target)),
             [way] => match super::structure::move_named(way) {
                 Some(step) => self.go_from(target, |a| step(a, &[], target)),
-                None => self.go_to_text(words),
+                None => self.go_to_text(words, target),
             },
-            _ => self.go_to_text(words),
+            _ => self.go_to_text(words, target),
         }
     }
 
@@ -182,13 +182,18 @@ impl App {
         go(self)
     }
 
-    /// Go to the item an address names, else to the next that holds the
-    /// text, as a leap does.
-    fn go_to_text(&mut self, words: &[&str]) -> Result<String, String> {
+    /// Go to the item an address names; else show the page it names, if
+    /// two or more items link to it (docs/concepts-seven.md, change 4);
+    /// else go to the next item that holds the text, as a leap does.
+    fn go_to_text(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let text = words.join(" ");
         if let Some(id) = self.resolve(&text) {
             self.jump(id, "go", json!({}));
             return Ok(String::new());
+        }
+        let key = page_key(text.strip_prefix('#').unwrap_or(&text));
+        if self.notebook.outline.page_linkers(&key).len() > 1 {
+            return self.cmd_find(&[&format!("#{key}")], target);
         }
         let found = self.leap_matches(&text, true).first().copied();
         let id = found.ok_or(format!("no item is or holds “{text}”"))?;

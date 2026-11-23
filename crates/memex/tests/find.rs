@@ -17,7 +17,7 @@ fn find_a_label_lists_the_items_that_carry_it_and_no_other() {
     // Catches a label found as text: #drafts holds the text "#draft".
     let mut r = labelled("find-label");
     r.command("find #draft");
-    assert!(r.shows("LABELLED #draft · 2"), "{:#?}", r.lines());
+    assert!(r.shows("LINKED TO #draft · 2"), "{:#?}", r.lines());
     assert!(r.shows("1. 1. first #draft") && r.shows("2. 3. third #Draft"));
     assert!(!r.shows("3. 4. fourth"), "{:#?}", r.lines());
 }
