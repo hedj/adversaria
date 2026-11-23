@@ -227,7 +227,7 @@ author took its five recommendations (23 November 2026).
 | The screen keeps claim, suggestion and finding as the kinds of offer, each named for its source | the concept the learner holds is offer; the kind tells where an offer came from, which deciding needs |
 | `[[name]]` to nothing becomes a virtual page, as `#name` does; its hint shows only while the text cursor is in the link | one rule for both spellings of a link, and a typo is still seen as it is typed |
 | A document's first import imports its items at once, as now | an import is asked for, so a second question would only slow it; the claims it brings are offers already |
-| Changes 1 to 3 (the notebook's inspector, one row for an offer, the history) are built first; the words of the guide and the screen change only after the journal shows whether learners treat a claim and a finding as one kind of thing | the first three serve seven concepts or the middle path of nine alike |
+| Changes 1 to 3 (the notebook's inspector, one row for an offer, the history) are built first; the words of the guide and the screen for claim, suggestion, finding, document and revision change to offer only after the journal shows whether learners treat a claim and a finding as one kind of thing | the first three serve seven concepts or the middle path of nine alike; so does change 4, labels as links, which joins link and label, not the kinds of offer, and so waits for nothing |
 
 #### Open questions
 
