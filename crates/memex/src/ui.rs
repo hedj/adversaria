@@ -1048,13 +1048,15 @@ impl<'a> OutlinePane<'a> {
         Some(Line::styled(format!("{indent}  {said}"), dim()))
     }
 
-    /// The [[links]] of the item at the cursor that name no item, if it is
-    /// this item and has any.
+    /// The [[links]] of the item at the cursor that name no item, while
+    /// its text cursor is in one of them (docs/concepts-seven.md, decision
+    /// 3): a link to no item is a page of its own, so the hint is for a
+    /// typo, seen as it is typed.
     fn unmade_here(&self, id: u64) -> Option<Vec<String>> {
-        let names = Some(id)
-            .filter(|i| *i == self.cursor())
-            .map(|i| self.outline().unresolved(i))?;
-        (!names.is_empty()).then_some(names)
+        let here = id == self.cursor() && self.has_focus();
+        let link = self.app.link_here().filter(|_| here)?;
+        let names = self.outline().unresolved(id);
+        names.contains(&link).then_some(names)
     }
 
     /// The hint of an item, if it is the item at the cursor.

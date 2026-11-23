@@ -268,8 +268,9 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   changed since:` and the files. Text the memex has read is cyan; under a
   question, `→` gives its answer. Under the item at the cursor, a dim line
   says why its text was not read (or, for a sentence APE can mend, `not
-  read: did you mean “…”? adopt fix mends it`), or which of its `[[links]]` name no item
-  yet (§ 2.4, § 3.1).
+  read: did you mean “…”? adopt fix mends it`), or, while the text cursor
+  is in a `[[link]]` that names no item, which of its links name none yet
+  (§ 2.4, § 3.1).
 - **Right pane, the inspector:** what is known about the item the cursor
   is on. By default its links,
   under `LINKS OF` and the item's address, or `no links`, each with the
@@ -733,8 +734,9 @@ typed (`[[ Energia · Energy launch · Tab completes`): the names that
 `name` gave, and the texts short enough to be names (3 to 60 characters, six
 words at most, not ending in `.`, `?` or `!`). Tab completes as far as
 they agree, and, when one fits, closes the link with `]]`. A link that names no item makes
-nothing: at the cursor a dim line says `not yet items: Buran flight ·
-adopt fix makes them`, and `adopt fix` (or `make`, its old name) makes
+nothing: it links to a page of its own (§ 2.4, Labels). While the text
+cursor is in it, a dim line says `not yet items: Buran flight · adopt fix
+makes them`, so that a typo is seen as it is typed, and `adopt fix` (or `make`, its old name) makes
 each at the foot of the top level and links it; one `undo` takes that back. If you make such an item yourself
 (by typing it, or with Leap and Enter), the link is made at the pause, and one `undo` takes the text and its
 links back together. A name given by `name` links at once; a name moved

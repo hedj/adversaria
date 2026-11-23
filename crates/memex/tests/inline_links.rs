@@ -80,18 +80,24 @@ fn a_link_goes_to_the_item_named_so_first() {
 }
 
 #[test]
-fn a_link_to_nothing_makes_nothing_and_says_so() {
+fn a_link_to_nothing_makes_nothing_and_says_so_while_the_text_cursor_is_in_it() {
     // Catches an item made without asking, or a link to nothing dropped
-    // without a word.
+    // without a word while it is typed; or the word kept after, though
+    // the link is a page of its own (docs/concepts-seven.md, decision 3).
     let mut r = Room::new("inline-unmade");
     r.items(&["Notes", "See [[Energia]]."]);
     r.app.idle();
     assert_eq!(r.outline().in_order().len(), 2, "no item made");
     assert!(
-        r.shows("not yet items: Energia · adopt fix makes them"),
-        "{:#?}",
+        !r.shows("not yet items"),
+        "the text cursor is past it: {:#?}",
         r.lines()
     );
+    r.tap(&[Key::Left, Key::Left, Key::Left]);
+    let said = "not yet items: Energia · adopt fix makes them";
+    assert!(r.shows(said), "{:#?}", r.lines());
+    r.tap(&[Key::Left; 8]);
+    assert!(!r.shows("not yet items"), "before its [[: {:#?}", r.lines());
 }
 
 #[test]
@@ -311,4 +317,21 @@ fn a_closed_link_offers_nothing() {
     assert!(!r.shows("Tab completes"), "{:#?}", r.lines());
     assert!(!r.shows("[[ no item"), "{:#?}", r.lines());
     assert_eq!(r.app.session.message, "", "Tab said nothing");
+}
+
+#[test]
+fn a_link_to_an_item_brings_no_hint_while_the_text_cursor_is_in_it() {
+    // Catches the hint shown in any [[link]] of an item that has one to
+    // no item.
+    let mut r = Room::new("inline-hint-made");
+    r.items(&["Notes", "[[Notes]] and [[Energia]]"]);
+    r.app.idle();
+    r.tap(&[Key::Home, Key::Right, Key::Right, Key::Right]);
+    assert!(!r.shows("not yet items"), "in [[Notes]]: {:#?}", r.lines());
+    r.tap(&[Key::End, Key::Left, Key::Left, Key::Left]);
+    assert!(
+        r.shows("not yet items: Energia"),
+        "in [[Energia]]: {:#?}",
+        r.lines()
+    );
 }

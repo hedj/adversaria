@@ -47,6 +47,18 @@ impl App {
         after.starts_with(&[']', ']'])
     }
 
+    /// The name in the closed `[[link]]` the text cursor is in, if it is
+    /// in one: between its `[[` and its `]]`.
+    pub(crate) fn link_here(&self) -> Option<String> {
+        let typed = self.open_link()?;
+        let text = self.text_of(self.cursor());
+        let after: String = text[self.session.view.pos.min(text.len())..]
+            .iter()
+            .collect();
+        let rest = &after[..after.find("]]")?];
+        (!rest.contains("[[")).then(|| format!("{typed}{rest}").trim().to_string())
+    }
+
     /// What is typed after an open `[[` before the text cursor, if the
     /// cursor is in one.
     fn open_link(&self) -> Option<String> {
