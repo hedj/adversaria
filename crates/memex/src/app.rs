@@ -419,6 +419,9 @@ pub struct Near {
 pub struct English {
     pub hint: Option<Hint>,
     pub free: Option<String>,
+    /// Whether the line is read by its form, its first word naming no
+    /// command (crate::actions::reader), as last checked.
+    pub reads: bool,
 }
 
 /// What APE makes of a supposition being typed, in words (or why there is
@@ -453,13 +456,21 @@ impl Active {
         }
     }
 
-    /// The sentence a Command line holds after its verb, `suppose` or
-    /// `ace`, if it holds one: the text that is English.
+    /// The sentence a Command line holds, if it holds one: the text after
+    /// its verb, `suppose` or `ace`, or the whole line, if it is read by
+    /// its form (crate::actions::reader).
     pub fn sentence(&self) -> Option<&str> {
         let verbs = ["suppose ", "ace "];
         let command = matches!(self.kind, Kind::Command(_));
         let rest = verbs.iter().find_map(|v| self.input.strip_prefix(v));
-        rest.filter(|_| command)
+        let whole = self.reads().then_some(self.input.as_str());
+        rest.or(whole).filter(|_| command)
+    }
+
+    /// Whether a Command line is read by its form, its first word naming
+    /// no command.
+    pub fn reads(&self) -> bool {
+        matches!(&self.kind, Kind::Command(e) if e.reads)
     }
 
     /// Whether its sentence is a supposition's.
@@ -542,8 +553,9 @@ impl Active {
         let Some(mended) = self.hint().and_then(|h| h.mended.clone()) else {
             return false;
         };
-        let verb = self.input.split(' ').next().unwrap_or("").to_string();
-        self.input = format!("{verb} {mended}");
+        let sentence = self.sentence().map_or(0, str::len);
+        let before = &self.input[..self.input.len() - sentence];
+        self.input = format!("{before}{mended}");
         true
     }
 

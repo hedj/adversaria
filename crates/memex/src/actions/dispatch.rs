@@ -770,6 +770,21 @@ pub(crate) fn in_quotes(input: &str) -> bool {
     open.is_some()
 }
 
+/// Whether a line is read by its form, not run as a command
+/// (crate::actions::reader): it has two words or more, and its first names
+/// no command, by its whole name or by a start of two letters or more. A
+/// line of one word is a command, or the start of one, whose list shows
+/// what it may be; one letter starts a command only there ("n" runs new),
+/// so a sentence that starts "A" is no `adopt`.
+pub(crate) fn read_by_form(line: &str) -> bool {
+    let mut words = line.split_whitespace();
+    let (Some(first), Some(_)) = (words.next(), words.next()) else {
+        return false;
+    };
+    let named = find_command(first).filter(|_| first.chars().count() > 1);
+    named.is_none()
+}
+
 /// The command a word names: exactly, or as the start of only one.
 pub(crate) fn find_command(w: &str) -> Option<&'static Command> {
     let w = w.to_lowercase();

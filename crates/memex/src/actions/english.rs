@@ -16,10 +16,15 @@ impl App {
         Ok(said(&self.ace_parse(&text)?))
     }
 
-    /// Check again the sentence a Command line holds (`suppose …`,
-    /// `ace …`), the text that is English, and list what may come next
-    /// while `?` lists.
+    /// Check again whether a Command line is read by its form, and the
+    /// sentence it holds (`suppose …`, `ace …`, or the whole line read so),
+    /// the text that is English; and list what may come next while `?`
+    /// lists.
     pub(crate) fn recheck(&mut self, a: &mut Active) {
+        let reads = super::dispatch::read_by_form(&a.input);
+        if let Kind::Command(english) = &mut a.kind {
+            english.reads = reads;
+        }
         let sentence = a.sentence().map(str::to_string);
         let Kind::Command(english) = &mut a.kind else {
             return;

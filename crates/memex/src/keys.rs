@@ -388,6 +388,7 @@ impl App {
             }
             // Command held only to move by structure has nothing to run.
             Quasi::Command if a.hold == Hold::Used && a.input.is_empty() => {}
+            Quasi::Command if a.reads() => return self.read_typed(a),
             Quasi::Command | Quasi::Suppose => return self.run_command(&a.input),
         }
         Mode::Normal

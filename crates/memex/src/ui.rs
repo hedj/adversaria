@@ -2363,15 +2363,39 @@ fn quasi_doing(a: &Active) -> String {
 /// sentence, and what the line ends in, the readings of a supposition or
 /// APE's verdict.
 fn sentence_doing(a: &Active, end: &str) -> String {
-    let (does, or_world) = match a.supposes() {
-        true => ("offers its readings", ", or a world of that name if none"),
-        false => ("says what APE makes of it", ""),
+    let (does, or_world) = match (a.reads(), a.supposes()) {
+        (true, _) => return read_doing(a, end),
+        (false, true) => ("offers its readings", ", or a world of that name if none"),
+        (false, false) => ("says what APE makes of it", ""),
     };
     match a.hint().and_then(|h| h.said.as_ref()) {
         None => format!(
             "type a statement · ? lists what may come next · Esc cancels · {end} {does}{or_world}"
         ),
         Some(said) => format!("{said} · {end} {does}"),
+    }
+}
+
+/// What a Command line read by its form does: that it is no command, what
+/// it is read as, what APE makes of it, and what ending it does.
+fn read_doing(a: &Active, end: &str) -> String {
+    let (read, does) = line_read_as(&a.input);
+    let said = ape_said(a);
+    format!("no command, so read as {read} · {said}{end} {does}")
+}
+
+/// What APE makes of a Command line's sentence, and a stop after it; or
+/// nothing, if it has said nothing yet.
+fn ape_said(a: &Active) -> String {
+    let said = a.hint().and_then(|h| h.said.as_ref());
+    said.map_or(String::new(), |s| format!("{s} · "))
+}
+
+/// What a line read by its form is read as, and what ending it does.
+fn line_read_as(line: &str) -> (&'static str, &'static str) {
+    match line.trim_end().ends_with('?') {
+        true => ("a question", "answers it"),
+        false => ("a statement", "offers its readings, if it has any"),
     }
 }
 

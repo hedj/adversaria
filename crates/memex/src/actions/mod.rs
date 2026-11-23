@@ -9,6 +9,7 @@ mod formal;
 mod inline;
 mod knowledge;
 mod nouns;
+mod reader;
 mod reading;
 mod split;
 mod structure;
