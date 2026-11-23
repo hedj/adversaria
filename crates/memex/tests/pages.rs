@@ -149,3 +149,137 @@ fn a_page_s_item_is_found_whatever_its_case_spaces_or_hyphens() {
     let see = titled(&r, "See [[buran-flight]].");
     assert_eq!(inline_to(&r, see), vec![titled(&r, "Buran  Flight")]);
 }
+
+/// The inspector's lines at 160 columns: what is right of the rule.
+fn inspector(r: &Room) -> Vec<String> {
+    let lines = r.lines_at(160, 40);
+    let right = |l: &String| l.split_once('│').map(|(_, r)| r.trim().to_string());
+    lines
+        .iter()
+        .filter_map(right)
+        .filter(|l| !l.is_empty())
+        .collect()
+}
+
+/// A page, its item; an essay with a label to it and one to a virtual
+/// page; and an item with a [[link]] to a page with no item.
+fn paged(name: &str) -> Room {
+    let mut r = Room::new(name);
+    r.items(&[
+        "Draft",
+        "The essay #draft #urgent",
+        "See [[plan]].",
+        "Notes #urgent",
+    ]);
+    r.app.idle();
+    r
+}
+
+#[test]
+fn an_item_s_inspector_lists_the_pages_it_links_to() {
+    // Catches a label shown nowhere but in what the text was read as, or
+    // a [[link]] to no item shown nowhere at all.
+    let mut r = paged("page-rows");
+    r.command("go 2");
+    let shown = inspector(&r);
+    let at = shown
+        .iter()
+        .position(|l| l == "pages →")
+        .unwrap_or_else(|| panic!("{shown:#?}"));
+    assert_eq!(shown[at + 1], "#draft → 1. Draft");
+    assert_eq!(shown[at + 2], "#urgent · no item · linked from 2");
+    r.command("go 3");
+    assert!(
+        inspector(&r).contains(&"[[plan]] · no item · linked from 1".to_string()),
+        "{:#?}",
+        inspector(&r)
+    );
+}
+
+#[test]
+fn a_click_on_a_page_goes_to_its_item_or_lists_what_links_to_it() {
+    let mut r = paged("page-click");
+    r.command("go 2");
+    let at = r.find("#urgent · no item");
+    let hits = r.hits();
+    r.app.click_at(&hits, at);
+    assert!(r.shows("LINKED TO #urgent · 2"), "{:#?}", r.lines());
+    r.command("find");
+    let at = r.find("#draft → 1. Draft");
+    let hits = r.hits();
+    r.app.click_at(&hits, at);
+    assert_eq!(r.text(r.app.cursor()), "Draft");
+}
+
+#[test]
+fn a_page_s_inspector_lists_the_items_that_label_it_and_not_as_mentions() {
+    // Catches a label to a page that the page does not show, or shows as
+    // a mention not linked, as if the label were not a link.
+    let mut r = paged("page-labelled-by");
+    r.command("go 1");
+    let shown = inspector(&r);
+    let at = shown
+        .iter()
+        .position(|l| l == "labelled by ←")
+        .unwrap_or_else(|| panic!("{shown:#?}"));
+    assert_eq!(shown[at + 1], "2. The essay #draft #urgent");
+    assert!(
+        !shown.iter().any(|l| l.starts_with("mentioned in")),
+        "{shown:#?}"
+    );
+}
+
+#[test]
+fn an_item_whose_text_another_has_first_is_no_page() {
+    // Catches a second item of the page's text taken for the page too.
+    let mut r = Room::new("page-second");
+    r.items(&["Draft", "Draft", "The essay #draft"]);
+    r.command("go 2");
+    assert!(
+        !inspector(&r).iter().any(|l| l == "labelled by ←"),
+        "{:#?}",
+        inspector(&r)
+    );
+    r.command("go 1");
+    assert!(
+        inspector(&r).iter().any(|l| l == "labelled by ←"),
+        "{:#?}",
+        inspector(&r)
+    );
+}
+
+#[test]
+fn a_page_given_by_name_lists_the_items_that_label_it() {
+    let mut r = paged("page-named");
+    r.command("go 3");
+    r.command("name urgent");
+    let shown = inspector(&r);
+    assert!(shown.iter().any(|l| l == "labelled by ←"), "{shown:#?}");
+    assert!(
+        shown.contains(&"4. Notes #urgent".to_string()),
+        "{shown:#?}"
+    );
+}
+
+#[test]
+fn a_text_that_does_not_read_as_a_name_is_not_looked_up_as_a_page() {
+    // Catches every item's inspector reading every other item's text to
+    // find its labels: only a short name is looked for, as for mentions.
+    let mut r = Room::new("page-long");
+    r.items(&[
+        "one two three four five six seven",
+        "x #one_two_three_four_five_six_seven",
+    ]);
+    r.command("go 1");
+    assert!(
+        !inspector(&r).iter().any(|l| l == "labelled by ←"),
+        "{:#?}",
+        inspector(&r)
+    );
+    r.command("name plan");
+    let shown = inspector(&r);
+    assert!(
+        !shown.iter().any(|l| l == "labelled by ←"),
+        "named, its text is still no page: {shown:#?}"
+    );
+}

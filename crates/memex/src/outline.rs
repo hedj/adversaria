@@ -707,7 +707,7 @@ impl Outline {
     /// The item named for a page by `name`, if one is: of two names of one
     /// page ("Draft", "draft"), the first in the names' sorted order, so
     /// that it is the same each time.
-    fn named_page(&self, key: &str) -> Option<u64> {
+    pub(crate) fn named_page(&self, key: &str) -> Option<u64> {
         let live = self
             .names
             .iter()
@@ -896,23 +896,6 @@ impl Outline {
 
     /// The items at the other ends of an item's links: those it links to,
     /// then those that link to it.
-    /// The items whose text names an item's text as whole words, in any
-    /// case, and that do not link to it: its unlinked mentions, in the
-    /// outline's order. Only a text that reads as a name is looked for.
-    pub fn mentions_of(&self, id: u64) -> Vec<u64> {
-        let name = self.text(id).trim().to_lowercase();
-        if !reads_as_name(&name) {
-            return vec![];
-        }
-        let linked: Vec<u64> = self.links_of(id).1.iter().map(|l| l.from).collect();
-        let names = |i: &u64| names_in(&self.text(*i).to_lowercase(), &name);
-        let others = self
-            .in_order()
-            .into_iter()
-            .filter(|i| *i != id && !linked.contains(i));
-        others.filter(names).collect()
-    }
-
     pub fn neighbours(&self, id: u64) -> Vec<u64> {
         let (out, into) = self.links_of(id);
         out.iter()
@@ -1242,7 +1225,7 @@ fn page_chars(name: &str) -> impl Iterator<Item = char> + '_ {
 
 /// Whether a text is a page's name, compared a character at a time, so
 /// that most texts are told apart at their first.
-fn same_page(text: &str, key: &str) -> bool {
+pub(crate) fn same_page(text: &str, key: &str) -> bool {
     page_chars(text).eq(key.chars())
 }
 
@@ -1253,7 +1236,7 @@ pub fn links_to_page(text: &str, key: &str) -> bool {
 
 /// Whether a text carries a page's label; one with no `#` is passed
 /// over unread.
-fn labels_page(text: &str, key: &str) -> bool {
+pub(crate) fn labels_page(text: &str, key: &str) -> bool {
     text.contains('#') && tags(text).iter().any(|t| t == key)
 }
 
@@ -1341,7 +1324,7 @@ pub fn reads_as_name(text: &str) -> bool {
 }
 
 /// Whether a text holds a name as whole words: not inside a longer word.
-fn names_in(text: &str, name: &str) -> bool {
+pub(crate) fn names_in(text: &str, name: &str) -> bool {
     let word = |c: Option<char>| c.is_some_and(char::is_alphanumeric);
     text.match_indices(name).any(|(at, _)| {
         let before = text[..at].chars().next_back();

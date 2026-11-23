@@ -16,6 +16,7 @@ mod habits;
 pub mod history;
 pub mod journal;
 pub mod keys;
+pub mod named;
 mod near;
 pub mod notebook;
 pub mod offers;

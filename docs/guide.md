@@ -275,7 +275,11 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   under `LINKS OF` and the item's address, or `no links`, each with the
   text of the item at its other end, grouped by kind: those from it as
   `cites →`, those into it as `cited by ←`, `supported by ←` or `opposed
-  by ←`, and a kind of your own as `precedes this ←`; then, under `mentioned in, not
+  by ←`, and a kind of your own as `precedes this ←`; under `pages →`, the
+  page of each of its labels and of each `[[link]]` that names no item
+  (`#draft → 1. Draft`, or `#urgent · no item · linked from 2`); and, on
+  an item that is a page, under `labelled by ←`, the items whose labels
+  name it (§ 2.4, Labels). Then, under `mentioned in, not
   linked ←`, the items whose text names this one's as whole words, in any
   case, without linking to it (only a text that reads as a name, as for
   unlinked-mention suggestions, § 3.4), each a click away; on an item with
@@ -497,6 +501,7 @@ on the characters. Presented are:
 | an offer, in the notebook's inspector | what it is about: the item, the constraint or the suggestion | does what a click on that thing does |
 | a step of the history, in the notebook's inspector | its entry | nothing: a right-click offers to retract it, or to go back to where a jump went |
 | a link, a mention or a match, in the inspector or a list | the item at its other end | jumps to it in the left pane (§ 2.4) |
+| a page, under `pages →` in the inspector | its item, or, with none, the list of what links to it | jumps to its item, or lists them (`find #draft`) |
 | a finding under an item (`‼ breaks …`, `? sources disagree …`), and the heading of the constraint in the inspector | the constraint | goes to the item that states the rule, if one does |
 | a mark of a view: a bar, a point, a box | the fact it draws | goes to the item that states the fact (§ 3.3) |
 | a layer, in a view's inspector | the layer | goes to its view |
@@ -706,7 +711,10 @@ words, `#buran_flight`, `[[Buran flight]]` and `[[buran-flight]]` (case
 aside, a space and a hyphen are an underscore). A page is the item named
 so, or else the first whose text is its name; with neither, the page is
 virtual, made of the items that link to it. `find #draft` lists them, by
-either spelling (`LINKED TO #draft · 3`). Each label also gives
+either spelling (`LINKED TO #draft · 3`). An item's inspector lists its
+pages under `pages →`, and a page's item lists the items that label it
+under `labelled by ←`; that one is looked for only when the item's text
+reads as a name, as for mentions (§ 3.4). Each label also gives
 `item_link(Item, Page, label)`, and a `[[link]]` to a virtual page
 `item_link(Item, Page, link)`, with the page by its item's number, else
 by its name: `item_link(4, draft, label)`. Views, derived text and constraints read

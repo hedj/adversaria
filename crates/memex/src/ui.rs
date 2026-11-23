@@ -6,6 +6,7 @@ mod commands;
 mod matches;
 mod notebook;
 mod offers;
+mod pages;
 mod wrap;
 
 use crate::app::{Active, App, Hold, Mode, PaneKind, Quasi, View};
@@ -1921,14 +1922,22 @@ fn links_lines(outline: &Outline, id: u64) -> Vec<Presented> {
     let heading = Line::styled(format!("LINKS OF {}", outline.number(id)), dim());
     let mut lines = plain(vec![heading, Line::raw("")]);
     lines.extend(plain(vec![Line::raw(outline.text(id)), Line::raw("")]));
+    let named = outline.named_by(id);
+    lines.extend(links_found(outline, id, &named.labels));
+    lines.extend(mention_lines(outline, &named.mentions));
+    lines
+}
+
+/// An item's links, where it is transcluded, and its pages, or that it
+/// has none.
+fn links_found(outline: &Outline, id: u64, labels: &[u64]) -> Vec<Presented> {
     let mut found = link_lines(outline, id);
     found.extend(transclusion_lines(outline, id));
+    found.extend(pages::page_lines(outline, id, labels));
     if found.is_empty() {
         found.push((Line::styled("no links", dim()), None));
     }
-    lines.extend(found);
-    lines.extend(mention_lines(outline, id));
-    lines
+    found
 }
 
 /// What an open [[link]] is offered: the names that fit, or that none
@@ -2026,13 +2035,12 @@ fn transclusion_lines(outline: &Outline, id: u64) -> Vec<Presented> {
 
 /// The items that name an item without linking to it, under a heading,
 /// each a click away.
-fn mention_lines(outline: &Outline, id: u64) -> Vec<Presented> {
-    let mentions = outline.mentions_of(id);
+fn mention_lines(outline: &Outline, mentions: &[u64]) -> Vec<Presented> {
     if mentions.is_empty() {
         return vec![];
     }
     let heading = (Line::styled("mentioned in, not linked ←", dim()), None);
-    let lines = mentions.into_iter().map(|m| mention_line(outline, m));
+    let lines = mentions.iter().map(|m| mention_line(outline, *m));
     std::iter::once(heading).chain(lines).collect()
 }
 
