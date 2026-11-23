@@ -402,8 +402,14 @@ and the inspector lists your note among the items that link to it:
 Press **F7** (`go back`; a mouse's back button does the same): the
 cursor returns to your note. F8 (`go forward`) goes forward again.
 
-On the heading again, hold Left Ctrl and type `link`. The foot shows
-what the link would take:
+On the heading again, right-click its row in the outline. After what
+the heading offers, the menu lists the verbs that apply to it, each
+saying what it will do: `link it to 2.1.3, the item you came from`,
+`move it after 2.1.3, the item you came from`,
+`delete it and its branch`, and the rest. (The Menu key, or Shift+F10,
+opens the same menu at the cursor.) Press Esc, and do the same with a
+command: hold Left Ctrl and type `link`. The foot shows what the link
+would take:
 
     link (from 2) (to) ‹item› [2.1.3] (as) ‹word› [link]
 

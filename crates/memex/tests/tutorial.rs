@@ -382,9 +382,15 @@ fn word_found(t: &mut T) {
     t.shows("MATCHES OF “automatic”");
 }
 
-/// Step 10: `link` held alone shows its defaults, and its release
-/// links the heading back to the note jumped from.
+/// Step 10: a right-click on the heading offers its verbs, with their
+/// defaults; then `link` held alone shows them, and its release links
+/// the heading back to the note jumped from.
 fn linked_back(t: &mut T) {
+    t.right_click_on("2. How Buran’s flight software was reviewed");
+    t.shows("link it to 2.1.3, the item you came from");
+    t.shows("move it after 2.1.3, the item you came from");
+    t.shows("delete it and its branch");
+    t.key(Key::Escape);
     t.app.handle(Event::down(Key::Quasi(Quasi::Command)));
     "link".chars().for_each(|c| t.tap(Key::Char(c)));
     t.shows("link (from 2) (to) ‹item› [2.1.3] (as) ‹word› [link]");

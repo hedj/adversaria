@@ -554,8 +554,9 @@ specific first:
 | any text | `find` the items that hold it |
 
 The other commands act on the item, not on text (`adopt`, `delete`,
-`show` and the rest), so the menu offers them on the item, not on its
-words; run them with Command, or the keys bound to them.
+`show` and the rest), so plumbing does not offer them: the menu offers
+them after plumbing's, as the verbs that apply to the item (§ 2.3,
+Right-click).
 
 Add your own with `[[plumb]]` in the configuration (§ 4.3); yours are
 offered before the built-in ones. Each has a `name` (the menu's words), a

@@ -2,8 +2,9 @@
 
 A proposal for the author, 22 November 2026, after the fifth review
 (docs/research/notes/ux-review-5-regularity.md). The grammar is built,
-and so are the lists of each verb's words and most of move 2, editing
-by habit (§ Built, and the count now); moves 1, 3 and 4 are not.
+and so are the lists of each verb's words, most of move 2 (editing by
+habit) and move 1 (the right-click's verbs) (§ Built, and the count
+now); moves 3 and 4 are not.
 
 ## The answer
 
@@ -44,6 +45,7 @@ Built on 22 November 2026, one change a commit:
 | `?` after a verb lists the words its first noun may be; Tab completes | 3b9e805 |
 | the tutorial teaches the grammar where it is first used | 5a68a1f |
 | move 2, editing by habit: Backspace deletes an empty item; Ctrl+X, Ctrl+C and Ctrl+V | ea2ead5 |
+| move 1: the right-click offers every verb that applies to an item; the Menu key and Shift+F10 open it at the cursor | 9329041, f4ca719; plumbing's item test, 6657e87 |
 
 Where the build differs from § The grammar:
 
@@ -92,6 +94,19 @@ since an item with text, or a branch, still needs it; drag to move is
 not built. The count falls from about 53 to about 48, within the budget
 of about 50.
 
+Move 1 makes the verbs recognised: the right-click on an item offers
+`link`, `move`, `copy`, `new`, `show`, `transclude`, `adopt fix`,
+`check`, `suppose`, `find` by label, `retract` and `delete`, where each
+applies, beside what the item offers already (its claims adopted, its
+adoption taken back, split, fold). Plumbing offers `go`, `find` and
+`import` on the text pointed at; a suggestion's, a change's and a
+world's presentations offer `adopt` and `dismiss`; `undo` and `redo` are
+habits since move 2, and `switch` has its key beside it in the list.
+Only `export` is offered nowhere, so one verb stays in recall. With the
+proposal's other assumption for this move, that pointing fills an
+argument, three address forms leave too. The count falls from about 48
+to about 31 (48 − 14 − 3), an estimate that rests on both assumptions.
+
 All 23 of the fall to 53 come from the lists, and rest on one assumption: that
 a list shown by `?` after the verb is recognition, as the fifth review's
 first suggestion assumed. The grammar itself removes nothing by the rule.
@@ -101,19 +116,20 @@ fewer words typed and fewer refusals, which the journal can measure
 
 ### The rest of the way
 
-From about 48 to about 20, each move keeping every capability (§ How far
-gives each in full); move 2's row is what was proposed, and it is built
-but for drag to move:
+From about 31 to about 20, each move keeping every capability (§ How far
+gives each in full). The rows for moves 2 and 1 are what was proposed;
+both are built, move 2 but for drag to move, and move 1 leaving
+`export` in recall:
 
 | Move | Held after it | Cost | What it needs |
 | --- | --- | --- | --- |
 | 2. Editing by habit: Backspace deletes an empty item; Ctrl+X, Ctrl+C and Ctrl+V on items and text; drag to move | about 47 as proposed, with `new`, `delete`, `move`, `copy`, `undo` and `redo` habits; about 48 as built, since `delete` stays | small to medium | three chords on the path Ctrl+Z uses, and a clipboard of the session's. A cut marks its items until they are pasted, as a spreadsheet's cut does, so a moved item keeps its identity and its entries |
 | 1. The right-click offers every verb that applies to what is under the pointer, ranked, each with its key, beside its object's commands and plumbing's, which stay; the Menu key, the keyboard's own right-click, opens the same menu at the cursor | about 30: the other 15 verbs, `delete` among them, and 3 address forms, since pointing fills an argument | large | for each verb, a test of whether it applies and a rank; the menu itself exists (the right-click's) |
-| 4. One reader for every line | about 28 | medium | a line that is no command but reads as a statement is supposed, a question is answered, and the foot says which, before Enter. Risk: a mistyped command read as a statement, so only a line with a reading is taken |
-| 3. Seven concepts | about 23 | large | labels as links and the five kinds of offer change the guide's vocabulary throughout; labels as links need a decision on the journal's meaning |
-| Enter, Esc, Tab and the right-click counted as habits | about 19 | none | a decision on the counting rule, for the author |
+| 4. One reader for every line | about 29 | medium | a line that is no command but reads as a statement is supposed, a question is answered, and the foot says which, before Enter. Risk: a mistyped command read as a statement, so only a line with a reading is taken |
+| 3. Seven concepts | about 24 | large | labels as links and the five kinds of offer change the guide's vocabulary throughout; labels as links need a decision on the journal's meaning |
+| Enter, Esc, Tab and the right-click counted as habits | about 20 | none | a decision on the counting rule, for the author |
 
-Recommended order: 2 (built), then 1, then 4, then 3. Move 2 is the cheapest,
+Recommended order: 2 (built), then 1 (built), then 4, then 3. Move 2 is the cheapest,
 and costs nothing to learn, since the keys are habits already. Move 1
 removes the most. Move 3 changes what the learner is told the notebook
 is, so it is the author's to choose, and it is best done last, when the
@@ -361,7 +377,7 @@ grammar), the start is 48: the object words and address forms are gone
 already, so move 1 removes the 19 verbs, and the sum is 48 − 19 − 5 − 2 −
 4 = 18, about 20 again. As built, the start is about 53, since numbers
 are not yet read by kind; § Built, and the count now, tables the rest of
-the way from there, to about 19.
+the way from there, to about 20.
 
 A first day: item, statement, offer and world; typing, Enter and Tab;
 Leap; the right-click; and F3, which the screen shows. About 9.

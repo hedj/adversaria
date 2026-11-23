@@ -195,6 +195,17 @@ gives these jobs.
 | --- | --- |
 | Backspace in an empty item with nothing under it deletes the item; Ctrl+C, Ctrl+X and Ctrl+V copy, cut and paste text and items, through the chords Ctrl+Z uses; a cut marks its items until they are pasted, and the paste moves them | docs/concepts-next.md, move 2, after the grammar was built (22 November 2026): the keys are habits from every desktop program, so `new`, `move`, `copy`, `undo` and `redo` need not be recalled. A cut that deleted at once would make a new item at the paste, losing the item's identity and its entries; a spreadsheet's cut marks instead. What is cut or copied is the session's, so the journal format is unchanged |
 
+##### Object first
+
+docs/concepts-next.md, § How far, move 1: the right-click is the
+gesture, and the menu teaches what acts on a thing.
+
+| Decision | Reason |
+| --- | --- |
+| On an item's text or a link, the right-click's menu ends with the verbs that apply to that item now, after its own offers and plumbing's; each runs as the verb typed alone does, and its words name the default it takes or end in an ellipsis where it asks | the author's decision (23 November 2026): the right-click exists and is held already, so the verbs need no new gesture. A finding keeps its own menu, since it presents a constraint, not the item; the documentation line names the verbs without listing them, since finding which apply reads the journal |
+| A plumbing rule's item test holds only for an item other than the cursor's | going to the item the cursor is on, linking it to itself or showing it in its own place does nothing, and a right-click on an item's own name offered all three |
+| The Menu key, or Shift+F10, opens the same menu at the cursor's item, unless the key is bound | the keyboard reaches every offer, as change 12 asked; Shift+F10 is the keyboard's right-click on Windows and the Linux desktops, and it was read as F10, which quits |
+
 #### Open questions
 
 - [ ] How fast does the journal grow in real use, and how are span lists compacted?
