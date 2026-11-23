@@ -411,14 +411,6 @@ fn a_draft_imported(t: &mut T) {
 /// rejected, the other kept.
 fn a_revision_taken_in(t: &mut T) {
     t.command("import document docs/tutorial/revised/essay.md");
-    for e in t.app.journal().entries() {
-        eprintln!(
-            "DBG {} {} {}",
-            e.seq,
-            e.kind(),
-            e.body().map(|b| b["op"].to_string()).unwrap_or_default()
-        );
-    }
     t.look("revision");
     t.shows("WORLD · REVISION OF ESSAY.MD");
     t.shows("entry 52  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”");
