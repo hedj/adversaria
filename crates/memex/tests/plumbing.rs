@@ -159,3 +159,13 @@ fn the_users_rules_are_offered_first() {
     r.app.plumb("Q2548", (0, 0));
     assert_eq!(offered(&r)[0], "query wd('Q2548', P, V)");
 }
+
+#[test]
+fn the_cursors_own_item_named_is_no_place_to_go_or_link() {
+    // Catches a right-click on an item's own name offering to go to it,
+    // link it to itself, or show it in its own place.
+    let mut r = Room::new("plumb-self");
+    r.items(&["Buran flight", "Energia launch"]);
+    r.app.plumb("2", (4, 3));
+    assert_eq!(offered(&r), ["find 2"], "item 2 is the cursor's");
+}

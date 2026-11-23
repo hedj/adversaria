@@ -198,9 +198,12 @@ impl App {
         offers
     }
 
-    /// What plumbing offers for a text.
+    /// What plumbing offers for a text. For a rule's `item` test, the
+    /// text names an item only if it is not the cursor's: going to the
+    /// item the cursor is on, linking it to itself or showing it in its
+    /// own place does nothing.
     fn plumbed(&self, text: &str) -> Vec<Offer> {
-        let names_item = |t: &str| self.resolve(t).is_some();
+        let names_item = |t: &str| self.resolve(t).is_some_and(|i| i != self.cursor());
         self.session.plumber.offers(text, &names_item)
     }
 

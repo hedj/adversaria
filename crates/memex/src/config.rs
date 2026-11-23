@@ -64,8 +64,8 @@ enabled = true
 # a name, the menu's words; match, a regular expression the whole text
 # must match; run, a command line, as typed in Command, with $0 for the
 # text and $1 to $9 for match's groups; and, if it needs one, a test:
-# "file" (a file that exists) or "item" (the text names an item). For
-# example:
+# "file" (a file that exists) or "item" (the text names an item other
+# than the cursor's). For example:
 #
 # [[plumb]]
 # name = "show Wikidata's statements about $0"

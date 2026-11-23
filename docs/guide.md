@@ -541,13 +541,13 @@ specific first:
 
 | The text | Offered |
 | --- | --- |
-| an address that names an item: `1.3`, `draft` | `go` to it |
+| an address that names an item other than the cursor's: `1.3`, `draft` | `go` to it |
 | `entry` and a number, or `#` and a number | `retract entry` it |
 | the path of a file that exists, ending in `.md`, `.docx`, `.odt`, `.tex`, `.html` (and others Pandoc reads), `.json` or `.pl` | `import document`, `import results` or `import wikidata` |
 | a Prolog goal, such as `date(E, Y)` | `find` its answers (`` find `date(E, Y)` ``), state it here as a fact, or state it and set aside what it contradicts |
 | a Prolog fact, or two or more words without brackets | `suppose` it, as the Suppose key does |
 | two or more words, without brackets | read them as ACE (`ace`, an old command), which says why if it cannot |
-| text that names an item | `link to` it from here, or `transclude` it: show its text here, in place |
+| text that names an item other than the cursor's | `link to` it from here, or `transclude` it: show its text here, in place |
 | any text | `find` the items that hold it |
 
 The other commands act on the item, not on text (`adopt`, `delete`,
@@ -559,7 +559,9 @@ offered before the built-in ones. Each has a `name` (the menu's words), a
 `match` (the regular expression, in Rust's syntax), a `run` (a command
 line, as typed in Command), and, if it needs one, an `if`: `"file"` (the
 text is a file that exists, from where the memex started) or `"item"`
-(the text names an item). In `name` and `run`, `$0` is the whole text and
+(the text names an item other than the cursor's, since going to it,
+linking it to itself or showing it in its own place does nothing). In
+`name` and `run`, `$0` is the whole text and
 `$1` to `$9` (or `${1}`) the expression's groups:
 
 ```toml
