@@ -6,8 +6,8 @@ and so are the lists of each verb's words, most of move 2 (editing by
 habit), move 1 (the right-click's verbs) and move 4 (one reader for
 every line) (§ Built, and the count now). Of move 3, changes 1 to 3 of
 docs/concepts-seven.md are built (the notebook's inspector, one row for
-an offer, the history). Its change 4, labels as links, waits for
-nothing; its change 5, the words, waits for the measures.
+an offer, the history), and so is its change 4, labels as links; its
+change 5, the words, waits for the measures.
 
 ## The answer
 

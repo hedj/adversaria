@@ -8,7 +8,7 @@ docs/design.md; for what has been tested and what has not, docs/log.md.
 
 Contents, four parts of four:
 
-1. Concepts: twelve ideas, the record, facts claims and beliefs,
+1. Concepts: eleven ideas, the record, facts claims and beliefs,
    constraints and worlds, and one command shape with seventeen verbs.
 2. Working: starting, the screen, keys and quasimodes, commands and
    addresses.
@@ -19,14 +19,14 @@ Contents, four parts of four:
 
 ## 1. Concepts
 
-The notebook is built from twelve ideas, and you act on them with
+The notebook is built from eleven ideas, and you act on them with
 seventeen verbs, each in one command shape. Five of the ideas are enough
 for a first day; they are marked *first day*, and the tutorial's part A
 teaches them (docs/tutorial.md). The rest you meet when you need them:
 `?` in Command lists what may come next, and a right-click offers what
 can act on what is under the pointer.
 
-### 1.1 Twelve ideas
+### 1.1 Eleven ideas
 
 #### Item (first day)
 
@@ -50,11 +50,7 @@ For trying "what if?" without changing what you hold. `suppose` (the Super key);
 
 #### Link
 
-For connecting items. `[[Buran flight]]` in an item's text, or `link to 9 as cites`; the inspector shows an item's links both ways.
-
-#### Label
-
-For grouping items, and naming one. `#draft` in an item's text links it to the page `draft`, as `[[draft]]` does; `find #draft` lists the items that link to it, and a page one item alone links to addresses it: `go draft`.
+For connecting items, and grouping them. `[[Buran flight]]` in an item's text links it to the page of that name, and `#draft`, a label, is the same link, for a word in running text. A page is the item of its name; with none it is made of what links to it. `link to 9 as cites` links by command, with a kind. The inspector shows an item's links both ways, and its pages; `find #draft` lists what links to a page, and a page one item alone links to addresses it: `go draft`.
 
 #### Entry
 

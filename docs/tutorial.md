@@ -350,8 +350,9 @@ drawn reversed, selected. (A drag of the mouse selects too.) Run `find`:
 typed alone, a command takes what is selected, so the inspector's place
 beside the outline now lists the items that hold it, numbered, under
 `MATCHES OF “automatic”`, each a click away. Typed in full,
-`find automatic` does the same. `find` also lists the items that carry a
-label (`find #draft`), and those that a rule's findings mark
+`find automatic` does the same. `find` also lists the items that link to
+a page, by a label or a `[[link]]` (`find #draft`), and those that a
+rule's findings mark
 (`find violations`). Run `find` alone, with nothing selected, to have
 the inspector back.
 
@@ -594,8 +595,9 @@ When you are done, delete `$HOME/adversaria-tutorial` and
 docs/guide.md describes every command, the files the notebook keeps, the
 tools around it, and how to change the keys. Things this tutorial did not
 show: links made by command, with a type (`link to 2 as supports`);
-labels, `#draft` in an item's text, which `find #draft` lists and which
-address the one item that carries them (`go draft`); a table or a graph
+labels, `#draft` in an item's text, which link to the page `draft` as
+`[[draft]]` does, and which `find #draft` lists (`go draft` reaches the
+page's item, or the one item that links to it); a table or a graph
 of your notes (`show as table`, `show as graph`); the marks a view is
 drawn with, for timelines, Gantt charts and flowcharts (docs/guide.md,
 § 3.3); splitting an item into sentences (right-click it); Wikidata as

@@ -4,10 +4,10 @@ A proposal for the author, 23 November 2026. It describes move 3 of
 docs/concepts-next.md § How far, the last of the four moves; moves 1, 2
 and 4 are built. The author took the five recommendations of § Decisions
 for the author (design.md records them). Changes 1 to 3 of § What it
-costs are built (commits 5098ce0, 8dcb5e0 and 95476af). Change 4,
-labels as links, serves seven concepts or nine alike and depends on none
-of them, so it waits for nothing. Change 5, the words, waits for the
-measures (§ Measuring), as decision 5 has it.
+costs are built (commits 5098ce0, 8dcb5e0 and 95476af), and so is
+change 4, labels as links (23affac, 7d06759, fe03a29 and the commit of
+the guide's Link idea). Change 5, the words, waits for the measures
+(§ Measuring), as decision 5 has it.
 
 **Built so far.** Change 1, the notebook's inspector, with two
 departures from § What it needs built. It lists no revision's changes:
@@ -28,6 +28,19 @@ right-click retracts a change or goes back to where a jump went, and
 pointing at one fills an entry slot. A text's reading, and the facts it
 wrote, are left out as steps of their own, since they follow the text's
 edit, as `undo` already treats them.
+Change 4, labels as links, with these choices beyond § Label into link.
+A page's name is read as a label is: in lower case, with a space or a
+hyphen as an underscore, so `[[Buran flight]]`, `[[buran-flight]]` and
+`#buran_flight` are one page. `[[draft]]` no longer links to the one
+item that carries `#draft`, as concepts.md's decision 5 had it: both
+link to the page. A `[[link]]` to a virtual page is a fact too,
+`item_link(Item, Page, link)`, beside a label's `item_link(Item, Page,
+label)`, so that a rule sees both spellings. A virtual page is no new
+presentation: its row in an item's inspector lists what links to it,
+as `find #draft` does. A page's item lists the items that label it only
+when its text reads as a name, or a name is given it, as mentions are
+looked for, so that a long text costs no pass over the items. The
+guide's Link and Label ideas are one, Link, so it has eleven.
 
 ## The answer
 
