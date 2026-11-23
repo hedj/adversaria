@@ -320,7 +320,9 @@ Four structural moves, each keeping every capability:
   be found even in the menu. The habits are held already.
 - **Held:** no further change: move 1 already counts these verbs.
 
-**3. Seven concepts in place of twelve.**
+**3. Seven concepts in place of twelve.** (docs/concepts-seven.md
+describes it in full: what each merge absorbs, how it maps onto the code
+as built, what it costs, what could go wrong, and five decisions.)
 - **item.**
 - **link**, which absorbs label. `#draft` is a link to `draft`; its
   backlinks are what `find #draft` lists, and "a label one item alone
