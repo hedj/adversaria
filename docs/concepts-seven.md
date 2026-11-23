@@ -19,6 +19,12 @@ offer in the same two rows, what it is and offers, then where it came
 from. One decided stays where it was listed, dim, ending in how it was
 decided: `(adopted)` for a claim, `(retracted)` for a change. A claim's
 entry number, which its questions showed, is gone: nothing used it.
+Change 3, the history: the notebook's inspector ends with the latest
+eight changes and jumps of the branch, newest first, by entry number. A
+right-click retracts a change or goes back to where a jump went, and
+pointing at one fills an entry slot. A text's reading, and the facts it
+wrote, are left out as steps of their own, since they follow the text's
+edit, as `undo` already treats them.
 
 ## The answer
 

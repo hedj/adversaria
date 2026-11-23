@@ -58,7 +58,7 @@ For grouping items, and naming one. `#draft` in an item's text; `find #draft` li
 
 #### Entry
 
-For losing nothing, and proving the record. Every change is an entry in the journal (§ 1.2); `undo` and `redo` (Ctrl+Z, Ctrl+Y); `retract entry 12` takes back an old one, keeping what came after.
+For losing nothing, and proving the record. Every change is an entry in the journal (§ 1.2); `undo` and `redo` (Ctrl+Z, Ctrl+Y); `retract entry 12` takes back an old one, keeping what came after. The notebook's inspector ends with the latest, each by its number.
 
 #### Trail
 
@@ -315,6 +315,14 @@ does; a right-click offers what decides it, such as `adopt` or
 does a click on the outline's title. A revision's changes are not among
 them: while a revision is open they fill the screen (§ 4.1).
 
+Below the offers, under `HISTORY · NEWEST FIRST`, are the latest eight
+steps of this branch: each change, retraction, undo and redo, and each
+jump, by its entry's number (`entry 17  linked 1: “Alder” to 2:
+“Birch”`). The reading of a text is no step of its own: it follows the
+text's edit. A right-click on a change offers to retract it, asking
+first; a change retracted is dim, ending `(retracted)`. A right-click on
+a jump offers to go back to where it went.
+
 ### 2.3 Keys and quasimodes
 
 The defaults are below. All of them can be changed (§ 4.3).
@@ -487,6 +495,7 @@ on the characters. Presented are:
 | an item's line in an outline pane | the item | moves the cursor to it, in the outline pane it is drawn in, and focus there, as the arrow keys would |
 | the outline's title | the notebook | moves the cursor above the first item, where the inspector lists what waits for you to decide (§ 2.2) |
 | an offer, in the notebook's inspector | what it is about: the item, the constraint or the suggestion | does what a click on that thing does |
+| a step of the history, in the notebook's inspector | its entry | nothing: a right-click offers to retract it, or to go back to where a jump went |
 | a link, a mention or a match, in the inspector or a list | the item at its other end | jumps to it in the left pane (§ 2.4) |
 | a finding under an item (`‼ breaks …`, `? sources disagree …`), and the heading of the constraint in the inspector | the constraint | goes to the item that states the rule, if one does |
 | a mark of a view: a bar, a point, a box | the fact it draws | goes to the item that states the fact (§ 3.3) |
@@ -550,7 +559,7 @@ argument takes types it in for you, with a space after, and only those
 are underlined: an item, by its address, for `link`, `copy`, `move`,
 `transclude` and `go` (a link, a fact, a rule or a view stands for its
 item); an entry, by its number, for `retract` (a layer, a change, a
-constraint or a fact); a suggestion, by its number, for `adopt` and
+constraint, a fact or a step of the history); a suggestion, by its number, for `adopt` and
 `dismiss`. Tap Left Ctrl, type `link to `, and click the item to link
 to: the line reads `link (from 1) (to) 2`, the from being the target,
 which you did not type, and Enter runs it. The foot says what

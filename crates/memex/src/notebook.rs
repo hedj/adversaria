@@ -206,15 +206,16 @@ impl Notebook {
 
     /// The entries on the path from the tip back to the root, oldest first.
     pub(crate) fn path(&self, tip: u64) -> Vec<&Entry> {
-        let mut out = Vec::new();
-        let mut at = Some(tip);
-        while let Some(s) = at {
-            let Some(e) = self.entry(s) else { break };
-            out.push(e);
-            at = e.parent_seq();
-        }
+        let mut out: Vec<&Entry> = self.back_from(tip).collect();
         out.reverse();
         out
+    }
+
+    /// The entries from a tip back to the root, newest first, each read
+    /// only when it is asked for.
+    pub(crate) fn back_from(&self, tip: u64) -> impl Iterator<Item = &Entry> + '_ {
+        let parent = |e: &&Entry| e.parent_seq().and_then(|s| self.entry(s));
+        std::iter::successors(self.entry(tip), parent)
     }
 
     /// The branch from the root to a head.

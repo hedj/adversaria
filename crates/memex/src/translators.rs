@@ -22,6 +22,7 @@ impl App {
             } => self.mark_offers(*entry, *item, *under),
             P::Layer { entry, view } => self.layer_offers(*entry, *view),
             P::Change(entry) => change_offers(*entry),
+            P::Entry(entry) => self.entry_offers(*entry),
             P::Suggestion(n) => suggestion_offers(*n),
             P::Command(line) => vec![offer(&format!("run {line}"), line)],
             P::Notebook { .. } => vec![],
@@ -147,6 +148,7 @@ impl App {
             P::Constraint { entry, .. } => self.constraint_name(*entry),
             P::Layer { entry, .. } => format!("layer of entry {entry}"),
             P::Change(entry) => format!("change {entry}"),
+            P::Entry(entry) => format!("entry {entry}"),
             P::Suggestion(n) => format!("suggestion {n}"),
             P::Command(line) => line.clone(),
             P::Notebook { .. } => "the notebook".into(),
@@ -161,6 +163,21 @@ impl App {
             || format!("fact of entry {entry}"),
             |(_, t)| crate::reason::show(t),
         )
+    }
+
+    /// What an entry of the history offers: going back to where a jump
+    /// went, if that item is left; retracting a change not yet retracted.
+    fn entry_offers(&self, seq: u64) -> Vec<Offer> {
+        if let Some(to) = self.jumped_to(seq) {
+            let left = self.notebook.outline.contains(to);
+            return left
+                .then(|| self.go_offer(to, "where it went"))
+                .into_iter()
+                .collect();
+        }
+        let retract = offer("retract it", &format!("retract entry {seq}"));
+        let can = self.unretractable(seq).is_none();
+        can.then_some(retract).into_iter().collect()
     }
 
     /// A constraint's name, by its entry.
@@ -179,7 +196,7 @@ impl App {
 fn entry_of(p: &Presentation) -> Option<u64> {
     use Presentation as P;
     match p {
-        P::Layer { entry, .. } | P::Change(entry) => Some(*entry),
+        P::Layer { entry, .. } | P::Change(entry) | P::Entry(entry) => Some(*entry),
         P::Constraint { entry, .. } | P::Fact { entry, .. } => Some(*entry),
         _ => None,
     }

@@ -840,20 +840,28 @@ impl App {
         None
     }
 
+    /// Why an entry cannot be retracted, if it cannot: it is not in this
+    /// world, is its first, is no change, or is retracted already. It
+    /// reads the branch, not a replay, so it is quick enough to ask as the
+    /// pointer moves.
+    pub(crate) fn unretractable(&self, t: u64) -> Option<String> {
+        let branch = self.notebook.branch(self.notebook.tip);
+        let Some(e) = branch.entries.iter().find(|e| e.seq == t) else {
+            return Some(format!("entry {t} is not in this world"));
+        };
+        if t == 1 || !CONTENT.contains(&e.kind()) {
+            return Some(format!("entry {t} ({}) cannot be retracted", e.kind()));
+        }
+        branch
+            .retracts(t)
+            .then(|| format!("entry {t} is already retracted"))
+    }
+
     /// Check that an entry can be retracted; return the entries that depend
     /// on it: those that would no longer apply without it.
     pub fn retractable(&self, t: u64) -> Result<Vec<u64>, String> {
-        let branch = self.notebook.branch(self.notebook.tip);
-        let e = branch
-            .entries
-            .iter()
-            .find(|e| e.seq == t)
-            .ok_or(format!("entry {t} is not in this world"))?;
-        if t == 1 || !CONTENT.contains(&e.kind()) {
-            return Err(format!("entry {t} ({}) cannot be retracted", e.kind()));
-        }
-        if branch.retracts(t) {
-            return Err(format!("entry {t} is already retracted"));
+        if let Some(why) = self.unretractable(t) {
+            return Err(why);
         }
         let with = self.notebook.replay(self.notebook.tip, None).failed;
         let without = self.notebook.replay(self.notebook.tip, Some(t)).failed;

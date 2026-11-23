@@ -41,6 +41,9 @@ pub enum Presentation {
     Change(u64),
     /// A suggestion shown, by its number from 1.
     Suggestion(usize),
+    /// An entry of the history, by its number: a right-click retracts a
+    /// change, or goes back to where a jump went.
+    Entry(u64),
     /// The notebook itself, as an outline pane's title presents it: a
     /// click puts the cursor above the first item, where the inspector
     /// lists what waits to be decided.
@@ -86,7 +89,7 @@ impl Presentation {
             }),
             P::Constraint { pane, item, .. } => item.map(|id| P::Item { pane: *pane, id }),
             P::Layer { view, .. } => Some(P::Item { pane: 0, id: *view }),
-            P::Change(_) => None,
+            P::Change(_) | P::Entry(_) => None,
             P::Suggestion(n) => Some(P::Command(format!("adopt suggestion {n}"))),
             P::Notebook { pane } => Some(P::Item {
                 pane: *pane,

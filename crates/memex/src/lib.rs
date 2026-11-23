@@ -13,6 +13,7 @@ mod evaluation;
 pub mod found;
 pub mod gui;
 mod habits;
+pub mod history;
 pub mod journal;
 pub mod keys;
 mod near;
