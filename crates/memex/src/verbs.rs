@@ -48,11 +48,15 @@ impl App {
         (!viewed).then(|| offer("show it as a chart", "show"))
     }
 
-    /// `adopt fix`, if the item's [[links]] name items that are not there.
+    /// `adopt fix`, if the item's [[links]] name items that are not there,
+    /// or else its text was not read and has a repair.
     fn made_offer(&self, id: u64) -> Option<Offer> {
         let names = self.notebook.outline.unresolved(id);
-        let said = format!("make the items its [[links]] name: {}", names.join(", "));
-        (!names.is_empty()).then(|| offer(&said, "adopt fix"))
+        let said = match names.is_empty() {
+            false => format!("make the items its [[links]] name: {}", names.join(", ")),
+            true => format!("mend it to “{}”", self.session.prose_repair(id)?),
+        };
+        Some(offer(&said, "adopt fix"))
     }
 
     /// `check`, for each kind the item has: a quotation imported from a

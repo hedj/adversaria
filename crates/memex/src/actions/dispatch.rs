@@ -806,7 +806,7 @@ const ADOPTED: &[(&str, &str)] = &[
     ("world", "the supposed world, as the actual one"),
     (
         "fix",
-        "the fix for the target's [[links]] that name no item: it makes them",
+        "the fix shown under the target: the items its [[links]] name, made, or its text mended",
     ),
     ("suggestion N", "the suggestion shown with that number"),
 ];

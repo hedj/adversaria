@@ -67,9 +67,23 @@ impl App {
             [] => self.adopt_claims(target, false),
             ["instead"] => self.adopt_claims(target, true),
             ["world"] => self.cmd_commit(&[], target),
-            ["fix"] => self.cmd_make(&[], target),
+            ["fix"] => self.adopt_fix(target),
             _ => self.cmd_accept(words, target),
         }
+    }
+
+    /// Adopt the fix the target offers: make the items its [[links]] name,
+    /// if one names no item; else mend its text as APE would, if it was
+    /// not read and has a repair (crate::actions::reader, move 4).
+    fn adopt_fix(&mut self, target: u64) -> Result<String, String> {
+        if !self.notebook.outline.unresolved(target).is_empty() {
+            return self.cmd_make(&[], target);
+        }
+        let mended = self.session.prose_repair(target).map(str::to_string);
+        let mended = mended.ok_or("nothing to fix: the target's [[links]] each name an item, and it has no repair to adopt")?;
+        let text: Vec<char> = mended.chars().collect();
+        self.write_text(target, &text)?;
+        Ok(format!("mended: “{mended}”"))
     }
 
     /// Set aside what is offered: a suggestion; the supposed world, back

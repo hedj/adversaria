@@ -1004,6 +1004,10 @@ impl<'a> OutlinePane<'a> {
     /// written in this session and was not: a quiet hint, nowhere else.
     fn prose_line(&self, id: u64, depth: usize) -> Option<Line<'static>> {
         let hint = self.hint_here(id).filter(|h| self.says_why(id, h))?;
+        let hint = match self.app.session.prose_repair(id) {
+            Some(mended) => format!("not read: did you mean “{mended}”? adopt fix mends it"),
+            None => hint.to_string(),
+        };
         let indent = "  ".repeat(depth + 1);
         Some(Line::styled(format!("{indent}  {hint}"), dim()))
     }

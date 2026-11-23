@@ -267,7 +267,8 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   source, in brackets. A result whose input files have changed says `input
   changed since:` and the files. Text the memex has read is cyan; under a
   question, `→` gives its answer. Under the item at the cursor, a dim line
-  says why its text was not read, or which of its `[[links]]` name no item
+  says why its text was not read (or, for a sentence APE can mend, `not
+  read: did you mean “…”? adopt fix mends it`), or which of its `[[links]]` name no item
   yet (§ 2.4, § 3.1).
 - **Right pane, the inspector:** what is known about the item the cursor
   is on. By default its links,
@@ -702,7 +703,7 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 
 | Command | Form | Does |
 | --- | --- | --- |
-| `adopt` | `adopt` (F3), `adopt instead`, `adopt suggestion N`, `adopt fix`, `adopt world` | `adopt` makes the target's claims beliefs, keeping their source, one adoption for each claim; `adopt instead` also retracts the beliefs they directly contradict (each that breaks a constraint with them and nothing else); `adopt suggestion N`, the Nth suggestion shown, with its evidence; `adopt fix`, the fix of a finding: the items the target's `[[links]]` name, made at the foot of the top level and linked, one `undo` taking it all back; `adopt world`, the supposed world as the actual one |
+| `adopt` | `adopt` (F3), `adopt instead`, `adopt suggestion N`, `adopt fix`, `adopt world` | `adopt` makes the target's claims beliefs, keeping their source, one adoption for each claim; `adopt instead` also retracts the beliefs they directly contradict (each that breaks a constraint with them and nothing else); `adopt suggestion N`, the Nth suggestion shown, with its evidence; `adopt fix`, the fix of a finding: the items the target's `[[links]]` name, made at the foot of the top level and linked, one `undo` taking it all back; or, if it has none to make and its text, a sentence, was not read, its text mended as APE would mend it (`not read: did you mean “…”?` under it); `adopt world`, the supposed world as the actual one |
 | `dismiss` | `dismiss suggestion N`, `dismiss world`, `dismiss change N` | `dismiss suggestion N` sets the Nth suggestion aside; it returns only if its evidence changes. `dismiss world` closes the supposition and returns to the actual world; it stays in the journal. `dismiss change N` rejects one change of a revision (§ 4.1), asking first |
 | `import` | `import FILE [as ADDRESS]`; or the kind first: `import wikidata FILE`, `import document FILE [as ADDRESS]`, `import results FILE` | imports a file of the kind its name ends in: a Wikidata subset (`.pl`), an analysis's results (`.json`), or else a document (with `as`, as a revision of the document the item at ADDRESS came from) (§ 3.4, § 4.1). Alone, it asks for the file |
 | `export` | `export FILE [NUMBER]` | exports the outline, or the section at item NUMBER, as a document |

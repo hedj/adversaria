@@ -306,8 +306,9 @@ struct Outside {
     stale: BTreeMap<u64, Vec<String>>,
     /// The last violations and disagreements recorded in the journal.
     observed: Option<Observed>,
-    /// Why the text of an item was not read, last time it was written.
-    prose: Option<(u64, String)>,
+    /// Why the text of an item was not read, last time it was written,
+    /// and APE's repair of it, if it has one.
+    prose: Option<(u64, String, Option<String>)>,
     /// The items whose text is written and waits to be read, each with the
     /// entry that wrote it.
     to_read: BTreeMap<u64, u64>,
@@ -355,12 +356,20 @@ impl Session {
     /// Why an item's text was not read as statements, if it was written
     /// in this session and was not.
     pub fn prose_hint(&self, item: u64) -> Option<&str> {
-        let hint = self.outside.prose.as_ref().filter(|(i, _)| *i == item);
-        hint.map(|(_, why)| why.as_str())
+        let hint = self.outside.prose.as_ref().filter(|(i, ..)| *i == item);
+        hint.map(|(_, why, _)| why.as_str())
     }
 
-    /// Note why an item's text was not read, or that it was.
-    pub(crate) fn set_prose(&mut self, hint: Option<(u64, String)>) {
+    /// The text APE would mend an item's text to, if its text was written
+    /// in this session, was not read, and has a repair.
+    pub fn prose_repair(&self, item: u64) -> Option<&str> {
+        let hint = self.outside.prose.as_ref().filter(|(i, ..)| *i == item);
+        hint.and_then(|(.., mended)| mended.as_deref())
+    }
+
+    /// Note why an item's text was not read, with its repair, if any; or
+    /// that it was read.
+    pub(crate) fn set_prose(&mut self, hint: Option<(u64, String, Option<String>)>) {
         self.outside.prose = hint;
     }
 

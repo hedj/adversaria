@@ -75,10 +75,25 @@ impl App {
         self.state_reading(w, &said);
     }
 
-    /// A text not read, and the hint of why at the cursor.
+    /// A text not read, and the hint of why at the cursor, with APE's
+    /// repair of it, if it has one.
     fn unread_saying_why(&mut self, w: &Written, reading: &Reading) {
-        self.session.set_prose(Some((w.item, hint_of(reading))));
+        let mended = self.repair_of(w.text, reading);
+        self.session
+            .set_prose(Some((w.item, hint_of(reading), mended)));
         self.unread(w);
+    }
+
+    /// APE's first repair of a text that is not ACE, if the text is a
+    /// sentence (it ends in a full stop, question or exclamation mark), as
+    /// "Do you mean …?" mends a supposition: a heading or a name is not
+    /// meant to be read.
+    fn repair_of(&mut self, text: &str, reading: &Reading) -> Option<String> {
+        let sentence = text.trim_end().ends_with(['.', '?', '!']);
+        if !sentence || !matches!(reading, Reading::NotAce(_)) {
+            return None;
+        }
+        self.ace_check(&unbracketed(text)).ok()?.mended()
     }
 
     /// Let each item whose text is not what was last read for it wait to

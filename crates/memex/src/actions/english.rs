@@ -94,7 +94,7 @@ impl App {
     }
 
     /// What a text being typed is, with the current world's words.
-    fn ace_check(&mut self, text: &str) -> Result<Check, String> {
+    pub(crate) fn ace_check(&mut self, text: &str) -> Result<Check, String> {
         let facts = self.notebook.facts_now()?;
         let ace = self.reason.ace()?;
         ace.check_with(lexicon_of(&facts), text).map_err(told)
