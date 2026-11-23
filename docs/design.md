@@ -216,6 +216,19 @@ docs/concepts-next.md, § How far, move 4: a line is read by its form.
 | A command's whole name, or a start of two letters or more, always wins; one letter starts a command only on a line of one word, and a line of one word is never read by its form | "A" alone starts `adopt`, and starts many sentences; a word still being typed must keep the list of the commands it may start |
 | An item whose text, a sentence, is not ACE is offered APE's first repair, under it and on the right-click, and `adopt fix` takes it where the item has no `[[links]]` to make | "Do you mean …?" served only the Command line. The repair is asked for only for the item just written, as the note of why is kept for it alone, so an import costs no more; a heading, which is not meant to be read, is offered none |
 
+##### Seven concepts
+
+docs/concepts-seven.md: move 3, seven concepts in place of twelve. The
+author took its five recommendations (23 November 2026).
+
+| Decision | Reason |
+| --- | --- |
+| A label's page with no item of its own is virtual: no entry, and no change to the journal's format; an item may still be made for it by hand | a page made an item at each label's first use would be a revision of the format, and most labels never need one |
+| The screen keeps claim, suggestion and finding as the kinds of offer, each named for its source | the concept the learner holds is offer; the kind tells where an offer came from, which deciding needs |
+| `[[name]]` to nothing becomes a virtual page, as `#name` does; its hint shows only while the text cursor is in the link | one rule for both spellings of a link, and a typo is still seen as it is typed |
+| A document's first import imports its items at once, as now | an import is asked for, so a second question would only slow it; the claims it brings are offers already |
+| Changes 1 to 3 (the notebook's inspector, one row for an offer, the history) are built first; the words of the guide and the screen change only after the journal shows whether learners treat a claim and a finding as one kind of thing | the first three serve seven concepts or the middle path of nine alike |
+
 #### Open questions
 
 - [ ] How fast does the journal grow in real use, and how are span lists compacted?

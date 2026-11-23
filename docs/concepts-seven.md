@@ -1,8 +1,10 @@
 # Seven concepts: move 3 in full
 
-A proposal for the author, 23 November 2026. Nothing here is built. It
-describes move 3 of docs/concepts-next.md § How far, the last of the four
-moves; moves 1, 2 and 4 are built.
+A proposal for the author, 23 November 2026. It describes move 3 of
+docs/concepts-next.md § How far, the last of the four moves; moves 1, 2
+and 4 are built. The author took the five recommendations of § Decisions
+for the author (design.md records them), and changes 1 to 3 of § What it
+costs are being built; changes 4 and 5 wait for the measures.
 
 ## The answer
 
