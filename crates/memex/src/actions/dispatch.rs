@@ -458,7 +458,7 @@ pub const COMMANDS: &[Command] = &[
         name: "transclude",
         run: App::cmd_transclude,
         target: true,
-        slots: &[noun("from", Slot::Item)],
+        slots: &[noun("from", Slot::Item).asked()],
         help: "show an item's text in place, in a new item after the target",
         brief: "show an item's text in place",
     },

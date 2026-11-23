@@ -329,7 +329,7 @@ fn the_foot_says_what_the_mouse_does_over_what_is_under_it() {
     let said = foot(&r);
     assert_eq!(
         said[0],
-        "click: go to 2 · right-click for: adopt its claims; adopt them instead of what they contradict"
+        "click: go to 2 · right-click for: adopt its claims; adopt them instead of what they contradict; the verbs that apply to it"
     );
     assert_eq!(said[1], "a message stays");
     r.app.session.pointer = None;

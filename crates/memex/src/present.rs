@@ -178,12 +178,24 @@ impl App {
         if let Some(item) = p.as_ref().and_then(Presentation::right_clicked) {
             self.click(&item);
         }
-        let mut offers = p.as_ref().map(|p| self.translators(p)).unwrap_or_default();
-        if p.as_ref().is_none_or(Presentation::is_text) {
-            add_new(&mut offers, self.plumbed_words(text));
-        }
+        let offers = self.menu_offers(p.as_ref(), text);
         let title = p.map_or_else(|| text.to_string(), |p| self.presented_name(&p));
         self.offer_menu(&title, offers, at);
+    }
+
+    /// What a right-click's menu offers, in order: what the object
+    /// presented offers; for a text, what plumbing offers; and for an
+    /// item's text, the cursor on it, the verbs that apply to the item
+    /// (crate::verbs). Each command line is offered once.
+    fn menu_offers(&self, p: Option<&Presentation>, text: &str) -> Vec<Offer> {
+        let mut offers = p.map(|p| self.translators(p)).unwrap_or_default();
+        if p.is_none_or(Presentation::is_text) {
+            add_new(&mut offers, self.plumbed_words(text));
+        }
+        if p.is_some_and(Presentation::is_text) {
+            add_new(&mut offers, self.verb_offers(self.cursor()));
+        }
+        offers
     }
 
     /// What plumbing offers for a text.
@@ -264,7 +276,11 @@ impl App {
             return menu_documentation(m, p);
         }
         let offers = self.translators(p);
-        let said = [self.click_documentation(p), offers_documentation(&offers)];
+        let verbs = p.is_text();
+        let said = [
+            self.click_documentation(p),
+            offers_documentation(&offers, verbs),
+        ];
         said.into_iter().flatten().collect::<Vec<_>>().join(" · ")
     }
 
@@ -286,16 +302,16 @@ impl App {
 
 /// What a right-click on a presentation offers, as the choices of a
 /// menu: up to three, then how many more, apart by semicolons, since an
-/// offer's words may hold a comma ("the rule, 1.3").
-fn offers_documentation(offers: &[Offer]) -> Option<String> {
-    let first: Vec<&str> = offers.iter().take(3).map(|o| o.label.as_str()).collect();
+/// offer's words may hold a comma ("the rule, 1.3"); and, on an item's
+/// text, the verbs, which are named, not counted, since finding which
+/// apply reads the journal, too slow for each move of the pointer.
+fn offers_documentation(offers: &[Offer], verbs: bool) -> Option<String> {
+    let mut first: Vec<&str> = offers.iter().take(3).map(|o| o.label.as_str()).collect();
     let more = offers.len().saturating_sub(3);
-    let more = if more > 0 {
-        format!("; {more} more")
-    } else {
-        String::new()
-    };
-    (!first.is_empty()).then(|| format!("right-click for: {}{more}", first.join("; ")))
+    let more = (more > 0).then(|| format!("{more} more"));
+    first.extend(more.as_deref());
+    first.extend(verbs.then_some("the verbs that apply to it"));
+    (!first.is_empty()).then(|| format!("right-click for: {}", first.join("; ")))
 }
 
 /// What a click on a menu's offer does: its words.

@@ -497,7 +497,18 @@ offers the commands that apply to what it presents, as it is now:
 After them come the commands plumbing offers (below) for the word under
 the pointer (without the punctuation around it), if it is in an item or
 in text that presents nothing, or for the text selected, whatever is
-under it. The offers appear in a
+under it. Last, on an item's text or a link, come the verbs that apply
+to that item, the cursor on it: link it, move it, copy it, a new item
+after it, show it as a chart (if it is no view yet), show another item's
+text after it, make what its `[[links]]` name (if one names no item),
+check its quotation or its source (if it has one), suppose what it
+states (if it is read), find what carries each of its labels, retract
+its last entry (if it has one, and not already offered), and delete it.
+Each runs as the verb typed alone does (§ 2.4, A verb alone): its words
+name the default it takes, or end in `…` where it asks. A verb with a
+key of habit names it, as `copy it after itself  (Ctrl+C, Ctrl+V)`.
+Over an item, the foot's `right-click for:` ends with `the verbs that
+apply to it`. The offers appear in a
 menu titled with what it acts on, such as `act on “flight”` or the
 item's text, just below the pointer (above it near the foot), so the
 row clicked stays in view. An offer that a key runs names the key, as
@@ -596,6 +607,7 @@ cursor.
 | `check` | (which) `quote` or `source`, whichever the target has | asks, if it has both or neither |
 | `retract` | (entry) the target's last entry that can be retracted | asks for an entry |
 | `import`, `export` | | asks for the file |
+| `transclude` | | asks for the item whose text to show |
 
 The item you last jumped from is never the target itself. Other verbs
 alone do what their rows below say.

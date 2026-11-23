@@ -32,5 +32,6 @@ mod spare;
 pub mod store;
 mod translators;
 pub mod ui;
+mod verbs;
 pub mod view;
 pub mod world;

@@ -210,7 +210,7 @@ fn suggestion_offers(n: usize) -> Vec<Offer> {
 }
 
 /// An offer: the menu's words, and the command line.
-fn offer(label: &str, line: &str) -> Offer {
+pub(crate) fn offer(label: &str, line: &str) -> Offer {
     Offer {
         label: label.to_string(),
         line: line.to_string(),
