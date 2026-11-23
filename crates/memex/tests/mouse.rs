@@ -175,7 +175,7 @@ fn buran_with_suggestions(name: &str) -> Room {
 /// The second suggestion's title, and its evidence lines below, are each
 /// a click that accepts it.
 fn the_second_spans_its_evidence(app: &Room, title: &str, accept: &Presentation) {
-    let at = app.find(&format!("2. {title}"));
+    let at = app.find(&format!("suggestion 2  {title}"));
     let hits = app.hits();
     assert_eq!(
         hits.at(at.0, at.1),

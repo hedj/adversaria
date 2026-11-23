@@ -5,14 +5,13 @@
 mod commands;
 mod matches;
 mod notebook;
+mod offers;
 mod wrap;
 
 use crate::app::{Active, App, Hold, Mode, PaneKind, Quasi, View};
 use crate::outline::{Layer, Link, Outline, Run, TOP};
 use crate::present::Presentation;
-use crate::reason::{
-    self, ConstraintEval, Finding, Prov, Solution, Sourced, Suggestion, WorldEval,
-};
+use crate::reason::{self, ConstraintEval, Finding, Prov, Solution, Sourced, WorldEval};
 use crate::view;
 use format::terms::Term;
 use ratatui::Frame;
@@ -1827,7 +1826,7 @@ fn claimed(app: &App, item: u64) -> Vec<Presented> {
     if !lines.is_empty() {
         lines.push((Line::raw(""), None));
     }
-    lines.extend(plain(interrogation(app, item)));
+    lines.extend(interrogation(app, item));
     lines
 }
 
@@ -3082,44 +3081,56 @@ fn definition_goal(e: &WorldEval, id: u64) -> Option<&Term> {
 /// The right pane at a claim item, or one interrogated: each of the
 /// item's claims, then what adopting them would do. The hint follows,
 /// drawn by draw_interrogation, where a click can find it.
-fn interrogation(app: &App, item: u64) -> Vec<Line<'static>> {
+fn interrogation(app: &App, item: u64) -> Vec<Presented> {
     let Some(e) = app.reason.eval[0].as_ref() else {
-        return vec![Line::raw("not yet evaluated")];
+        return plain(vec![Line::raw("not yet evaluated")]);
     };
     let mut lines = interrogation_head(&app.notebook.outline, item);
     lines.extend(claims_asked(app, e, item));
-    lines.extend(adoption_lines(app, item));
+    lines.extend(plain(adoption_lines(app, item).to_vec()));
     lines
 }
 
 /// Each claim an item states, and what is asked of it.
-fn claims_asked(app: &App, e: &WorldEval, item: u64) -> Vec<Line<'static>> {
+fn claims_asked(app: &App, e: &WorldEval, item: u64) -> Vec<Presented> {
     let claims = app.claims_shown(item).into_iter();
-    claims.flat_map(|c| claim_lines(app, e, c)).collect()
+    claims.flat_map(|c| claim_lines(app, e, item, c)).collect()
 }
 
 /// The heading of a claim item's questions, and the item.
-fn interrogation_head(outline: &Outline, item: u64) -> Vec<Line<'static>> {
+fn interrogation_head(outline: &Outline, item: u64) -> Vec<Presented> {
     let named = format!("CLAIMS OF {} · WHO SAYS THEM", outline.number(item));
     let heading = Line::styled(named, dim());
-    vec![
+    plain(vec![
         heading,
         Line::raw(""),
         Line::raw(outline.text(item)),
         Line::raw(""),
-    ]
+    ])
 }
 
-/// A claim interrogated: what it says and its entry, who else claims it,
-/// who claims the contrary, and its source's record.
-fn claim_lines(app: &App, e: &WorldEval, claim: (u64, String, Term)) -> Vec<Line<'static>> {
-    let asking = Asking::of(app, e, &claim);
-    let mut lines = asking.said();
-    lines.extend(section(
-        "who else claims it",
-        asking.claimants(),
-        "no one else",
-    ));
+/// A claim interrogated: the claim, in an offer's rows, then who else
+/// claims it, who claims the contrary, and its source's record.
+fn claim_lines(app: &App, e: &WorldEval, item: u64, claim: (u64, String, Term)) -> Vec<Presented> {
+    let mut lines = claim_row(app, item, &claim);
+    lines.extend(plain(claim_questions(app, e, &claim)));
+    lines
+}
+
+/// A claim an item states, in an offer's rows: dim, and said so, once
+/// adopted.
+fn claim_row(app: &App, item: u64, claim: &(u64, String, Term)) -> Vec<Presented> {
+    let (_, source, fact) = claim;
+    let open = app.claim_open(item, source.clone(), fact);
+    let adopted = app.not_adopted(vec![claim.clone()]).is_empty();
+    offers::offer_row(&open, adopted.then_some("adopted"))
+}
+
+/// What is asked of a claim: who else claims it, who claims the
+/// contrary, and its source's record.
+fn claim_questions(app: &App, e: &WorldEval, claim: &(u64, String, Term)) -> Vec<Line<'static>> {
+    let asking = Asking::of(app, e, claim);
+    let mut lines = section("who else claims it", asking.claimants(), "no one else");
     lines.extend(section(
         "who claims the contrary",
         asking.contrary(),
@@ -3149,16 +3160,6 @@ impl<'a> Asking<'a> {
             eval,
             claim,
         }
-    }
-
-    /// What the claim says, restated, with its source, and its entry.
-    fn said(&self) -> Vec<Line<'static>> {
-        let (seq, src, p) = self.claim;
-        let said = format!("claims: {} — from {src}", self.restated(p));
-        vec![
-            Line::raw(said),
-            Line::styled(format!("  entry {seq}"), dim()),
-        ]
     }
 
     /// A fact restated in words, by the world's labels.
@@ -3919,46 +3920,23 @@ fn inset(area: Rect) -> Rect {
 /// The suggestion pane: few in view, ranked by evidence, each with why it
 /// was offered. It never takes the keyboard: accept or dismiss by command.
 fn draw_suggestions(f: &mut Frame, app: &App, area: Rect) -> Presentations {
-    let inner = inset(area);
-    let column = suggestion_lines(app, Column::new(inner));
-    f.render_widget(Hung(column.lines), inner);
-    column.hits
+    draw_presented(f, suggestion_lines(app), inset(area))
 }
 
-/// The suggestion pane's column: how many are shown of all, each shown
-/// one, and how to act on them.
-fn suggestion_lines(app: &App, mut column: Column) -> Column {
-    let suggestions = &app.reason.suggestions;
-    let shown = suggestions.shown();
-    let heading = format!(
-        "SUGGESTIONS · {} OF {}",
-        shown.len(),
-        suggestions.list.len()
-    );
-    column.lines = vec![Line::styled(heading, dim()), Line::raw("")];
-    let blocks = shown
-        .iter()
-        .enumerate()
-        .map(|(i, s)| suggestion_block(i, s));
-    for (block, click) in blocks {
-        column.clickable(block, click);
-    }
+/// The suggestion pane's lines: how many are shown of all, each shown
+/// one in an offer's rows, and how to act on them.
+fn suggestion_lines(app: &App) -> Vec<Presented> {
+    let all = app.reason.suggestions.list.len();
+    let shown = app.suggestions_open();
+    let heading = format!("SUGGESTIONS · {} OF {all}", shown.len());
+    let mut lines = plain(vec![Line::styled(heading, dim()), Line::raw("")]);
+    lines.extend(shown.iter().flat_map(|o| offers::offer_row(o, None)));
     if shown.is_empty() {
-        column.lines.push(Line::styled("nothing to suggest", dim()));
+        lines.push((Line::styled("nothing to suggest", dim()), None));
     }
     let hint = "adopt N adopts · dismiss N dismisses";
-    column
-        .lines
-        .extend([Line::raw(""), Line::styled(hint, dim())]);
-    column
-}
-
-/// The i-th suggestion shown, numbered from 1, with why it was offered; a
-/// click on it accepts it.
-fn suggestion_block(i: usize, s: &Suggestion) -> (Vec<Line<'static>>, Presentation) {
-    let title = Line::raw(format!("{}. {}", i + 1, s.describe()));
-    let why = Line::styled(format!("   {}", s.evidence), dim());
-    (vec![title, why], Presentation::Suggestion(i + 1))
+    lines.extend(plain(vec![Line::raw(""), Line::styled(hint, dim())]));
+    lines
 }
 
 /// The lines of a pane, wrapped in its area, and what a click on them
@@ -4004,28 +3982,18 @@ fn wrapped_height(lines: &[Line<'static>], width: u16) -> u16 {
     p.line_count(width) as u16
 }
 
-/// The lines of a revision's panel: its name, each change, and how to
-/// keep or undo them.
+/// The lines of a revision's panel: its name, each change in an offer's
+/// rows, and how to keep or undo them.
 fn revision_lines(name: &str, changes: &[(u64, String, bool)]) -> Vec<Presented> {
     let heading = Line::styled(format!("WORLD · {}", name.to_uppercase()), dim());
     let mut lines = plain(vec![heading, Line::raw("")]);
-    lines.extend(changes.iter().map(change_line));
+    lines.extend(changes.iter().flat_map(|c| offers::change_rows(name, c)));
     if changes.is_empty() {
         lines.push((Line::styled("no changes", dim()), None));
     }
     let how = "dismiss change N rejects one change · adopt world keeps the rest · dismiss world drops them all";
     lines.extend(plain(vec![Line::raw(""), Line::styled(how, dim())]));
     lines
-}
-
-/// One change of a revision: its entry and what it does, dim if retracted.
-fn change_line((seq, what, retracted): &(u64, String, bool)) -> Presented {
-    let line = format!("entry {seq}  {what}");
-    let line = match retracted {
-        true => Line::styled(format!("{line}  (retracted)"), dim()),
-        false => Line::raw(line),
-    };
-    (line, Some(Presentation::Change(*seq)))
 }
 
 /// The keys an empty notebook names, each by the key configured for it.

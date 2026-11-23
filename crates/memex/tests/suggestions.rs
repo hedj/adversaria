@@ -48,8 +48,8 @@ fn clicks(room: &Room, x: u16, rows: std::ops::Range<u16>) -> Vec<Option<Present
 #[test]
 fn a_click_on_any_row_of_a_suggestion_wrapped_rows_too_accepts_it() {
     let room = suggested("suggest-wrapped");
-    let (x, top) = room.find("1. buran_flight");
-    let rows = top..room.find("2. buran_flight").1;
+    let (x, top) = room.find("suggestion 1  buran_flight");
+    let rows = top..room.find("suggestion 2  buran_flight").1;
     assert!(rows.len() > 2, "its evidence wraps");
     let accept = Some(Presentation::Suggestion(1));
     assert!(clicks(&room, x, rows).iter().all(|c| *c == accept));

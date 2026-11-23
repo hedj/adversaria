@@ -316,8 +316,10 @@ changes in a world of their own, one entry each:
 
     WORLD · REVISION OF ESSAY.MD
 
-    entry 52  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”
-    entry 53  added: “Each team wrote its findings in the DRAKON language.”
+    change 52  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”
+       from the revision of essay.md
+    change 53  added: “Each team wrote its findings in the DRAKON language.”
+       from the revision of essay.md
 
 Say your own sources name two teams. Reject that change: right-click it,
 and the menu offers `reject this change`; or run, by its number,

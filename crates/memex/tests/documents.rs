@@ -266,7 +266,7 @@ fn a_revision_is_shown_change_by_change() {
     let mut r = Room::new("rev-screen");
     revised(&mut r, "# T\n\nOld text.\n", "# T\n\nNew text.\n");
     let change = format!(
-        "entry {}  changed 1.1: “Old text.” → “New text.”",
+        "change {}  changed 1.1: “Old text.” → “New text.”",
         r.last("edit")
     );
     assert!(
@@ -290,7 +290,7 @@ fn a_retracted_change_is_shown_retracted() {
     let change = r.last("edit");
     r.command(&format!("retract entry {change}"));
     r.tap(&[memex::app::Key::Enter]);
-    let line = format!("entry {change}  changed 1.1: “Old text.” → “New text.”  (retracted)");
+    let line = format!("change {change}  changed 1.1: “Old text.” → “New text.”  (retracted)");
     assert!(shows(&r, &line), "{:?}", r.lines());
 }
 

@@ -81,7 +81,7 @@ impl App {
     }
 
     /// A claim an item states, not yet adopted, from its source.
-    fn claim_open(&self, id: u64, source: String, fact: &Term) -> Open {
+    pub(crate) fn claim_open(&self, id: u64, source: String, fact: &Term) -> Open {
         let what = self.about(id, &self.restated(fact));
         let presents = Presentation::Item { pane: 0, id };
         Open {
@@ -107,7 +107,7 @@ impl App {
     }
 
     /// The memex's suggestions shown, by their numbers.
-    fn suggestions_open(&self) -> Vec<Open> {
+    pub(crate) fn suggestions_open(&self) -> Vec<Open> {
         let shown = self.reason.suggestions.shown().into_iter();
         shown.zip(1..).map(|(s, n)| suggestion_open(s, n)).collect()
     }
@@ -135,6 +135,19 @@ fn suggestion_open(s: &Suggestion, n: usize) -> Open {
     Open {
         kind,
         what: s.describe(),
+        source,
+        presents,
+    }
+}
+
+/// A change of a revision, from the world it is in.
+pub(crate) fn change_open(seq: u64, what: String, world: &str) -> Open {
+    let kind = format!("change {seq}");
+    let source = format!("the {world}");
+    let presents = Presentation::Change(seq);
+    Open {
+        kind,
+        what,
         source,
         presents,
     }

@@ -224,8 +224,8 @@ fn the_inspector_answers_a_claims_five_questions() {
     app.evaluate().unwrap();
     let s = screen(&app);
     s.assert("CLAIMS OF 2.1 · WHO SAYS THEM");
-    s.assert("claims: the date of Buran's flight is 1989 — from my notes, conference talk");
-    s.assert("  entry ");
+    s.assert("claim  2.1: the date of Buran's flight is 1989");
+    s.assert("   from my notes, conference talk");
     s.assert("who else claims it");
     s.assert("no one else");
     s.assert("who claims the contrary");

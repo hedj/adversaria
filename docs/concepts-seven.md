@@ -13,6 +13,12 @@ is not drawn, so a row there could never be seen. It lists no fix for a
 `[[link]]` to nothing, since decision 3 makes such a link a virtual
 page, not an offer. A click on an offer does what a click on its thing
 does: it goes to the item or the rule, and it adopts a suggestion.
+Change 2, one row for an offer: the notebook's inspector, the
+suggestions list, a claim's questions and a revision's changes draw an
+offer in the same two rows, what it is and offers, then where it came
+from. One decided stays where it was listed, dim, ending in how it was
+decided: `(adopted)` for a claim, `(retracted)` for a change. A claim's
+entry number, which its questions showed, is gone: nothing used it.
 
 ## The answer
 

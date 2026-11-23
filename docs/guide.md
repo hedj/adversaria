@@ -282,10 +282,11 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   findings, the constraint, its rule, its solutions and what depends on them;
   on a view, its layers. Under the links or the constraint, `READ AS` and
   the address show what the item's text was read as, in Prolog, and its
-  tags (§ 3.1). On an item that states a claim, the pane then asks of each
-  claim who else claims it, who claims the contrary, its source, the
-  source's record, and what adopting it would do (`CLAIMS OF 2 · WHO SAYS
-  THEM`). The inspector follows the cursor and never takes the keys.
+  tags (§ 3.1). On an item that states a claim, the pane then shows each
+  claim in the two rows of any offer (`claim  2: …`, then, dim, `from` its
+  source; dim, ending `(adopted)`, once adopted), and asks of it who else
+  claims it, who claims the contrary, the source's record, and what
+  adopting it would do (`CLAIMS OF 2 · WHO SAYS THEM`). The inspector follows the cursor and never takes the keys.
   `find` shows a list in its place, and `find` alone shows the inspector
   again (§ 2.4). With the cursor above the first item, on the notebook
   itself, the inspector lists what waits for you to decide, as the next
@@ -305,7 +306,8 @@ most pressing first: each finding, from the rule it comes from; each
 claim not adopted, from its source; a text you just wrote that the memex
 can mend; then the memex's suggestions. Each takes two rows: what it is
 and what it offers (`claim  2: the date of Buran-flight is 1989`), then,
-dim, where it came from (`from Talk-notes`). A click on one goes to its
+dim, where it came from (`from Talk-notes`). An offer takes the same two
+rows wherever it is listed. A click on one goes to its
 item or its rule, or adopts a suggestion, as a click on the thing itself
 does; a right-click offers what decides it, such as `adopt` or
 `dismiss`. The first twelve are listed, and the rest are counted.
@@ -1186,7 +1188,9 @@ The memex suggests these and more, without any language model:
   ending in `.`, `?` or `!`). Accepting it writes the link.
 
 `find suggestions` lists them in the inspector's place, at most five,
-ranked by evidence, each with why it was offered. A suggestion is a claim
+ranked by evidence, each in the two rows of any offer: what it offers
+(`suggestion 1  link …`), then, dim, `from the memex:` and why it was
+offered. A suggestion is a claim
 whose source is the memex: `adopt suggestion N` adopts the Nth, with its
 evidence, and `dismiss suggestion N` sets it aside until its evidence
 changes. While they are listed, suggestions keep their places, so the
@@ -1223,7 +1227,10 @@ that document, so a later import under either name finds the same
 history.
 It opens a supposed world with each change as one entry: changed text,
 added items, deleted items, and items moved under another heading (when a
-heading changes its level, for one). `dismiss change N` drops a change;
+heading changes its level, for one). Each change takes the two rows of
+any offer: `change 52  changed 2.2.1: …`, then, dim, `from the revision
+of essay.md`; one dropped stays, dim, ending `(retracted)`.
+`dismiss change N` drops a change;
 `adopt world` keeps the rest; `dismiss world` drops them all. Your own items stay where you
 put them.
 
