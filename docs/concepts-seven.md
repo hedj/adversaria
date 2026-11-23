@@ -3,8 +3,9 @@
 A proposal for the author, 23 November 2026. It describes move 3 of
 docs/concepts-next.md § How far, the last of the four moves; moves 1, 2
 and 4 are built. The author took the five recommendations of § Decisions
-for the author (design.md records them), and changes 1 to 3 of § What it
-costs are being built; changes 4 and 5 wait for the measures.
+for the author (design.md records them). Changes 1 to 3 of § What it
+costs are built (commits 5098ce0, 8dcb5e0 and 95476af); changes 4 and 5
+wait for the measures.
 
 **Built so far.** Change 1, the notebook's inspector, with two
 departures from § What it needs built. It lists no revision's changes:

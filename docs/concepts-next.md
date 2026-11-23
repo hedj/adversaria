@@ -4,7 +4,9 @@ A proposal for the author, 22 November 2026, after the fifth review
 (docs/research/notes/ux-review-5-regularity.md). The grammar is built,
 and so are the lists of each verb's words, most of move 2 (editing by
 habit), move 1 (the right-click's verbs) and move 4 (one reader for
-every line) (§ Built, and the count now); move 3 is not.
+every line) (§ Built, and the count now). Of move 3, changes 1 to 3 of
+docs/concepts-seven.md are built (the notebook's inspector, one row for
+an offer, the history); its changes 4 and 5 wait for the measures.
 
 ## The answer
 
