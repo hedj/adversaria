@@ -484,7 +484,7 @@ fn boxes_and_rules(t: &mut T) {
     t.read("The food is 400.");
     t.read("What is the rest?");
     t.shows("→ 400");
-    t.command("find What is the cost?");
+    t.command("What is the cost?");
     t.says("1 answer: Answer = 1600");
 }
 
@@ -514,7 +514,11 @@ fn a_value_changed(t: &mut T) {
 
 /// Step 14: what if the rent rose.
 fn a_what_if(t: &mut T) {
-    t.tapped(Quasi::Suppose, "rent is 1600");
+    t.tap(Key::Quasi(Quasi::Command));
+    t.typ("rent is 1600");
+    t.shows("no command, so read as a statement");
+    t.tap(Key::Enter);
+    t.app.evaluate().unwrap();
     t.look("suppose rent?");
     t.shows("Do you mean: Suppose that the rent is 1600.  Enter: yes · Esc: no");
     t.key(Key::Enter);

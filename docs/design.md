@@ -206,6 +206,16 @@ gesture, and the menu teaches what acts on a thing.
 | A plumbing rule's item test holds only for an item other than the cursor's | going to the item the cursor is on, linking it to itself or showing it in its own place does nothing, and a right-click on an item's own name offered all three |
 | The Menu key, or Shift+F10, opens the same menu at the cursor's item, unless the key is bound | the keyboard reaches every offer, as change 12 asked; Shift+F10 is the keyboard's right-click on Windows and the Linux desktops, and it was read as F10, which quits |
 
+##### One reader
+
+docs/concepts-next.md, § How far, move 4: a line is read by its form.
+
+| Decision | Reason |
+| --- | --- |
+| A Command line of two words or more whose first word names no command is read by its form: a question is answered once, a statement supposed with its readings offered; a line with no reading is refused and kept open, latched | the author's decision (23 November 2026). Refused, not made a world of that name as `suppose` makes one, since a mistyped command would make a world; kept, so that Tab can mend it |
+| A command's whole name, or a start of two letters or more, always wins; one letter starts a command only on a line of one word, and a line of one word is never read by its form | "A" alone starts `adopt`, and starts many sentences; a word still being typed must keep the list of the commands it may start |
+| An item whose text, a sentence, is not ACE is offered APE's first repair, under it and on the right-click, and `adopt fix` takes it where the item has no `[[links]]` to make | "Do you mean …?" served only the Command line. The repair is asked for only for the item just written, as the note of why is kept for it alone, so an import costs no more; a heading, which is not meant to be read, is offered none |
+
 #### Open questions
 
 - [ ] How fast does the journal grow in real use, and how are span lists compacted?

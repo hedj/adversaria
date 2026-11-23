@@ -3,8 +3,8 @@
 A proposal for the author, 22 November 2026, after the fifth review
 (docs/research/notes/ux-review-5-regularity.md). The grammar is built,
 and so are the lists of each verb's words, most of move 2 (editing by
-habit) and move 1 (the right-click's verbs) (§ Built, and the count
-now); moves 3 and 4 are not.
+habit), move 1 (the right-click's verbs) and move 4 (one reader for
+every line) (§ Built, and the count now); move 3 is not.
 
 ## The answer
 
@@ -46,6 +46,7 @@ Built on 22 November 2026, one change a commit:
 | the tutorial teaches the grammar where it is first used | 5a68a1f |
 | move 2, editing by habit: Backspace deletes an empty item; Ctrl+X, Ctrl+C and Ctrl+V | ea2ead5 |
 | move 1: the right-click offers every verb that applies to an item; the Menu key and Shift+F10 open it at the cursor | 9329041, f4ca719; plumbing's item test, 6657e87 |
+| move 4: a Command line with no command first is read by its form; an item that does not read offers APE's repair, and `adopt fix` takes it | fada7b5, 6cde612 |
 
 Where the build differs from § The grammar:
 
@@ -107,6 +108,13 @@ proposal's other assumption for this move, that pointing fills an
 argument, three address forms leave too. The count falls from about 48
 to about 31 (48 − 14 − 3), an estimate that rests on both assumptions.
 
+Move 4 lets a statement or a question be typed as it is, with no verb:
+one rule of the command shape (a sentence needs `suppose` or `find`
+before it) and one statement form (the question asked by `find`) leave
+recall, as the proposal counted them. The count falls from about 31 to
+about 29. A line with no reading is refused rather than made the name of
+a world, so `suppose` before a text is still how a world is named.
+
 All 23 of the fall to 53 come from the lists, and rest on one assumption: that
 a list shown by `?` after the verb is recognition, as the fifth review's
 first suggestion assumed. The grammar itself removes nothing by the rule.
@@ -116,10 +124,10 @@ fewer words typed and fewer refusals, which the journal can measure
 
 ### The rest of the way
 
-From about 31 to about 20, each move keeping every capability (§ How far
-gives each in full). The rows for moves 2 and 1 are what was proposed;
-both are built, move 2 but for drag to move, and move 1 leaving
-`export` in recall:
+From about 29 to about 20, each move keeping every capability (§ How far
+gives each in full). The rows for moves 2, 1 and 4 are what was
+proposed; all three are built, move 2 but for drag to move, and move 1
+leaving `export` in recall:
 
 | Move | Held after it | Cost | What it needs |
 | --- | --- | --- | --- |
@@ -129,7 +137,7 @@ both are built, move 2 but for drag to move, and move 1 leaving
 | 3. Seven concepts | about 24 | large | labels as links and the five kinds of offer change the guide's vocabulary throughout; labels as links need a decision on the journal's meaning |
 | Enter, Esc, Tab and the right-click counted as habits | about 20 | none | a decision on the counting rule, for the author |
 
-Recommended order: 2 (built), then 1 (built), then 4, then 3. Move 2 is the cheapest,
+Recommended order: 2, 1 and 4 (built), then 3. Move 2 is the cheapest,
 and costs nothing to learn, since the keys are habits already. Move 1
 removes the most. Move 3 changes what the learner is told the notebook
 is, so it is the author's to choose, and it is best done last, when the

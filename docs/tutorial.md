@@ -450,8 +450,11 @@ set; rules compute them. The question is answered on the line under it:
     → 400
 
 A question written in an item stays, and its answer follows the facts.
-To ask once without keeping it, run `find What is the cost?`. The foot
-says `1 answer: Answer = 1600`, and nothing is written.
+To ask once without keeping it, type the question itself on the Command
+line: tap Left Ctrl, type `What is the cost?`, and press Enter. A line
+whose first word is no command is read by its form, and a question is
+answered (`find What is the cost?` does the same). The foot says
+`1 answer: Answer = 1600`, and nothing is written.
 
 ### 12. Rules between the boxes
 
@@ -482,7 +485,10 @@ same way make it `500.` Now `→ 300`, and the violation is gone.
 
 ### 14. What if
 
-Tap Super, type `rent is 1600`, and press Enter. The notebook asks:
+Tap Left Ctrl, type `rent is 1600`, and press Enter. A statement typed
+with no command first is supposed, as Super supposes one (step 5); the
+foot says so, `no command, so read as a statement`, before you press
+Enter. The notebook asks:
 
     Do you mean: Suppose that the rent is 1600.  Enter: yes · Esc: no
 
