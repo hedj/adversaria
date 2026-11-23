@@ -74,12 +74,14 @@ pub enum Key {
     Quasi(Quasi),
 }
 
-/// Keys the memex leaves free for the user's bindings.
+/// Keys free for the user's bindings; unbound, a few have a job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Special {
     Insert,
     PageUp,
     PageDown,
+    /// The Menu key, or Shift+F10: unless bound, the right-click's menu
+    /// at the cursor's item.
     Menu,
     Pause,
     ScrollLock,

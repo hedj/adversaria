@@ -434,7 +434,9 @@ takes one letter: tap Left Ctrl, type `n`, press Enter.
 #### Function keys and confirmations
 
 F1 opens the command palette: Command, latched, with the list of
-commands open. F10 quits, writing what is pending first. F3 and F4 adopt
+commands open. The Menu key, or Shift+F10, opens at the cursor's item
+the menu a right-click on it opens (§ 2.3, Right-click), so the keyboard
+reaches every offer. F10 quits, writing what is pending first. F3 and F4 adopt
 a claim and take back the target's own last entry, an adoption, a fact
 or a layer (`adopt`, `retract`), F6 switches between two outline panes,
 and F7 and F8 go back and forward along the trail of jumps (`go back`,
@@ -511,7 +513,8 @@ Over an item, the foot's `right-click for:` ends with `the verbs that
 apply to it`. The offers appear in a
 menu titled with what it acts on, such as `act on “flight”` or the
 item's text, just below the pointer (above it near the foot), so the
-row clicked stays in view. An offer that a key runs names the key, as
+row clicked stays in view. The Menu key, or Shift+F10, opens the same
+menu for the cursor's item, below it. An offer that a key runs names the key, as
 `adopt its claims  (F3)`. Up and Down choose, Enter or a number runs
 one, Esc closes it; a click on an offer runs it, and a click anywhere
 else closes the menu. If nothing can act on it, the foot says so.
@@ -1365,7 +1368,8 @@ built-in ones; there may be any number, in order. See § 2.3, Plumbing.
   `IsoLevel5Shift`;
 - for quasimodes or bindings: `F1` to `F35`, `Insert`, `PageUp`,
   `PageDown`, `Menu`, `Pause`, `ScrollLock`, `PrintScreen`, `CapsLock`,
-  `NumLock`;
+  `NumLock`. Unbound, `Menu`, which Shift+F10 also is, opens the
+  right-click's menu at the cursor;
 - for bindings only: `ShiftUp`, `ShiftDown`, `ShiftLeft`, `ShiftRight`,
   `ShiftHome`, `ShiftEnd`, an arrow, Home or End with Shift held. A
   quasimode cannot use one: it is two keys, and if Shift is let go first,

@@ -159,7 +159,7 @@ impl App {
     /// cell; or, if none matches, say so.
     pub fn plumb(&mut self, text: &str, at: (u16, u16)) {
         let offers = self.plumbed(text);
-        self.offer_menu(text, offers, at);
+        self.offer_menu(text, offers, Some(at));
     }
 
     /// A right-click at a cell, on the text there (the text selected, or
@@ -180,7 +180,34 @@ impl App {
         }
         let offers = self.menu_offers(p.as_ref(), text);
         let title = p.map_or_else(|| text.to_string(), |p| self.presented_name(&p));
-        self.offer_menu(&title, offers, at);
+        self.offer_menu(&title, offers, Some(at));
+    }
+
+    /// The Menu key, the keyboard's right-click: the menu a right-click
+    /// on the cursor's item opens, at that item, with plumbing's offers
+    /// for the text selected or the word at the text cursor; the mode it
+    /// leaves.
+    pub(crate) fn menu_at_cursor(&mut self) -> Mode {
+        let id = self.cursor();
+        if id == crate::outline::TOP {
+            self.session.message = "there is no item to act on".into();
+            return Mode::Normal;
+        }
+        let p = Presentation::Item {
+            pane: self.session.view.focus,
+            id,
+        };
+        let offers = self.menu_offers(Some(&p), &self.word_here());
+        self.offer_menu(&self.presented_name(&p), offers, None);
+        std::mem::replace(&mut self.session.mode, Mode::Normal)
+    }
+
+    /// The text selected, or else the word at the text cursor.
+    fn word_here(&self) -> String {
+        let text = self.text_of(self.cursor());
+        let (a, b) = crate::app::word_at(&text, self.session.view.pos);
+        let word = || text[a..b].iter().collect::<String>().trim().to_string();
+        self.selected_text().unwrap_or_else(word)
     }
 
     /// What a right-click's menu offers, in order: what the object
@@ -218,7 +245,7 @@ impl App {
 
     /// Open a menu of offers about a text at a cell; or, with none, say
     /// that nothing acts on it.
-    fn offer_menu(&mut self, about: &str, offers: Vec<Offer>, at: (u16, u16)) {
+    fn offer_menu(&mut self, about: &str, offers: Vec<Offer>, at: Option<(u16, u16)>) {
         if offers.is_empty() {
             self.session.message = format!("nothing acts on “{}”", about.trim());
             return;

@@ -26,7 +26,8 @@ pub const DEFAULT_TOML: &str = r#"# Adversaria: key configuration. Copy to ~/.co
 # Bound keys: F1 to F35, Insert PageUp PageDown Menu Pause ScrollLock
 #   PrintScreen CapsLock NumLock, and ShiftUp ShiftDown ShiftLeft ShiftRight
 #   ShiftHome ShiftEnd (an arrow, Home or End with Shift held, which selects
-#   unless it is bound).
+#   unless it is bound). Menu, which Shift+F10 also is, opens the
+#   right-click's menu at the cursor unless it is bound.
 # Reserved, for editing, and refused: Enter Tab Backspace Delete Esc, the
 #   arrows, Home End, Shift, and any printable character.
 

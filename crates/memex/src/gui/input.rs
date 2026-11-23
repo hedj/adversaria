@@ -52,13 +52,14 @@ fn quasi_held_on(names: &[&'static str], config: &Config) -> Option<Quasi> {
 
 /// What a key is under the configuration: a quasimode's key, or itself;
 /// none if it has no job and no binding. An arrow, Home or End with Shift
-/// has a job: it selects.
+/// has a job: it selects; and so has Menu: it opens the right-click's
+/// menu at the cursor.
 fn configured(key: Key, config: &Config) -> Option<Key> {
     if let Some(q) = config.quasi_for(QuasiKey::Key(key)) {
         return Some(Key::Quasi(q));
     }
     let bound = config.bindings.iter().any(|(b, _)| *b == key);
-    let free = matches!(key, Key::Special(s) if unshifted(s).is_none());
+    let free = matches!(key, Key::Special(s) if unshifted(s).is_none() && s != Special::Menu);
     (bound || !free).then_some(key)
 }
 
@@ -156,9 +157,12 @@ fn editing(n: NamedKey) -> Option<Key> {
     })
 }
 
-/// An arrow, Home or End, as it is with Shift held.
+/// An arrow, Home or End, as it is with Shift held; and F10, which with
+/// Shift is the keyboard's right-click on Windows and the Linux desktops,
+/// so it is the Menu key (and does not quit, as F10 does).
 fn shifted(n: NamedKey) -> Option<Special> {
     Some(match n {
+        NamedKey::F10 => Special::Menu,
         NamedKey::ArrowUp => Special::ShiftUp,
         NamedKey::ArrowDown => Special::ShiftDown,
         NamedKey::ArrowLeft => Special::ShiftLeft,
@@ -531,6 +535,25 @@ mod tests {
         let end = named_key(KeyCode::End, NamedKey::End);
         let key = map_key(&end, true, &Config::default()).unwrap().key;
         assert_eq!(key, Key::Special(Special::ShiftEnd));
+    }
+
+    #[test]
+    fn shift_with_f10_is_the_menu_key_and_f10_alone_is_f10() {
+        // Catches Shift+F10, the desktops' keyboard right-click, read as
+        // F10, which quits.
+        let f10 = named_key(KeyCode::F10, NamedKey::F10);
+        let c = Config::default();
+        let menu = Key::Special(Special::Menu);
+        assert_eq!(map_key(&f10, true, &c).unwrap().key, menu);
+        assert_eq!(map_key(&f10, false, &c).unwrap().key, Key::F(10));
+    }
+
+    #[test]
+    fn the_menu_key_unbound_is_kept_for_its_job() {
+        // Catches Menu dropped as a key with no job and no binding.
+        let menu = named_key(KeyCode::ContextMenu, NamedKey::ContextMenu);
+        let key = map_key(&menu, false, &Config::default()).unwrap().key;
+        assert_eq!(key, Key::Special(Special::Menu));
     }
 
     #[test]

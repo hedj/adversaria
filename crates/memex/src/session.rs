@@ -96,14 +96,15 @@ impl Clip {
 }
 
 /// What a right-click offers (crate::plumb): the offers, the one chosen,
-/// and the cell, column and row, where the menu opens.
+/// and the cell, column and row, where the menu opens; with none, it
+/// opens at the cursor's item, as the Menu key opens it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Menu {
     /// The text the menu acts on.
     pub text: String,
     pub offers: Vec<Offer>,
     pub chosen: usize,
-    pub at: (u16, u16),
+    pub at: Option<(u16, u16)>,
 }
 
 /// What the menu does with a key or a click.
@@ -114,8 +115,9 @@ pub enum Answer {
 }
 
 impl Menu {
-    /// A menu of offers for a text, the first chosen, at a cell.
-    pub fn new(text: &str, offers: Vec<Offer>, at: (u16, u16)) -> Menu {
+    /// A menu of offers for a text, the first chosen, at a cell or at the
+    /// cursor's item.
+    pub fn new(text: &str, offers: Vec<Offer>, at: Option<(u16, u16)>) -> Menu {
         Menu {
             text: text.trim().to_string(),
             offers,

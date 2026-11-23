@@ -3,7 +3,7 @@
 
 mod support;
 
-use memex::app::{Key, Mode};
+use memex::app::{Key, Mode, Special};
 use support::Room;
 
 /// A right-click where a text starts, on the word there, as the window
@@ -189,4 +189,60 @@ fn a_link_offers_the_verbs_of_the_item_at_its_other_end() {
     );
     choose(&mut r, "delete it");
     assert_eq!(texts(&r), ["Alder", "See [[Birch]]"]);
+}
+
+/// The menu open, if one is.
+fn menu(r: &Room) -> Option<&memex::session::Menu> {
+    match &r.app.session.mode {
+        Mode::Menu(m) => Some(m),
+        _ => None,
+    }
+}
+
+#[test]
+fn the_menu_key_opens_the_right_clicks_menu_at_the_cursors_item() {
+    // Catches the verbs out of the keyboard's reach, or the menu drawn
+    // away from the item it acts on.
+    let mut r = abc("verbs-menu-key");
+    r.command("go 2");
+    r.tap(&[Key::Special(Special::Menu)]);
+    let m = menu(&r).expect("a menu");
+    assert_eq!((m.text.as_str(), m.at), ("Birch", None));
+    assert!(
+        m.offers.iter().any(|o| o.label == "delete it"),
+        "{:?}",
+        m.offers
+    );
+    let rows = r.lines_at(100, 30);
+    let row = |t: &str| rows.iter().position(|l| l.contains(t)).unwrap();
+    assert_eq!(row("act on “Birch”"), row("• 2. Birch") + 2, "{rows:#?}");
+}
+
+#[test]
+fn the_menu_key_plumbs_the_word_at_the_text_cursor() {
+    let mut r = Room::new("verbs-menu-word");
+    r.items(&["Undo #5"]);
+    r.tap(&[Key::Special(Special::Menu)]);
+    let lines: Vec<&str> = menu(&r)
+        .unwrap()
+        .offers
+        .iter()
+        .map(|o| o.line.as_str())
+        .collect();
+    assert_eq!(lines[0], "retract entry 5", "{lines:?}");
+}
+
+#[test]
+fn the_menu_key_with_no_item_or_bound_does_its_other_job() {
+    let mut r = Room::new("verbs-menu-none");
+    r.tap(&[Key::Special(Special::Menu)]);
+    assert_eq!(r.app.session.message, "there is no item to act on");
+    let toml = "[keys]\nMenu = \"new\"\n";
+    r.app.session.keys = memex::config::Config::parse(toml).unwrap().keys();
+    r.tap(&[Key::Special(Special::Menu)]);
+    assert_eq!(
+        r.outline().in_order().len(),
+        1,
+        "the binding ran: a new item"
+    );
 }

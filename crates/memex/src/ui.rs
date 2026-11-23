@@ -152,7 +152,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 pub fn draw_hits(f: &mut Frame, app: &App) -> Presentations {
     let (body, foot) = draw_edges(f, app);
     let hits = draw_body(f, app, body);
-    let hits = match MenuBox::open(app) {
+    let hits = match MenuBox::open(app, &hits) {
         Some(menu) => menu.draw(f, hits),
         None => hits,
     };
@@ -227,6 +227,23 @@ fn written_span(buf: &ratatui::buffer::Buffer, row: Rect) -> Option<(u16, u16)> 
     Some((first, xs.next_back().unwrap_or(first)))
 }
 
+/// A menu's entries, each its words, whether it is chosen, and the
+/// command a click on it runs.
+fn offered_commands(entries: Vec<(String, bool, String)>) -> Vec<(String, bool, Presentation)> {
+    let entry = |(text, chosen, line)| (text, chosen, Presentation::Command(line));
+    entries.into_iter().map(entry).collect()
+}
+
+/// The first cell where the cursor's item is drawn, if it is.
+fn cursor_cell(app: &App, drawn: &Presentations) -> Option<(u16, u16)> {
+    let id = app.cursor();
+    let at = drawn
+        .0
+        .iter()
+        .find(|(_, p)| matches!(p, Presentation::Item { id: i, .. } if *i == id));
+    at.map(|(r, _)| (r.x, r.y))
+}
+
 /// What a right-click offers, as drawn at its cell: each entry's line,
 /// whether it is the one chosen, and what a click on it runs.
 struct MenuBox {
@@ -236,19 +253,21 @@ struct MenuBox {
 }
 
 impl MenuBox {
-    /// The menu, if one is open.
-    fn open(app: &App) -> Option<MenuBox> {
+    /// The menu, if one is open, at its cell, or else at the cursor's
+    /// item as drawn.
+    fn open(app: &App, drawn: &Presentations) -> Option<MenuBox> {
         let Mode::Menu(m) = &app.session.mode else {
             return None;
         };
-        let entry = |(text, chosen, line)| (text, chosen, Presentation::Command(line));
-        let entries = m.entries().into_iter().map(entry).collect();
-        let title = format!(" act on “{}” ", shortened(&m.text, 40));
-        Some(MenuBox {
-            title,
-            entries,
-            at: m.at,
-        })
+        let at = m.at.or_else(|| cursor_cell(app, drawn)).unwrap_or((0, 0));
+        Some(MenuBox::of(&m.text, m.entries(), at))
+    }
+
+    /// A menu about a text, its entries, at a cell.
+    fn of(text: &str, entries: Vec<(String, bool, String)>, at: (u16, u16)) -> MenuBox {
+        let title = format!(" act on “{}” ", shortened(text, 40));
+        let entries = offered_commands(entries);
+        MenuBox { title, entries, at }
     }
 
     /// The menu in a box below its cell, or above it where there is no
