@@ -580,6 +580,66 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// The rows of the screen's cells, as text.
+    fn rows(screen: &Screen) -> Vec<String> {
+        let buf = &screen.cells.backend().buffer;
+        let row = |y| (0..buf.area.width).map(|x| buf[(x, y)].symbol()).collect();
+        (0..buf.area.height).map(row).collect()
+    }
+
+    /// The first and last cells of a text where it is first drawn, by
+    /// column, in cells, not bytes, and row.
+    fn span_of(screen: &Screen, text: &str) -> ((u16, u16), (u16, u16)) {
+        let rows = rows(screen);
+        let at = |(y, row): (usize, &String)| Some((row[..row.find(text)?].chars().count(), y));
+        let (x, y) = rows.iter().enumerate().find_map(at).expect(text);
+        let last = x + text.chars().count() - 1;
+        ((x as u16, y as u16), (last as u16, y as u16))
+    }
+
+    /// Type text into the app, key by key.
+    fn typed(app: &mut App, text: &str) {
+        for c in text.chars() {
+            app.handle(Event::down(crate::app::Key::Char(c)));
+            app.handle(Event::up(crate::app::Key::Char(c)));
+        }
+    }
+
+    /// Drag across a text drawn on the screen, from its first cell to its
+    /// last, and release.
+    fn dragged_over(screen: &mut Screen, app: &mut App, text: &str) -> (u16, u16) {
+        let (first, last) = span_of(screen, text);
+        screen.mouse.drag.press(Some(first));
+        screen.mouse.drag.moved(last);
+        screen.released(app);
+        last
+    }
+
+    /// The open menu's offers, by their command lines.
+    fn offered(app: &App) -> Vec<String> {
+        match &app.session.mode {
+            Mode::Menu(m) => m.offers.iter().map(|o| o.line.clone()).collect(),
+            _ => vec![],
+        }
+    }
+
+    #[test]
+    fn text_dragged_then_right_clicked_offers_what_plumbing_matches() {
+        // Catches the drag's selection dropped before the right-click, now
+        // that the app keeps it, so plumbing saw the word under the pointer
+        // ("5") rather than the text dragged ("entry 5").
+        let (dir, mut app) = opened("window-plumb");
+        typed(&mut app, "Undo entry 5");
+        let mut screen = Screen::new();
+        laid(&mut screen, &app);
+        let last = dragged_over(&mut screen, &mut app, "entry 5");
+        laid(&mut screen, &app);
+        screen.right_click(&mut app, last);
+        let offers = offered(&app);
+        assert!(offers.contains(&"retract entry 5".into()), "{offers:?}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn a_selection_cleared_leaves_no_mark() {
         // Catches the selection marked on the cells after they are drawn:
