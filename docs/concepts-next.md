@@ -108,7 +108,7 @@ but for drag to move:
 | Move | Held after it | Cost | What it needs |
 | --- | --- | --- | --- |
 | 2. Editing by habit: Backspace deletes an empty item; Ctrl+X, Ctrl+C and Ctrl+V on items and text; drag to move | about 47 as proposed, with `new`, `delete`, `move`, `copy`, `undo` and `redo` habits; about 48 as built, since `delete` stays | small to medium | three chords on the path Ctrl+Z uses, and a clipboard of the session's. A cut marks its items until they are pasted, as a spreadsheet's cut does, so a moved item keeps its identity and its entries |
-| 1. The right-click offers every verb that applies to what is under the pointer, ranked, each with its key; the Menu key, the keyboard's own right-click, opens the same menu at the cursor | about 30: the other 15 verbs, `delete` among them, and 3 address forms, since pointing fills an argument | large | for each verb, a test of whether it applies and a rank; the menu itself exists (the right-click's) |
+| 1. The right-click offers every verb that applies to what is under the pointer, ranked, each with its key, beside its object's commands and plumbing's, which stay; the Menu key, the keyboard's own right-click, opens the same menu at the cursor | about 30: the other 15 verbs, `delete` among them, and 3 address forms, since pointing fills an argument | large | for each verb, a test of whether it applies and a rank; the menu itself exists (the right-click's) |
 | 4. One reader for every line | about 28 | medium | a line that is no command but reads as a statement is supposed, a question is answered, and the foot says which, before Enter. Risk: a mistyped command read as a statement, so only a line with a reading is taken |
 | 3. Seven concepts | about 23 | large | labels as links and the five kinds of offer change the guide's vocabulary throughout; labels as links need a decision on the journal's meaning |
 | Enter, Esc, Tab and the right-click counted as habits | about 19 | none | a decision on the counting rule, for the author |
@@ -267,9 +267,13 @@ Four structural moves, each keeping every capability:
 
 **1. Object first, then action.**
 - **How:** one gesture acts on anything: the right-click, which exists
-  and is held already. It now offers only some of what acts on a thing
-  (for an item: question, adopt, take back, split, fold); it would offer
-  every verb that applies, each with its key. The Menu key, which PC
+  and is held already. Its menu keeps both kinds of offer it has now:
+  the commands for the object presented under the pointer (for an item:
+  question, adopt, take back, split, fold), and plumbing's, after Plan
+  9's plumber, for the text selected or the word under the pointer (go
+  to an address, import a file named, answer a Prolog goal, and the
+  user's own patterns). The move adds every verb that applies to the
+  object, each with its key, beside those. The Menu key, which PC
   keyboards have for this job, opens the same menu at the cursor, so the
   keyboard reaches every offer too (change 12). A typed command stays the fast
   path, found by its name with `?`.
@@ -281,7 +285,8 @@ Four structural moves, each keeping every capability:
 - **Held:** about −40: 19 verbs, 18 object words, and 3 address forms,
   since pointing fills an argument in.
 - **Risk:** long menus. Keep each to about seven offers, ranked, the most
-  likely first.
+  likely first: plumbing's matches, which are the most specific to what
+  was pointed at, before the verbs that apply to any item.
 
 **2. Editing by habit.**
 - **How:** an empty item deleted by Backspace; Ctrl+X, Ctrl+C and Ctrl+V on
