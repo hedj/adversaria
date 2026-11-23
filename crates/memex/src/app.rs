@@ -320,11 +320,12 @@ impl View {
     }
 }
 
-/// Where a cursor goes after the outline changes: it stays on an item
-/// that is left, or where nothing could have vanished; else it goes to the
-/// nearest item before it that is left, else the first.
+/// Where a cursor goes after the outline changes: it stays on the
+/// notebook, above the first item, on an item that is left, or where
+/// nothing could have vanished; else it goes to the nearest item before
+/// it that is left, else the first.
 fn surviving(outline: &Outline, before: &[u64], c: u64) -> u64 {
-    if c != TOP && (outline.contains(c) || before.is_empty()) {
+    if c == TOP || outline.contains(c) || before.is_empty() {
         return c;
     }
     let at = before.iter().position(|x| *x == c).unwrap_or(0);

@@ -24,6 +24,7 @@ impl App {
             P::Change(entry) => change_offers(*entry),
             P::Suggestion(n) => suggestion_offers(*n),
             P::Command(line) => vec![offer(&format!("run {line}"), line)],
+            P::Notebook { .. } => vec![],
         }
     }
 
@@ -148,6 +149,7 @@ impl App {
             P::Change(entry) => format!("change {entry}"),
             P::Suggestion(n) => format!("suggestion {n}"),
             P::Command(line) => line.clone(),
+            P::Notebook { .. } => "the notebook".into(),
         }
     }
 

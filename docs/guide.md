@@ -287,13 +287,31 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   source's record, and what adopting it would do (`CLAIMS OF 2 · WHO SAYS
   THEM`). The inspector follows the cursor and never takes the keys.
   `find` shows a list in its place, and `find` alone shows the inspector
-  again (§ 2.4).
+  again (§ 2.4). With the cursor above the first item, on the notebook
+  itself, the inspector lists what waits for you to decide, as the next
+  part tells.
 - **Foot:** the message line, and, while a quasimode is on (held or
   latched), what you have typed and how it ends.
 
 With the cursor on an item with findings, the foot suggests a what-if
 (`Try a what-if: tap Super to suppose a statement, …`), dim, until you have used Suppose
 four times.
+
+#### The notebook
+
+Above the first item is the notebook itself, and there the inspector
+lists what waits for you to decide (`THE NOTEBOOK · 3 OPEN OFFERS`), the
+most pressing first: each finding, from the rule it comes from; each
+claim not adopted, from its source; a text you just wrote that the memex
+can mend; then the memex's suggestions. Each takes two rows: what it is
+and what it offers (`claim  2: the date of Buran-flight is 1989`), then,
+dim, where it came from (`from Talk-notes`). A click on one goes to its
+item or its rule, or adopts a suggestion, as a click on the thing itself
+does; a right-click offers what decides it, such as `adopt` or
+`dismiss`. The first twelve are listed, and the rest are counted.
+`go parent` from an item at the top level goes there (Ctrl+Left), and so
+does a click on the outline's title. A revision's changes are not among
+them: while a revision is open they fill the screen (§ 4.1).
 
 ### 2.3 Keys and quasimodes
 
@@ -343,7 +361,7 @@ again before you let go.
 | Key | Does |
 | --- | --- |
 | Ctrl with Up, Down | move to the previous or next item at the cursor's level (`go previous`, `go next`) |
-| Ctrl with Left, Right | move to the item the cursor's is under, or the first under it (`go parent`, `go child`) |
+| Ctrl with Left, Right | move to the item the cursor's is under, or the first under it (`go parent`, `go child`); from the top level, to the notebook above the first item (§ 2.2) |
 | Ctrl with Home, End | move to the first or last item at the cursor's level (`go first`, `go last`) |
 
 #### Quasimodes
@@ -465,6 +483,8 @@ on the characters. Presented are:
 | What is drawn | Presents | A click |
 | --- | --- | --- |
 | an item's line in an outline pane | the item | moves the cursor to it, in the outline pane it is drawn in, and focus there, as the arrow keys would |
+| the outline's title | the notebook | moves the cursor above the first item, where the inspector lists what waits for you to decide (§ 2.2) |
+| an offer, in the notebook's inspector | what it is about: the item, the constraint or the suggestion | does what a click on that thing does |
 | a link, a mention or a match, in the inspector or a list | the item at its other end | jumps to it in the left pane (§ 2.4) |
 | a finding under an item (`‼ breaks …`, `? sources disagree …`), and the heading of the constraint in the inspector | the constraint | goes to the item that states the rule, if one does |
 | a mark of a view: a bar, a point, a box | the fact it draws | goes to the item that states the fact (§ 3.3) |
@@ -658,7 +678,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | Command | Form | Does |
 | --- | --- | --- |
 | `find` | `find TEXT`, `find #LABEL`, `find violations`, `find disagreements`, `find suggestions`, `find QUESTION?`, `` find `GOAL` ``, `find` | lists in the inspector's place the items that hold TEXT, ignoring case (as Leap matches), that carry the label, or that a violation or a disagreement marks, in the outline's order, numbered, with where the cursor is among them (`LABELLED #draft · 2 · at 1 of 2`); a click on one jumps to it, so `go back` returns, and the list stays as you edit. `find suggestions` lists the suggestions. A question, in English or as a Prolog goal between backticks, is answered once over this world's beliefs, through rules: `` find `animal(X)` `` says `2 answers: X = nemo · X = dory`, a goal without variables `yes` or `no`, and an English question its answer alone (`1 answer: Answer = 1600`). At most 20 answers are shown; the goal may only read facts, compare and compute, as a definition may; nothing is written. `find` alone shows the inspector again |
-| `go` | `go TEXT`, `go link N`, `go back`, `go forward`, `go next`, `go previous`, `go first`, `go last`, `go parent`, `go child` | goes to the item TEXT addresses, else to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3). `go link N` goes to the other end of the target's Nth link (default 1). `go back` (F7, or the mouse's back button) goes back to where the last jump came from: `go`, Leap, or a click on a link, a mention or a match; `go forward` (F8) goes forward again, and a new jump empties the way forward, as in a browser. Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over. `go next`, `go previous`, `go first`, `go last`, `go parent` and `go child` move by the outline's structure, after NLS (Ctrl with an arrow, Home or End, § 2.3): `go next` passes over the items under the target, and `go child` shows a folded branch. These are moves, as arrow keys are, not jumps. The words of the ways are kept for them: an item whose text is `next` is reached by its number |
+| `go` | `go TEXT`, `go link N`, `go back`, `go forward`, `go next`, `go previous`, `go first`, `go last`, `go parent`, `go child` | goes to the item TEXT addresses, else to the next item that holds TEXT, ignoring case, as Leap does; a right-click offers it (§ 2.3). `go link N` goes to the other end of the target's Nth link (default 1). `go back` (F7, or the mouse's back button) goes back to where the last jump came from: `go`, Leap, or a click on a link, a mention or a match; `go forward` (F8) goes forward again, and a new jump empties the way forward, as in a browser. Each jump's view entry records where it came from, so a reopened notebook keeps the trail; an item since deleted is passed over. `go next`, `go previous`, `go first`, `go last`, `go parent` and `go child` move by the outline's structure, after NLS (Ctrl with an arrow, Home or End, § 2.3): `go next` passes over the items under the target, `go parent` from the top level goes to the notebook, whose inspector lists what waits for you to decide (§ 2.2), and `go child` shows a folded branch. These are moves, as arrow keys are, not jumps. The words of the ways are kept for them: an item whose text is `next` is reached by its number |
 
 #### Labels
 

@@ -6,6 +6,14 @@ and 4 are built. The author took the five recommendations of § Decisions
 for the author (design.md records them), and changes 1 to 3 of § What it
 costs are being built; changes 4 and 5 wait for the measures.
 
+**Built so far.** Change 1, the notebook's inspector, with two
+departures from § What it needs built. It lists no revision's changes:
+while a revision is open its changes fill the screen, and the notebook
+is not drawn, so a row there could never be seen. It lists no fix for a
+`[[link]]` to nothing, since decision 3 makes such a link a virtual
+page, not an offer. A click on an offer does what a click on its thing
+does: it goes to the item or the rule, and it adopts a suggestion.
+
 ## The answer
 
 Move 3 replaces the guide's twelve concepts with seven: **item, link,
@@ -176,8 +184,8 @@ instead` makes it for a claim already.
   dismiss on a click or a right-click. It answers "what is waiting for
   me?" in one place, as the suggestions list, `find violations` and
   `find disagreements` answer it now in three. The cursor needs a way
-  there: `go parent` from an item at the top level (it is refused now),
-  and a click on the outline's title.
+  there: `go parent` from an item at the top level (it was refused
+  before change 1), and a click on the outline's title.
 - **One row for an offer.** The suggestions list, the claim's questions
   and a revision's changes each draw their rows their own way now. One
   presentation of an offer, with its source, its adopt and its dismiss,

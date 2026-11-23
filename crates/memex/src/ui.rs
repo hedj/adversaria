@@ -4,6 +4,7 @@
 
 mod commands;
 mod matches;
+mod notebook;
 mod wrap;
 
 use crate::app::{Active, App, Hold, Mode, PaneKind, Quasi, View};
@@ -19,7 +20,7 @@ use ratatui::layout::{Alignment, Constraint, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use wrap::{Hung, Wrapped, hung, wrap};
 
 fn dim() -> Style {
@@ -755,18 +756,21 @@ fn untitled(text: &str) -> String {
 /// near the cursor, and the window onto them that keeps the cursor's line
 /// in view.
 fn draw_outline(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Presentations {
-    let rows = outline_frame(f, app, pane, area);
+    let [head, rows] = outline_frame(f, app, pane, area);
     let outline = OutlinePane::new(app, pane, rows);
-    outline.drawn().show(f, &outline)
+    let mut hits = outline.drawn().show(f, &outline);
+    hits.0.push((head, Presentation::Notebook { pane }));
+    hits
 }
 
 /// An outline pane's frame, ruled off from the pane on its right, and its
-/// title: the area left for its rows.
-fn outline_frame(f: &mut Frame, app: &App, pane: usize, area: Rect) -> Rect {
+/// title, which presents the notebook: the title's area, and the area
+/// left for its rows.
+fn outline_frame(f: &mut Frame, app: &App, pane: usize, area: Rect) -> [Rect; 2] {
     let inner = draw_frame(f, pane, area);
     let [head, rows] = title_and_rows(inner);
     f.render_widget(dim_text(title(app)), head);
-    rows
+    [Rect { height: 1, ..head }, rows]
 }
 
 /// A pane's frame, the first ruled off from the second: the area inside.
@@ -1740,6 +1744,9 @@ fn draw_presented(f: &mut Frame, lines: Vec<Presented>, area: Rect) -> Presentat
 /// What the selected item needs: its view's layers, the constraints its
 /// marks come from, or its links.
 fn right_panel(app: &App, id: u64) -> Vec<Presented> {
+    if id == TOP {
+        return notebook::notebook_lines(app);
+    }
     if let Some(layers) = app.notebook.outline.views.get(&id) {
         return view_panel(app, id, layers);
     }
@@ -1912,10 +1919,6 @@ impl Along {
 /// kind once and each link numbered as follow numbers it, and where its
 /// text is shown in place.
 fn links_lines(outline: &Outline, id: u64) -> Vec<Presented> {
-    if id == TOP {
-        let heading = Line::styled("LINKS OF THE SELECTED ITEM", dim());
-        return plain(vec![heading, Line::raw(""), nothing_selected()]);
-    }
     let heading = Line::styled(format!("LINKS OF {}", outline.number(id)), dim());
     let mut lines = plain(vec![heading, Line::raw("")]);
     lines.extend(plain(vec![Line::raw(outline.text(id)), Line::raw("")]));
@@ -1953,10 +1956,6 @@ fn item_presented(id: u64) -> Option<Presentation> {
 }
 
 /// What the links pane says with no item selected.
-fn nothing_selected() -> Line<'static> {
-    Line::styled("(the selected item and its links appear here)", dim())
-}
-
 /// An item's links, under a heading for each kind, numbered in order.
 fn link_lines(outline: &Outline, id: u64) -> Vec<Presented> {
     let rows = numbered_links(outline, id);
@@ -2528,6 +2527,42 @@ pub fn item_marks(e: &WorldEval, outline: &Outline, item: u64) -> Vec<MarkLine> 
     merged(parts.collect())
 }
 
+/// The marks of each item that has any, in the outline's order: each
+/// finding gathered once, under the items whose facts it rests on, not
+/// once for each item, as `item_marks` would.
+pub fn marks_by_item(e: &WorldEval, outline: &Outline) -> Vec<(u64, Vec<MarkLine>)> {
+    let findings: Vec<Finding> = e
+        .constraints
+        .iter()
+        .flat_map(ConstraintEval::findings)
+        .collect();
+    let mut under: HashMap<u64, Vec<&Finding>> = HashMap::new();
+    for f in &findings {
+        for item in items_of(f.sol, outline) {
+            under.entry(item).or_default().push(f);
+        }
+    }
+    let marks = |id| Some((id, marks_under(under.remove(&id)?, outline, id)));
+    outline.in_order().into_iter().filter_map(marks).collect()
+}
+
+/// The items whose facts a solution rests on, each once.
+fn items_of(sol: &Solution, outline: &Outline) -> BTreeSet<u64> {
+    let items = sol
+        .prov
+        .iter()
+        .filter_map(|p| outline.fact_item.get(&p.seq()));
+    items.copied().collect()
+}
+
+/// An item's marks, from the findings that rest on its facts.
+fn marks_under(findings: Vec<&Finding>, outline: &Outline, item: u64) -> Vec<MarkLine> {
+    let parts = findings
+        .into_iter()
+        .filter_map(|f| finding_marks(f, outline, item));
+    merged(parts.collect())
+}
+
 /// A mark in parts: whether it is loud, what it says of the item's own
 /// fact, and the other facts it is against, each with where it is.
 struct Mark {
@@ -2665,7 +2700,7 @@ fn rule_named(outline: &Outline, name: &str) -> String {
 }
 
 /// The item whose text states a rule of a name, if one does.
-fn stating_rule(outline: &Outline, name: &str) -> Option<u64> {
+pub(crate) fn stating_rule(outline: &Outline, name: &str) -> Option<u64> {
     let states = |i: &u64| outline.text(*i).trim_end_matches('.') == name;
     outline.in_order().into_iter().find(states)
 }

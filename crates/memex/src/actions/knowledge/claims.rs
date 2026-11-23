@@ -8,6 +8,7 @@ use crate::reason::{Suggestion, show};
 use format::record::Entry;
 use format::terms::Term;
 use serde_json::{Value, json};
+use std::collections::HashMap;
 
 impl App {
     /// An item's claims at the tip: (entry seq, source, claimed fact).
@@ -121,8 +122,39 @@ impl App {
         Ok(with_left(said, &left))
     }
 
+    /// Every claim not yet adopted, as the current world was last
+    /// evaluated, each with the item that states it, in the outline's
+    /// order: one pass over the facts, not one for each item.
+    pub(crate) fn claims_open_by_item(&self) -> Vec<(u64, (u64, String, Term))> {
+        let mut by_item = self.claims_open_grouped();
+        let order = self.notebook.outline.in_order().into_iter();
+        let claims = |id| {
+            by_item
+                .remove(&id)
+                .into_iter()
+                .flatten()
+                .map(move |c| (id, c))
+        };
+        order.flat_map(claims).collect()
+    }
+
+    /// The claims not yet adopted, by the item that states each.
+    fn claims_open_grouped(&self) -> HashMap<u64, Vec<(u64, String, Term)>> {
+        let mut by_item: HashMap<u64, Vec<_>> = HashMap::new();
+        let Some(e) = self.reason.eval[0].as_ref() else {
+            return by_item;
+        };
+        let fact_item = &self.notebook.outline.fact_item;
+        for claim in self.not_adopted(claims_among_all(&e.facts)) {
+            if let Some(id) = fact_item.get(&claim.0) {
+                by_item.entry(*id).or_default().push(claim);
+            }
+        }
+        by_item
+    }
+
     /// The claims with no adoption in effect on this branch.
-    fn not_adopted(&self, claims: Vec<(u64, String, Term)>) -> Vec<(u64, String, Term)> {
+    pub(crate) fn not_adopted(&self, claims: Vec<(u64, String, Term)>) -> Vec<(u64, String, Term)> {
         let branch = self.notebook.branch(self.notebook.tip);
         let adopted: Vec<u64> = branch.live().filter_map(adopted_claim).collect();
         claims
@@ -317,14 +349,23 @@ fn claims_among(
     let stated = facts
         .iter()
         .filter(|(s, _)| outline.fact_item.get(s) == Some(&item));
-    stated
-        .filter_map(|(s, f)| match f {
-            Term::Compound(n, a) if n == "claims" && a.len() == 2 => {
-                Some((*s, name_of(&a[0]), a[1].clone()))
-            }
-            _ => None,
-        })
-        .collect()
+    stated.filter_map(claim_of).collect()
+}
+
+/// Every claim among facts: its entry, its source and what it claims.
+fn claims_among_all(facts: &[(u64, Term)]) -> Vec<(u64, String, Term)> {
+    facts.iter().filter_map(claim_of).collect()
+}
+
+/// A fact as a claim, if it is one: its entry, its source and what it
+/// claims.
+fn claim_of((s, f): &(u64, Term)) -> Option<(u64, String, Term)> {
+    match f {
+        Term::Compound(n, a) if n == "claims" && a.len() == 2 => {
+            Some((*s, name_of(&a[0]), a[1].clone()))
+        }
+        _ => None,
+    }
 }
 
 fn name_of(t: &Term) -> String {

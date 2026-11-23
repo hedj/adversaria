@@ -60,9 +60,12 @@ impl App {
         self.move_along(target, Along::Last)
     }
 
+    /// To the item the target is under; from the top level, to the
+    /// notebook itself, above the first item, where the inspector lists
+    /// what waits to be decided (docs/concepts-seven.md, change 1).
     pub(crate) fn cmd_parent(&mut self, _: &[&str], target: u64) -> Result<String, String> {
         let up = self.notebook.outline.parent_or_top(target);
-        self.move_to((up != TOP).then_some(up), "it is at the top level")
+        self.move_to(Some(up), "")
     }
 
     pub(crate) fn cmd_child(&mut self, _: &[&str], target: u64) -> Result<String, String> {

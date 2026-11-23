@@ -641,7 +641,7 @@ impl Said {
 }
 
 /// The fact a claim makes, or the fact itself.
-fn claimed(fact: &Term) -> &Term {
+pub fn claimed(fact: &Term) -> &Term {
     match parts(fact, "claims", 2) {
         Some(a) => &a[1],
         None => fact,

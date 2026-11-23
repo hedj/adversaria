@@ -41,6 +41,10 @@ pub enum Presentation {
     Change(u64),
     /// A suggestion shown, by its number from 1.
     Suggestion(usize),
+    /// The notebook itself, as an outline pane's title presents it: a
+    /// click puts the cursor above the first item, where the inspector
+    /// lists what waits to be decided.
+    Notebook { pane: usize },
 }
 
 impl Presentation {
@@ -84,6 +88,10 @@ impl Presentation {
             P::Layer { view, .. } => Some(P::Item { pane: 0, id: *view }),
             P::Change(_) => None,
             P::Suggestion(n) => Some(P::Command(format!("adopt suggestion {n}"))),
+            P::Notebook { pane } => Some(P::Item {
+                pane: *pane,
+                id: crate::outline::TOP,
+            }),
         }
     }
 }
@@ -141,7 +149,8 @@ impl App {
     /// Put the cursor on an item of an outline pane, as a click on it
     /// does: a view change, as an arrow key is.
     fn go_to_item(&mut self, pane: usize, id: u64) {
-        if !self.notebook.outline.items.contains_key(&id) || pane > 1 {
+        let there = id == crate::outline::TOP || self.notebook.outline.items.contains_key(&id);
+        if !there || pane > 1 {
             return;
         }
         self.flush_text();
@@ -317,6 +326,9 @@ impl App {
     /// What a click on a presentation does, if anything.
     fn click_documentation(&self, p: &Presentation) -> Option<String> {
         match p.clicked()? {
+            Presentation::Item { id, .. } if id == crate::outline::TOP => {
+                Some("click: go to what waits for you to decide".into())
+            }
             Presentation::Item { id, .. } => {
                 Some(format!("click: go to {}", self.notebook.outline.number(id)))
             }

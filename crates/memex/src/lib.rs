@@ -17,6 +17,7 @@ pub mod journal;
 pub mod keys;
 mod near;
 pub mod notebook;
+pub mod offers;
 pub mod outline;
 pub mod pairs;
 pub mod plumb;

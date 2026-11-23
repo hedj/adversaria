@@ -367,6 +367,13 @@ impl Session {
         hint.and_then(|(.., mended)| mended.as_deref())
     }
 
+    /// The item just written whose text did not read, and the text APE
+    /// would mend it to, if it has a repair.
+    pub fn repaired(&self) -> Option<(u64, &str)> {
+        let (item, _, mended) = self.outside.prose.as_ref()?;
+        Some((*item, mended.as_deref()?))
+    }
+
     /// Note why an item's text was not read, with its repair, if any; or
     /// that it was read.
     pub(crate) fn set_prose(&mut self, hint: Option<(u64, String, Option<String>)>) {
