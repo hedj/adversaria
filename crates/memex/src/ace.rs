@@ -170,18 +170,36 @@ impl Ace {
     /// twice, say). A lexicon of thousands of names is sent once, and
     /// then only what changed.
     pub fn set_lexicon(&mut self, entries: Vec<Term>) -> Result<Vec<Message>, Error> {
+        let mut told = Vec::new();
+        while let Some(more) = self.lexicon_part(&entries)? {
+            told.extend(more);
+        }
+        Ok(told)
+    }
+
+    /// Send the first part of what makes the user lexicon these entries,
+    /// those taken out before those put in: APE's messages about it, or
+    /// none if the lexicon is these entries already. A part fits a
+    /// message, so a lexicon of thousands of names can be sent a part at
+    /// a time, between keys.
+    pub fn lexicon_part(&mut self, entries: &[Term]) -> Result<Option<Vec<Message>>, Error> {
         let mut held = match self.lexicon.take() {
             Some(held) => held,
             None => self.emptied_lexicon()?,
         };
-        let (removed, added) = changes(&held, &entries);
-        let told = self.send_changes(&removed, &added)?;
-        for e in &removed {
+        let (removed, added) = changes(&held, entries);
+        let (out, put) = first_part(&removed, &added);
+        if out.is_empty() && put.is_empty() {
+            self.lexicon = Some(held);
+            return Ok(None);
+        }
+        let told = self.change(out, put)?;
+        for e in out {
             held.remove(e);
         }
-        held.extend(added);
+        held.extend(put.iter().cloned());
         self.lexicon = Some(held);
-        Ok(told)
+        Ok(Some(told))
     }
 
     /// The user lexicon emptied, so that what APE holds is known again.
@@ -189,19 +207,6 @@ impl Ace {
         let empty = call("ace_lexicon", vec![make_list(vec![]), Term::Var(0)]);
         self.only_answer(&empty)?;
         Ok(HashSet::new())
-    }
-
-    /// Take out the entries removed and put in those added, in parts that
-    /// each fit a message; APE's messages about those added.
-    fn send_changes(&mut self, removed: &[Term], added: &[Term]) -> Result<Vec<Message>, Error> {
-        let mut told = Vec::new();
-        for part in in_parts(removed) {
-            told.extend(self.change(part, &[])?);
-        }
-        for part in in_parts(added) {
-            told.extend(self.change(&[], part)?);
-        }
-        Ok(told)
     }
 
     /// One change of the user lexicon (ace_lexicon_change/3), its words
@@ -289,29 +294,28 @@ fn changes(held: &HashSet<Term>, wanted: &[Term]) -> (Vec<Term>, Vec<Term>) {
 
 /// The most cells a part of a lexicon change holds: a message holds at
 /// most 65,535 words, and a part is sent with little else.
-const PART: usize = 16_000;
+const PART: usize = 8_000;
 
-/// Entries in parts of at most PART cells each, as sent. An entry larger
-/// than a part is a part of its own.
-fn in_parts(mut entries: &[Term]) -> Vec<&[Term]> {
-    let mut parts = Vec::new();
-    while !entries.is_empty() {
-        let (part, rest) = entries.split_at(fitting(entries));
-        parts.push(part);
-        entries = rest;
+/// The first part of a change: of the entries taken out, if there are
+/// any, else of those put in.
+fn first_part<'a>(removed: &'a [Term], added: &'a [Term]) -> (&'a [Term], &'a [Term]) {
+    match removed.is_empty() {
+        false => (&removed[..fitting(removed)], &[]),
+        true => (&[], &added[..fitting(added)]),
     }
-    parts
 }
 
 /// How many entries, from the first, fit in a part with their list
-/// cells: at least one.
+/// cells: at least one, if there is one. An entry larger than a part is
+/// a part of its own.
 fn fitting(entries: &[Term]) -> usize {
     let mut size = 0;
     let mut fits = |e: &&Term| {
         size += cells_of(e) + 1;
         size <= PART
     };
-    entries.iter().take_while(|e| fits(e)).count().max(1)
+    let n = entries.iter().take_while(|e| fits(e)).count();
+    n.max(1).min(entries.len())
 }
 
 /// The cells an entry takes, its names sent as strings: a string is a
@@ -770,20 +774,27 @@ mod tests {
 
     #[test]
     fn an_entry_larger_than_a_part_is_sent_alone() {
-        // Catches a loop for ever on an entry that no part could take.
+        // Catches a loop for ever on an entry that no part could take, or
+        // a part taken from no entries.
         let entries = [4 * PART, 1, 1].map(name_of_length);
-        let parts = in_parts(&entries);
-        assert_eq!(parts, vec![&entries[..1], &entries[1..]]);
+        assert_eq!(fitting(&entries), 1);
+        assert_eq!(fitting(&entries[1..]), 2);
+        assert_eq!(fitting(&[]), 0);
     }
 
     #[test]
-    fn a_lexicon_change_is_sent_in_parts_that_each_fit() {
-        // Catches a part over the size a message holds.
+    fn a_part_is_the_most_entries_that_fit_a_message() {
+        // Catches a part over the size a message holds, or one smaller
+        // than it need be.
         let many: Vec<Term> = (0..5_000).map(|_| name_of_length(8)).collect();
-        let size = |p: &&[Term]| p.iter().map(|e| cells_of(e) + 1).sum::<usize>();
-        let sizes: Vec<usize> = in_parts(&many).iter().map(size).collect();
-        let fit = sizes.iter().all(|n| *n <= PART);
-        assert!(sizes.len() > 1 && fit, "{sizes:?}");
+        let n = fitting(&many);
+        let (taken, one_more) = (part_cells(&many[..n]), part_cells(&many[..=n]));
+        assert!(taken <= PART && one_more > PART, "{n}: {taken}, {one_more}");
+    }
+
+    /// The cells a part of these entries takes, with their list cells.
+    fn part_cells(entries: &[Term]) -> usize {
+        entries.iter().map(|e| cells_of(e) + 1).sum()
     }
 
     #[test]

@@ -411,9 +411,10 @@ impl Session {
         self.outside.to_read.insert(item, of);
     }
 
-    /// The items that wait to be read, which then wait no more.
-    pub(crate) fn take_to_read(&mut self) -> BTreeMap<u64, u64> {
-        std::mem::take(&mut self.outside.to_read)
+    /// The next item that waits to be read, with the entry that wrote its
+    /// text, which then waits no more.
+    pub(crate) fn next_to_read(&mut self) -> Option<(u64, u64)> {
+        self.outside.to_read.pop_first()
     }
 
     /// Whether any item's text waits to be read.

@@ -109,6 +109,20 @@ fn a_sentence_waits_to_be_read_until_the_user_pauses() {
 }
 
 #[test]
+fn a_pause_is_taken_a_step_at_a_time() {
+    // Catches a pause that writes the text and reads it in one step: a key
+    // pressed during the pause waited for all of it, as the window could
+    // not stop between.
+    let mut r = Room::new("read-steps");
+    r.typ("The income is 2000.");
+    let item = r.app.cursor();
+    assert!(r.app.pause_step(), "writing the text leaves its reading");
+    assert!(facts_of(&r.app, item).is_empty(), "read in the first step");
+    while r.app.pause_step() {}
+    assert_eq!(facts_of(&r.app, item), ["box(income, 2000)"]);
+}
+
+#[test]
 fn a_thing_with_no_name_is_not_read_and_says_why() {
     // Catches the hint for a sentence about one unnamed thing ("a fish"),
     // which ACE reads as "there is a fish", not saying so.

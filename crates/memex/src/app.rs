@@ -760,13 +760,25 @@ impl App {
         self.write(Some(self.notebook.tip), kind, body)
     }
 
-    /// What the memex does when the user pauses: write whatever is pending,
-    /// then read the text that waits to be read. Reading is slower than a
-    /// keystroke may be (APE takes a second to start), so no key waits for
-    /// it.
+    /// What the memex does when the user pauses, all of it: write whatever
+    /// is pending, then read the text that waits to be read (pause_step).
     pub fn idle(&mut self) {
-        self.flush();
-        self.read_waiting();
+        while self.pause_step() {}
+    }
+
+    /// One step of what the memex does when the user pauses: write what is
+    /// pending, or send a part of the parser's lexicon, or read one item's
+    /// text; whether more remains. Reading is slower than a keystroke may
+    /// be, so the window takes a step at a time, and stops when a key
+    /// comes: a key waits for one step at most, and text is read only
+    /// while the user pauses.
+    pub fn pause_step(&mut self) -> bool {
+        if self.pending() {
+            self.flush();
+        } else if self.session.waits_to_read() {
+            self.read_step();
+        }
+        self.idle_work()
     }
 
     /// Whether a pause has anything to do.

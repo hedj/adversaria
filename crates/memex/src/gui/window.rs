@@ -80,11 +80,14 @@ struct Screen {
 }
 
 /// What keys and clicks mean: the configuration, whether Shift is held,
-/// and where the pointer is, in points.
+/// where the pointer is, in points, and whether the user is pausing: a
+/// step of the pause was taken, and no event has come since
+/// (App::pause_step).
 struct Input {
     config: Config,
     shift: bool,
     pointer: Option<Vec2>,
+    pausing: bool,
 }
 
 /// What the mouse acts on: where clicks land in the frame drawn, and the
@@ -201,6 +204,7 @@ impl Memex {
             config,
             shift: false,
             pointer: None,
+            pausing: false,
         };
         Memex {
             app,
@@ -385,26 +389,36 @@ impl ApplicationHandler for Memex {
         }
     }
 
-    /// After a second with no event, write what is pending, so a crash
-    /// loses nothing typed, and read what waits to be read.
+    /// After a second with no event, and then after each step while no
+    /// event comes, take a step of the pause: write what is pending, so a
+    /// crash loses nothing typed, or read a part of what waits to be read.
     fn new_events(&mut self, _: &ActiveEventLoop, cause: StartCause) {
         if matches!(cause, StartCause::ResumeTimeReached { .. }) && self.app.idle_work() {
-            self.app.idle();
+            self.input.pausing = self.app.pause_step();
             if let Some(g) = self.window.gfx() {
                 g.window.request_redraw();
             }
         }
     }
 
+    /// Wait a second for an event; while a pause is under way, wait for
+    /// none, so that its next step follows.
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-        el.set_control_flow(ControlFlow::WaitUntil(
-            Instant::now() + Duration::from_secs(1),
-        ));
+        let wait = match self.input.pausing {
+            true => Duration::ZERO,
+            false => Duration::from_secs(1),
+        };
+        el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + wait));
     }
 
     fn window_event(&mut self, el: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         if let Some(g) = self.window.gfx_mut() {
             let _ = g.state.on_window_event(&g.window, &event);
+        }
+        // Any event but a frame to draw ends the pause until the next
+        // second without one: text is read only while the user pauses.
+        if !matches!(event, WindowEvent::RedrawRequested) {
+            self.input.pausing = false;
         }
         match event {
             WindowEvent::CloseRequested => el.exit(),

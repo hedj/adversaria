@@ -32,11 +32,29 @@ impl App {
         let _started = self.reason.ace();
     }
 
-    /// Read each item's text that waits to be read.
-    pub(crate) fn read_waiting(&mut self) {
-        for (item, of) in self.session.take_to_read() {
+    /// A step of reading what waits: a part of the parser's lexicon, if it
+    /// is not yet the current world's, else the next item's text.
+    pub(crate) fn read_step(&mut self) {
+        if self.lexicon_step() {
+            return;
+        }
+        if let Some((item, of)) = self.session.next_to_read() {
             self.on_its_own(|app| app.read_item(item, of));
         }
+    }
+
+    /// Send a part of the parser's lexicon, if it is not yet the current
+    /// world's: whether a part was sent. A failure sends none, and the
+    /// reading that follows says it.
+    fn lexicon_step(&mut self) -> bool {
+        let Ok(facts) = self.notebook.facts_now() else {
+            return false;
+        };
+        let lexicon = words_of(&facts).lexicon;
+        let Ok(ace) = self.reason.ace() else {
+            return false;
+        };
+        ace.lexicon_part(&lexicon).is_ok_and(|sent| sent.is_some())
     }
 
     /// Read an item's text, written by the entry `of`, unless it is what
