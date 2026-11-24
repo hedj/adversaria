@@ -94,16 +94,17 @@ fn nothing_offered_says_so_and_a_retract_still_asks() {
     r.app.plumb("   ", (0, 0));
     assert_eq!(r.app.session.mode, Mode::Normal);
     assert!(r.app.session.message.starts_with("nothing acts on"));
-    r.app.plumb("#2", (0, 0));
+    // #3 is the first item's entry, after the session's start entry (2).
+    r.app.plumb("#3", (0, 0));
     assert_eq!(
         offered(&r)[..2],
-        ["go #2", "retract entry 2"],
-        "#2 is an address too"
+        ["go #3", "retract entry 3"],
+        "#3 is an address too"
     );
     r.tap(&[Key::Char('2')]);
     assert!(matches!(
         r.app.session.mode,
-        Mode::ConfirmRetract { target: 2, .. }
+        Mode::ConfirmRetract { target: 3, .. }
     ));
 }
 

@@ -20,7 +20,7 @@ and a few keys: typing, Enter and Tab; Shift with an arrow to select;
 Left Ctrl for a command, with `?` to list and Esc to cancel; F3 to adopt
 and F4 to take back; Super to suppose. Ctrl+Z undoes, as in any program.
 Every command has one shape, a verb and then what it acts on:
-`adopt world`, `dismiss change 52`, `go link 1`, `show as chart`. Typed
+`adopt world`, `dismiss change 53`, `go link 1`, `show as chart`. Typed
 alone, a verb takes what you have selected, or the defaults the foot
 shows, and asks for what it lacks.
 
@@ -316,14 +316,14 @@ changes in a world of their own, one entry each:
 
     WORLD · REVISION OF ESSAY.MD
 
-    change 52  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”
+    change 53  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”
        from the revision of essay.md
-    change 53  added: “Each team wrote its findings in the DRAKON language.”
+    change 54  added: “Each team wrote its findings in the DRAKON language.”
        from the revision of essay.md
 
 Say your own sources name two teams. Reject that change: right-click it,
 and the menu offers `reject this change`; or run, by its number,
-`dismiss change 52`. The foot of the screen says
+`dismiss change 53`. The foot of the screen says
 `nothing depends on it · Enter retracts · Esc keeps it`; press Enter.
 Then run `adopt world` to keep the rest. The essay keeps
 `Two teams reviewed the flight software.` and gains

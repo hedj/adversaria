@@ -43,6 +43,9 @@ pub struct Session {
     pub quit: bool,
     /// The cell under the mouse pointer, if it is over the window.
     pub pointer: Option<(u16, u16)>,
+    /// Whether this session has written its start entry, which goes
+    /// before the first entry it writes (App::write).
+    pub(crate) started: bool,
     outside: Outside,
 }
 

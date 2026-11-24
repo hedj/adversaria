@@ -87,11 +87,12 @@ pub fn session(dir: &Path) -> App {
 #[test]
 fn counts_match_a_hand_count() {
     // The entries of the small session, read by hand (kind and op), and the
-    // counts made from that list by hand: writing 2 4 6 7 8 13 14 15 16;
-    // navigating 3 5 17 22; searching 10; deciding 11 19 20 21;
-    // observations 9 12 18; entry 1 is the memex's own. Entry 18 offers two
-    // rules; 19 adopts one, 20 dismisses one, 21 retracts 19. Entry 9 shows
-    // the violation date(buran, 1988) · date(buran, 1989); entry 12, in the
+    // counts made from that list by hand: writing 3 5 7 8 9 14 15 16 17;
+    // navigating 4 6 18 23; searching 11; deciding 12 20 21 22;
+    // observations 10 13 19; entries 1 and 2 are the memex's own: the
+    // journal's first, and the session's start. Entry 19 offers two rules;
+    // 20 adopts one, 21 dismisses one, 22 retracts 20. Entry 10 shows the
+    // violation date(buran, 1988) · date(buran, 1989); entry 13, in the
     // actual world after the retraction, shows none.
     let dir = temp("hand");
     let app = session(&dir);
@@ -108,6 +109,7 @@ fn counts_match_a_hand_count() {
         .collect();
     let by_hand = [
         ("edit", "init"),
+        ("view", "start"),
         ("edit", "create"),
         ("view", "move"),
         ("edit", "text"),
@@ -139,7 +141,7 @@ fn counts_match_a_hand_count() {
         "the journal is not the one counted by hand"
     );
     let r = tools::measures::measure(app.journal().entries());
-    assert_eq!(r.entries, 22);
+    assert_eq!(r.entries, 23);
     assert_eq!(r.actions["writing"], 9);
     assert_eq!(r.actions["navigating"], 4);
     assert_eq!(r.actions["searching"], 1);
@@ -151,7 +153,7 @@ fn counts_match_a_hand_count() {
             + r.actions["exporting"],
         0
     );
-    assert_eq!((r.observations, r.unclassified), (3, 1));
+    assert_eq!((r.observations, r.unclassified), (3, 2));
     assert_eq!(
         (r.offered, r.adopted, r.dismissed, r.adopted_then_retracted),
         (2, 1, 1, 1)

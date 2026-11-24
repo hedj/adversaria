@@ -326,6 +326,8 @@ Cursor moves and typing are merged into one entry until another kind of action, 
 
 ##### What a view entry records of an action
 
+A session's start: the first entry each session writes follows a view entry of op `start`, which records `schema`, the schema of what the session's entries mean, and `build`, the git commit of the memex that wrote them (twelve hexadecimal digits, with `-dirty` if the tree held changes not committed; `unknown` without git). Opening a journal alone writes nothing. Schema 1 is what entries meant before any start entry, as this section described them on 24 November 2026; schema 2 begins with the start entry, and stays open until stage 1 begins, the build saying exactly which code wrote each entry (24 November 2026, by the author's choice of a schema recorded in the journal over a new header version: the header covers the record's syntax, which has not changed; a review found that nothing recorded which build wrote a journal, nor where sessions began).
+
 The `op` may also be `world`, with `close` or `commit` true, which leaves the open supposition; `dismiss`, with the `key` of the suggestion dismissed, which stays dismissed; `interrogate`, the start of an interrogation; `export`, with the `file` name and the counts of `items` and `sources` written; and `observed` and `offer`, below (milestone 7). The memex wrote these before they were listed here; a code review found them unlisted, and `world` and `dismiss` change replayed state (version 1 revised, 22 November 2026, to list what was written, not to change it).
 
 ##### Boxes

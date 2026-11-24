@@ -413,13 +413,13 @@ fn a_revision_taken_in(t: &mut T) {
     t.command("import document docs/tutorial/revised/essay.md");
     t.look("revision");
     t.shows("WORLD · REVISION OF ESSAY.MD");
-    t.shows("change 52  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”");
+    t.shows("change 53  changed 2.2.1: “Two teams reviewed the flight software.” → “Three teams reviewed the flight software, one of them outside the programme.”");
     t.shows("   from the revision of essay.md");
-    t.shows("change 53  added: “Each team wrote its findings in the DRAKON language.”");
-    t.right_click_on("change 52");
+    t.shows("change 54  added: “Each team wrote its findings in the DRAKON language.”");
+    t.right_click_on("change 53");
     t.shows("reject this change");
     t.key(Key::Escape);
-    t.command("dismiss change 52");
+    t.command("dismiss change 53");
     t.shows("nothing depends on it · Enter retracts · Esc keeps it");
     t.key(Key::Enter);
     t.look("retracted");
