@@ -1,13 +1,16 @@
-//! The notebook: the journal, and the outline replayed from it at the tip
+//! The notebook: the journal, the outline replayed from it at the tip, and
+//! the store of the facts of the world last asked for
 //! (docs/structure.md § The code's structure). It changes only by an
 //! entry, the one way state changes.
 
 use crate::docs::Quote;
 use crate::journal::{Error as JournalError, Journal};
 use crate::outline::{Constraint, Outline, TOP};
+use crate::store::Store;
 use format::record::Entry;
 use format::terms::Term;
 use serde_json::{Value, json};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -25,6 +28,8 @@ pub struct Notebook {
     pub tip: u64,
     /// Entries undone and not redone, most recent last.
     pub redo: Vec<u64>,
+    /// The facts of the world last asked for, kept to reach the next.
+    store: RefCell<Store>,
 }
 
 /// The strings of a list in an entry's body; none if it is no list.
@@ -177,14 +182,18 @@ impl Notebook {
         if journal.entries().is_empty() {
             journal.append("edit", json!({"op": "init"}))?;
         }
-        let outline = Outline::default();
-        let notebook = Notebook {
+        Ok((Notebook::at_no_entry(journal), note))
+    }
+
+    /// A notebook of a journal, whose state is at no entry.
+    fn at_no_entry(journal: Journal) -> Notebook {
+        Notebook {
             journal,
-            outline,
+            outline: Outline::default(),
             tip: 0,
             redo: vec![],
-        };
-        Ok((notebook, note))
+            store: RefCell::default(),
+        }
     }
 
     pub(crate) fn entry(&self, seq: u64) -> Option<&Entry> {
@@ -250,9 +259,13 @@ impl Notebook {
         head: u64,
         outline: &Outline,
     ) -> Result<Vec<(u64, Term)>, String> {
-        let facts = crate::store::facts(self.journal.entries(), head)?;
-        let stand = |(seq, _): &(u64, Term)| self.items_stand(*seq, outline);
-        Ok(facts.into_iter().filter(stand).collect())
+        let mut store = self.store.borrow_mut();
+        store.move_to(self.journal.entries(), head)?;
+        let standing = store
+            .by_entry()
+            .filter(|(seq, _)| self.items_stand(*seq, outline));
+        let facts = standing.flat_map(|(seq, fs)| fs.iter().map(move |f| (seq, f.clone())));
+        Ok(facts.collect())
     }
 
     /// Whether each item an entry names, and the item whose reading

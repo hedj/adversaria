@@ -10,16 +10,14 @@ use crate::prolog::{self, Prolog};
 use format::record::Entry;
 use format::terms::{self, Term};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 /// The facts of the world whose head is `head`, in the order they were added,
 /// each with the seq of the entry that added it.
 pub fn facts(entries: &[Entry], head: u64) -> Result<Vec<(u64, Term)>, String> {
-    let mut world = Replay::new(entries);
-    for e in path(entries, head)? {
-        world.read(e)?;
-    }
-    Ok(world.facts)
+    let mut store = Store::default();
+    store.move_to(entries, head)?;
+    Ok(store.facts().map(|(seq, f)| (seq, f.clone())).collect())
 }
 
 /// The entry of this number, which sits at place seq - 1.
@@ -29,72 +27,135 @@ fn entry(entries: &[Entry], seq: u64) -> Result<&Entry, String> {
     found.ok_or(format!("entry {seq} does not exist"))
 }
 
-/// The entries of a world, from the root to its head.
-fn path(entries: &[Entry], head: u64) -> Result<Vec<&Entry>, String> {
-    let mut path = Vec::new();
-    let mut at = Some(head);
-    while let Some(seq) = at {
-        path.push(entry(entries, seq)?);
-        at = path.last().and_then(|e| e.parent_seq());
-    }
-    path.reverse();
-    Ok(path)
-}
-
-/// A world being replayed: the entries read so far on its path, those
-/// retracted, and the facts that stand.
-struct Replay<'a> {
-    entries: &'a [Entry],
+/// The facts of one world, kept so that the next world asked for is
+/// reached by the entries between the two, not replayed from the root:
+/// a key adds an entry or two to a journal of thousands.
+#[derive(Debug, Default)]
+pub struct Store {
+    /// The world's entries, from the root to its head.
+    path: Vec<u64>,
     on_path: HashSet<u64>,
     retracted: HashSet<u64>,
-    facts: Vec<(u64, Term)>,
+    /// The facts that stand, by the entry that added them. A parent is
+    /// an earlier entry (format::chain), so this order is the path's.
+    facts: BTreeMap<u64, Vec<Term>>,
+    /// How many entries the journal held when the store last moved.
+    read: usize,
 }
 
-impl<'a> Replay<'a> {
-    fn new(entries: &'a [Entry]) -> Self {
-        let (on_path, retracted, facts) = (HashSet::new(), HashSet::new(), Vec::new());
-        Replay {
-            entries,
-            on_path,
-            retracted,
-            facts,
+impl Store {
+    /// Move to the world whose head is `head`. After an error the store
+    /// is empty, so the next move replays from the root.
+    pub fn move_to(&mut self, entries: &[Entry], head: u64) -> Result<(), String> {
+        let moved = self.try_move(entries, head);
+        if moved.is_err() {
+            *self = Store::default();
         }
+        moved
+    }
+
+    /// The facts that stand, in the order they were added, each with the
+    /// seq of the entry that added it.
+    pub fn facts(&self) -> impl Iterator<Item = (u64, &Term)> {
+        let by_entry = self.facts.iter();
+        by_entry.flat_map(|(seq, fs)| fs.iter().map(move |f| (*seq, f)))
+    }
+
+    /// The facts that stand, grouped by the entry that added them.
+    pub fn by_entry(&self) -> impl Iterator<Item = (u64, &[Term])> {
+        self.facts.iter().map(|(seq, fs)| (*seq, fs.as_slice()))
+    }
+
+    fn try_move(&mut self, entries: &[Entry], head: u64) -> Result<(), String> {
+        if self.purged_since(entries) {
+            *self = Store::default();
+        }
+        self.read = entries.len();
+        for e in self.branch_to(entries, head)? {
+            self.read_entry(entries, e)?;
+        }
+        Ok(())
+    }
+
+    /// Whether the journal purged an entry since the last move, which
+    /// takes a body the store may hold. The journal only grows, but for a
+    /// purge; one with fewer entries is taken as purged too.
+    fn purged_since(&self, entries: &[Entry]) -> bool {
+        let new = entries.get(self.read..);
+        new.is_none_or(|new| new.iter().any(|e| e.kind() == "purge"))
+    }
+
+    /// The entries of the world at `head` after the last that it shares
+    /// with this one, root first. The store is unwound to that entry.
+    fn branch_to<'a>(&mut self, entries: &'a [Entry], head: u64) -> Result<Vec<&'a Entry>, String> {
+        let mut ahead = Vec::new();
+        let mut at = Some(head);
+        while let Some(seq) = at.filter(|s| !self.on_path.contains(s)) {
+            ahead.push(entry(entries, seq)?);
+            at = ahead.last().and_then(|e| e.parent_seq());
+        }
+        self.unwind_to(entries, at)?;
+        ahead.reverse();
+        Ok(ahead)
+    }
+
+    /// Unwind the store to the world whose head is `shared`, last entry
+    /// first; to no world if none.
+    fn unwind_to(&mut self, entries: &[Entry], shared: Option<u64>) -> Result<(), String> {
+        while self.path.last().copied() != shared {
+            let Some(seq) = self.path.pop() else { break };
+            self.on_path.remove(&seq);
+            self.unread(entries, seq)?;
+        }
+        Ok(())
+    }
+
+    /// Take an entry's facts out, and give back those it retracted.
+    fn unread(&mut self, entries: &[Entry], seq: u64) -> Result<(), String> {
+        self.facts.remove(&seq);
+        let Some(t) = retract_target(entry(entries, seq)?) else {
+            return Ok(());
+        };
+        self.retracted.remove(&t);
+        let target = entry(entries, t)?.body();
+        target.map_or(Ok(()), |body| self.add(t, body))
     }
 
     /// Read the next entry on the path; an error names the entry.
-    fn read(&mut self, e: &Entry) -> Result<(), String> {
+    fn read_entry(&mut self, entries: &[Entry], e: &Entry) -> Result<(), String> {
+        self.path.push(e.seq);
         self.on_path.insert(e.seq);
         let Some(body) = e.body() else { return Ok(()) };
-        let done = self.apply(e, body);
+        let done = self.apply(entries, e, body);
         done.map_err(|m| format!("entry {}: {m}", e.seq))
     }
 
     /// What an entry's body does to the facts: a retract removes those of
     /// its target, and any entry may add its own.
-    fn apply(&mut self, e: &Entry, body: &Value) -> Result<(), String> {
+    fn apply(&mut self, entries: &[Entry], e: &Entry, body: &Value) -> Result<(), String> {
         if e.kind() == "retract" {
-            self.retract(e.seq, body)?;
+            self.retract(entries, e.seq, body)?;
         }
         self.add(e.seq, body)
     }
 
-    fn retract(&mut self, seq: u64, body: &Value) -> Result<(), String> {
+    fn retract(&mut self, entries: &[Entry], seq: u64, body: &Value) -> Result<(), String> {
         let target = body.get("target").and_then(Value::as_u64);
         let t = target.ok_or("a retract needs a target")?;
-        self.check_target(seq, t)?;
-        self.facts.retain(|(s, _)| *s != t);
+        self.check_target(entries, seq, t)?;
+        self.facts.remove(&t);
         Ok(())
     }
 
     /// A retract names an entry earlier in this world, which is no
     /// retraction and is not yet retracted.
-    fn check_target(&mut self, seq: u64, t: u64) -> Result<(), String> {
+    fn check_target(&mut self, entries: &[Entry], seq: u64, t: u64) -> Result<(), String> {
         if !self.on_path.contains(&t) || t == seq {
             return Err(format!(
                 "retracts entry {t}, which is not earlier in this world"
             ));
         }
-        if entry(self.entries, t)?.kind() == "retract" {
+        if entry(entries, t)?.kind() == "retract" {
             return Err("retracts a retraction; adopt the facts again instead".into());
         }
         if !self.retracted.insert(t) {
@@ -108,11 +169,24 @@ impl<'a> Replay<'a> {
         let Some(list) = body.get("facts") else {
             return Ok(());
         };
-        for f in list.as_array().ok_or("facts must be a list")? {
-            self.facts.push((seq, fact(f)?));
+        let list = list.as_array().ok_or("facts must be a list")?;
+        let fs = list
+            .iter()
+            .map(fact)
+            .collect::<Result<Vec<Term>, String>>()?;
+        if !fs.is_empty() {
+            self.facts.insert(seq, fs);
         }
         Ok(())
     }
+}
+
+/// The entry a retraction names, if this entry is one that names one.
+fn retract_target(e: &Entry) -> Option<u64> {
+    let retracts = e.kind() == "retract";
+    retracts
+        .then(|| e.body()?.get("target")?.as_u64())
+        .flatten()
 }
 
 /// A fact as the journal encodes it: an atom or a compound term.
@@ -315,6 +389,73 @@ mod tests {
         ]);
         es[0] = es[0].purged();
         assert!(facts(&es, 2).unwrap().is_empty());
+    }
+
+    /// The facts a store holds, as `facts` gives them.
+    fn held(store: &Store) -> Vec<(u64, Term)> {
+        store.facts().map(|(seq, f)| (seq, f.clone())).collect()
+    }
+
+    #[test]
+    fn a_store_moved_between_worlds_holds_what_a_replay_from_the_root_holds() {
+        // Catches a move that keeps facts of the world it left, or does not
+        // give back the facts that a retraction it unwound had taken.
+        let es = journal(&[
+            (None, "edit", json!({"facts": [date("a", 1)]})),
+            (
+                Some(1),
+                "edit",
+                json!({"facts": [date("b", 2), date("c", 3)]}),
+            ),
+            (Some(2), "retract", json!({"target": 1})),
+            (Some(3), "adopt", json!({"facts": [date("d", 4)]})),
+            (Some(2), "suppose", json!({"facts": [date("e", 5)]})),
+            (Some(5), "retract", json!({"target": 2})),
+            (Some(1), "edit", json!({})),
+            (
+                Some(7),
+                "retract",
+                json!({"target": 1, "facts": [date("f", 6)]}),
+            ),
+        ]);
+        let mut store = Store::default();
+        for head in [4, 6, 3, 8, 1, 4, 4, 7, 2, 6, 5, 8, 3] {
+            store.move_to(&es, head).unwrap();
+            assert_eq!(held(&store), facts(&es, head).unwrap(), "at {head}");
+        }
+    }
+
+    #[test]
+    fn a_store_that_met_an_error_replays_from_the_root() {
+        // Catches a store left half moved by an entry it refused: unwinding
+        // the refused second retraction of entry 1 gave entry 1 back.
+        let es = journal(&[
+            (None, "edit", json!({"facts": [date("a", 1)]})),
+            (Some(1), "retract", json!({"target": 1})),
+            (Some(2), "retract", json!({"target": 1})),
+        ]);
+        let mut store = Store::default();
+        assert!(store.move_to(&es, 3).is_err());
+        store.move_to(&es, 2).unwrap();
+        assert_eq!(held(&store), vec![]);
+    }
+
+    #[test]
+    fn a_store_forgets_the_facts_of_an_entry_purged_since_it_moved() {
+        // Catches a store that keeps facts it read before their entry was
+        // purged.
+        let mut es = journal(&[
+            (None, "edit", json!({"facts": [date("a", 1)]})),
+            (Some(1), "edit", json!({"facts": [date("b", 2)]})),
+        ]);
+        let mut store = Store::default();
+        store.move_to(&es, 2).unwrap();
+        es[0] = es[0].purged();
+        let purge = (Some(2), "purge", json!({"target": 1, "reason": "a test"}));
+        es.push(next_entry(&es, &purge));
+        store.move_to(&es, 3).unwrap();
+        assert_eq!(held(&store), facts(&es, 3).unwrap());
+        assert_eq!(held(&store).len(), 1);
     }
 
     #[test]
