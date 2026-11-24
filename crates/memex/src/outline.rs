@@ -91,16 +91,23 @@ impl Revised {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Item {
     pub id: u64,
     pub parent: u64,
     pub children: Vec<u64>,
     pub spans: Vec<Span>,
-    /// The characters its spans name, joined: set with the spans, since
-    /// what an entry added never changes.
-    text: String,
+    said: Said,
     pub block: Block,
+}
+
+/// What an item's spans say: the characters they name, joined, and the
+/// key of the page that text would name (page_key). Set with the spans,
+/// since what an entry added never changes.
+#[derive(Debug, Clone, PartialEq, Default)]
+struct Said {
+    text: String,
+    key: String,
 }
 
 /// What an item is as a block of a document.
@@ -340,13 +347,12 @@ impl Item {
     /// A new item under another, with the style and origin its entry gives.
     /// It has no text until its spans are set (Outline::set_spans).
     fn new(id: u64, parent: u64, block: Block) -> Item {
+        let item = Item::default();
         Item {
             id,
             parent,
-            children: vec![],
-            spans: vec![],
-            text: String::new(),
             block,
+            ..item
         }
     }
 }
@@ -448,12 +454,15 @@ impl Outline {
 
     /// The text of an item, borrowed: none for no item.
     pub fn text_ref(&self, id: u64) -> &str {
-        self.items.get(&id).map_or("", |i| &i.text)
+        self.items.get(&id).map_or("", |i| &i.said.text)
     }
 
-    /// The characters some spans name, joined.
-    fn joined(&self, spans: &[Span]) -> String {
-        spans.iter().map(|s| self.text_of(s)).collect()
+    /// What some spans say: the characters they name, joined, and the
+    /// key of the page that text would name.
+    fn said_by(&self, spans: &[Span]) -> Said {
+        let text: String = spans.iter().map(|s| self.text_of(s)).collect();
+        let key = page_key(&text);
+        Said { text, key }
     }
 
     /// Spans covering characters [from, to) of an item's text.
@@ -625,9 +634,9 @@ impl Outline {
     /// Set an item's spans, and its text with them: the one place either
     /// changes.
     fn set_spans(&mut self, id: u64, spans: Vec<Span>) -> Option<()> {
-        let text = self.joined(&spans);
+        let said = self.said_by(&spans);
         let item = self.items.get_mut(&id)?;
-        (item.spans, item.text) = (spans, text);
+        (item.spans, item.said) = (spans, said);
         Some(())
     }
 
@@ -768,7 +777,7 @@ impl Outline {
     /// is the page's name. All at once, for the facts of every label.
     pub fn page_items(&self) -> HashMap<String, u64> {
         let titled = self.in_order().into_iter().rev();
-        let keyed = titled.map(|id| (page_key(&self.text(id)), id));
+        let keyed = titled.filter_map(|id| Some((self.items.get(&id)?.said.key.clone(), id)));
         let mut pages: HashMap<String, u64> = keyed.collect();
         let keys: BTreeSet<String> = self.names.keys().map(|n| page_key(n)).collect();
         let named = keys
