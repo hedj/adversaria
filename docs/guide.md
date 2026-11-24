@@ -1255,7 +1255,9 @@ It opens a supposed world with each change as one entry: changed text,
 added items, deleted items, and items moved under another heading (when a
 heading changes its level, for one). Each change takes the two rows of
 any offer: `change 52  changed 2.2.1: …`, then, dim, `from the revision
-of essay.md`; one dropped stays, dim, ending `(retracted)`.
+of essay.md`; one dropped stays, dim, ending `(retracted)`. While the
+changes fill the screen, the outline is not drawn, and keys that would
+edit it or move in it do nothing; the foot says how to leave.
 `dismiss change N` drops a change;
 `adopt world` keeps the rest; `dismiss world` drops them all. Your own items stay where you
 put them.

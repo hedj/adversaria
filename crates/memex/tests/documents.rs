@@ -3,6 +3,7 @@
 
 mod support;
 
+use memex::app::Key;
 use support::Room;
 
 /// What importing a document of this name and text says.
@@ -412,5 +413,28 @@ fn a_block_new_at_the_start_goes_after_the_items_before_the_document() {
     assert_eq!(
         after,
         items(&[("", "mine"), ("", "New first."), ("", "Old para.")])
+    );
+}
+
+#[test]
+fn keys_that_edit_edit_nothing_while_a_revision_fills_the_screen() {
+    // Catches typing that edited the outline, unseen behind the revision,
+    // and was then listed as one of the co-author's changes.
+    let mut r = Room::new("rev-keys");
+    r.items(&["Notes"]);
+    revised(&mut r, "# T\n\nOld text.\n", "# T\n\nNew text.\n");
+    let (texts, changes) = (pairs(&r), r.app.revision_changes().len());
+    r.typ("hello");
+    r.tap(&[Key::Enter, Key::Backspace, Key::Tab, Key::Up]);
+    assert_eq!(pairs(&r), texts, "the outline unchanged");
+    assert_eq!(
+        r.app.revision_changes().len(),
+        changes,
+        "no change of the user's added"
+    );
+    let said = &r.app.session.message;
+    assert!(
+        said.starts_with("a revision's changes fill the screen"),
+        "{said}"
     );
 }

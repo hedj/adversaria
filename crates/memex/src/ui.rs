@@ -483,7 +483,7 @@ fn draw_body(f: &mut Frame, app: &App, area: Rect) -> Presentations {
 /// each, to keep or retract (retract N) before the world is committed or
 /// closed.
 fn draw_worlds(f: &mut Frame, app: &App, name: &str, area: Rect) -> Presentations {
-    if name.starts_with("revision of ") {
+    if app.reason.in_revision() {
         return draw_presented(f, revision_lines(name, &app.revision_changes()), area);
     }
     if let Some(sides) = Sides::of(app) {
@@ -3320,9 +3320,9 @@ fn hint(app: &App) -> Option<(String, String)> {
 /// While a supposition is open, how to leave it: a revision's pane says
 /// its own.
 fn leaving_hint(app: &App) -> Option<String> {
-    let sup = app.reason.supposition.as_ref()?;
+    app.reason.supposition.as_ref()?;
     let leave = "dismiss world returns to the actual world · adopt world makes this one actual";
-    (!sup.name.starts_with("revision of ")).then(|| leave.to_string())
+    (!app.reason.in_revision()).then(|| leave.to_string())
 }
 
 /// A world's column, by its place, in its half.

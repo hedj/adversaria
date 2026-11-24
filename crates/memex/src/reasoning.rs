@@ -87,6 +87,13 @@ impl Reasoning {
         self.supposition.as_ref().map_or("actual", |s| &s.name)
     }
 
+    /// Whether the open supposition is a document's revision, whose
+    /// changes fill the screen in place of the outline.
+    pub fn in_revision(&self) -> bool {
+        let sup = self.supposition.as_ref();
+        sup.is_some_and(|s| s.name.starts_with("revision of "))
+    }
+
     /// The head of the actual world, when the current one's is the tip.
     pub fn actual_head(&self, tip: u64) -> u64 {
         self.supposition.as_ref().map_or(tip, |s| s.actual)

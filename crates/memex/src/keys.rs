@@ -9,6 +9,10 @@ use crate::session::Answer;
 use format::terms::Term;
 use serde_json::json;
 
+/// What a key that edits or moves the outline says while a revision is
+/// open: its changes fill the screen, so the outline, unseen, takes none.
+const IN_REVISION: &str = "a revision's changes fill the screen, so the outline takes no keys: adopt world keeps the changes, dismiss world drops them";
+
 impl App {
     pub fn handle(&mut self, ev: Event) {
         let mode = std::mem::replace(&mut self.session.mode, Mode::Normal);
@@ -111,6 +115,10 @@ impl App {
     /// move selects; a key that acts on a selection acts on it; any
     /// other ends it.
     fn edit_key(&mut self, key: Key) {
+        if self.reason.in_revision() {
+            self.session.message = IN_REVISION.into();
+            return;
+        }
         if let Key::Special(s) = key
             && self.select_by(s)
         {
