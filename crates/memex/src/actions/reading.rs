@@ -16,6 +16,14 @@ use crate::engine::told;
 use serde_json::json;
 
 impl App {
+    /// Start the parser of controlled English, which takes about a second
+    /// to load, in a process of its own: the window starts it as it opens,
+    /// so that the first pause need not wait for it. A failure is said
+    /// when the parser is first needed.
+    pub fn start_parser(&mut self) {
+        let _started = self.reason.ace();
+    }
+
     /// Let an item's text, written by the entry `of`, wait to be read at
     /// the next pause (App::idle). APE is started now, so that it is ready
     /// by then.

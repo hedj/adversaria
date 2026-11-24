@@ -25,6 +25,7 @@ use winit::window::{Window, WindowId};
 /// what is pending and read what waits to be read.
 pub fn run(dir: &Path, config: Config) -> Result<(), String> {
     let mut app = App::open(dir).map_err(|e| e.to_string())?;
+    app.start_parser();
     app.session.keys = config.keys();
     app.session.plumber = config.plumber()?;
     let event_loop = EventLoop::new().map_err(|e| format!("no window: {e}"))?;
