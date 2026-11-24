@@ -734,3 +734,100 @@ fn an_observation_names_each_finding_by_its_constraint_and_facts() {
     assert_eq!(first["disagreements"], serde_json::json!([names]));
     assert_eq!(first["world"], "actual");
 }
+
+/// Two dates for one flight and a rule against two, read: the violation
+/// shown and recorded.
+fn two_dates(name: &str) -> Room {
+    let mut r = Room::new(name);
+    r.items(&[
+        "The date of Buran-flight is 1988.",
+        "The date of Buran-flight is 1989.",
+        "Nothing has more than 1 date.",
+    ]);
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    assert_eq!(
+        last_observed(&r)["violations"].as_array().map(Vec::len),
+        Some(1)
+    );
+    r
+}
+
+/// The body of the last observed entry.
+fn last_observed(r: &Room) -> serde_json::Value {
+    let bodies = r.app.journal().entries().iter().filter_map(|e| e.body());
+    let last = bodies.rev().find(|b| b["op"] == "observed");
+    last.cloned().expect("an observed entry")
+}
+
+/// What the room does, read and reasoned over: why the last observed
+/// entry says each violation went.
+fn why_gone(r: &mut Room, act: impl FnOnce(&mut Room)) -> Vec<String> {
+    act(r);
+    r.app.flush();
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    let last = last_observed(r);
+    let gone = last["gone"].as_array().cloned().unwrap_or_default();
+    gone.iter()
+        .map(|g| g["why"].as_str().unwrap_or("").to_string())
+        .collect()
+}
+
+/// The cursor on the nth item shown, its text cursor at the end.
+fn at_end_of(r: &mut Room, n: usize) {
+    r.put_cursor(r.outline().in_order()[n]);
+    r.tap(&[Key::End]);
+}
+
+// The next four catch every violation that goes counted as corrected,
+// though its rule was deleted, an item under it deleted, or its text
+// made unread.
+
+#[test]
+fn a_violation_whose_rule_is_deleted_went_with_its_rule() {
+    let mut r = two_dates("gone-rule");
+    let gone = why_gone(&mut r, |r| (at_end_of(r, 2), r.command("delete")).1);
+    assert_eq!(gone, ["rule"]);
+}
+
+#[test]
+fn a_violation_whose_item_is_deleted_went_with_the_item() {
+    let mut r = two_dates("gone-deleted");
+    let gone = why_gone(&mut r, |r| (at_end_of(r, 0), r.command("delete")).1);
+    assert_eq!(gone, ["deleted"]);
+}
+
+#[test]
+fn a_violation_whose_text_no_longer_reads_went_unread() {
+    let mut r = two_dates("gone-unread");
+    let gone = why_gone(&mut r, |r| {
+        (at_end_of(r, 0), r.typ(" — so the notes say")).1
+    });
+    assert_eq!(gone, ["unread"]);
+}
+
+#[test]
+fn a_violation_whose_fact_is_mended_was_corrected() {
+    let mut r = two_dates("gone-corrected");
+    let mend = |r: &mut Room| r.tap(&[Key::Backspace; 5]);
+    let gone = why_gone(&mut r, |r| (at_end_of(r, 0), mend(r), r.typ("1989.")).2);
+    assert_eq!(gone, ["corrected"]);
+}
+
+#[test]
+fn a_violation_gone_in_a_supposition_is_recorded_gone_once_adopted() {
+    // Catches a reason recorded for a supposed world, which is not the
+    // actual one; or none when adopting the world takes the violation
+    // away, since what is shown does not change then.
+    let mut r = two_dates("gone-supposed");
+    r.command("suppose that w");
+    let delete_first = |r: &mut Room| {
+        r.put_cursor(r.outline().in_order()[0]);
+        r.command("delete");
+    };
+    assert_eq!(why_gone(&mut r, delete_first), Vec::<String>::new());
+    assert_ne!(last_observed(&r)["world"], "actual");
+    assert_eq!(why_gone(&mut r, |r| r.command("adopt world")), ["deleted"]);
+    assert_eq!(last_observed(&r)["world"], "actual");
+}

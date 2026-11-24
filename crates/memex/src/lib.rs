@@ -11,6 +11,7 @@ pub mod documents;
 pub mod engine;
 mod evaluation;
 pub mod found;
+mod gone;
 pub mod gui;
 mod habits;
 pub mod history;

@@ -120,18 +120,23 @@ impl App {
         self.record_offers();
     }
 
-    /// Record what reasoning shows of the current world, when it changes.
-    /// Applying the entry records it as observed, so a write that fails is
-    /// tried again.
+    /// Record what reasoning shows of the current world, when it changes,
+    /// with why each violation the actual world showed is gone. Applying
+    /// the entry records it as observed, so a write that fails is tried
+    /// again.
     fn record_shown(&mut self) {
         let Some(now) = self.reason.eval[0].as_ref().map(WorldEval::observed) else {
             return;
         };
-        if !self.session.observed_changed(&now) {
+        let gone = self.track_shown();
+        if gone.is_empty() && !self.session.observed_changed(&now) {
             return;
         }
         let world = self.reason.world().to_string();
-        let body = json!({"violations": now.0, "disagreements": now.1, "world": world});
+        let mut body = json!({"violations": now.0, "disagreements": now.1, "world": world});
+        if !gone.is_empty() {
+            body["gone"] = json!(gone);
+        }
         self.write_view("observed", body);
     }
 

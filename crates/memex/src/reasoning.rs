@@ -5,7 +5,7 @@
 use crate::ace::Ace;
 use crate::engine::Engine;
 use crate::notebook::strings;
-use crate::reason::{Suggestion, WorldEval};
+use crate::reason::{Shown, Suggestion, WorldEval};
 use crate::world::World;
 use format::record::Entry;
 use serde_json::Value;
@@ -53,6 +53,8 @@ pub struct Reasoning {
     /// violations adopting them would raise.
     pub preview: Option<(u64, String)>,
     pub suggestions: Suggestions,
+    /// The violations the actual world showed when last evaluated.
+    pub(crate) last_shown: Vec<Shown>,
     /// The parser of controlled English, started when first needed.
     ace: Option<Ace>,
 }

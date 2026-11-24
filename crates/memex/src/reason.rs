@@ -5,7 +5,7 @@
 use crate::engine::Engine;
 use crate::outline::{Constraint, Derive};
 use format::terms::Term;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Prov {
@@ -117,6 +117,12 @@ impl ConstraintEval {
         }
     }
 
+    /// Its violations, each named as `name_of` names it, with its
+    /// solution.
+    pub(crate) fn violations_named(&self) -> impl Iterator<Item = (String, &Solution)> {
+        self.violations.iter().map(|s| (self.name_of(s), s))
+    }
+
     /// Its findings that pass a test, each named as `name_of` names it.
     pub(crate) fn named_where(&self, keep: impl Fn(&Finding) -> bool) -> Vec<String> {
         let kept = self.findings().filter(|f| keep(f));
@@ -217,6 +223,16 @@ impl WorldEval {
         names.sort();
         names
     }
+}
+
+/// A violation shown in the actual world: its name, as an observed entry
+/// names it; its rule's entry; and the items whose facts it rests on, to
+/// say why it is gone once it is (crate::gone).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Shown {
+    pub(crate) name: String,
+    pub(crate) rule: u64,
+    pub(crate) items: BTreeSet<u64>,
 }
 
 /// What derived items and layers found.

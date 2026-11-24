@@ -2562,7 +2562,7 @@ pub(crate) fn marked_under(f: &Finding, outline: &Outline, item: u64) -> bool {
 }
 
 /// The items whose facts a solution rests on, each once.
-fn items_of(sol: &Solution, outline: &Outline) -> BTreeSet<u64> {
+pub(crate) fn items_of(sol: &Solution, outline: &Outline) -> BTreeSet<u64> {
     let items = sol
         .prov
         .iter()
