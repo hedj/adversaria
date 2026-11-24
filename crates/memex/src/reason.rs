@@ -123,10 +123,13 @@ impl ConstraintEval {
         self.violations.iter().map(|s| (self.name_of(s), s))
     }
 
-    /// Its findings that pass a test, each named as `name_of` names it.
+    /// Its findings that pass a test, each named as `name_of` names it,
+    /// sorted, each name once: the same facts may be both a violation and
+    /// a disagreement.
     pub(crate) fn named_where(&self, keep: impl Fn(&Finding) -> bool) -> Vec<String> {
         let kept = self.findings().filter(|f| keep(f));
-        kept.map(|f| self.name_of(f.sol)).collect()
+        let names: BTreeSet<String> = kept.map(|f| self.name_of(f.sol)).collect();
+        names.into_iter().collect()
     }
 
     /// Its findings: the violations, then the disagreements.

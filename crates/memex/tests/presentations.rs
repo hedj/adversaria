@@ -502,3 +502,19 @@ fn observed(r: &Room) -> Vec<serde_json::Value> {
     let both = ["violations", "disagreements"].map(|k| last[k].as_array().cloned());
     both.into_iter().flatten().flatten().collect()
 }
+
+#[test]
+fn a_verdict_names_a_finding_once_though_it_is_of_both_kinds() {
+    // Catches a finding named twice when an adopted claim makes the same
+    // two facts both a violation and a disagreement.
+    let mut r = dated("verdict-once");
+    let claim = r.outline().in_order()[1];
+    r.put_cursor(claim);
+    r.command("adopt");
+    r.app.evaluate().unwrap();
+    r.command("verdict known");
+    let v = r.body_of(r.last("view"));
+    assert_eq!(v["op"], "verdict", "{}", r.app.session.message);
+    let named = v["findings"].as_array().unwrap();
+    assert_eq!(named.len(), 1, "{named:?}");
+}
