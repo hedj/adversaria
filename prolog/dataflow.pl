@@ -397,6 +397,7 @@ suggestion(S) :- belief_suggestion(S).
 suggestion(S) :- outline_suggestion(S).
 
 wikidata_suggestion(suggestion(link, [same_as(E, Q)], Ev, Score)) :-
+    \+ \+ wd_label(_, _),                 % no import: no entity to look at
     entity_name(E, Name),
     \+ fact_ref(_, same_as(E, _), _),
     split_string(Name, " _'", " _'", Words0),
