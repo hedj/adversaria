@@ -9,6 +9,8 @@ mod definitions;
 mod layers;
 mod query;
 mod sources;
+mod verdicts;
+pub(crate) use verdicts::{NO_RULE, VERDICTS};
 
 use crate::app::App;
 use crate::engine::{told, variables};

@@ -19,6 +19,7 @@ pub use dispatch::{
     ALIASES, COMMANDS, Command, GROUPS, Group, Slot, awaited, command_groups, command_usage,
 };
 pub(crate) use inline::bracketed;
-pub(crate) use knowledge::adopts;
+pub(crate) use knowledge::{NO_RULE, VERDICTS, adopts};
 pub use nouns::candidates;
 pub(crate) use split::sentences;
+pub(crate) use worlds::entry_number;

@@ -141,7 +141,7 @@ impl App {
 
 /// An entry's sequence number, as written after retract: "entry 12"
 /// (docs/concepts.md, decision 7), or as before, "12" or "#12".
-fn entry_number(words: &[&str]) -> Option<u64> {
+pub(crate) fn entry_number(words: &[&str]) -> Option<u64> {
     let words = words.strip_prefix(&["entry"]).unwrap_or(words);
     match words {
         [n] => n.trim_start_matches('#').parse().ok(),

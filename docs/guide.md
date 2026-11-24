@@ -524,7 +524,7 @@ offers the commands that apply to what it presents, as it is now:
 | Right-click on | Offers |
 | --- | --- |
 | an item (the cursor goes to it first) | question its claim and adopt its claims, if it states any; take back its adoption, if it has one; split it, if it has two sentences or more; hide or show its branch, if it has one |
-| a finding under an item (the cursor goes to that item first) | what the item offers, as above, since the finding is about it; then go to the item that states the rule; retract the constraint |
+| a finding under an item (the cursor goes to that item first) | what the item offers, as above, since the finding is about it; then go to the item that states the rule; retract the constraint; then your verdict on the finding: a real error, the rule is wrong, the text was misread, or known already (`verdict`, § 2.4) |
 | a mark of a view | go to the item that states its fact |
 | a layer | retract it; go to its view |
 | a revision's change | reject it (`dismiss change N`, which asks first); keep the rest (`adopt world`) |
@@ -746,6 +746,7 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 | --- | --- | --- |
 | `show` | `show as chart`, `show as table`, `show as graph`, `show ADDRESS as chart`, `show MARK where GOAL` | makes the target, or the item ADDRESS names, a view of the world's facts (§ 3.3): a bar for each box (`box` fact), a table of them, or the graph of the items and their links. With a mark, it adds that layer: one mark for each solution of GOAL |
 | `check` | `check quote`, `check source` | checks the target's text against the document it came from, or its `doi` fact against Crossref |
+| `verdict` | `verdict error`, `verdict rule`, `verdict misread`, `verdict known`, each with `entry N` or without | records what a finding marked under the target is worth: a real error; the rule is wrong; the text was misread; known already. `entry N` names the rule's entry; without it, the one rule with a finding under the target. It changes nothing shown; the journal keeps it, so the measures can tell findings that caught errors from those that did not. A right-click on a finding offers each |
 
 #### Claims and suggestions
 

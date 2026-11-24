@@ -2,6 +2,7 @@
 //! was typed, and running it on the target (docs/guide.md, § 2.4).
 
 use super::nouns::{Alone, Noun, alone, asking, complete_noun, noun, prompts, takes_text};
+use crate::actions::{NO_RULE, VERDICTS};
 use crate::app::{Active, App, Mode};
 use crate::outline::TOP;
 
@@ -88,6 +89,17 @@ pub const COMMANDS: &[Command] = &[
         )],
         help: "check quote (the text is in its source) or check source (the DOI, through Crossref)",
         brief: "check a quote or a source",
+    },
+    Command {
+        name: "verdict",
+        run: App::cmd_verdict,
+        target: true,
+        slots: &[
+            noun("which", Slot::Word).among(VERDICTS).asked(),
+            noun("entry", Slot::Entry).defaults_to(App::rule_under, NO_RULE),
+        ],
+        help: "say what a finding marked under the target is worth: `verdict error`, a real error; `verdict rule`, the rule is wrong; `verdict misread`, the text was misread; `verdict known`, known already; then the rule's entry, by default the one rule with a finding there. It changes nothing shown; the measures report counts it. A right-click on a finding offers each",
+        brief: "say what a finding is worth",
     },
     Command {
         name: "close",
@@ -892,7 +904,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
         ],
     ),
     ("FINDING AND MOVING", &["find", "go"]),
-    ("VIEWS AND CHECKS", &["show", "check"]),
+    ("VIEWS AND CHECKS", &["show", "check", "verdict"]),
     (
         "CLAIMS AND SUGGESTIONS",
         &["adopt", "dismiss", "import", "export"],

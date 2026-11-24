@@ -2555,6 +2555,12 @@ pub fn marks_by_item(e: &WorldEval, outline: &Outline) -> Vec<(u64, Vec<MarkLine
     outline.in_order().into_iter().filter_map(marks).collect()
 }
 
+/// Whether a finding is marked under an item: it rests on the item's
+/// facts.
+pub(crate) fn marked_under(f: &Finding, outline: &Outline, item: u64) -> bool {
+    items_of(f.sol, outline).contains(&item)
+}
+
 /// The items whose facts a solution rests on, each once.
 fn items_of(sol: &Solution, outline: &Outline) -> BTreeSet<u64> {
     let items = sol

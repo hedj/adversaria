@@ -110,10 +110,13 @@ impl App {
 
     /// What a constraint offers: under a mark, first what the item it is
     /// under offers, since the mark is a finding about that item; then
-    /// the rule's.
+    /// the rule's; then, a finding being marked, each verdict on it.
     fn mark_offers(&self, entry: u64, item: Option<u64>, under: Option<u64>) -> Vec<Offer> {
         let mut offers = under.map(|u| self.item_offers(u)).unwrap_or_default();
         offers.extend(self.constraint_offers(entry, item));
+        if under.is_some() {
+            offers.extend(verdict_offers(entry));
+        }
         offers
     }
 
@@ -234,4 +237,17 @@ pub(crate) fn offer(label: &str, line: &str) -> Offer {
         label: label.to_string(),
         line: line.to_string(),
     }
+}
+
+/// Each verdict on a finding of a rule, by its entry, marked under the
+/// item the cursor is on.
+fn verdict_offers(entry: u64) -> Vec<Offer> {
+    let each = crate::actions::VERDICTS.iter();
+    each.map(|(w, says)| {
+        offer(
+            &format!("verdict: {says}"),
+            &format!("verdict {w} entry {entry}"),
+        )
+    })
+    .collect()
 }

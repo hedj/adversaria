@@ -173,7 +173,9 @@ fn a_mark_offers_its_rule_and_retracting_its_constraint() {
     let offers = right_click_on(&mut r, "? sources disagree");
     assert_eq!(offers[0], "go 3", "{offers:?}");
     assert!(offers[1].starts_with("retract "), "{offers:?}");
-    assert_eq!(offers.len(), 2, "no word of the mark plumbed: {offers:?}");
+    let verdicts = offers[2..].iter().all(|o| o.starts_with("verdict "));
+    assert!(verdicts, "then the verdicts on the finding: {offers:?}");
+    assert_eq!(offers.len(), 6, "no word of the mark plumbed: {offers:?}");
     assert!(
         r.shows("act on “Nothing has more than 1 date”"),
         "{:#?}",
@@ -190,12 +192,23 @@ fn a_mark_under_a_claim_offers_the_claims_actions_first_on_its_item() {
     // mark under a claim and could not act on the claim from it.
     let mut r = dated("mark-claim-menu");
     let offers = right_click_on(&mut r, "1989 here");
+    assert!(offers[3].starts_with("retract entry "), "{offers:?}");
+    let rule = offers[3].trim_start_matches("retract entry ");
+    let verdict = |w: &str| format!("verdict {w} entry {rule}");
     assert_eq!(
         offers,
-        ["adopt", "adopt instead", "go 3", &offers[3]],
-        "the claim's (disputed, so adopting it instead), then the rule's"
+        [
+            "adopt",
+            "adopt instead",
+            "go 3",
+            &offers[3],
+            &verdict("error"),
+            &verdict("rule"),
+            &verdict("misread"),
+            &verdict("known"),
+        ],
+        "the claim's (disputed, so adopting it instead), then the rule's, then the verdicts"
     );
-    assert!(offers[3].starts_with("retract "), "{offers:?}");
     assert!(
         r.here().starts_with("Talk-notes says"),
         "the cursor on the claim"
@@ -414,6 +427,78 @@ fn the_foot_names_a_right_clicks_offers_as_choices() {
     let said = foot(&r)[0].clone();
     assert_eq!(
         said,
-        "click: go to 3 · right-click for: go to the item that states the rule, 3; retract the constraint"
+        "click: go to 3 · right-click for: go to the item that states the rule, 3; retract the constraint; verdict: a real error; 3 more"
     );
+}
+
+#[test]
+fn a_right_click_on_a_finding_records_a_verdict_naming_it() {
+    // Catches a finding with no verdict offered, or a verdict that names
+    // no finding the measures can match to what reasoning showed.
+    let mut r = dated("verdict-menu");
+    let Some(Presentation::Constraint {
+        entry,
+        under: Some(under),
+        ..
+    }) = presented_at(&r, "? sources disagree")
+    else {
+        panic!("the test needs a finding's mark");
+    };
+    let offers = right_click_on(&mut r, "? sources disagree");
+    for which in ["error", "rule", "misread", "known"] {
+        let line = format!("verdict {which} entry {entry}");
+        assert!(offers.contains(&line), "{line} not in {offers:?}");
+    }
+    r.app.click(&Presentation::Command(format!(
+        "verdict known entry {entry}"
+    )));
+    assert_eq!(r.app.session.message, "recorded: known already");
+    let v = r.body_of(r.last("view"));
+    assert_eq!(
+        (v["op"].as_str(), v["verdict"].as_str()),
+        (Some("verdict"), Some("known"))
+    );
+    assert_eq!(
+        (v["rule"].as_u64(), v["under"].as_u64()),
+        (Some(entry), Some(under))
+    );
+    assert_eq!(v.get("by"), None, "the user's verdict");
+    let shown = observed(&r);
+    let named = v["findings"].as_array().unwrap();
+    assert!(!named.is_empty(), "{v}");
+    for f in named {
+        assert!(shown.contains(f), "{f} not among {shown:?}");
+    }
+}
+
+#[test]
+fn a_verdict_typed_takes_the_one_rule_marked_under_the_target() {
+    // Catches a verdict recorded where no finding is marked, or one typed
+    // alone that does not find the rule.
+    let mut r = dated("verdict-typed");
+    let [first, _, rule_item] = r.outline().in_order()[..] else {
+        panic!("three items");
+    };
+    r.put_cursor(rule_item);
+    let before = r.entry_count();
+    r.command("verdict error");
+    assert_eq!(r.entry_count(), before, "no finding under the rule's item");
+    let said = &r.app.session.message;
+    assert!(said.starts_with("no rule's finding is marked"), "{said}");
+    r.put_cursor(first);
+    r.command("verdict error");
+    let v = r.body_of(r.last("view"));
+    assert_eq!(v["op"], "verdict", "{}", r.app.session.message);
+    assert_eq!(v["under"].as_u64(), Some(first));
+    assert!(!v["findings"].as_array().unwrap().is_empty(), "{v}");
+}
+
+/// The findings the last `observed` entry names: violations and
+/// disagreements.
+fn observed(r: &Room) -> Vec<serde_json::Value> {
+    let bodies = r.app.journal().entries().iter().filter_map(|e| e.body());
+    let last = bodies.rev().find(|b| b["op"] == "observed");
+    let last = last.expect("observed");
+    let both = ["violations", "disagreements"].map(|k| last[k].as_array().cloned());
+    both.into_iter().flatten().flatten().collect()
 }

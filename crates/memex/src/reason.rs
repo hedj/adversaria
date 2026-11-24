@@ -117,6 +117,12 @@ impl ConstraintEval {
         }
     }
 
+    /// Its findings that pass a test, each named as `name_of` names it.
+    pub(crate) fn named_where(&self, keep: impl Fn(&Finding) -> bool) -> Vec<String> {
+        let kept = self.findings().filter(|f| keep(f));
+        kept.map(|f| self.name_of(f.sol)).collect()
+    }
+
     /// Its findings: the violations, then the disagreements.
     pub fn findings(&self) -> impl Iterator<Item = Finding<'_>> {
         let (seq, name) = (self.seq, self.constraint.name.as_str());
