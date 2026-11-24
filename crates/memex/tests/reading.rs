@@ -58,7 +58,7 @@ fn after_ape_refuses_an_entry_the_lexicon_is_sent_whole_again() {
     let malformed = Term::Compound("pn_sg".into(), vec![Term::Atom("energia".into())]);
     let text = "The date of buran_flight is 1988.";
     assert!(is_ace(&mut ace, &flight, text));
-    assert!(ace.set_lexicon(vec![flight[0].clone(), malformed]).is_err());
+    assert!(ace.set_lexicon(&[flight[0].clone(), malformed]).is_err());
     assert!(is_ace(&mut ace, &flight, text));
 }
 
@@ -74,10 +74,7 @@ fn proper_name(name: &str) -> Term {
 
 /// Whether a text is ACE with this user lexicon.
 fn is_ace(ace: &mut Ace, lexicon: &[Term], text: &str) -> bool {
-    ace.parse_with(lexicon.to_vec(), text)
-        .unwrap()
-        .ace
-        .is_some()
+    ace.parse_with(lexicon, text).unwrap().ace.is_some()
 }
 
 #[test]

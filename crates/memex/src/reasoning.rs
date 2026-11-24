@@ -2,7 +2,7 @@
 //! engines, what they found in the worlds shown, and the suggestions
 //! (docs/structure.md § The code's structure).
 
-use crate::ace::Ace;
+use crate::ace::{Ace, Words};
 use crate::engine::Engine;
 use crate::mentions::Mentions;
 use crate::notebook::strings;
@@ -11,6 +11,7 @@ use crate::world::World;
 use format::record::Entry;
 use serde_json::Value;
 use std::collections::BTreeSet;
+use std::rc::Rc;
 
 /// An open supposition: a world sprouted from the actual one.
 #[derive(Debug, Clone, PartialEq)]
@@ -63,6 +64,9 @@ pub struct Reasoning {
     pub(crate) at: Option<(u64, usize)>,
     /// The current world's unlinked mentions, kept to follow its changes.
     pub(crate) mentions: Mentions,
+    /// The current world's words for the parser, and where the journal
+    /// was when they were gathered (App::words).
+    pub(crate) words: Option<((u64, usize), Rc<Words>)>,
 }
 
 impl Reasoning {

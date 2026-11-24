@@ -1,7 +1,7 @@
 //! Controlled English: what APE makes of a text, read with the words the
 //! current world gives (docs/translator.md).
 
-use crate::ace::{Check, Next, Parse, hint, lexicon_of, listing, said};
+use crate::ace::{Check, Next, Parse, hint, listing, said};
 use crate::app::{Active, App, Hint, Kind};
 use crate::engine::told;
 use crate::pairs::{pairs_of, proposal};
@@ -88,16 +88,16 @@ impl App {
     }
 
     fn ace_next(&mut self, text: &str) -> Result<Vec<Next>, String> {
-        let facts = self.notebook.facts_now()?;
+        let words = self.words()?;
         let ace = self.reason.ace()?;
-        ace.next_with(lexicon_of(&facts), text).map_err(told)
+        ace.next_with(&words.lexicon, text).map_err(told)
     }
 
     /// What a text being typed is, with the current world's words.
     pub(crate) fn ace_check(&mut self, text: &str) -> Result<Check, String> {
-        let facts = self.notebook.facts_now()?;
+        let words = self.words()?;
         let ace = self.reason.ace()?;
-        ace.check_with(lexicon_of(&facts), text).map_err(told)
+        ace.check_with(&words.lexicon, text).map_err(told)
     }
 
     /// What APE makes of a text, with the current world's words in its
@@ -106,9 +106,9 @@ impl App {
     /// buran_flight is 1988") has none to have, and the warning would
     /// come with each.
     pub(crate) fn ace_parse(&mut self, text: &str) -> Result<Parse, String> {
-        let facts = self.notebook.facts_now()?;
+        let words = self.words()?;
         let ace = self.reason.ace()?;
-        let mut parse = ace.parse_with(lexicon_of(&facts), text).map_err(told)?;
+        let mut parse = ace.parse_with(&words.lexicon, text).map_err(told)?;
         parse.messages.retain(|m| m.error || m.kind != "anaphor");
         Ok(parse)
     }

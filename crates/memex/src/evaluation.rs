@@ -37,7 +37,7 @@ impl App {
     }
 
     /// Where the journal is: its tip and its length.
-    fn journal_at(&self) -> (u64, usize) {
+    pub(crate) fn journal_at(&self) -> (u64, usize) {
         (self.notebook.tip, self.notebook.entry_count())
     }
 

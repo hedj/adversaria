@@ -10,10 +10,11 @@
 //! source's claims, not the user's beliefs.
 
 use super::inline::unbracketed;
-use crate::ace::{Kind, Reading, Said, Unread, words_of};
+use crate::ace::{Kind, Reading, Said, Unread, Words, words_of};
 use crate::app::App;
 use crate::engine::told;
 use serde_json::json;
+use std::rc::Rc;
 
 impl App {
     /// Start the parser of controlled English, which takes about a second
@@ -47,14 +48,14 @@ impl App {
     /// world's: whether a part was sent. A failure sends none, and the
     /// reading that follows says it.
     fn lexicon_step(&mut self) -> bool {
-        let Ok(facts) = self.notebook.facts_now() else {
+        let Ok(words) = self.words() else {
             return false;
         };
-        let lexicon = words_of(&facts).lexicon;
         let Ok(ace) = self.reason.ace() else {
             return false;
         };
-        ace.lexicon_part(&lexicon).is_ok_and(|sent| sent.is_some())
+        ace.lexicon_part(&words.lexicon)
+            .is_ok_and(|sent| sent.is_some())
     }
 
     /// Read an item's text, written by the entry `of`, unless it is what
@@ -137,9 +138,24 @@ impl App {
 
     /// What the notebook reads in a text, with the current world's words.
     pub(crate) fn ace_read(&mut self, text: &str) -> Result<Reading, String> {
-        let facts = self.notebook.facts_now()?;
+        let words = self.words()?;
         let ace = self.reason.ace()?;
-        ace.read_with(words_of(&facts), text).map_err(told)
+        ace.read_with(&words, text).map_err(told)
+    }
+
+    /// The current world's words for the parser, kept while the journal
+    /// stays where it is: gathering them from 10,000 facts took 16 ms, and
+    /// each step of a pause, and each key on an ace line, asks for them.
+    pub(crate) fn words(&mut self) -> Result<Rc<Words>, String> {
+        let at = self.journal_at();
+        if let Some((kept_at, words)) = &self.reason.words
+            && *kept_at == at
+        {
+            return Ok(words.clone());
+        }
+        let words = Rc::new(words_of(&self.notebook.facts_now()?));
+        self.reason.words = Some((at, words.clone()));
+        Ok(words)
     }
 
     /// State what an item's text was read as, in place of what it was read

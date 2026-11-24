@@ -169,9 +169,9 @@ impl Ace {
     /// last made; the messages APE gave about those added (a word defined
     /// twice, say). A lexicon of thousands of names is sent once, and
     /// then only what changed.
-    pub fn set_lexicon(&mut self, entries: Vec<Term>) -> Result<Vec<Message>, Error> {
+    pub fn set_lexicon(&mut self, entries: &[Term]) -> Result<Vec<Message>, Error> {
         let mut told = Vec::new();
-        while let Some(more) = self.lexicon_part(&entries)? {
+        while let Some(more) = self.lexicon_part(entries)? {
             told.extend(more);
         }
         Ok(told)
@@ -228,7 +228,7 @@ impl Ace {
 
     /// What APE makes of a text, with this user lexicon; APE's messages
     /// about the lexicon, if it changed, come first.
-    pub fn parse_with(&mut self, lexicon: Vec<Term>, text: &str) -> Result<Parse, Error> {
+    pub fn parse_with(&mut self, lexicon: &[Term], text: &str) -> Result<Parse, Error> {
         let told = self.set_lexicon(lexicon)?;
         let mut parse = self.parse(text)?;
         parse.messages.splice(0..0, told);
@@ -237,14 +237,14 @@ impl Ace {
 
     /// What a text being typed is, with this user lexicon (ace_check/2):
     /// ACE, or where it fails, and repairs.
-    pub fn check_with(&mut self, lexicon: Vec<Term>, text: &str) -> Result<Check, Error> {
+    pub fn check_with(&mut self, lexicon: &[Term], text: &str) -> Result<Check, Error> {
         self.set_lexicon(lexicon)?;
         let goal = call("ace_check", vec![Term::Str(text.into()), Term::Var(0)]);
         check_of(&self.only_answer(&goal)?)
     }
 
     /// What may come next in a text, with this user lexicon (ace_next/2).
-    pub fn next_with(&mut self, lexicon: Vec<Term>, text: &str) -> Result<Vec<Next>, Error> {
+    pub fn next_with(&mut self, lexicon: &[Term], text: &str) -> Result<Vec<Next>, Error> {
         self.set_lexicon(lexicon)?;
         let goal = call("ace_next", vec![Term::Str(text.into()), Term::Var(0)]);
         list(&self.only_answer(&goal)?)
@@ -255,10 +255,10 @@ impl Ace {
 
     /// What the notebook reads in a text, with this user lexicon
     /// (ace_read_text/2).
-    pub fn read_with(&mut self, words: Words, text: &str) -> Result<Reading, Error> {
-        self.set_lexicon(words.lexicon)?;
-        let names = |n: Vec<String>| make_list(n.into_iter().map(Term::Atom).collect());
-        let words = call("words", vec![names(words.rules), names(words.boxes)]);
+    pub fn read_with(&mut self, words: &Words, text: &str) -> Result<Reading, Error> {
+        self.set_lexicon(&words.lexicon)?;
+        let names = |n: &[String]| make_list(n.iter().cloned().map(Term::Atom).collect());
+        let words = call("words", vec![names(&words.rules), names(&words.boxes)]);
         let goal = call(
             "ace_read_text",
             vec![Term::Str(text.into()), words, Term::Var(0)],
