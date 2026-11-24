@@ -292,7 +292,7 @@ impl App {
             vec![Term::Str(name.clone()), a[1].clone(), a[2].clone()],
         );
         let rule = format!("false :- {}", show(&a[2]));
-        let fact = encoded(&node_def(self.next_seq(), defines))?;
+        let fact = encoded(&node_def(self.next_entry(), defines))?;
         let body = json!({"suggestion": mark, "op": "constraint", "name": name, "rule": rule, "facts": [fact]});
         self.write_here("adopt", body)?;
         Ok(())
@@ -300,7 +300,7 @@ impl App {
 
     /// A suggested rule, its head and body, numbered by its own entry.
     fn adopt_rule(&mut self, a: &[Term], mark: Value) -> Result<(), String> {
-        let seq = Term::Int(self.next_seq() as i64);
+        let seq = Term::Int(self.next_entry() as i64);
         let def = Term::Compound("rule_def".into(), vec![seq, a[0].clone(), a[1].clone()]);
         self.write_adopted(mark, vec![encoded(&def)?])
     }

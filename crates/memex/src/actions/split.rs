@@ -34,8 +34,8 @@ impl App {
     }
 
     /// A split of an item that starts at the next entry.
-    fn split_of(&self, item: u64) -> Split {
-        let first = self.notebook.next_seq();
+    fn split_of(&mut self, item: u64) -> Split {
+        let first = self.next_entry();
         Split { item, first }
     }
 

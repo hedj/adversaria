@@ -188,3 +188,62 @@ fn where_writing_leaves_the_cursor_is_recorded_apart_from_a_move() {
         "an item made, then erased"
     );
 }
+
+#[test]
+fn a_session_s_first_act_may_name_the_entry_it_writes() {
+    // Catches a rule, or a split, that reserves its entry's number before
+    // the session's start entry takes it: the rule's node then names an
+    // entry that is not the rule's, and reasoning finds no value for it;
+    // the split's run starts at the start entry, which undo then takes.
+    let mut r = Room::new("first-act");
+    r.items(&["Alder. Birch.", "Cedar"]);
+    let mut again = replayed(&r.dir);
+    let app: &mut App = &mut again;
+    let rule = "constraint one date: false :- date(E, A), date(E, B), A \\= B.";
+    run(app, rule);
+    assert_eq!(app.evaluate(), Ok(()), "{}", app.session.message);
+    let mut again = replayed(&r.dir);
+    let app: &mut App = &mut again;
+    run(app, "rule dated(E) :- date(E, _).");
+    let kept = app.journal().entries().last().unwrap().clone();
+    let def = &kept.body().unwrap()["facts"][0]["args"][0];
+    assert_eq!(def.as_u64(), Some(kept.seq), "the rule names its own entry");
+    let mut again = replayed(&r.dir);
+    let app: &mut App = &mut again;
+    let first = app.notebook.outline.in_order()[0];
+    app.session.view.panes[0].cursor = first;
+    run(app, "split");
+    let split = app
+        .journal()
+        .entries()
+        .last()
+        .unwrap()
+        .body()
+        .unwrap()
+        .clone();
+    let start = starts_at(app);
+    assert_eq!(split["op"], "split");
+    assert_eq!(split["of"].as_u64(), Some(start + 1), "{split}");
+}
+
+/// Run a command line, as typed in the Command quasimode.
+fn run(app: &mut App, line: &str) {
+    app.handle(memex::app::Event::down(Key::Quasi(
+        memex::app::Quasi::Command,
+    )));
+    for c in line.chars() {
+        app.handle(memex::app::Event::down(Key::Char(c)));
+    }
+    app.handle(memex::app::Event::up(Key::Quasi(
+        memex::app::Quasi::Command,
+    )));
+}
+
+/// The number of the last start entry.
+fn starts_at(app: &App) -> u64 {
+    let entries = app.journal().entries().iter().rev();
+    let start = entries
+        .into_iter()
+        .find(|e| e.body().is_some_and(|b| b["op"] == "start"));
+    start.unwrap().seq
+}

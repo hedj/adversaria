@@ -89,13 +89,8 @@ impl App {
         Ok(())
     }
 
-    fn node_def_fact(&self, defines: Term) -> Result<Value, String> {
-        encoded(&node_def(self.next_seq(), defines))
-    }
-
-    /// The sequence number the next entry will have.
-    fn next_seq(&self) -> u64 {
-        self.notebook.journal.entries().len() as u64 + 1
+    fn node_def_fact(&mut self, defines: Term) -> Result<Value, String> {
+        encoded(&node_def(self.next_entry(), defines))
     }
 }
 

@@ -102,7 +102,7 @@ impl App {
         if names.is_empty() {
             return Err("nothing to make: each of the target's [[links]] names an item".into());
         }
-        let first = self.notebook.next_seq();
+        let first = self.next_entry();
         let made = self.make_items(&names, first)?;
         self.link_inline(target);
         let body = json!({"op": "make", "item": target, "of": first, "made": made});

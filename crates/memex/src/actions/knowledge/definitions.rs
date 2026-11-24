@@ -68,7 +68,7 @@ impl App {
     }
 
     fn keep_rule(&mut self, text: &str, head: Term, body: Term, target: u64) -> Result<(), String> {
-        let entry = rule_entry(text, self.next_seq(), head, body, target)?;
+        let entry = rule_entry(text, self.next_entry(), head, body, target)?;
         self.write_here("edit", entry)?;
         Ok(())
     }

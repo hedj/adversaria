@@ -130,7 +130,7 @@ impl App {
     /// State each statement on the item: the edit entries written, and
     /// what the commands said.
     fn state_all(&mut self, item: u64, text: &str, said: &[Said]) -> (Vec<u64>, Vec<String>) {
-        let first = self.notebook.next_seq();
+        let first = self.next_entry();
         let told = self.outcomes(item, named(text, said));
         (self.edits_since(first), told)
     }

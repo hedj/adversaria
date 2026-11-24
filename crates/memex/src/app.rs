@@ -721,21 +721,39 @@ impl App {
     /// The journal's header declares the version its entries are in.
     /// An entry meant to follow the tip follows the start entry.
     fn started_before(&mut self, parent: Option<u64>) -> Option<u64> {
+        let tip = self.notebook.tip;
+        match self.start_session() {
+            Some(start) if parent == Some(tip) => Some(start),
+            _ => parent,
+        }
+    }
+
+    /// Write the session's start entry, if it is not yet written: its
+    /// number, if this wrote it.
+    fn start_session(&mut self) -> Option<u64> {
         if self.session.started {
-            return parent;
+            return None;
         }
         self.session.started = true;
         let tip = self.notebook.tip;
         let start = json!({"build": crate::notebook::BUILD, "by": "memex"});
         let body = self.view_body("start", start);
         match self.write(Some(tip), "view", body) {
-            Ok(e) if parent == Some(tip) => Some(e.seq),
-            Ok(_) => parent,
+            Ok(e) => Some(e.seq),
             Err(m) => {
                 self.session.message = m;
-                parent
+                None
             }
         }
+    }
+
+    /// The number the next entry will have, the session's start entry
+    /// written first if it is not yet. An entry that names itself, or a
+    /// record that names where its run began, takes its number from here,
+    /// not from Notebook::next_seq, which the start entry would take.
+    pub(crate) fn next_entry(&mut self) -> u64 {
+        self.start_session();
+        self.notebook.next_seq()
     }
 
     pub(crate) fn write_here(&mut self, kind: &str, body: Value) -> Result<Entry, String> {
