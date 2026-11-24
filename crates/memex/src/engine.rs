@@ -8,17 +8,36 @@
 use crate::prolog::{Error, Prolog};
 use crate::reason::{Suggestion, list, show};
 use format::terms::Term;
-use std::collections::HashSet;
+use std::collections::BTreeMap;
 
 pub struct Engine {
     p: Prolog,
-    loaded: HashSet<(u64, Term)>,
+    /// The facts loaded, by the number of the entry or item each is of.
+    loaded: BTreeMap<u64, Vec<Term>>,
     /// The import entry whose Wikidata subset is loaded.
     wikidata: Option<u64>,
 }
 
 fn c(f: &str, args: Vec<Term>) -> Term {
     Term::Compound(f.into(), args)
+}
+
+/// Facts by the number of the entry or item each is of.
+type Groups<'a> = BTreeMap<u64, Vec<&'a Term>>;
+
+/// Facts grouped by their numbers, in the order given within each.
+fn grouped(facts: &[(u64, Term)]) -> Groups<'_> {
+    let mut groups: Groups = BTreeMap::new();
+    for (seq, term) in facts {
+        groups.entry(*seq).or_default().push(term);
+    }
+    groups
+}
+
+/// Whether a loaded group is the wanted one, term for term.
+fn same(held: &[Term], wanted: Option<&Vec<&Term>>) -> bool {
+    let wanted = wanted.map_or(&[][..], Vec::as_slice);
+    held.len() == wanted.len() && held.iter().zip(wanted).all(|(h, w)| h == *w)
 }
 
 /// The variables of a term, each once, in order of first appearance.
@@ -39,7 +58,7 @@ impl Engine {
     pub fn start() -> Result<Engine, Error> {
         Ok(Engine {
             p: Prolog::start()?,
-            loaded: HashSet::new(),
+            loaded: BTreeMap::new(),
             wikidata: None,
         })
     }
@@ -53,19 +72,54 @@ impl Engine {
     /// recorded as it is made, so a fact the server refuses leaves the
     /// record true of what the server holds, and a retry repeats nothing.
     pub fn sync(&mut self, facts: &[(u64, Term)]) -> Result<(), Error> {
-        let wanted: HashSet<&(u64, Term)> = facts.iter().collect();
-        let gone = self.loaded.iter().filter(|f| !wanted.contains(f));
-        for fact in gone.cloned().collect::<Vec<_>>() {
-            self.p.retract_fact(&fact.1, fact.0)?;
-            self.loaded.remove(&fact);
-        }
-        for fact in facts {
-            if !self.loaded.contains(fact) {
-                self.p.assert_fact(&fact.1, fact.0)?;
-                self.loaded.insert(fact.clone());
+        let wanted = grouped(facts);
+        self.retract_unwanted(&wanted)?;
+        self.assert_missing(&wanted)
+    }
+
+    /// Retract each loaded fact that is no longer wanted. Groups that are
+    /// as wanted, nearly all of them, are passed over by comparing them.
+    fn retract_unwanted(&mut self, wanted: &Groups) -> Result<(), Error> {
+        let differ = |(seq, held): (&u64, &Vec<Term>)| !same(held, wanted.get(seq));
+        let changed: Vec<u64> = self
+            .loaded
+            .iter()
+            .filter(|g| differ(*g))
+            .map(|(s, _)| *s)
+            .collect();
+        for seq in changed {
+            let keep = wanted.get(&seq).map_or(&[][..], Vec::as_slice);
+            let gone = self.loaded[&seq].iter().filter(|t| !keep.contains(t));
+            for term in gone.cloned().collect::<Vec<_>>() {
+                self.p.retract_fact(&term, seq)?;
+                self.unload(seq, &term);
             }
         }
         Ok(())
+    }
+
+    /// Assert each wanted fact that is not loaded, once.
+    fn assert_missing(&mut self, wanted: &Groups) -> Result<(), Error> {
+        for (seq, terms) in wanted {
+            for term in terms.iter().copied() {
+                if !self.loaded.get(seq).is_some_and(|held| held.contains(term)) {
+                    self.p.assert_fact(term, *seq)?;
+                    self.loaded.entry(*seq).or_default().push(term.clone());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Record a fact retracted.
+    fn unload(&mut self, seq: u64, term: &Term) {
+        let Some(held) = self.loaded.get_mut(&seq) else {
+            return;
+        };
+        held.retain(|t| t != term);
+        if held.is_empty() {
+            self.loaded.remove(&seq);
+        }
     }
 
     /// The first answer to a goal, if it has one: a value for each of its
