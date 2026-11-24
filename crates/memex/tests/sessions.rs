@@ -1,7 +1,7 @@
 //! Each session's start entry (docs/design.md, The journal format): the
-//! first entry a session writes follows one, which records the schema the
-//! session writes in and the build that wrote it, so which build wrote each
-//! entry, and where each session began, are in the record.
+//! first entry a session writes follows one, which records the build that
+//! wrote the session, so which build wrote each entry, and where each
+//! session began, are in the record. The header declares the version.
 
 mod support;
 
@@ -35,7 +35,7 @@ fn the_first_entry_a_session_writes_follows_its_start() {
         (entries[1].kind(), &first["op"]),
         ("view", &serde_json::json!("start"))
     );
-    assert_eq!(first["schema"], 2);
+    assert_eq!(first.get("schema"), None, "the header declares the version");
     let build = first["build"].as_str().unwrap();
     let hex = |s: &str| s.len() == 12 && s.chars().all(|c| c.is_ascii_hexdigit());
     assert!(

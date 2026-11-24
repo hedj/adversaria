@@ -14,12 +14,6 @@ use std::path::{Path, PathBuf};
 /// Entry kinds that change the outline.
 pub(crate) const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
 
-/// The schema of what entries' bodies mean, which each start entry
-/// records: 1 for the entries before any start entry, as design.md
-/// described them on 24 November 2026; 2 from then, open until stage 1
-/// begins, the build in the start entry saying exactly which wrote them.
-pub const SCHEMA: u64 = 2;
-
 /// The build this memex is: its git commit, from build.rs.
 pub const BUILD: &str = env!("MEMEX_BUILD");
 

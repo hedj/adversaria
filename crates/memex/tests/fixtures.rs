@@ -1,15 +1,17 @@
 //! The journal format pinned (docs/design.md, The journal format): a
-//! journal the memex wrote at schema 1, kept in tests/fixtures, must check
-//! and replay to the same outline and facts, whatever the code becomes. A
-//! change that fails these tests changes what a journal already written
-//! means: give it a new schema and a reason, and keep this fixture.
+//! journal the memex wrote at version 1, kept in tests/fixtures, must check
+//! and, migrated, replay to the same outline and facts, whatever the code
+//! becomes. A change that fails these tests changes what a journal
+//! already written means: give it a new version, a migration and a
+//! reason, and keep this fixture.
 
 mod support;
 
+use format::record::Entry;
 use memex::app::{App, Key};
 use support::{Room, replayed};
 
-const SCHEMA1: &str = "tests/fixtures/schema1";
+const VERSION1: &str = "tests/fixtures/version1";
 
 /// A session that writes each kind of entry the memex writes: items and
 /// their text, readings with their facts, a claim and its adoption, a
@@ -54,13 +56,13 @@ fn session(r: &mut Room) {
 }
 
 #[test]
-#[ignore = "writes the fixture: run it by hand, once, when a schema is made"]
-fn write_schema1() {
-    let mut r = Room::new("fixture-schema1");
+#[ignore = "writes the fixture: run it by hand, once, when a version is made"]
+fn write_version1() {
+    let mut r = Room::new("fixture-version1");
     session(&mut r);
-    std::fs::create_dir_all(SCHEMA1).unwrap();
+    std::fs::create_dir_all(VERSION1).unwrap();
     let journal = r.dir.join("journal.jsonl");
-    std::fs::copy(journal, format!("{SCHEMA1}/journal.jsonl")).unwrap();
+    std::fs::copy(journal, format!("{VERSION1}/journal.jsonl")).unwrap();
 }
 
 /// The outline of an app: each item's number and text, in order.
@@ -86,17 +88,17 @@ fn facts(app: &mut App) -> Vec<String> {
 }
 
 #[test]
-fn the_schema_1_journal_checks() {
+fn the_version_1_journal_checks() {
     // Catches a change to the record's format that a journal already
     // written no longer passes.
-    let text = std::fs::read_to_string(format!("{SCHEMA1}/journal.jsonl")).unwrap();
+    let text = std::fs::read_to_string(format!("{VERSION1}/journal.jsonl")).unwrap();
     let entries = format::chain::check_journal(&text).unwrap();
     assert_eq!(entries.len(), 61);
 }
 
 #[test]
-fn the_schema_1_journal_replays_to_the_same_outline() {
-    let app = replayed(std::path::Path::new(SCHEMA1));
+fn the_version_1_journal_replays_to_the_same_outline() {
+    let app = replayed(std::path::Path::new(VERSION1));
     let expected = [
         "1 Buran",
         "2 See [[Buran]].",
@@ -109,11 +111,11 @@ fn the_schema_1_journal_replays_to_the_same_outline() {
 }
 
 #[test]
-fn the_schema_1_journal_replays_to_the_same_facts() {
+fn the_version_1_journal_replays_to_the_same_facts() {
     // Catches a change to what a journal's entries mean: here, the
     // adoption it retracted, and the fact of the item it deleted, hold no
     // more; its rule, its claim and its links do.
-    let mut app = replayed(std::path::Path::new(SCHEMA1));
+    let mut app = replayed(std::path::Path::new(VERSION1));
     let expected = [
         r#"claims("Talk-notes", date(buran_flight, 1989))"#,
         "date(buran_flight, 1988)",
@@ -122,4 +124,105 @@ fn the_schema_1_journal_replays_to_the_same_facts() {
         r#"node_def(36, constraint("Nothing has more than 1 date", [_0, _1, _2], date(_0, _1), date(_0, _2), \==(_1, _2)))"#,
     ];
     assert_eq!(facts(&mut app), expected);
+}
+
+/// A copy of the version-1 fixture, with seals and public keys beside its
+/// journal (stand-ins: a migration moves and copies them, never reads
+/// them), in a directory of this test's own.
+fn version_1_room(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("adversaria-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(
+        format!("{VERSION1}/journal.jsonl"),
+        dir.join("journal.jsonl"),
+    )
+    .unwrap();
+    std::fs::write(dir.join("seals.jsonl"), "the seals of version 1\n").unwrap();
+    std::fs::write(dir.join("keys.jsonl"), "the public keys\n").unwrap();
+    dir
+}
+
+/// A directory's file as text.
+fn text_of(dir: &std::path::Path, file: &str) -> String {
+    std::fs::read_to_string(dir.join(file)).unwrap()
+}
+
+#[test]
+fn opening_a_version_1_journal_migrates_it_and_keeps_the_old_one() {
+    // Catches a journal of version 1 appended to as if it were version 2,
+    // the old journal or its seals lost or changed, or the seals left
+    // beside a journal they no longer seal.
+    let dir = version_1_room("migrate");
+    let before = text_of(&dir, "journal.jsonl");
+    let app = App::open(&dir).unwrap();
+    let said = &app.session.message;
+    assert!(said.contains("migrated to version 2"), "{said}");
+    drop(app);
+    let header = format::record::header(format::record::JOURNAL_FORMAT);
+    let after = text_of(&dir, "journal.jsonl");
+    assert_eq!(after.lines().next(), Some(header.as_str()));
+    assert_eq!(text_of(&dir, "v1/journal.jsonl"), before, "kept unchanged");
+    assert_eq!(text_of(&dir, "v1/seals.jsonl"), "the seals of version 1\n");
+    assert_eq!(text_of(&dir, "v1/keys.jsonl"), "the public keys\n");
+    let beside = dir.join("seals.jsonl").exists();
+    assert!(!beside, "no seals beside a journal they do not seal");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_migrated_journal_continues_the_old_one_once() {
+    // Catches the migrated entries cut loose from the old ones, a body
+    // changed that version 2 reads as version 1 did, or a second
+    // migration on opening again.
+    let dir = version_1_room("migrate-continues");
+    let old = entries_of(&dir);
+    drop(App::open(&dir).unwrap());
+    let new = entries_of(&dir);
+    let last = old.last().unwrap().hash.as_str();
+    let from = &new[0].body().unwrap()["migrated_from"];
+    assert_eq!(from, &serde_json::json!({"version": 1, "last": last}));
+    assert_eq!(
+        shape(&new),
+        shape(&old),
+        "the same entries, after the same parents"
+    );
+    assert_eq!(
+        bodies(&new[1..]),
+        bodies(&old[1..]),
+        "no other body changed"
+    );
+    drop(App::open(&dir).unwrap());
+    assert_eq!(entries_of(&dir), new, "migrated once");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A directory's journal, checked.
+fn entries_of(dir: &std::path::Path) -> Vec<Entry> {
+    format::chain::check_journal(&text_of(dir, "journal.jsonl")).unwrap()
+}
+
+/// Each entry's kind and parent.
+fn shape(es: &[Entry]) -> Vec<(String, Option<u64>)> {
+    es.iter()
+        .map(|e| (e.kind().to_string(), e.parent_seq()))
+        .collect()
+}
+
+/// Each entry's body.
+fn bodies(es: &[Entry]) -> Vec<Option<serde_json::Value>> {
+    es.iter().map(|e| e.body().cloned()).collect()
+}
+
+#[test]
+fn a_version_1_journal_with_a_torn_line_is_kept_as_version_1() {
+    // Catches the torn line set aside by writing the old journal under
+    // the new header, so that the journal kept in v1/ claims a version
+    // its entries are not in.
+    let dir = version_1_room("migrate-torn");
+    let whole = text_of(&dir, "journal.jsonl");
+    std::fs::write(dir.join("journal.jsonl"), format!("{whole}{{\"seq\":62,")).unwrap();
+    drop(App::open(&dir).unwrap());
+    assert_eq!(text_of(&dir, "v1/journal.jsonl"), whole, "version 1, whole");
+    std::fs::remove_dir_all(&dir).unwrap();
 }

@@ -1,7 +1,7 @@
 //! The measures report (docs/plan.md, Milestone 7), from the journal alone.
 //!
 //! Every entry is one user action, one observation the memex recorded, or
-//! an entry the memex wrote on its own (from schema 2, marked
+//! an entry the memex wrote on its own (from version 2, marked
 //! `"by": "memex"`: a session's start, a reading of a text and what it
 //! states, relinking), which is not the user's action.
 //! Actions by kind, after Licklider's count of his own work:
@@ -16,11 +16,11 @@
 //!   and view verdict, the user's word on whether a finding is right;
 //! * importing: import; exporting: view export.
 //!
-//! A view written (from schema 2) records only where writing left the
+//! A view written (from version 2) records only where writing left the
 //! cursor: in the text typed, on an item made, off one deleted. It is
 //! part of the writing before it, not an action, and not navigating.
 //!
-//! A verdict (schema 2) is the user's word on findings: a real error, the
+//! A verdict (version 2) is the user's word on findings: a real error, the
 //! rule is wrong, the text was misread, or known already. A finding
 //! judged more than once counts by its last verdict.
 //!
@@ -31,9 +31,9 @@
 //! later retracted if a retract entry names that entry.
 //! A violation is gone if a later observation in the actual world no
 //! longer shows it. Why it went is what that observation records under
-//! `gone` (schema 2): corrected, its rule changed or deleted, an item
+//! `gone` (version 2): corrected, its rule changed or deleted, an item
 //! under it deleted, or such an item's text no longer read; without a
-//! record, as in schema 1, the reason is unrecorded.
+//! record, as in version 1, the reason is unrecorded.
 
 use format::record::Entry;
 use std::collections::{BTreeMap, BTreeSet};
@@ -472,7 +472,10 @@ mod tests {
         // raised the actions and lowered the clerical share.
         let es = chain(&[
             ("edit", json!({"op": "init"})),
-            ("view", json!({"op": "start", "schema": 2, "by": "memex"})),
+            (
+                "view",
+                json!({"op": "start", "build": "abc", "by": "memex"}),
+            ),
             ("edit", json!({"op": "facts", "item": 2, "by": "memex"})),
             ("edit", json!({"op": "facts", "item": 2})),
             ("view", json!({"op": "offer", "keys": ["k"], "by": "memex"})),
@@ -551,7 +554,7 @@ mod tests {
     #[test]
     fn where_writing_left_the_cursor_is_not_navigating() {
         // Catches the view entry after each burst of typing counted as a
-        // move of the user's, as all 14 moves of the schema-1 fixture were.
+        // move of the user's, as all 14 moves of the version-1 fixture were.
         let es = chain(&[
             ("edit", json!({"op": "init"})),
             ("edit", json!({"op": "text", "item": 2})),
@@ -567,7 +570,7 @@ mod tests {
     #[test]
     fn going_to_an_address_back_or_forward_is_navigating() {
         // Catches the jumps of go, back and forward left unclassified, as
-        // eight of the schema-1 fixture's nine unclassified entries were,
+        // eight of the version-1 fixture's nine unclassified entries were,
         // and a verdict on a finding counted as no action.
         let view = |op: &str| ("view", json!({"op": op}));
         let ops = ["go", "back", "forward", "verdict"];

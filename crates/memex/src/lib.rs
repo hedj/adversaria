@@ -17,6 +17,7 @@ mod habits;
 pub mod history;
 pub mod journal;
 pub mod keys;
+mod migrate;
 pub mod named;
 mod near;
 pub mod notebook;

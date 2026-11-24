@@ -2,7 +2,8 @@
 //! `seals.jsonl` and never holds a key (docs/design.md § The journal).
 
 use format::chain::{self, LineError};
-use format::record::{self, Entry, JOURNAL, JOURNAL_FORMAT};
+use format::layout;
+use format::record::{self, Entry, JOURNAL, JOURNAL_FORMAT, JOURNAL_VERSION};
 use serde_json::{Value, json};
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
@@ -78,10 +79,30 @@ impl Journal {
         let dir = Locked::take(dir)?;
         let bytes = fs::read(dir.join(JOURNAL))?;
         let keep = unfinished_from(&bytes).unwrap_or(bytes.len());
-        let journal = Journal::of(dir, checked(&bytes[..keep])?);
+        let mut journal = Journal::of(dir, checked(&bytes[..keep])?);
+        let header = header_of(&bytes);
         let torn = &bytes[keep..];
-        let note = (!torn.is_empty()).then(|| journal.set_aside(torn));
-        Ok((journal, note.transpose()?))
+        let set_aside = (!torn.is_empty()).then(|| journal.set_aside(&header, torn));
+        let old = record::header_version(&header, JOURNAL_FORMAT) == Some(1);
+        let migrated = old.then(|| journal.migrate());
+        let notes = [set_aside.transpose()?, migrated.transpose()?];
+        let said: Vec<String> = notes.into_iter().flatten().collect();
+        Ok((journal, (!said.is_empty()).then(|| said.join("; "))))
+    }
+
+    /// Migrate a journal of version 1 to version 2: keep it, with its
+    /// seals, in v1/, where they still check, and write its entries
+    /// converted in its place (crate::migrate). What opening it says.
+    fn migrate(&mut self) -> Result<String, Error> {
+        let entries = crate::migrate::from_v1(&self.entries)?;
+        let tmp = self.written_aside(&record::header(JOURNAL_FORMAT), &entries)?;
+        let kept = layout::archive(&self.dir, 1)?;
+        self.replace_with(&tmp)?;
+        self.entries = entries;
+        let kept = kept.file_name().unwrap_or_default().to_string_lossy();
+        Ok(format!(
+            "the journal was of version 1: it is migrated to version {JOURNAL_VERSION}, and the old journal and its seals are kept in {kept}/; seal the journal again"
+        ))
     }
 
     /// A journal of these entries, as opened: durable, and whole.
@@ -96,12 +117,12 @@ impl Journal {
 
     /// Keep a line that was never finished beside the journal, durably,
     /// then write the journal without it.
-    fn set_aside(&self, torn: &[u8]) -> Result<String, Error> {
+    fn set_aside(&self, header: &str, torn: &[u8]) -> Result<String, Error> {
         let path = self.dir.join(TORN);
         let mut kept = OpenOptions::new().create(true).append(true).open(path)?;
         kept.write_all(torn)?;
         kept.sync_all()?;
-        self.rewrite(&self.entries)?;
+        self.rewrite(header, &self.entries)?;
         Ok(format!(
             "the journal's last line was unfinished, as a crash leaves it; it is kept in {TORN}"
         ))
@@ -230,14 +251,22 @@ impl Journal {
         let mut entries = self.entries.clone();
         entries[target as usize - 1] = t.purged();
         entries.push(p.clone());
-        self.rewrite(&entries)?;
+        self.rewrite(&record::header(JOURNAL_FORMAT), &entries)?;
         self.entries = entries;
         Ok(p)
     }
 
-    /// Write the journal anew as these entries, in place of the file.
-    fn rewrite(&self, entries: &[Entry]) -> Result<(), Error> {
-        let mut text = record::header(JOURNAL_FORMAT) + "\n";
+    /// Write the journal anew as a header and these entries, in place of
+    /// the file.
+    fn rewrite(&self, header: &str, entries: &[Entry]) -> Result<(), Error> {
+        let tmp = self.written_aside(header, entries)?;
+        self.replace_with(&tmp)
+    }
+
+    /// A journal of a header and these entries, written durably beside
+    /// the journal, to replace it.
+    fn written_aside(&self, header: &str, entries: &[Entry]) -> Result<PathBuf, Error> {
+        let mut text = format!("{header}\n");
         for e in entries {
             text += &(e.to_line()? + "\n");
         }
@@ -245,7 +274,12 @@ impl Journal {
         let mut f = File::create(&tmp)?;
         f.write_all(text.as_bytes())?;
         f.sync_all()?;
-        fs::rename(&tmp, self.dir.join(JOURNAL))?;
+        Ok(tmp)
+    }
+
+    /// Put a journal written aside in place of the journal, durably.
+    fn replace_with(&self, tmp: &Path) -> Result<(), Error> {
+        fs::rename(tmp, self.dir.join(JOURNAL))?;
         sync_dir(&self.dir)?;
         Ok(())
     }
@@ -315,6 +349,12 @@ fn unfinished_from(bytes: &[u8]) -> Option<usize> {
 }
 
 /// The entries of a journal's text, checked.
+/// A journal file's first line, its header.
+fn header_of(bytes: &[u8]) -> String {
+    let first = bytes.split(|b| *b == b'\n').next().unwrap_or_default();
+    String::from_utf8_lossy(first).into_owned()
+}
+
 fn checked(bytes: &[u8]) -> Result<Vec<Entry>, Error> {
     let text = std::str::from_utf8(bytes)
         .map_err(|_| Error::Refused(format!("{JOURNAL} is not UTF-8")))?;

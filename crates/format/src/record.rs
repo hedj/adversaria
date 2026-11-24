@@ -19,9 +19,18 @@ pub const SEALS: &str = "seals.jsonl";
 pub const KEYS: &str = "keys.jsonl";
 pub const BLOBS: &str = "blobs";
 
+/// The version of the seals and keys files.
 pub const VERSION: u64 = 1;
 
-/// The kinds of entry in format version 1.
+/// The version of the journal: what its entries mean, as well as how
+/// they are written. Version 2 (24 November 2026) marks what the memex
+/// writes on its own, tells where writing left the cursor from a move,
+/// and records offers from the notebook, verdicts on findings, and why a
+/// violation went (docs/design.md, The journal format, Versions). The
+/// memex migrates a journal of version 1 when it opens one.
+pub const JOURNAL_VERSION: u64 = 2;
+
+/// The kinds of entry in versions 1 and 2 of the journal.
 /// `view` (a change to what is shown: cursor, folds, panes, a Leap) was added
 /// to version 1 before any journal was kept, for milestone 3.
 pub const KINDS: [&str; 11] = [
@@ -29,9 +38,38 @@ pub const KINDS: [&str; 11] = [
     "view",
 ];
 
-/// The header line of each file: `{"format":"memex-journal","version":1}`.
+/// The header line of each file: `{"format":"memex-journal","version":2}`.
 pub fn header(format: &str) -> String {
-    jcs::dumps(&json!({"format": format, "version": VERSION})).expect("a header is canonical")
+    header_of(format, current(format))
+}
+
+/// The header line of a version of a format.
+fn header_of(format: &str, version: u64) -> String {
+    jcs::dumps(&json!({"format": format, "version": version})).expect("a header is canonical")
+}
+
+/// The version a format is written in now.
+fn current(format: &str) -> u64 {
+    match format {
+        JOURNAL_FORMAT => JOURNAL_VERSION,
+        _ => VERSION,
+    }
+}
+
+/// The versions of a format that are read: for the journal, version 1 as
+/// well, so that it can be checked and migrated.
+fn read_versions(format: &str) -> Vec<u64> {
+    match format {
+        JOURNAL_FORMAT => vec![1, JOURNAL_VERSION],
+        _ => vec![VERSION],
+    }
+}
+
+/// The version a header line declares, if it is a header of the format
+/// in a version that is read.
+pub fn header_version(line: &str, format: &str) -> Option<u64> {
+    let versions = read_versions(format).into_iter();
+    versions.into_iter().find(|v| line == header_of(format, *v))
 }
 
 pub const JOURNAL_FORMAT: &str = "memex-journal";
@@ -338,13 +376,14 @@ fn hash_of(fields: &Value, drop_body: bool) -> Result<String, String> {
 
 /// Check a header line against the format it should name.
 pub fn check_header(line: &str, format: &str) -> Result<(), String> {
-    if line == header(format) {
+    if header_version(line, format).is_some() {
         return Ok(());
     }
     let f = Fields::read(line)?;
+    let known = |v: &Value| read_versions(format).iter().any(|r| v == r);
     match (f.0.get("format"), f.0.get("version")) {
         (Some(f), _) if f != format => Err(format!("header names format {f}, expected {format:?}")),
-        (_, Some(v)) if v != VERSION => Err(format!("format version {v} is not supported")),
+        (_, Some(v)) if !known(v) => Err(format!("format version {v} is not supported")),
         _ => Err(format!("header must be exactly {}", header(format))),
     }
 }
@@ -455,6 +494,20 @@ impl Entry {
 
     pub fn id(&self) -> EntryId {
         EntryId::new(self.seq, &self.hash)
+    }
+
+    /// The same entry after a parent whose hash changed, hashed anew: its
+    /// content, purged or not, unchanged. A migration rewrites each entry
+    /// so, since every hash depends on the parent's.
+    pub fn with_parent(&self, parent: Option<(u64, &str)>) -> Result<Entry, String> {
+        let parent = parent.map(|(seq, hash)| EntryId::new(seq, hash));
+        let hash = String::new();
+        Entry {
+            parent,
+            hash,
+            ..self.clone()
+        }
+        .hashed()
     }
 
     pub fn kind(&self) -> &str {
@@ -923,11 +976,22 @@ mod tests {
         // Catches a wrong format name or version accepted.
         assert_eq!(
             header(JOURNAL_FORMAT),
-            r#"{"format":"memex-journal","version":1}"#
+            r#"{"format":"memex-journal","version":2}"#
+        );
+        assert_eq!(
+            header(SEALS_FORMAT),
+            r#"{"format":"memex-seals","version":1}"#
         );
         assert!(check_header(&header(JOURNAL_FORMAT), JOURNAL_FORMAT).is_ok());
         assert!(check_header(&header(SEALS_FORMAT), JOURNAL_FORMAT).is_err());
-        assert!(check_header(r#"{"format":"memex-journal","version":2}"#, JOURNAL_FORMAT).is_err());
+        let v1 = r#"{"format":"memex-journal","version":1}"#;
+        assert_eq!(
+            header_version(v1, JOURNAL_FORMAT),
+            Some(1),
+            "read, to migrate"
+        );
+        assert!(check_header(r#"{"format":"memex-journal","version":3}"#, JOURNAL_FORMAT).is_err());
+        assert!(check_header(r#"{"format":"memex-seals","version":2}"#, SEALS_FORMAT).is_err());
         assert!(
             check_header(
                 r#"{"format":"memex-journal","version":1,"x":1}"#,

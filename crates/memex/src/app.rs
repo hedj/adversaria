@@ -715,9 +715,10 @@ impl App {
 
     /// The parent of an entry, once the session's start entry is in the
     /// record: the first entry a session writes follows one, which records
-    /// the build and the schema it writes in (docs/design.md, The journal
+    /// the build that wrote the session (docs/design.md, The journal
     /// format), so which build wrote each entry, and where each session
     /// began, are in the record; opening a journal alone writes nothing.
+    /// The journal's header declares the version its entries are in.
     /// An entry meant to follow the tip follows the start entry.
     fn started_before(&mut self, parent: Option<u64>) -> Option<u64> {
         if self.session.started {
@@ -725,7 +726,7 @@ impl App {
         }
         self.session.started = true;
         let tip = self.notebook.tip;
-        let start = json!({"schema": crate::notebook::SCHEMA, "build": crate::notebook::BUILD, "by": "memex"});
+        let start = json!({"build": crate::notebook::BUILD, "by": "memex"});
         let body = self.view_body("start", start);
         match self.write(Some(tip), "view", body) {
             Ok(e) if parent == Some(tip) => Some(e.seq),
