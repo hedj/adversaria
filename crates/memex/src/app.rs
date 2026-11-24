@@ -687,9 +687,30 @@ impl App {
         body: Value,
     ) -> Result<Entry, String> {
         let parent = self.started_before(parent);
+        let body = self.marked(body);
         let e = self.notebook.append(parent, kind, body)?;
         self.apply(&e);
         Ok(e)
+    }
+
+    /// Do what the memex does on its own, not at a command or a key: read
+    /// a text, link what it names, record what it observed. What it writes
+    /// then is marked `"by": "memex"` (docs/design.md, The journal
+    /// format), so the record tells the user's entries from its own; text
+    /// typed is the user's whenever it is written (flush_text).
+    pub(crate) fn on_its_own<T>(&mut self, act: impl FnOnce(&mut Self) -> T) -> T {
+        let was = std::mem::replace(&mut self.session.on_its_own, true);
+        let done = act(self);
+        self.session.on_its_own = was;
+        done
+    }
+
+    /// A body, marked as the memex's own if it writes on its own.
+    fn marked(&self, mut body: Value) -> Value {
+        if self.session.on_its_own {
+            body["by"] = json!("memex");
+        }
+        body
     }
 
     /// The parent of an entry, once the session's start entry is in the
@@ -704,7 +725,7 @@ impl App {
         }
         self.session.started = true;
         let tip = self.notebook.tip;
-        let start = json!({"schema": crate::notebook::SCHEMA, "build": crate::notebook::BUILD});
+        let start = json!({"schema": crate::notebook::SCHEMA, "build": crate::notebook::BUILD, "by": "memex"});
         let body = self.view_body("start", start);
         match self.write(Some(tip), "view", body) {
             Ok(e) if parent == Some(tip) => Some(e.seq),
@@ -765,7 +786,9 @@ impl App {
             return;
         };
         let before = self.notebook.tip;
+        let mine = std::mem::replace(&mut self.session.on_its_own, false);
         let written = self.write_text(p.item, &p.text);
+        self.session.on_its_own = mine;
         self.session.report(written);
         if self.notebook.tip != before {
             self.will_read(p.item, self.notebook.tip);
@@ -917,6 +940,25 @@ pub(crate) fn word_at(text: &[char], pos: usize) -> (usize, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_typed_is_the_user_s_though_the_memex_writes_it_on_its_own() {
+        // Catches the user's typing marked as the memex's, when its own
+        // work, such as recording what it observed, writes the text
+        // still waiting.
+        let dir = std::env::temp_dir().join(format!("adversaria-own-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut app = App::open(&dir).unwrap();
+        app.new_item_after(TOP).unwrap();
+        let item = app.cursor();
+        app.session.type_into(item, vec![], 'x');
+        app.on_its_own(|app| app.flush_text());
+        let last = app.journal().entries().last().unwrap().clone();
+        let body = last.body().unwrap();
+        assert_eq!((last.kind(), body["op"].as_str()), ("edit", Some("text")));
+        assert!(body.get("by").is_none(), "{body}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn a_view_with_focus_on_another_pane_is_restored_with_focus_on_an_outline() {

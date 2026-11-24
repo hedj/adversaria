@@ -91,7 +91,7 @@ impl App {
         self.update_frozen();
         let stale = self.notebook.stale_results();
         self.session.set_stale(stale);
-        self.record_observations();
+        self.on_its_own(|app| app.record_observations());
     }
 
     /// While the inspector shows a claim's questions, the preview of

@@ -78,3 +78,72 @@ fn an_undo_as_a_session_s_first_entry_keeps_the_record_whole() {
     let text = std::fs::read_to_string(again.journal().dir().join("journal.jsonl"));
     assert!(text.is_ok_and(|t| format::chain::check_journal(&t).is_ok()));
 }
+
+/// Each entry's kind and op, and whether it is marked as the memex's own.
+fn marks(app: &App) -> Vec<(String, String, bool)> {
+    let entries = app.journal().entries().iter();
+    let mark = |e: &format::record::Entry| {
+        let b = e.body().unwrap();
+        let op = b["op"].as_str().unwrap_or("").to_string();
+        (e.kind().to_string(), op, b["by"] == "memex")
+    };
+    entries.skip(1).map(mark).collect()
+}
+
+/// Whether every entry of a kind and op is marked as the memex's, if
+/// there is one; None if there is none.
+fn all_marked(all: &[(String, String, bool)], kind: &str, op: &str) -> Option<bool> {
+    let these = all.iter().filter(|(k, o, _)| k == kind && o == op);
+    let marks: Vec<bool> = these.map(|e| e.2).collect();
+    let first = *marks.first()?;
+    Some(first && marks.iter().all(|m| *m == first))
+}
+
+#[test]
+fn what_the_memex_writes_on_its_own_is_marked_and_the_user_s_is_not() {
+    // Catches a reading, or an observation, counted as the user's work,
+    // or the user's typing marked as the memex's.
+    let mut r = Room::new("session-marks");
+    r.items(&[
+        "The date of Buran-flight is 1988.",
+        "The date of Buran-flight is 1989.",
+        "Nothing has more than 1 date.",
+    ]);
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    let all = marks(&r.app);
+    let own = ["start", "facts", "constraint", "read", "observed"];
+    let kinds = ["view", "edit", "edit", "edit", "view"];
+    for (kind, op) in kinds.into_iter().zip(own) {
+        assert_eq!(
+            all_marked(&all, kind, op),
+            Some(true),
+            "{kind} {op}: {all:#?}"
+        );
+    }
+    for (kind, op) in [("edit", "create"), ("edit", "text"), ("view", "move")] {
+        assert_eq!(
+            all_marked(&all, kind, op),
+            Some(false),
+            "{kind} {op}: {all:#?}"
+        );
+    }
+}
+
+#[test]
+fn a_name_s_relinking_is_the_memex_s_and_the_name_the_user_s() {
+    let mut r = Room::new("session-relink");
+    r.items(&["Alder", "See [[tree]]."]);
+    r.app.idle();
+    r.command("go 1");
+    r.command("name tree");
+    let all = marks(&r.app);
+    let found = |kind: &str, op: &str| all.iter().find(|(k, o, _)| k == kind && o == op).cloned();
+    assert_eq!(found("name", "").map(|f| f.2), Some(false), "{all:#?}");
+    assert_eq!(found("edit", "relink").map(|f| f.2), Some(true), "{all:#?}");
+    assert_eq!(
+        found("link", "").map(|f| f.2),
+        Some(true),
+        "the link the name made: {all:#?}"
+    );
+}

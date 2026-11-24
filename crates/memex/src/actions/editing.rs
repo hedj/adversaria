@@ -23,7 +23,7 @@ impl App {
             ));
         }
         let named = self.write_here("name", json!({"name": n, "item": target}))?;
-        self.relink_name(&n, named.seq)?;
+        self.on_its_own(|app| app.relink_name(&n, named.seq))?;
         Ok(String::new())
     }
 

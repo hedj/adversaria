@@ -46,6 +46,9 @@ pub struct Session {
     /// Whether this session has written its start entry, which goes
     /// before the first entry it writes (App::write).
     pub(crate) started: bool,
+    /// Whether the memex is writing on its own, not at a command or a
+    /// key (App::on_its_own).
+    pub(crate) on_its_own: bool,
     outside: Outside,
 }
 

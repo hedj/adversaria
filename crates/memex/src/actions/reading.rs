@@ -27,7 +27,7 @@ impl App {
     /// Read each item's text that waits to be read.
     pub(crate) fn read_waiting(&mut self) {
         for (item, of) in self.session.take_to_read() {
-            self.read_item(item, of);
+            self.on_its_own(|app| app.read_item(item, of));
         }
     }
 
