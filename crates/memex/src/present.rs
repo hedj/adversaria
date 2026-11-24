@@ -8,6 +8,7 @@ use crate::actions::awaited;
 use crate::app::{App, Mode};
 use crate::plumb::Offer;
 use crate::session::Menu;
+use crate::session::ViewChange;
 use crate::ui::Presentations;
 use serde_json::json;
 
@@ -164,7 +165,7 @@ impl App {
             self.write_view("pane", json!({}));
         }
         self.set_cursor(id);
-        self.session.view_dirty = true;
+        self.session.view_changed(ViewChange::Moved);
     }
 
     /// Plumb a text: open a menu of the commands its rules offer, at a

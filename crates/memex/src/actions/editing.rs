@@ -3,6 +3,7 @@
 
 use crate::app::{App, PaneKind, word_at};
 use crate::outline::{Outline, page_key, reads_as_number};
+use crate::session::ViewChange;
 use format::terms::{self, Term};
 use serde_json::{Value, json};
 
@@ -57,7 +58,7 @@ impl App {
 
     fn set_pos(&mut self, pos: usize) {
         self.session.view.pos = pos;
-        self.session.view_dirty = true;
+        self.session.view_changed(ViewChange::Written);
     }
 
     // Moving items.
@@ -113,7 +114,7 @@ impl App {
     /// Show an item's children if they were folded away.
     fn open_branch(&mut self, id: u64) {
         if self.session.view.folded.remove(&id) {
-            self.session.view_dirty = true;
+            self.session.view_changed(ViewChange::Written);
         }
     }
 

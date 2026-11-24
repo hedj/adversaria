@@ -88,7 +88,9 @@ pub fn session(dir: &Path) -> App {
 fn counts_match_a_hand_count() {
     // The entries of the small session, read by hand (kind and op), and the
     // counts made from that list by hand: writing 3 5 7 8 9 14 15 16 17;
-    // navigating 4 6 18 23; searching 11; deciding 12 20 21 22;
+    // navigating 18 23; searching 11; deciding 12 20 21 22; entries 4 and 6
+    // record only where writing (the item made, the text typed) left the
+    // cursor, so are no action;
     // observations 10 13 19; entries 1 and 2 are the memex's own: the
     // journal's first, unclassified, and the session's start, marked as
     // written by the memex on its own. Entry 19 offers two rules;
@@ -112,9 +114,9 @@ fn counts_match_a_hand_count() {
         ("edit", "init"),
         ("view", "start"),
         ("edit", "create"),
-        ("view", "move"),
+        ("view", "written"),
         ("edit", "text"),
-        ("view", "move"),
+        ("view", "written"),
         ("edit", "facts"),
         ("edit", "facts"),
         ("edit", "constraint"),
@@ -144,7 +146,7 @@ fn counts_match_a_hand_count() {
     let r = tools::measures::measure(app.journal().entries());
     assert_eq!(r.entries, 23);
     assert_eq!(r.actions["writing"], 9);
-    assert_eq!(r.actions["navigating"], 4);
+    assert_eq!(r.actions["navigating"], 2);
     assert_eq!(r.actions["searching"], 1);
     assert_eq!(r.actions["deciding"], 4);
     assert_eq!(
@@ -155,6 +157,7 @@ fn counts_match_a_hand_count() {
         0
     );
     assert_eq!((r.observations, r.by_memex, r.unclassified), (3, 1, 1));
+    assert_eq!(r.left_by_writing, 2);
     assert_eq!(
         (r.offered, r.adopted, r.dismissed, r.adopted_then_retracted),
         (2, 1, 1, 1)
@@ -169,7 +172,7 @@ fn counts_match_a_hand_count() {
     );
     assert!(
         r.to_string()
-            .contains("clerical share (searching, following links, navigating): 5 of 18, 27.8%")
+            .contains("clerical share (searching, following links, navigating): 3 of 16, 18.8%")
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -222,7 +225,7 @@ fn the_program_reports_a_valid_journal_and_refuses_a_broken_one() {
 /// memex's own, or none of these.
 fn counted(r: &tools::measures::Report) -> usize {
     let actions: usize = r.actions.values().sum();
-    actions + r.observations + r.by_memex + r.unclassified
+    actions + r.observations + r.left_by_writing + r.by_memex + r.unclassified
 }
 
 /// A report's entries, observations and actions.

@@ -17,6 +17,26 @@ pub type Observed = (Vec<String>, Vec<String>);
 /// What the user sees and is in the middle of, the keys bound to
 /// commands, whether the user has quit, and what the session has noticed
 /// outside the journal: all that it holds and the journal does not.
+/// What changed the view: writing, which only leaves the cursor where it
+/// put it (in the text typed, on an item made, off one deleted); or a
+/// move of the user's, an arrow key or a click. Only a move is the user's
+/// navigation, so the two are recorded apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum ViewChange {
+    Written,
+    Moved,
+}
+
+impl ViewChange {
+    /// The op of the view entry that records it.
+    pub(crate) fn op(self) -> &'static str {
+        match self {
+            ViewChange::Written => "written",
+            ViewChange::Moved => "move",
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct Session {
     pub view: View,
@@ -24,8 +44,8 @@ pub struct Session {
     pub message: String,
     /// Text typed into an item and not yet written.
     pub(crate) pending_text: Option<PendingText>,
-    /// The view moved and is not yet written.
-    pub(crate) view_dirty: bool,
+    /// What changed the view since its last entry, if anything.
+    pub(crate) view_change: Option<ViewChange>,
     /// The last leap's pattern and direction, for leaping again.
     pub(crate) last_leap: Option<(String, bool)>,
     /// What the list beside the outline lists: the last find's, or the
@@ -480,7 +500,13 @@ impl Session {
     /// Keep an item's new text until it is written.
     pub(crate) fn hold_text(&mut self, item: u64, text: Vec<char>) {
         self.pending_text = Some(PendingText { item, text });
-        self.view_dirty = true;
+        self.view_changed(ViewChange::Written);
+    }
+
+    /// Note a change of the view, which the next pause records: a move of
+    /// the user's outranks writing.
+    pub(crate) fn view_changed(&mut self, change: ViewChange) {
+        self.view_change = self.view_change.max(Some(change));
     }
 
     /// The text typed into an item and not yet written, if any.
@@ -496,7 +522,7 @@ impl Session {
 
     /// Whether anything is typed or moved and not yet written.
     pub fn pending(&self) -> bool {
-        self.pending_text.is_some() || self.view_dirty
+        self.pending_text.is_some() || self.view_change.is_some()
     }
 
     /// Point the source check at another Crossref-like service (for tests).

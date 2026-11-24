@@ -6,6 +6,7 @@ use crate::app::{Active, App, Event, Hold, Key, Kind, Mode, Press, Quasi, Specia
 use crate::outline::TOP;
 use crate::reason;
 use crate::session::Answer;
+use crate::session::ViewChange;
 use format::terms::Term;
 use serde_json::json;
 
@@ -171,7 +172,7 @@ impl App {
         };
         if let Some((id, _)) = rows.get(to) {
             self.set_cursor(*id);
-            self.session.view_dirty = true;
+            self.session.view_changed(ViewChange::Moved);
         }
     }
 
@@ -180,7 +181,7 @@ impl App {
         let len = self.text_of(self.cursor()).len();
         let view = &mut self.session.view;
         view.pos = text_pos(view.pos, key, len);
-        self.session.view_dirty = true;
+        self.session.view_changed(ViewChange::Moved);
     }
 
     fn type_char(&mut self, c: char) {
@@ -215,7 +216,7 @@ impl App {
             json!({"op": "create", "under": under, "after": after, "add": "", "spans": []}),
         )?;
         self.set_cursor(e.seq);
-        self.write_view("move", json!({}));
+        self.write_view(ViewChange::Written.op(), json!({}));
         Ok(())
     }
 

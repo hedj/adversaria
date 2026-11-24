@@ -758,9 +758,8 @@ impl App {
     /// Write whatever is pending: typed text, then cursor moves.
     pub fn flush(&mut self) {
         self.flush_text();
-        if self.session.view_dirty {
-            self.session.view_dirty = false;
-            let body = self.view_body("move", json!({}));
+        if let Some(change) = self.session.view_change.take() {
+            let body = self.view_body(change.op(), json!({}));
             let written = self.write_here("view", body);
             self.session.report(written);
         }
@@ -768,7 +767,7 @@ impl App {
 
     pub(crate) fn write_view(&mut self, op: &str, extra: Value) {
         self.flush_text();
-        self.session.view_dirty = false;
+        self.session.view_change = None;
         let body = self.view_body(op, extra);
         let written = self.write_here("view", body);
         self.session.report(written);

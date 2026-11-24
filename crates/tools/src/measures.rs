@@ -16,6 +16,10 @@
 //!   and view verdict, the user's word on whether a finding is right;
 //! * importing: import; exporting: view export.
 //!
+//! A view written (from schema 2) records only where writing left the
+//! cursor: in the text typed, on an item made, off one deleted. It is
+//! part of the writing before it, not an action, and not navigating.
+//!
 //! Clerical work is searching, following links and navigating.
 //! Observations (not actions): view observed (the violations and
 //! disagreements shown) and view offer (suggestions shown).
@@ -46,6 +50,8 @@ pub struct Report {
     pub observations: usize,
     /// Entries the memex wrote on its own, other than observations.
     pub by_memex: usize,
+    /// View entries that record only where writing left the cursor.
+    pub left_by_writing: usize,
     /// Entries that are none of these: the memex's first entry, or a view
     /// the report does not know. Counted, not hidden.
     pub unclassified: usize,
@@ -123,12 +129,14 @@ impl Report {
         }
     }
 
-    /// An entry, as an observation, the memex's own, an action of its
-    /// kind, or none of these; and a dismissal counted.
+    /// An entry, as an observation, the memex's own, where writing left
+    /// the cursor, an action of its kind, or none of these; and a
+    /// dismissal counted.
     fn count(&mut self, e: &Entry) {
         match kind(e) {
             _ if is_view(e, &["observed", "offer"]) => self.observations += 1,
             _ if by_memex(e) => self.by_memex += 1,
+            _ if is_view(e, &["written"]) => self.left_by_writing += 1,
             Some(k) => *self.actions.get_mut(k).unwrap() += 1,
             None => self.unclassified += 1,
         }
@@ -246,8 +254,13 @@ impl fmt::Display for Report {
         let actions: usize = self.actions.values().sum();
         writeln!(
             f,
-            "journal: {} entries: {actions} actions, {} observations, {} written by the memex on its own, {} unclassified",
-            self.entries, self.observations, self.by_memex, self.unclassified
+            "journal: {} entries: {actions} actions, {} observations",
+            self.entries, self.observations
+        )?;
+        writeln!(
+            f,
+            "other entries: {} views where writing left the cursor, {} written by the memex on its own, {} unclassified",
+            self.left_by_writing, self.by_memex, self.unclassified
         )?;
         writeln!(f, "actions by kind:")?;
         for k in KINDS {
@@ -382,6 +395,22 @@ mod tests {
             (kind(&es[1]), kind(&es[2])),
             (Some("checking"), Some("navigating"))
         );
+    }
+
+    #[test]
+    fn where_writing_left_the_cursor_is_not_navigating() {
+        // Catches the view entry after each burst of typing counted as a
+        // move of the user's, as all 14 moves of the schema-1 fixture were.
+        let es = chain(&[
+            ("edit", json!({"op": "init"})),
+            ("edit", json!({"op": "text", "item": 2})),
+            ("view", json!({"op": "written"})),
+            ("view", json!({"op": "move"})),
+        ]);
+        let r = measure(&es);
+        assert_eq!(r.left_by_writing, 1);
+        assert_eq!((r.actions["writing"], r.actions["navigating"]), (1, 1));
+        assert_eq!(r.unclassified, 1, "the first entry alone");
     }
 
     #[test]

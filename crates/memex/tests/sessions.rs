@@ -5,7 +5,7 @@
 
 mod support;
 
-use memex::app::App;
+use memex::app::{App, Key};
 use support::{Room, replayed};
 
 /// The start entries of a journal, by their bodies.
@@ -121,7 +121,7 @@ fn what_the_memex_writes_on_its_own_is_marked_and_the_user_s_is_not() {
             "{kind} {op}: {all:#?}"
         );
     }
-    for (kind, op) in [("edit", "create"), ("edit", "text"), ("view", "move")] {
+    for (kind, op) in [("edit", "create"), ("edit", "text"), ("view", "written")] {
         assert_eq!(
             all_marked(&all, kind, op),
             Some(false),
@@ -145,5 +145,46 @@ fn a_name_s_relinking_is_the_memex_s_and_the_name_the_user_s() {
         found("link", "").map(|f| f.2),
         Some(true),
         "the link the name made: {all:#?}"
+    );
+}
+
+/// The ops of the view entries written since entry `from`, in order.
+fn views_since(r: &Room, from: usize) -> Vec<String> {
+    let after = &r.app.journal().entries()[from..];
+    let views = after.iter().filter(|e| e.kind() == "view");
+    views
+        .map(|e| e.body().unwrap()["op"].as_str().unwrap_or("").to_string())
+        .collect()
+}
+
+#[test]
+fn where_writing_leaves_the_cursor_is_recorded_apart_from_a_move() {
+    // Catches the view entry after each burst of typing recorded as a
+    // move of the user's, which the measures count as navigating.
+    let mut r = Room::new("written");
+    r.items(&["Alder", "Birch"]);
+    let from = r.entry_count();
+    r.typ(" bark");
+    r.app.flush();
+    assert_eq!(views_since(&r, from), ["written"], "typing alone");
+    let from = r.entry_count();
+    r.tap(&[Key::Up]);
+    r.typ("s");
+    r.app.flush();
+    assert_eq!(views_since(&r, from), ["move"], "a move, then typing");
+    let from = r.entry_count();
+    r.typ("!");
+    r.tap(&[Key::Down]);
+    r.app.flush();
+    assert_eq!(views_since(&r, from), ["move"], "typing, then a move");
+    let from = r.entry_count();
+    r.tap(&[Key::Enter]);
+    r.tap(&[Key::Backspace]);
+    r.app.flush();
+    let made_then_erased = ["written", "written"];
+    assert_eq!(
+        views_since(&r, from),
+        made_then_erased,
+        "an item made, then erased"
     );
 }

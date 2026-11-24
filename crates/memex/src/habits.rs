@@ -10,7 +10,7 @@
 
 use crate::app::App;
 use crate::outline::TOP;
-use crate::session::Clip;
+use crate::session::{Clip, ViewChange};
 use serde_json::json;
 
 impl App {
@@ -29,7 +29,7 @@ impl App {
         let deleted = self.write_here("edit", json!({"op": "delete", "item": item}));
         self.session.report(deleted);
         self.set_cursor(next);
-        self.session.view_dirty = true;
+        self.session.view_changed(ViewChange::Written);
         true
     }
 
