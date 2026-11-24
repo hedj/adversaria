@@ -11,7 +11,7 @@
 use crate::prolog::{Error, Prolog, prolog_file};
 use crate::reason::{list, make_list, parts};
 use format::terms::Term;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashSet};
 
 /// The parser: its server, and the user lexicon it holds; none when that
 /// is not known, after a change that failed.
@@ -689,15 +689,14 @@ fn one_place_rule(fact: &Term) -> Option<String> {
     }
 }
 
-/// The user lexicon a world's facts give, each entry once, in order.
+/// The user lexicon a world's facts give, each entry once, where it first
+/// comes.
 pub fn lexicon_of(facts: &[(u64, Term)]) -> Vec<Term> {
-    let mut entries = BTreeMap::new();
-    for (_, f) in facts {
-        for e in entries_of(f) {
-            entries.insert(format!("{e:?}"), e);
-        }
-    }
-    entries.into_values().collect()
+    let all: Vec<Term> = facts.iter().flat_map(|(_, f)| entries_of(f)).collect();
+    let mut seen = HashSet::new();
+    let first: Vec<bool> = all.iter().map(|e| seen.insert(e)).collect();
+    let kept = all.into_iter().zip(first).filter(|(_, first)| *first);
+    kept.map(|(e, _)| e).collect()
 }
 
 /// The entries one fact gives: a claim's as its claimed fact's.
@@ -916,7 +915,7 @@ mod tests {
         let empty = c("q", vec![atom("")]);
         assert_eq!(
             shown(&[odd, empty]),
-            ["adj_itr(q, q)", "noun_sg(p, p, neutr)"]
+            ["noun_sg(p, p, neutr)", "adj_itr(q, q)"]
         );
     }
 
