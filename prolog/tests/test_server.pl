@@ -36,7 +36,8 @@ served_once(In, Out) :-
 fresh_server :-
     reset_atoms,
     forall(retract(query_engine(_, E)), engine_destroy(E)),
-    forall(retract(fact_ref(_, _, Ref)), erase(Ref)).
+    forall(retract(fact_ref(_, _, Ref)), erase(Ref)),
+    forall(retract(outline_ref(_, _, Ref)), erase(Ref)).
 
 send(W, Type-Req-Terms) :-
     terms_cells(Terms, Cells, _, _),

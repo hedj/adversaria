@@ -24,6 +24,15 @@ journal seq in fact_ref/3; a claim is the fact claims(Source, P).
 */
 
 :- dynamic([node_def/2, fact_ref/3], [incremental(true)]).
+%   The outline's facts are no beliefs (outline_predicate/1). The server
+%   keeps their clauses in outline_ref/3, which is not incremental, and
+%   goals read them through their own predicates, which are. In
+%   fact_ref/3, each one changed was checked against every call of
+%   fact_ref/3 that a table had made: with a rule over 10,000 dates, 11 ms
+%   for each keystroke that changed an item's text.
+:- dynamic([user:item_text/2, user:item_under/2, user:item_link/3, user:item_tag/2],
+           [incremental(true)]).
+:- dynamic(outline_ref/3).
 %   Filled by server.pl once it is loaded: the predicates that are not the
 %   user's facts.
 :- dynamic(server_predicate/1).
@@ -58,6 +67,7 @@ eval(layer(Mark, Goal), V) :-
 prove((A, B), P) :- !, prove(A, P1), prove(B, P2), append(P1, P2, P).
 prove(G, []) :- builtin(G), !, safe_call(G).
 prove(G, [S]) :- fact_ref(S, G, _).
+prove(G, [S]) :- outline_fact(G, S).
 prove(G, P) :- fact_ref(_, rule_def(_, G, B), _), prove(B, P).
 
 %   A literal holds as a belief, or as some source's claim.
@@ -75,13 +85,23 @@ holds_all(G, P) :- fact_ref(_, rule_def(_, G, B), _), holds_all(B, P).
 %   Fact). A Wikidata claim is derived from the imported subset, through the
 %   user's links (same_as) and property mappings (wd_property).
 holds(G, belief(S, G)) :- fact_ref(S, G, _).
+holds(G, belief(S, G)) :- outline_fact(G, S).
 holds(G, claim(Src, S, G)) :- fact_ref(S, claims(Src, G), _).
 holds(G, claim("Wikidata", S, G)) :- wd_import(S, _), wd_claim(G).
 
 beliefs((A, B)) :- !, beliefs(A), beliefs(B).
 beliefs(G) :- builtin(G), !, safe_call(G).
 beliefs(G) :- fact_ref(_, G, _).
+beliefs(G) :- outline_fact(G, _).
 beliefs(G) :- fact_ref(_, rule_def(_, G, B), _), beliefs(B).
+
+%   A fact the memex states of the outline, with the item it is of, read
+%   through its own predicate, so that a table that reads it depends on
+%   that predicate alone.
+outline_fact(G, S) :- outline_goal(G), user:G, outline_ref(S, G, _).
+
+%   A goal of one of the outline's predicates.
+outline_goal(G) :- callable(G), functor(G, N, A), outline_predicate(N/A).
 
 builtin(G) :- predicate_property(system:G, built_in).
 
@@ -156,7 +176,9 @@ vet(G) :- not_allowed(G).
 not_allowed(What) :- throw(error(permission_error(call, not_allowed, What), _)).
 
 %   A predicate this server's files define (node/2, load_wikidata/2,
-%   fact_ref/3, ...) or a library's: not the user's facts.
+%   fact_ref/3, ...) or a library's: not the user's facts. The outline's
+%   predicates are declared here, but are read as the user's facts are.
+own_predicate(G) :- outline_goal(G), !, fail.
 own_predicate(G) :- functor(G, N, A), server_predicate(N/A), !.
 own_predicate(G) :- predicate_property(user:G, file(_)), !.
 own_predicate(G) :- predicate_property(user:G, imported_from(_)).
@@ -481,17 +503,17 @@ user_binary_(P) :-
     current_predicate(user:P/2),
     \+ server_predicate(P/2),
     \+ memberchk(P, [same_as, wd_property, label, node_def, rule_def, claims, cites]),
-    \+ outline_predicate(P),
+    \+ outline_predicate(P/2),
     functor(F, P, 2),
     \+ \+ fact_ref(_, F, _).
 
 %   The predicates the memex states of the outline (crates/memex/src/
 %   world.rs), not of what the user believes: goals may read them, but no
 %   rule is mined from them.
-outline_predicate(item_text).
-outline_predicate(item_under).
-outline_predicate(item_link).
-outline_predicate(item_tag).
+outline_predicate(item_text/2).
+outline_predicate(item_under/2).
+outline_predicate(item_link/3).
+outline_predicate(item_tag/2).
 
 entity_name(E, Name) :-
     fact_ref(_, F, _), compound(F), F =.. [P, E | _], atom(E),

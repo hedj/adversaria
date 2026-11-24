@@ -90,20 +90,28 @@ handle(atom, Req, Body, Out) :-
     (   string(Name0) -> atom_string(Name, Name0) ; throw(protocol_error(atom_needs_string)) ),
     reply_atom(Out, Req, Name).
 
-%   Store a fact the memex states, by its entry's number.
+%   Store a fact the memex states, by its entry's number (an outline
+%   fact's is its item's).
 store_fact(Fact, Seq) :-
     fact_seq(Fact, Seq),
     declare(Fact),
     assertz(user:Fact, Ref),
-    assertz(fact_ref(Seq, Fact, Ref)).
+    ref_of(Fact, Seq, Fact, Ref, Kept),
+    assertz(Kept).
 
 %   Erase a fact the memex stated, by its entry's number.
 erase_fact(Fact, Seq) :-
     fact_seq(Fact, Seq),
-    (   fact_ref(Seq, F, Ref), F =@= Fact
-    ->  erase(Ref), retract(fact_ref(Seq, F, Ref))
+    ref_of(Fact, Seq, F, Ref, Kept),
+    (   call(Kept), F =@= Fact
+    ->  erase(Ref), retract(Kept)
     ;   throw(protocol_error(no_such_fact(Seq)))
     ).
+
+%   Where a fact's clause is kept, by its entry's number: an outline
+%   fact's in outline_ref/3, any other's in fact_ref/3 (dataflow.pl).
+ref_of(Fact, Seq, F, Ref, outline_ref(Seq, F, Ref)) :- outline_goal(Fact), !.
+ref_of(_, Seq, F, Ref, fact_ref(Seq, F, Ref)).
 
 %   An atom's number, numbered now if it is new, sent to the memex.
 reply_atom(Out, Req, Name) :-
@@ -111,7 +119,8 @@ reply_atom(Out, Req, Name) :-
     atom_is(Out, Req, Name, No).
 
 %!  memex_fact(?Seq, ?Fact) is nondet.
-%   The facts the memex added, in the order it added them.
+%   The facts the memex added, in the order it added them, but the
+%   outline's, which are in outline_ref/3.
 memex_fact(Seq, Fact) :- fact_ref(Seq, Fact, _).
 
 fact_seq(Fact, Seq) :-
@@ -122,10 +131,13 @@ fact_seq(Fact, Seq) :-
 %   A fact may be stored if it is a plain fact of the user's own: not a
 %   clause (Head :- Body would be a rule, run when Head is called), not
 %   module-qualified, and not of a predicate this server, a library or the
-%   system defines (fact_ref/3, wd/3, append/3, ...). node_def/2 is the one
-%   predicate of the server's that the memex writes: definitions arrive as
-%   facts, and dataflow.pl's vet/1 decides what they may call.
+%   system defines (fact_ref/3, wd/3, append/3, ...). The memex writes two
+%   kinds of the server's own: node_def/2, as definitions arrive as facts,
+%   and dataflow.pl's vet/1 decides what they may call; and the outline's
+%   predicates, which dataflow.pl declares so that a goal may read them
+%   before any is stated.
 storable(F) :- F = node_def(_, _), !.
+storable(F) :- outline_goal(F), !.
 storable(F) :- functor(F, N, A), memberchk(N/A, [(:-)/2, (:-)/1, (?-)/1, (-->)/2, (:)/2]), !, fail.
 storable(F) :- functor(F, N, A), server_predicate(N/A), !, fail.
 storable(F) :-
