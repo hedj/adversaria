@@ -14,7 +14,7 @@ word, or the sentence with <> where parsing failed); Repair is APE's
 advice.
 */
 
-:- module(ace, [ace_lexicon/2, ace_parse/2, ace_drs/4, ace_check/2, ace_next/2]).
+:- module(ace, [ace_lexicon/2, ace_lexicon_change/3, ace_parse/2, ace_drs/4, ace_check/2, ace_next/2]).
 
 %   APE's files declare no encoding, and one holds UTF-8 in a comment.
 :- set_prolog_flag(encoding, utf8).
@@ -48,10 +48,34 @@ advice.
 %   word left out. Throws ace_lexicon(Messages) if APE refuses any entry.
 %   APE keeps lexicon messages until they are cleared, and a parse would
 %   report them as its own, so they are cleared here.
-ace_lexicon(Entries, Told) :-
-    must_be(list, Entries),
-    partition(content_entry, Entries, Kept, Skipped),
+%   An entry's words may come as strings, made atoms here: the memex
+%   sends them so, as giving each atom a number first takes a message to
+%   and fro (10,000 names took 2.1 s; as strings, 0.2 s).
+ace_lexicon(Entries0, Told) :-
+    must_be(list, Entries0),
     discard_ulex,
+    maplist(entry_atoms, Entries0, Entries),
+    add_entries(Entries, Told).
+
+%!  ace_lexicon_change(+Removed:list, +Added:list, -Told:list) is det.
+%   Change the user lexicon: take out the entries removed, then put in
+%   those added, as ace_lexicon/2 puts them in. A notebook of thousands
+%   of names sends its lexicon in parts, as a message holds at most
+%   65,535 words, and after that only what changed. Throws
+%   ace_lexicon(Messages), with the user lexicon empty, if APE refuses an
+%   entry added.
+ace_lexicon_change(Removed0, Added0, Told) :-
+    must_be(list, Removed0),
+    must_be(list, Added0),
+    maplist(entry_atoms, Removed0, Removed),
+    forall(( member(E, Removed), compound(E) ), retractall(ulex:E)),
+    maplist(entry_atoms, Added0, Added),
+    add_entries(Added, Told).
+
+%   Put entries in the user lexicon, but those whose word is a function
+%   word, which Told warns of with APE's own warnings.
+add_entries(Entries, Told) :-
+    partition(content_entry, Entries, Kept, Skipped),
     clear_messages,
     % APE leaves a choice point when a word is defined twice.
     once(add_lexicon_entries(Kept)),
@@ -69,6 +93,17 @@ ace_lexicon(Entries, Told) :-
 left_out(Entry, message(warning, lexicon, 0, 0, Word, "A function word of ACE: left out of the lexicon.")) :-
     arg(1, Entry, W),
     text(W, Word).
+
+%   An entry with each of its strings an atom.
+entry_atoms(Entry0, Entry) :-
+    (   compound(Entry0)
+    ->  Entry0 =.. [Kind|Args0],
+        maplist(string_atom, Args0, Args),
+        Entry =.. [Kind|Args]
+    ;   Entry = Entry0
+    ).
+
+string_atom(S, A) :- ( string(S) -> atom_string(A, S) ; A = S ).
 
 %   An entry whose word is not a function word of ACE.
 content_entry(Entry) :-

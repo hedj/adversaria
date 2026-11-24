@@ -35,6 +35,30 @@ test(a_word_from_the_notebook_makes_a_sentence_ace) :-
     ace_parse("The date of buran_flight is 1988.", parsed(P, _, _)),
     assertion(P == "A date of buran_flight is 1988.").
 
+test(an_entry_whose_words_are_strings_is_an_entry_of_atoms) :-
+    % Catches a word sent as a string kept as a string: APE's lexicon
+    % matches atoms, so the name would not be found.
+    ace_lexicon([pn_sg("buran_flight", "buran_flight", "neutr")], []),
+    ace_parse("The date of buran_flight is 1988.", parsed(P, _, _)),
+    assertion(P == "A date of buran_flight is 1988.").
+
+test(a_change_takes_out_the_entries_removed_and_puts_in_those_added) :-
+    % Catches an entry removed but still found, or one added but not.
+    ace_lexicon([pn_sg(buran_flight, buran_flight, neutr)], []),
+    ace_lexicon_change([pn_sg("buran_flight", "buran_flight", "neutr")],
+                       [pn_sg("energia_flight", "energia_flight", "neutr")], []),
+    ace_parse("The date of buran_flight is 1988.", not_ace(_)),
+    ace_parse("The date of energia_flight is 1987.", parsed(_, _, _)).
+
+test(a_change_that_adds_a_malformed_entry_empties_the_lexicon,
+     [throws(ace_lexicon([message(error, lexicon, 0, 0, _, _)|_]))]) :-
+    % Catches a refused change that leaves the lexicon half changed: the
+    % memex then sends it whole again.
+    ace_lexicon([pn_sg(buran_flight, buran_flight, neutr)], []),
+    catch(ace_lexicon_change([], [pn_sg(energia)], _), E, true),
+    ace_parse("The date of buran_flight is 1988.", not_ace(_)),
+    throw(E).
+
 test(a_new_lexicon_replaces_the_last) :-
     % Catches entries kept from a lexicon set before.
     ace_lexicon([pn_sg(buran_flight, buran_flight, neutr)], []),

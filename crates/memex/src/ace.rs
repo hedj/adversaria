@@ -11,12 +11,13 @@
 use crate::prolog::{Error, Prolog, prolog_file};
 use crate::reason::{list, make_list, parts};
 use format::terms::Term;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-/// The parser: its server, and the user lexicon it holds.
+/// The parser: its server, and the user lexicon it holds; none when that
+/// is not known, after a change that failed.
 pub struct Ace {
     p: Prolog,
-    lexicon: Option<Vec<Term>>,
+    lexicon: Option<HashSet<Term>>,
 }
 
 /// What APE made of a text: its paraphrase and logical form (APE's DRS)
@@ -160,22 +161,59 @@ impl Ace {
             return Err(Error::Server(NO_APE.into()));
         }
         let p = Prolog::start_with(&prolog_file("ace_server.pl"))?;
-        Ok(Ace { p, lexicon: None })
+        let lexicon = Some(HashSet::new());
+        Ok(Ace { p, lexicon })
     }
 
-    /// Make the user lexicon these entries, unless it is already; the
-    /// messages APE gave about them (a word defined twice, say).
+    /// Make the user lexicon these entries, by what changed since it was
+    /// last made; the messages APE gave about those added (a word defined
+    /// twice, say). A lexicon of thousands of names is sent once, and
+    /// then only what changed.
     pub fn set_lexicon(&mut self, entries: Vec<Term>) -> Result<Vec<Message>, Error> {
-        if self.lexicon.as_ref() == Some(&entries) {
-            return Ok(vec![]);
+        let mut held = match self.lexicon.take() {
+            Some(held) => held,
+            None => self.emptied_lexicon()?,
+        };
+        let (removed, added) = changes(&held, &entries);
+        let told = self.send_changes(&removed, &added)?;
+        for e in &removed {
+            held.remove(e);
         }
+        held.extend(added);
+        self.lexicon = Some(held);
+        Ok(told)
+    }
+
+    /// The user lexicon emptied, so that what APE holds is known again.
+    fn emptied_lexicon(&mut self) -> Result<HashSet<Term>, Error> {
+        let empty = call("ace_lexicon", vec![make_list(vec![]), Term::Var(0)]);
+        self.only_answer(&empty)?;
+        Ok(HashSet::new())
+    }
+
+    /// Take out the entries removed and put in those added, in parts that
+    /// each fit a message; APE's messages about those added.
+    fn send_changes(&mut self, removed: &[Term], added: &[Term]) -> Result<Vec<Message>, Error> {
+        let mut told = Vec::new();
+        for part in in_parts(removed) {
+            told.extend(self.change(part, &[])?);
+        }
+        for part in in_parts(added) {
+            told.extend(self.change(&[], part)?);
+        }
+        Ok(told)
+    }
+
+    /// One change of the user lexicon (ace_lexicon_change/3), its words
+    /// as strings, which the server makes atoms: an atom new to this end
+    /// would first take a message to and fro, 0.2 ms each.
+    fn change(&mut self, removed: &[Term], added: &[Term]) -> Result<Vec<Message>, Error> {
+        let sent = |es: &[Term]| make_list(es.iter().map(strung).collect());
         let goal = call(
-            "ace_lexicon",
-            vec![make_list(entries.clone()), Term::Var(0)],
+            "ace_lexicon_change",
+            vec![sent(removed), sent(added), Term::Var(0)],
         );
-        let told = self.only_answer(&goal)?;
-        self.lexicon = Some(entries);
-        messages(&told)
+        messages(&self.only_answer(&goal)?)
     }
 
     /// Whether its server is dead (Prolog::is_dead).
@@ -238,6 +276,64 @@ impl Ace {
             .and_then(|v| v.into_iter().next());
         value.ok_or_else(|| Error::Server(format!("APE gave no answer to {goal:?}")))
     }
+}
+
+/// The entries held and not wanted, and those wanted and not held, in the
+/// order wanted.
+fn changes(held: &HashSet<Term>, wanted: &[Term]) -> (Vec<Term>, Vec<Term>) {
+    let wanted_set: HashSet<&Term> = wanted.iter().collect();
+    let removed = held.iter().filter(|e| !wanted_set.contains(e));
+    let added = wanted.iter().filter(|e| !held.contains(*e));
+    (removed.cloned().collect(), added.cloned().collect())
+}
+
+/// The most cells a part of a lexicon change holds: a message holds at
+/// most 65,535 words, and a part is sent with little else.
+const PART: usize = 16_000;
+
+/// Entries in parts of at most PART cells each, as sent. An entry larger
+/// than a part is a part of its own.
+fn in_parts(mut entries: &[Term]) -> Vec<&[Term]> {
+    let mut parts = Vec::new();
+    while !entries.is_empty() {
+        let (part, rest) = entries.split_at(fitting(entries));
+        parts.push(part);
+        entries = rest;
+    }
+    parts
+}
+
+/// How many entries, from the first, fit in a part with their list
+/// cells: at least one.
+fn fitting(entries: &[Term]) -> usize {
+    let mut size = 0;
+    let mut fits = |e: &&Term| {
+        size += cells_of(e) + 1;
+        size <= PART
+    };
+    entries.iter().take_while(|e| fits(e)).count().max(1)
+}
+
+/// The cells an entry takes, its names sent as strings: a string is a
+/// cell, then a byte of kind and its bytes, four to a word.
+fn cells_of(t: &Term) -> usize {
+    match t {
+        Term::Atom(s) | Term::Str(s) => 1 + (s.len() + 4) / 4,
+        Term::Compound(_, args) => 1 + args.iter().map(cells_of).sum::<usize>(),
+        _ => 1,
+    }
+}
+
+/// An entry with its names as strings.
+fn strung(entry: &Term) -> Term {
+    let Term::Compound(kind, args) = entry else {
+        return entry.clone();
+    };
+    let string = |a: &Term| match a {
+        Term::Atom(s) => Term::Str(s.clone()),
+        a => a.clone(),
+    };
+    Term::Compound(kind.clone(), args.iter().map(string).collect())
 }
 
 const NO_APE: &str = "APE is not installed: APE_HOME is not set (the Nix shell sets it)";
@@ -667,6 +763,29 @@ fn is_word(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A proper name of so many letters.
+    fn name_of_length(n: usize) -> Term {
+        call("pn_sg", vec![atom(&"x".repeat(n)), atom("neutr")])
+    }
+
+    #[test]
+    fn an_entry_larger_than_a_part_is_sent_alone() {
+        // Catches a loop for ever on an entry that no part could take.
+        let entries = [4 * PART, 1, 1].map(name_of_length);
+        let parts = in_parts(&entries);
+        assert_eq!(parts, vec![&entries[..1], &entries[1..]]);
+    }
+
+    #[test]
+    fn a_lexicon_change_is_sent_in_parts_that_each_fit() {
+        // Catches a part over the size a message holds.
+        let many: Vec<Term> = (0..5_000).map(|_| name_of_length(8)).collect();
+        let size = |p: &&[Term]| p.iter().map(|e| cells_of(e) + 1).sum::<usize>();
+        let sizes: Vec<usize> = in_parts(&many).iter().map(size).collect();
+        let fit = sizes.iter().all(|n| *n <= PART);
+        assert!(sizes.len() > 1 && fit, "{sizes:?}");
+    }
 
     #[test]
     fn each_kind_of_word_has_its_article() {

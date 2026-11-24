@@ -6,6 +6,7 @@
 mod support;
 
 use format::terms::Term;
+use memex::ace::Ace;
 use memex::app::{App, Key};
 use ratatui::style::Color;
 use support::Room;
@@ -33,6 +34,50 @@ fn facts_of(app: &App, item: u64) -> Vec<String> {
 /// Whether an item states the fact of an entry.
 fn states(app: &App, item: u64, seq: u64) -> bool {
     app.notebook.outline.states(item, seq)
+}
+
+#[test]
+fn a_lexicon_of_twenty_thousand_names_is_sent_in_parts_then_by_what_changed() {
+    // Catches the lexicon sent as one message, which holds at most 65,535
+    // words (13,000 names did not fit), or a name kept once removed.
+    let mut ace = Ace::start().unwrap();
+    let many: Vec<Term> = (0..20_000)
+        .map(|i| proper_name(&format!("event_{i}")))
+        .collect();
+    let text = "The date of event_19999 is 1988.";
+    assert!(is_ace(&mut ace, &many, text));
+    assert!(!is_ace(&mut ace, &many[..19_999], text));
+}
+
+#[test]
+fn after_ape_refuses_an_entry_the_lexicon_is_sent_whole_again() {
+    // Catches the lexicon taken as still held after APE refused a change,
+    // which empties it: the same lexicon set again was not sent.
+    let mut ace = Ace::start().unwrap();
+    let flight = [proper_name("buran_flight")];
+    let malformed = Term::Compound("pn_sg".into(), vec![Term::Atom("energia".into())]);
+    let text = "The date of buran_flight is 1988.";
+    assert!(is_ace(&mut ace, &flight, text));
+    assert!(ace.set_lexicon(vec![flight[0].clone(), malformed]).is_err());
+    assert!(is_ace(&mut ace, &flight, text));
+}
+
+/// An entity as a proper name for itself, as the notebook's lexicon
+/// gives it.
+fn proper_name(name: &str) -> Term {
+    let n = Term::Atom(name.into());
+    Term::Compound(
+        "pn_sg".into(),
+        vec![n.clone(), n, Term::Atom("neutr".into())],
+    )
+}
+
+/// Whether a text is ACE with this user lexicon.
+fn is_ace(ace: &mut Ace, lexicon: &[Term], text: &str) -> bool {
+    ace.parse_with(lexicon.to_vec(), text)
+        .unwrap()
+        .ace
+        .is_some()
 }
 
 #[test]
