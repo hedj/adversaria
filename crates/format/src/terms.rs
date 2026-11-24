@@ -41,6 +41,24 @@ impl PartialEq for Term {
     }
 }
 
+/// Equality compares floats by bit pattern, so it is reflexive.
+impl Eq for Term {}
+
+/// Hashed as it is compared: floats by bit pattern.
+impl std::hash::Hash for Term {
+    fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
+        use Term::*;
+        std::mem::discriminant(self).hash(h);
+        match self {
+            Int(n) => n.hash(h),
+            Float(x) => x.to_bits().hash(h),
+            Str(s) | Atom(s) => s.hash(h),
+            Var(v) => v.hash(h),
+            Compound(f, args) => (f, args).hash(h),
+        }
+    }
+}
+
 /// A value that is not a term in the journal's encoding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TermError(pub String);
@@ -205,6 +223,25 @@ mod tests {
     use super::*;
     use crate::jcs::dumps;
     use crate::jcs::tests::Rng;
+
+    #[test]
+    fn equal_terms_hash_alike_and_signed_zeros_differ() {
+        // Catches a hash that disagrees with equality, which would let a
+        // set of facts hold one twice or lose one, or that takes 0.0 for
+        // -0.0, which Prolog tells apart.
+        use std::collections::HashSet;
+        let t = |x: f64| Term::Compound("p".into(), vec![Term::Float(x), Term::Str("a".into())]);
+        let set: HashSet<Term> = [
+            t(0.0),
+            t(0.0),
+            t(-0.0),
+            Term::Atom("a".into()),
+            Term::Str("a".into()),
+        ]
+        .into();
+        assert_eq!(set.len(), 4, "{set:?}");
+        assert!(set.contains(&t(-0.0)) && set.contains(&Term::Str("a".into())));
+    }
 
     /// Encode, write canonically, read back as a reader of the journal would.
     fn through_journal(t: &Term) -> Term {

@@ -12,7 +12,7 @@ use std::collections::HashSet;
 
 pub struct Engine {
     p: Prolog,
-    loaded: Vec<(u64, Term)>,
+    loaded: HashSet<(u64, Term)>,
     /// The import entry whose Wikidata subset is loaded.
     wikidata: Option<u64>,
 }
@@ -35,23 +35,11 @@ pub fn variables(t: &Term) -> Vec<u64> {
     out
 }
 
-/// A fact by what it is and where it came from, to compare facts without
-/// scanning a list: a world with many facts syncs in linear time.
-fn key((seq, fact): &(u64, Term)) -> (u64, String) {
-    (*seq, format!("{fact:?}"))
-}
-
-/// The facts that are not among some others.
-fn absent<'a>(facts: &'a [(u64, Term)], others: &[(u64, Term)]) -> Vec<&'a (u64, Term)> {
-    let keys: HashSet<(u64, String)> = others.iter().map(key).collect();
-    facts.iter().filter(|f| !keys.contains(&key(f))).collect()
-}
-
 impl Engine {
     pub fn start() -> Result<Engine, Error> {
         Ok(Engine {
             p: Prolog::start()?,
-            loaded: vec![],
+            loaded: HashSet::new(),
             wikidata: None,
         })
     }
@@ -65,14 +53,17 @@ impl Engine {
     /// recorded as it is made, so a fact the server refuses leaves the
     /// record true of what the server holds, and a retry repeats nothing.
     pub fn sync(&mut self, facts: &[(u64, Term)]) -> Result<(), Error> {
-        let gone: Vec<(u64, Term)> = absent(&self.loaded, facts).into_iter().cloned().collect();
-        for fact in gone {
+        let wanted: HashSet<&(u64, Term)> = facts.iter().collect();
+        let gone = self.loaded.iter().filter(|f| !wanted.contains(f));
+        for fact in gone.cloned().collect::<Vec<_>>() {
             self.p.retract_fact(&fact.1, fact.0)?;
-            self.loaded.retain(|f| key(f) != key(&fact));
+            self.loaded.remove(&fact);
         }
-        for fact in absent(facts, &self.loaded) {
-            self.p.assert_fact(&fact.1, fact.0)?;
-            self.loaded.push(fact.clone());
+        for fact in facts {
+            if !self.loaded.contains(fact) {
+                self.p.assert_fact(&fact.1, fact.0)?;
+                self.loaded.insert(fact.clone());
+            }
         }
         Ok(())
     }
@@ -297,6 +288,22 @@ fn rule_forbidden(how: &Term, what: &Term) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_sync_leaves_the_engine_holding_these_facts_each_once() {
+        // Catches a fact left asserted after the world drops it, one not
+        // asserted, or one asserted twice when the world lists it twice.
+        let mut engine = Engine::start().unwrap();
+        let fact = |seq: u64, a: &str| (seq, c("p", vec![Term::Atom(a.into())]));
+        engine.sync(&[fact(1, "a"), fact(2, "b")]).unwrap();
+        engine
+            .sync(&[fact(2, "b"), fact(3, "c"), fact(3, "c")])
+            .unwrap();
+        let answers = engine.all(&c("p", vec![Term::Var(0)])).unwrap();
+        let mut held: Vec<String> = answers.iter().map(|a| show(&a[0])).collect();
+        held.sort();
+        assert_eq!(held, ["b", "c"]);
+    }
 
     /// What the engine says of a definition or a rule, read from text.
     fn refusal(check: impl Fn(&mut Engine, Term) -> Result<(), String>, text: &str) -> String {
