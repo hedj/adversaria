@@ -103,6 +103,34 @@ test(message_round_trip) :-
     assertion(Type-Req == answer-4000000000),
     assertion(Body2 == Body).
 
+test(strings_of_ascii_and_of_other_letters_round_trip) :-
+    % Catches a string read byte for letter where its bytes are not all
+    % ASCII, or an ASCII one changed on its way.
+    Strings = ["plain ASCII, with \x7f\ and a NUL \x0\", "é", "東京", "a\U0001F600\b"],
+    terms_cells(Strings, Cells, _, _),
+    cells_terms(Cells, Back, []),
+    assertion(Back == Strings).
+
+test(a_string_not_utf8_is_refused, [forall(member(Bytes, [[0xff], [0x41, 0xc3]])), throws(protocol_error(bad_utf8))]) :-
+    % Catches bytes that are not UTF-8 taken as letters. (An overlong
+    % form, such as C0 80, library(utf8) still accepts.)
+    blob_cells([0's|Bytes], Cells),
+    cells_terms(Cells, _, _).
+
+%   A string blob's cells for these bytes, its kind first.
+blob_cells(Bytes, [Head|Words]) :-
+    length(Bytes, N),
+    Head is (4 << 29) \/ N,
+    Pad is (4 - N mod 4) mod 4,
+    length(Zeros, Pad), maplist(=(0), Zeros),
+    append(Bytes, Zeros, Padded),
+    bytes_words(Padded, Words).
+
+bytes_words([], []).
+bytes_words([A,B,C,D|T], [W|Ws]) :-
+    W is (A << 24) \/ (B << 16) \/ (C << 8) \/ D,
+    bytes_words(T, Ws).
+
 test(malformed, [forall(member(Cells, [[], [0x60000001], [0x80000005, 0x73000000]])), throws(protocol_error(_))]) :-
     % Catches a truncated term, an unknown tag, or a short blob accepted.
     cells_terms(Cells, [_|_], _).

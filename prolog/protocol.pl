@@ -341,6 +341,11 @@ decode(blob, N, R0, R, A, A, T) :-
     Bytes = [Kind|Data],
     blob_term(Kind, Data, T).
 
+%   Bytes that are all ASCII are their own UTF-8 codes, read with no
+%   grammar: most strings are, and the grammar takes a call per byte.
+ascii([]).
+ascii([B|Bs]) :- B < 128, ascii(Bs).
+
 words_bytes([], []).
 words_bytes([W|Ws], [A,B,C,D|T]) :-
     A is (W >> 24) /\ 0xff, B is (W >> 16) /\ 0xff,
@@ -353,7 +358,10 @@ decode_args([X|Xs], R0, R, A0, A) :-
     decode_args(Xs, R1, R, A1, A).
 
 blob_term(0's, Bytes, S) :- !,
-    (   phrase(utf8_codes(Codes), Bytes) -> true ; throw(protocol_error(bad_utf8)) ),
+    (   ascii(Bytes) -> Codes = Bytes
+    ;   phrase(utf8_codes(Codes), Bytes) -> true
+    ;   throw(protocol_error(bad_utf8))
+    ),
     string_codes(S, Codes).
 blob_term(0'i, Codes, I) :- !,
     (   catch(number_codes(I, Codes), _, fail), integer(I) -> true
