@@ -97,6 +97,9 @@ pub struct Item {
     pub parent: u64,
     pub children: Vec<u64>,
     pub spans: Vec<Span>,
+    /// The characters its spans name, joined: set with the spans, since
+    /// what an entry added never changes.
+    text: String,
     pub block: Block,
 }
 
@@ -335,12 +338,13 @@ impl<'a> Body<'a> {
 
 impl Item {
     /// A new item under another, with the style and origin its entry gives.
-    fn new(id: u64, parent: u64, spans: Vec<Span>, block: Block) -> Item {
+    fn new(id: u64, parent: u64, spans: Vec<Span>, text: String, block: Block) -> Item {
         Item {
             id,
             parent,
             children: vec![],
             spans,
+            text,
             block,
         }
     }
@@ -438,7 +442,17 @@ impl Outline {
     }
 
     pub fn text(&self, id: u64) -> String {
-        self.runs(id).into_iter().map(|r| r.text).collect()
+        self.text_ref(id).to_string()
+    }
+
+    /// The text of an item, borrowed: none for no item.
+    pub fn text_ref(&self, id: u64) -> &str {
+        self.items.get(&id).map_or("", |i| &i.text)
+    }
+
+    /// The characters some spans name, joined.
+    fn joined(&self, spans: &[Span]) -> String {
+        spans.iter().map(|s| self.text_of(s)).collect()
     }
 
     /// Spans covering characters [from, to) of an item's text.
@@ -594,8 +608,9 @@ impl Outline {
         if !self.spans_valid(&spans) {
             return None;
         }
-        self.items
-            .insert(seq, Item::new(seq, under, spans, b.block()));
+        let text = self.joined(&spans);
+        let item = Item::new(seq, under, spans, text, b.block());
+        self.items.insert(seq, item);
         self.place(seq, under, b.num("after"));
         Some(())
     }
@@ -604,7 +619,9 @@ impl Outline {
         let id = self.item_in(b)?;
         self.record_text(seq, id, b);
         let spans = b.spans(seq).filter(|s| self.spans_valid(s))?;
-        self.items.get_mut(&id)?.spans = spans;
+        let text = self.joined(&spans);
+        let item = self.items.get_mut(&id)?;
+        (item.spans, item.text) = (spans, text);
         Some(())
     }
 
