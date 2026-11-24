@@ -184,21 +184,14 @@ impl Atoms {
     /// compound's name before its arguments'. A stack, not recursion, so a
     /// long list does not overflow it.
     pub fn missing(&self, terms: &[Term]) -> Vec<String> {
-        let (mut out, mut todo): (Vec<String>, Vec<&Term>) = (vec![], terms.iter().rev().collect());
-        while let Some(t) = todo.pop() {
-            let name = match t {
-                Term::Atom(n) => n,
-                Term::Compound(n, args) => {
-                    todo.extend(args.iter().rev());
-                    n
-                }
-                _ => continue,
-            };
-            if self.number(name).is_none() && !out.contains(name) {
-                out.push(name.clone());
-            }
-        }
-        out
+        let mut seen = std::collections::HashSet::new();
+        let unknown = names_in(terms)
+            .into_iter()
+            .filter(|n| self.number(n).is_none());
+        unknown
+            .filter(|n| seen.insert(*n))
+            .map(String::from)
+            .collect()
     }
 }
 
@@ -541,6 +534,24 @@ impl Renaming {
     fn all_match(&mut self, xs: &[Term], ys: &[Term]) -> bool {
         xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.matches(x, y))
     }
+}
+
+/// The names of the atoms and functors in some terms, in order: a
+/// compound's name before its arguments'. A stack, not recursion, so a
+/// long list does not overflow it.
+fn names_in(terms: &[Term]) -> Vec<&str> {
+    let (mut out, mut todo): (Vec<&str>, Vec<&Term>) = (vec![], terms.iter().rev().collect());
+    while let Some(t) = todo.pop() {
+        match t {
+            Term::Atom(n) => out.push(n),
+            Term::Compound(n, args) => {
+                todo.extend(args.iter().rev());
+                out.push(n);
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 #[cfg(test)]
