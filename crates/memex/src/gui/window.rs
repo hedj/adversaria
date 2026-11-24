@@ -70,12 +70,10 @@ impl WindowState {
     }
 }
 
-/// The screen as laid out: its cells, where clicks land, and where the
-/// journal was when the memex last reasoned.
+/// The screen as laid out: its cells, and where clicks land.
 struct Screen {
     cells: Terminal<Cells>,
     mouse: Mouse,
-    reasoned_at: Option<(u64, usize)>,
     /// A cell's size in points, as last measured.
     cell_size: Vec2,
 }
@@ -102,7 +100,6 @@ impl Screen {
         Screen {
             cells: Terminal::new(Cells::new(80, 24)).expect("cells in memory"),
             mouse: Mouse::default(),
-            reasoned_at: None,
             cell_size: Vec2::new(9.0, 18.0),
         }
     }
@@ -218,19 +215,6 @@ impl Memex {
         el.exit();
     }
 
-    /// Reason again when the journal has moved: constraints and derived
-    /// values are computed from it, never stored in it.
-    fn reason_if_moved(&mut self) {
-        let place = (self.app.notebook.tip, self.app.journal().entries().len());
-        if self.screen.reasoned_at == Some(place) {
-            return;
-        }
-        if let Err(e) = self.app.evaluate() {
-            self.app.session.message = e;
-        }
-        self.screen.reasoned_at = Some(place);
-    }
-
     /// A key to the app; the window closes when the app quits.
     fn key(&mut self, el: &ActiveEventLoop, event: &winit::event::KeyEvent) {
         if let Some(e) = self.event_of(event) {
@@ -310,7 +294,7 @@ impl Memex {
     /// Lay the screen out in cells as many as the window holds, and paint
     /// them.
     fn draw(&mut self) {
-        self.reason_if_moved();
+        self.app.reason_if_moved();
         let Some(g) = self.window.gfx_mut() else {
             return;
         };

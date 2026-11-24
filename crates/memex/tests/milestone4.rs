@@ -735,6 +735,27 @@ fn an_observation_names_each_finding_by_its_constraint_and_facts() {
     assert_eq!(first["world"], "actual");
 }
 
+#[test]
+fn what_reasoning_records_of_its_own_is_not_reasoned_over_again() {
+    // Catches where the journal was taken before reasoning ran: what
+    // reasoning recorded of its own, what it showed, moved the journal,
+    // and the window reasoned over the same world again at its next frame.
+    let mut r = Room::new("reasoned-once");
+    r.items(&[
+        "The date of Buran-flight is 1988.",
+        "The date of Buran-flight is 1989.",
+        "Nothing has more than 1 date.",
+    ]);
+    r.app.idle();
+    let observed = r.count("view");
+    assert!(r.app.reason_if_moved(), "the items moved the journal");
+    assert!(
+        r.count("view") > observed,
+        "reasoning recorded what it showed"
+    );
+    assert!(!r.app.reason_if_moved());
+}
+
 /// Two dates for one flight and a rule against two, read: the violation
 /// shown and recorded.
 fn two_dates(name: &str) -> Room {

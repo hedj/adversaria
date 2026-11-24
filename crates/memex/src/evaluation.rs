@@ -13,8 +13,35 @@ use std::path::PathBuf;
 
 impl App {
     /// Reason over the worlds shown: sync each world's facts into its engine,
-    /// and read its constraints and derived values.
+    /// and read its constraints and derived values. Where the journal is
+    /// after it is noted, failed or not, since what reasoning records of
+    /// its own (what it showed and offered) moves no world.
     pub fn evaluate(&mut self) -> Result<(), String> {
+        let done = self.reason_over_worlds();
+        self.reason.at = Some(self.journal_at());
+        done
+    }
+
+    /// Reason again if the journal moved since reasoning last ran, as the
+    /// window does before it draws: constraints and derived values are
+    /// computed from the journal, never stored in it. A failure becomes
+    /// the message. Whether it reasoned.
+    pub fn reason_if_moved(&mut self) -> bool {
+        if self.reason.at == Some(self.journal_at()) {
+            return false;
+        }
+        if let Err(e) = self.evaluate() {
+            self.session.message = e;
+        }
+        true
+    }
+
+    /// Where the journal is: its tip and its length.
+    fn journal_at(&self) -> (u64, usize) {
+        (self.notebook.tip, self.notebook.entry_count())
+    }
+
+    fn reason_over_worlds(&mut self) -> Result<(), String> {
         self.evaluate_worlds()?;
         self.refresh_suggestions()?;
         self.after_evaluation();

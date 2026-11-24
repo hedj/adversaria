@@ -57,6 +57,9 @@ pub struct Reasoning {
     pub(crate) last_shown: Vec<Shown>,
     /// The parser of controlled English, started when first needed.
     ace: Option<Ace>,
+    /// Where the journal was when reasoning last ran: its tip and its
+    /// length.
+    pub(crate) at: Option<(u64, usize)>,
 }
 
 impl Reasoning {
