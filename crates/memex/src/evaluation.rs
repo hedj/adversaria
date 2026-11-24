@@ -4,12 +4,12 @@
 
 use crate::app::{App, PaneKind};
 use crate::engine::{Engine, told};
-use crate::outline::Outline;
+use crate::notebook::Notebook;
 use crate::reason::{Suggestion, WorldEval};
 use crate::world::World;
 use format::terms::Term;
 use serde_json::json;
-use std::path::PathBuf;
+use std::borrow::Cow;
 
 impl App {
     /// Reason over the worlds shown: sync each world's facts into its engine,
@@ -63,32 +63,8 @@ impl App {
 
     /// The world at a head, evaluated in engine k.
     fn evaluate_world(&mut self, k: usize, head: u64) -> Result<WorldEval, String> {
-        let world = self.world(k, head)?;
+        let world = world_of(&self.notebook, k, head)?;
         self.reason.evaluate(k, world)
-    }
-
-    fn world(&self, k: usize, head: u64) -> Result<World, String> {
-        let (outline, import) = self.world_parts(k, head);
-        let facts = self.notebook.facts_in(head, &outline)?;
-        Ok(World {
-            facts,
-            outline,
-            import,
-            at: self.notebook.entry_count(),
-        })
-    }
-
-    fn world_parts(&self, k: usize, head: u64) -> (Outline, Option<(u64, PathBuf)>) {
-        (self.world_outline(k, head), self.notebook.import_on(head))
-    }
-
-    /// The outline of the world at a head: the current one's is kept.
-    fn world_outline(&self, k: usize, head: u64) -> Outline {
-        if k == 0 {
-            self.notebook.outline.clone()
-        } else {
-            self.notebook.outline_at(head)
-        }
     }
 
     // Suggestions.
@@ -231,4 +207,22 @@ fn adoption_preview(raised: &[String]) -> String {
         return "adopting it raises no violation".into();
     }
     format!("adopting it would raise {}", raised.join(", "))
+}
+
+/// The world at a head, for engine k. The current world's (k = 0) outline
+/// is the notebook's own, borrowed; another world's is replayed.
+fn world_of(notebook: &Notebook, k: usize, head: u64) -> Result<World<'_>, String> {
+    let outline = match k {
+        0 => Cow::Borrowed(&notebook.outline),
+        _ => Cow::Owned(notebook.outline_at(head)),
+    };
+    let facts = notebook.facts_in(head, &outline)?;
+    let import = notebook.import_on(head);
+    let at = notebook.entry_count();
+    Ok(World {
+        facts,
+        outline,
+        import,
+        at,
+    })
 }

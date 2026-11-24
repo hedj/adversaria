@@ -131,7 +131,7 @@ impl Reasoning {
     }
 
     /// A world, evaluated in engine k.
-    pub(crate) fn evaluate(&mut self, k: usize, world: World) -> Result<WorldEval, String> {
+    pub(crate) fn evaluate(&mut self, k: usize, world: World<'_>) -> Result<WorldEval, String> {
         world.evaluate(&mut self.engines[k])
     }
 

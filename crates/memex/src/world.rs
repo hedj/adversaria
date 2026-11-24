@@ -5,19 +5,21 @@ use crate::engine::{Engine, told};
 use crate::outline::{Outline, page_key};
 use crate::reason::{ConstraintEval, Nodes, WorldEval, marks};
 use format::terms::Term;
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
-/// A world: the facts stated in it, its outline, the Wikidata subset
-/// imported in it (its entry and blob), and the journal's length.
-pub struct World {
+/// A world: the facts stated in it, its outline (the notebook's own, for
+/// the current world, which is not copied), the Wikidata subset imported in
+/// it (its entry and blob), and the journal's length.
+pub struct World<'a> {
     pub facts: Vec<(u64, Term)>,
-    pub outline: Outline,
+    pub outline: Cow<'a, Outline>,
     pub import: Option<(u64, PathBuf)>,
     pub at: usize,
 }
 
-impl World {
+impl World<'_> {
     /// What reasoning finds in the world, in the engine in `slot`, which is
     /// started only if the world has facts.
     /// A world with neither facts nor items is not read: there is nothing
