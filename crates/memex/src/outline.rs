@@ -176,6 +176,10 @@ pub struct Outline {
     pub names: BTreeMap<String, u64>,
     /// What each item's text was last read as, by the item.
     pub readings: HashMap<u64, Reading>,
+    /// The item whose text's reading wrote an entry, by the entry: a rule
+    /// or a fact read from an item's text holds while the item does
+    /// (Notebook::facts_in), though its entry may not name the item.
+    pub read_by: HashMap<u64, u64>,
 }
 
 /// A run of an item's text, and the item it was written for (its origin).
@@ -483,6 +487,15 @@ impl Outline {
             self.remove_branch(k);
         }
         self.items.remove(&id);
+        self.remove_rules_read(id);
+    }
+
+    /// The rules read from an item removed: their facts no longer hold
+    /// (Notebook::facts_in), so the world evaluates them no more.
+    fn remove_rules_read(&mut self, id: u64) {
+        let read_by = &self.read_by;
+        self.constraints
+            .retain(|seq, _| read_by.get(seq) != Some(&id));
     }
 
     fn spans_valid(&self, spans: &[Span]) -> bool {
@@ -538,7 +551,10 @@ impl Outline {
     /// Record what an item's text was read as.
     fn record_reading(&mut self, b: &Body) -> Option<()> {
         let item = self.item_in(b)?;
-        self.readings.insert(item, reading_of(b)?);
+        let reading = reading_of(b)?;
+        self.read_by
+            .extend(reading.entries.iter().map(|e| (*e, item)));
+        self.readings.insert(item, reading);
         Some(())
     }
 

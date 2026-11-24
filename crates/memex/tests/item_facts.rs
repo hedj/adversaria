@@ -102,3 +102,39 @@ fn a_journal_reopened_reads_a_deleted_item_s_facts_as_gone() {
     let mut again = replayed(&r.dir);
     assert!(!dated(&mut again));
 }
+
+#[test]
+fn a_rule_read_from_an_item_s_text_goes_with_the_item() {
+    // Catches a rule whose entry names no item, only the reading that
+    // wrote it, kept in force after its item is deleted.
+    let mut r = Room::new("item-facts-rule");
+    r.items(&["Nothing has more than 1 date.", "Other"]);
+    let rules = |app: &mut App| {
+        facts(app)
+            .iter()
+            .filter(|f| f.contains("constraint("))
+            .count()
+    };
+    assert_eq!(rules(&mut r.app), 1, "read");
+    r.command("go 1");
+    r.command("delete");
+    assert_eq!(rules(&mut r.app), 0, "deleted");
+    r.command("undo");
+    assert_eq!(rules(&mut r.app), 1, "undone");
+}
+
+#[test]
+fn the_world_evaluates_after_a_view_or_a_derived_value_s_item_is_deleted() {
+    // Catches evaluation refused on a layer or a derived value whose item
+    // is gone, and whose facts therefore no longer hold, as a rule's was.
+    let mut r = Room::new("item-facts-view");
+    r.items(&["chart", "The rent is 1200.", "What is the rent?"]);
+    r.command("go 1");
+    r.command("layer bar(x(C), y(V)) where box(C, V)");
+    facts(&mut r.app);
+    r.command("go 1");
+    r.command("delete");
+    r.command("go 2");
+    r.command("delete");
+    facts(&mut r.app);
+}

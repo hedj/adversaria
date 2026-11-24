@@ -238,7 +238,8 @@ impl Notebook {
 
     /// The facts stated in the world whose head is an entry, by that
     /// world's outline: an entry's facts hold only while each item it
-    /// names (`item`, or a link's `from` and `to`) is in the outline, so
+    /// names (`item`, or a link's `from` and `to`), and the item whose
+    /// text's reading wrote it, is in the outline, so
     /// deleting an item takes its statements out, and undoing the
     /// deletion puts them back.
     pub(crate) fn facts_in(
@@ -251,13 +252,15 @@ impl Notebook {
         Ok(facts.into_iter().filter(stand).collect())
     }
 
-    /// Whether each item an entry names is in an outline.
+    /// Whether each item an entry names, and the item whose reading
+    /// wrote it, if one did, is in an outline.
     fn items_stand(&self, seq: u64, outline: &Outline) -> bool {
         let Some(b) = self.entry(seq).and_then(|e| e.body()) else {
             return true;
         };
-        let mut named = ["item", "from", "to"].iter().filter_map(|k| b[*k].as_u64());
-        named.all(|i| outline.contains(i))
+        let named = ["item", "from", "to"].iter().filter_map(|k| b[*k].as_u64());
+        let mut tied = named.chain(outline.read_by.get(&seq).copied());
+        tied.all(|i| outline.contains(i))
     }
 
     /// The facts of the world at the tip.
