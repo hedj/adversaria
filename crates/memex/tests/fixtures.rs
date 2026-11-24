@@ -1,9 +1,9 @@
-//! The journal format pinned (docs/design.md, The journal format): a
-//! journal the memex wrote at version 1, kept in tests/fixtures, must check
-//! and, migrated, replay to the same outline and facts, whatever the code
-//! becomes. A change that fails these tests changes what a journal
-//! already written means: give it a new version, a migration and a
-//! reason, and keep this fixture.
+//! The journal format pinned (docs/design.md, The journal format): the
+//! journals the memex wrote at version 1 and at version 2, kept in
+//! tests/fixtures, must check and replay (version 1 migrated) to the same
+//! outline and facts, whatever the code becomes. A change that fails
+//! these tests changes what a journal already written means: give it a
+//! new version, a migration and a reason, and keep these fixtures.
 
 mod support;
 
@@ -12,21 +12,28 @@ use memex::app::{App, Key};
 use support::{Room, replayed};
 
 const VERSION1: &str = "tests/fixtures/version1";
+const VERSION2: &str = "tests/fixtures/version2";
+
+/// The items the sessions write: the version-1 session the first seven,
+/// the version-2 session also one that mentions another unlinked, so that
+/// a suggestion is offered.
+const ITEMS: [&str; 8] = [
+    "Buran",
+    "The date of Buran-flight is 1988.",
+    "Talk-notes says that the date of Buran-flight is 1989.",
+    "Nothing has more than 1 date.",
+    "Notes #draft",
+    "See [[Buran]].",
+    "The rent is 1200.",
+    "More on Buran",
+];
 
 /// A session that writes each kind of entry the memex writes: items and
 /// their text, readings with their facts, a claim and its adoption, a
 /// rule, a label, a [[link]], a link by command, a name, a move, a delete
 /// undone and redone, a retraction, a supposition left, a find and jumps.
 fn session(r: &mut Room) {
-    r.items(&[
-        "Buran",
-        "The date of Buran-flight is 1988.",
-        "Talk-notes says that the date of Buran-flight is 1989.",
-        "Nothing has more than 1 date.",
-        "Notes #draft",
-        "See [[Buran]].",
-        "The rent is 1200.",
-    ]);
+    r.items(&ITEMS[..7]);
     r.app.idle();
     for line in [
         "go Talk-notes",
@@ -53,6 +60,62 @@ fn session(r: &mut Room) {
         r.command(line);
     }
     r.app.flush();
+}
+
+/// The version-1 session's steps, reasoned over after each as the window
+/// does, and what version 2 adds: a verdict on the finding the adoption
+/// raises, which goes when the adoption is retracted, and a visit to the
+/// notebook while the inspector shows, which offers the suggestion it
+/// lists.
+fn session2(r: &mut Room) {
+    r.items(&ITEMS);
+    reason(r);
+    for line in [
+        "go Talk-notes",
+        "adopt",
+        "verdict known",
+        "go parent",
+        "go Buran",
+        "name launch",
+        "go Notes",
+        "link 1",
+        "go See",
+        "move after 1",
+        "go The rent",
+        "delete",
+        "undo",
+        "redo",
+        "go Talk-notes",
+        "retract",
+        "suppose the date of Buran-flight is 1990",
+        "dismiss world",
+        "find #draft",
+        "go Buran",
+        "go back",
+    ] {
+        r.command(line);
+        if line == "retract" || line.starts_with("suppose") {
+            r.tap(&[Key::Enter]);
+        }
+        reason(r);
+    }
+}
+
+/// A pause, then reasoning, as the window does once the journal moves.
+fn reason(r: &mut Room) {
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    r.app.flush();
+}
+
+#[test]
+#[ignore = "writes the fixture: run it by hand when version 2 changes, before stage 1"]
+fn write_version2() {
+    let mut r = Room::new("fixture-version2");
+    session2(&mut r);
+    std::fs::create_dir_all(VERSION2).unwrap();
+    let journal = r.dir.join("journal.jsonl");
+    std::fs::copy(journal, format!("{VERSION2}/journal.jsonl")).unwrap();
 }
 
 #[test]
@@ -249,4 +312,64 @@ fn a_version_1_journal_with_a_torn_line_is_kept_as_version_1() {
     drop(App::open(&dir).unwrap());
     assert_eq!(text_of(&dir, "v1/journal.jsonl"), whole, "version 1, whole");
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn the_version_2_journal_checks_at_version_2() {
+    // Catches a change to the record's format that a journal of version
+    // 2 already written no longer passes.
+    let text = text_of(std::path::Path::new(VERSION2), "journal.jsonl");
+    let header = format::record::header(format::record::JOURNAL_FORMAT);
+    assert_eq!(text.lines().next(), Some(header.as_str()));
+    assert_eq!(format::chain::check_journal(&text).unwrap().len(), 73);
+}
+
+#[test]
+fn the_version_2_journal_replays_unmigrated_to_the_same_outline_and_facts() {
+    // Catches a change to what a journal of version 2 means, or one
+    // migrated again.
+    let mut app = replayed(std::path::Path::new(VERSION2));
+    let items = [
+        "1 Buran",
+        "2 See [[Buran]].",
+        "3 The date of Buran-flight is 1988.",
+        "4 Talk-notes says that the date of Buran-flight is 1989.",
+        "5 Nothing has more than 1 date.",
+        "6 Notes #draft",
+        "7 More on Buran",
+    ];
+    assert_eq!(outline(&app), items);
+    let expected = [
+        r#"claims("Talk-notes", date(buran_flight, 1989))"#,
+        "date(buran_flight, 1988)",
+        "link(19, 3)",
+        "link(23, 3)",
+        r#"node_def(41, constraint("Nothing has more than 1 date", [_0, _1, _2], date(_0, _1), date(_0, _2), \==(_1, _2)))"#,
+    ];
+    assert_eq!(facts(&mut app), expected);
+    assert!(!app.journal().dir().join("v1").exists(), "not migrated");
+}
+
+#[test]
+fn the_version_2_journal_holds_each_record_version_2_adds() {
+    // Catches the fixture written again without one of them: the build,
+    // the memex's marks, views written, an offer, a verdict, a reason.
+    let es = entries_of(std::path::Path::new(VERSION2));
+    let bodies: Vec<&serde_json::Value> = es.iter().filter_map(|e| e.body()).collect();
+    let count = |key: &str, value: &str| bodies.iter().filter(|b| b[key] == value).count();
+    let counts = [
+        count("by", "memex"),
+        count("op", "written"),
+        count("op", "offer"),
+    ];
+    assert_eq!(counts, [18, 16, 1]);
+    assert_eq!(count("verdict", "known"), 1);
+    let start = bodies.iter().find(|b| b["op"] == "start").unwrap();
+    assert!(
+        start["build"].is_string() && start.get("schema").is_none(),
+        "{start}"
+    );
+    let gone = bodies.iter().filter_map(|b| b["gone"].as_array()).flatten();
+    let why: Vec<&serde_json::Value> = gone.map(|g| &g["why"]).collect();
+    assert_eq!(why, ["corrected"]);
 }

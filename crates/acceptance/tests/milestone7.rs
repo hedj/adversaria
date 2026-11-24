@@ -306,3 +306,37 @@ fn a_verdict_the_memex_records_is_counted() {
     assert_eq!(r.verdicts["misread"], 1, "{}", app.session.message);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn the_report_of_the_version_2_fixture_is_as_counted_by_hand() {
+    // Catches a change to what the report reads in a journal of version
+    // 2. Counted by hand from the fixture's entries by kind and op:
+    // writing 8 creates, 8 texts, a move, a delete, a link, a name;
+    // navigating 7 go, a move, a back; searching a find; deciding an
+    // adopt, 2 retracts, a supposition, an undo, a redo, a world closed;
+    // checking a verdict; 16 views written; the memex's own a start, 5
+    // readings, 3 facts, a rule, a link; 6 observed and an offer.
+    let fixture = "/../memex/tests/fixtures/version2/journal.jsonl";
+    let path = env!("CARGO_MANIFEST_DIR").to_string() + fixture;
+    let entries = format::chain::check_journal(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let report = tools::measures::measure(&entries).to_string();
+    assert_eq!(report, VERSION_2_REPORT);
+}
+
+const VERSION_2_REPORT: &str = "journal: 73 entries: 38 actions, 7 observations
+other entries: 16 views where writing left the cursor, 11 written by the memex on its own, 1 unclassified
+actions by kind:
+  writing          20
+  searching        1
+  following links  0
+  navigating       9
+  deciding         7
+  checking         1
+  importing        0
+  exporting        0
+clerical share (searching, following links, navigating): 10 of 38, 26.3%
+suggestions: 1 offered, 0 adopted, 0 dismissed, 0 adopted and later retracted
+constraint violations: 2 seen, 1 later gone in the actual world
+  gone because: 1 corrected, 0 their rule changed or deleted, 0 an item under them deleted, 0 its text no longer read, 0 not recorded
+disagreements between sources: 2 seen
+verdicts on findings: 0 a real error, 0 the rule is wrong, 0 the text was misread, 1 known already";
