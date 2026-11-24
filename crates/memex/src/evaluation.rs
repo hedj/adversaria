@@ -41,8 +41,8 @@ impl App {
     }
 
     fn world(&self, k: usize, head: u64) -> Result<World, String> {
-        let facts = self.notebook.facts_at(head)?;
         let (outline, import) = self.world_parts(k, head);
+        let facts = self.notebook.facts_in(head, &outline)?;
         Ok(World {
             facts,
             outline,

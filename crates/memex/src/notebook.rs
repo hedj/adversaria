@@ -236,14 +236,33 @@ impl Notebook {
         self.outline = self.outline_at(self.tip);
     }
 
-    /// The facts stated in the world whose head is an entry.
-    pub(crate) fn facts_at(&self, head: u64) -> Result<Vec<(u64, Term)>, String> {
-        crate::store::facts(self.journal.entries(), head)
+    /// The facts stated in the world whose head is an entry, by that
+    /// world's outline: an entry's facts hold only while each item it
+    /// names (`item`, or a link's `from` and `to`) is in the outline, so
+    /// deleting an item takes its statements out, and undoing the
+    /// deletion puts them back.
+    pub(crate) fn facts_in(
+        &self,
+        head: u64,
+        outline: &Outline,
+    ) -> Result<Vec<(u64, Term)>, String> {
+        let facts = crate::store::facts(self.journal.entries(), head)?;
+        let stand = |(seq, _): &(u64, Term)| self.items_stand(*seq, outline);
+        Ok(facts.into_iter().filter(stand).collect())
+    }
+
+    /// Whether each item an entry names is in an outline.
+    fn items_stand(&self, seq: u64, outline: &Outline) -> bool {
+        let Some(b) = self.entry(seq).and_then(|e| e.body()) else {
+            return true;
+        };
+        let mut named = ["item", "from", "to"].iter().filter_map(|k| b[*k].as_u64());
+        named.all(|i| outline.contains(i))
     }
 
     /// The facts of the world at the tip.
     pub(crate) fn facts_now(&self) -> Result<Vec<(u64, Term)>, String> {
-        self.facts_at(self.tip)
+        self.facts_in(self.tip, &self.outline)
     }
 
     /// The facts at the tip, and these claims adopted as beliefs by the
@@ -253,7 +272,7 @@ impl Notebook {
         by: u64,
         claims: Vec<Term>,
     ) -> Result<Vec<(u64, Term)>, String> {
-        let mut facts = self.facts_at(self.tip)?;
+        let mut facts = self.facts_now()?;
         facts.extend(claims.into_iter().map(|p| (by, p)));
         Ok(facts)
     }
@@ -281,7 +300,7 @@ impl Notebook {
     /// A fact to try against the world at the tip.
     pub(crate) fn trial(&self, fact: &Term) -> Result<Trial, String> {
         let by = self.next_seq();
-        let mut facts = self.facts_at(self.tip)?;
+        let mut facts = self.facts_now()?;
         facts.extend(crate::world::outline_facts(&self.outline));
         facts.push((by, fact.clone()));
         let constraints = self
@@ -299,7 +318,7 @@ impl Notebook {
 
     /// The facts stated on an item, in the world at the tip.
     pub(crate) fn facts_of(&self, item: u64) -> Result<Vec<Term>, String> {
-        let facts = self.facts_at(self.tip)?.into_iter();
+        let facts = self.facts_now()?.into_iter();
         let on_item = facts.filter(|(s, _)| self.outline.fact_item.get(s) == Some(&item));
         Ok(on_item.map(|(_, f)| f).collect())
     }

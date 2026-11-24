@@ -14,7 +14,9 @@
 //!   a new item under p (0 is the top), after sibling s, or first.
 //! * edit `{"op":"text","item":i,"add":text,"spans":[...]}`: new text for item i.
 //! * edit `{"op":"move","item":i,"under":p,"after":s|null}`.
-//! * edit `{"op":"delete","item":i}`: the item and its branch leave the outline.
+//! * edit `{"op":"delete","item":i}`: the item and its branch leave the outline,
+//!   and with them the facts of every entry that names one of them
+//!   (Notebook::facts_in).
 //! * link `{"from":a,"to":b,"type":t,"facts":[t(a,b)]}`.
 //! * name `{"name":n,"item":i}`.
 //!

@@ -679,7 +679,7 @@ Where a command takes an ADDRESS, any of these name an item:
 | Command | Form | Does |
 | --- | --- | --- |
 | `new` | `new` | makes a new item after the target |
-| `delete` | `delete`, `delete word` | deletes the target and its branch; `delete word` deletes only the word at the text cursor |
+| `delete` | `delete`, `delete word` | deletes the target and its branch, and with them what they state: their facts and claims, the beliefs adopted from their claims, their layers and derived values, and the links to and from them; `undo` puts it all back. `delete word` deletes only the word at the text cursor |
 | `move` | `move after ADDRESS` | moves the target's branch to follow ADDRESS |
 | `copy` | `copy after ADDRESS` | copies the target's text to a new item after ADDRESS |
 | `link` | `link [FROM] to TO [as TYPE]` | links two items; FROM defaults to the target, TYPE to `link`. `cites`, `supports` and `opposes` read well in the inspector |
