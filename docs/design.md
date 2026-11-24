@@ -289,6 +289,7 @@ The journal must outlive the memex, so its format is open, plain and documented,
 | Lines | JSON Lines: UTF-8 text, strings and object keys in Unicode NFC (the memex normalises text to NFC before it writes; a reader refuses a line with text not in NFC), one JSON object per line, never rewritten except by a purge, which replaces one entry's `body` with null. The first line of each file is a header: `{"format": "memex-journal", "version": 1}`, or `"memex-seals"` or `"memex-keys"` |
 | The private key | one line, the 32-byte Ed25519 secret in hexadecimal, in a file readable by its owner only (mode 600), which only the sealer reads |
 | Checking | a reference checker, a small Rust program, is published with the format; it verifies both chains, every signature against `keys.jsonl`, and every blob's name, and needs nothing from the memex |
+| Pinned by tests | `crates/format/tests/known_answers.rs` works out an entry's and a seal's hash from literal canonical JSON written in the test, not from the code that writes them, so a change to the hash rule fails even when writer and reader change together. `crates/memex/tests/fixtures/schema1/journal.jsonl` is a journal the memex wrote (24 November 2026, after the rule that an entry's facts hold while its items do), with each kind of entry it writes; `crates/memex/tests/fixtures.rs` checks that it passes the checker and replays to the same outline and facts. A change that fails them changes what a journal already written means: it needs a new schema and a reason, and the fixture stays |
 
 ##### Entries
 
