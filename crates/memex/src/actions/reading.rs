@@ -32,8 +32,12 @@ impl App {
     }
 
     /// Read an item's text, written by the entry `of`, unless it is what
-    /// was last read for it. Without APE nothing is read.
+    /// was last read for it, or the item is gone (deleted before the
+    /// pause; its facts went with it). Without APE nothing is read.
     fn read_item(&mut self, item: u64, of: u64) {
+        if !self.notebook.outline.contains(item) {
+            return;
+        }
         let text = self.notebook.outline.text(item);
         let read = self.notebook.outline.readings.get(&item);
         if read.is_some_and(|r| r.text == text) {

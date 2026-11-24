@@ -448,3 +448,20 @@ fn a_question_in_backticks_is_answered_and_a_template_is_filled() {
     assert!(r.shows("→ nemo"), "{:#?}", r.lines());
     assert!(r.shows("The fish is nemo."), "{:#?}", r.lines());
 }
+
+#[test]
+fn an_item_deleted_before_the_pause_is_not_read() {
+    // Catches a reading of an item that is gone: its facts retracted a
+    // second time and its empty text recorded as read, as a redo of its
+    // deletion did.
+    let mut r = Room::new("read-deleted");
+    r.items(&["The rent is 1200.", "Other"]);
+    r.app.idle();
+    r.put_cursor(r.outline().in_order()[0]);
+    for line in ["delete", "undo", "redo"] {
+        r.command(line);
+    }
+    let before = r.entry_count();
+    r.app.idle();
+    assert_eq!(r.entry_count(), before, "nothing to read: the item is gone");
+}
