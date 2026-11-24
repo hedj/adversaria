@@ -20,6 +20,10 @@
 //! cursor: in the text typed, on an item made, off one deleted. It is
 //! part of the writing before it, not an action, and not navigating.
 //!
+//! A verdict (schema 2) is the user's word on findings: a real error, the
+//! rule is wrong, the text was misread, or known already. A finding
+//! judged more than once counts by its last verdict.
+//!
 //! Clerical work is searching, following links and navigating.
 //! Observations (not actions): view observed (the violations and
 //! disagreements shown) and view offer (suggestions shown).
@@ -34,6 +38,9 @@
 use format::record::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+
+/// The verdicts on findings, as verdict entries name them.
+pub const VERDICTS: [&str; 4] = ["error", "rule", "misread", "known"];
 
 /// Why a violation went, as observed entries record it, and when they
 /// record nothing.
@@ -74,6 +81,9 @@ pub struct Report {
     /// Of those gone, how many went for each reason, as WHY names them.
     pub gone_why: BTreeMap<&'static str, usize>,
     pub disagreements_seen: usize,
+    /// The findings given a verdict, by their last verdict, as VERDICTS
+    /// names them.
+    pub verdicts: BTreeMap<&'static str, usize>,
 }
 
 /// Whether a facts edit states a ruling: a fact ruling(...), not any
@@ -127,6 +137,7 @@ pub fn measure(entries: &[Entry]) -> Report {
     }
     offers.report(&mut r, &retracted(entries));
     watch.report(&mut r);
+    r.verdicts = verdicts(entries);
     r
 }
 
@@ -183,6 +194,37 @@ fn retracted(entries: &[Entry]) -> BTreeSet<u64> {
     retracts
         .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
         .collect()
+}
+
+/// How many findings have each verdict last.
+fn verdicts(entries: &[Entry]) -> BTreeMap<&'static str, usize> {
+    let mut judged = Judged::default();
+    entries.iter().for_each(|e| judged.read(e));
+    judged.counts()
+}
+
+/// Each finding's last verdict, by its name.
+#[derive(Default)]
+struct Judged(BTreeMap<String, &'static str>);
+
+impl Judged {
+    /// A verdict entry: its word, for each finding it names.
+    fn read(&mut self, e: &Entry) {
+        let Some(b) = e.body().filter(|_| is_view(e, &["verdict"])) else {
+            return;
+        };
+        let Some(word) = VERDICTS.iter().find(|v| b["verdict"] == **v) else {
+            return;
+        };
+        let named = strings(&b["findings"]).into_iter();
+        self.0.extend(named.map(|f| (f, *word)));
+    }
+
+    /// How many findings have each verdict last.
+    fn counts(&self) -> BTreeMap<&'static str, usize> {
+        let count = |v: &&str| self.0.values().filter(|w| *w == v).count();
+        VERDICTS.iter().map(|v| (*v, count(v))).collect()
+    }
 }
 
 /// Why each violation an observation records as gone went, by its name;
@@ -339,10 +381,19 @@ impl fmt::Display for Report {
             why("unread"),
             why("unrecorded")
         )?;
-        write!(
+        writeln!(
             f,
             "disagreements between sources: {} seen",
             self.disagreements_seen
+        )?;
+        let said = |v: &str| self.verdicts.get(v).copied().unwrap_or(0);
+        write!(
+            f,
+            "verdicts on findings: {} a real error, {} the rule is wrong, {} the text was misread, {} known already",
+            said("error"),
+            said("rule"),
+            said("misread"),
+            said("known")
         )
     }
 }
@@ -456,6 +507,28 @@ mod tests {
             (1, 1, 1)
         );
         assert_eq!(r.violations_corrected, 1);
+    }
+
+    #[test]
+    fn a_finding_counts_by_its_last_verdict() {
+        // Catches verdicts not counted, or a finding judged twice counted
+        // twice.
+        let verdict = |word: &str, findings: &[&str]| {
+            let b = json!({"op": "verdict", "verdict": word, "rule": 3, "under": 2, "findings": findings});
+            ("view", b)
+        };
+        let es = chain(&[
+            ("edit", json!({"op": "init"})),
+            verdict("known", &["a"]),
+            verdict("rule", &["b", "c"]),
+            verdict("error", &["a"]),
+        ]);
+        let r = measure(&es);
+        let said = |v| r.verdicts[v];
+        assert_eq!(
+            (said("error"), said("rule"), said("misread"), said("known")),
+            (1, 2, 0, 0)
+        );
     }
 
     #[test]

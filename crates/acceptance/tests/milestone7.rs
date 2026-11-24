@@ -284,3 +284,25 @@ fn measures_program() -> std::process::Command {
         env!("CARGO_MANIFEST_DIR").to_string() + "/../../target/debug/measures",
     )
 }
+
+#[test]
+fn a_verdict_the_memex_records_is_counted() {
+    // Catches the report reading a verdict under other names than the
+    // memex writes it with.
+    let dir = temp("verdict");
+    let mut app = App::open(&dir).unwrap();
+    app.set_durable(false);
+    typ(&mut app, "Buran flew");
+    app.flush();
+    command(&mut app, "fact date(buran, 1989)");
+    command(&mut app, "fact date(buran, 1988)");
+    command(
+        &mut app,
+        "constraint one date: false :- date(E, A), date(E, B), A \\= B.",
+    );
+    app.evaluate().unwrap();
+    command(&mut app, "verdict misread");
+    let r = tools::measures::measure(app.journal().entries());
+    assert_eq!(r.verdicts["misread"], 1, "{}", app.session.message);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

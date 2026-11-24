@@ -263,7 +263,8 @@ As built (milestone 7): the memex records what reasoning shows as `view` entries
 * the clerical share: searching, following links and navigating;
 * suggestions offered, adopted, dismissed, and adopted then retracted;
 * violations seen, those later gone in the actual world, and why each went, as the observation that found it gone records: corrected; its rule changed or deleted; an item under it deleted; its text no longer read; or not recorded, as in schema 1;
-* disagreements seen.
+* disagreements seen;
+* the findings given each verdict (schema 2), a finding judged more than once counting by its last.
 
 `make measures JOURNAL=…` runs it.
 
