@@ -1,5 +1,6 @@
 //! The suggestion pane: what it lists, and how it says to act on it.
 
+use memex::app::Key;
 use memex::present::Presentation;
 
 mod support;
@@ -53,4 +54,29 @@ fn a_click_on_any_row_of_a_suggestion_wrapped_rows_too_accepts_it() {
     assert!(rows.len() > 2, "its evidence wraps");
     let accept = Some(Presentation::Suggestion(1));
     assert!(clicks(&room, x, rows).iter().all(|c| *c == accept));
+}
+
+#[test]
+fn no_rule_is_mined_from_the_outline_s_own_description_of_itself() {
+    // Catches a rule suggested between the user's facts and the facts the
+    // memex states of the outline (item_under), which no one stated: it
+    // names nothing the user believes, and mining them scanned every item
+    // at each change.
+    let mut r = Room::new("no-outline-rules");
+    r.items(&["Parent", "First", "Second"]);
+    let [parent, first, second] = r.outline().in_order()[..] else {
+        panic!("three items");
+    };
+    for child in [first, second] {
+        r.put_cursor(child);
+        r.tap(&[Key::Tab]);
+        r.command(&format!("fact under({child}, {parent})"));
+    }
+    r.app.evaluate().unwrap();
+    let list = &r.app.reason.suggestions.list;
+    let mined = list
+        .iter()
+        .map(|s| s.identity())
+        .filter(|s| s.contains("item_under"));
+    assert_eq!(mined.collect::<Vec<_>>(), Vec::<String>::new());
 }

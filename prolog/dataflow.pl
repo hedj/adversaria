@@ -556,9 +556,24 @@ in_store_work(W, QW) :-
 user_binary(P) :-
     setof(P0, user_binary_(P0), Ps),
     member(P, Ps).
+%   The server asserts each fact in the user module too, so the user's
+%   predicates are those defined there that are not the server's: asking
+%   for them reads no fact, where scanning fact_ref/3 read every one.
 user_binary_(P) :-
-    fact_ref(_, F, _), compound(F), F =.. [P, _, _],
-    \+ memberchk(P, [same_as, wd_property, label, node_def, rule_def, claims, cites]).
+    current_predicate(user:P/2),
+    \+ server_predicate(P/2),
+    \+ memberchk(P, [same_as, wd_property, label, node_def, rule_def, claims, cites]),
+    \+ outline_predicate(P),
+    functor(F, P, 2),
+    \+ \+ fact_ref(_, F, _).
+
+%   The predicates the memex states of the outline (crates/memex/src/
+%   world.rs), not of what the user believes: goals may read them, but no
+%   rule is mined from them.
+outline_predicate(item_text).
+outline_predicate(item_under).
+outline_predicate(item_link).
+outline_predicate(item_tag).
 
 entity_name(E, Name) :-
     fact_ref(_, F, _), compound(F), F =.. [P, E | _], atom(E),
