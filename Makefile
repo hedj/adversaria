@@ -1,7 +1,12 @@
 # One command runs every test (docs/plan.md § Layout).
-.PHONY: test test-spikes test-prolog test-rust test-window spike-scasp run measures interactivity
+.PHONY: test test-spikes test-prolog test-rust test-window test-timing spike-scasp run measures interactivity
 
-test: test-spikes test-prolog test-rust test-window
+test: test-spikes test-prolog test-rust test-window test-timing
+
+# The 0.1 s target for a key, the reasoning it causes and the drawing, on
+# 10,000 items, timed in a release build, as `make run` runs the memex.
+test-timing:
+	cargo test -q --release -p memex --test milestone3 -- --nocapture reasoning_it_causes
 
 # The memex program in its window, under X11 (Xvfb) and Wayland (headless
 # sway), with a script typing into it. The Nix shell has what it needs.

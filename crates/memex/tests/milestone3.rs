@@ -857,3 +857,171 @@ fn focus_lost_after_typing_in_a_quasimode_keeps_it_open_until_enter() {
     assert_eq!(app.notebook.outline.text(app.cursor()), "DRAKON");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "timed in a release build, as the window runs: make test-timing"
+)]
+fn a_key_and_the_reasoning_it_causes_take_under_100ms_on_ten_thousand_items() {
+    // Plan: "Keystroke to visible change within 0.1 s for an outline of
+    // 10,000 items". Timed as the window does it: the key handled, the
+    // world reasoned over again if the journal moved, and the screen drawn.
+    // Each item states a fact, and a rule reads them all. The keys timed
+    // each move the journal. A pause, which writes what is pending and
+    // reads it, is timed a step at a time, as the window takes it, and a
+    // key pressed during a step is timed with the step, as it waits for it.
+    let dir = temp("timing-reasoned");
+    ten_thousand_items(&dir);
+    dated_items(&dir);
+    let (mut app, opened) = open_ten_thousand(&dir);
+    app.start_parser();
+    let rule = "constraint one date: false :- date(E, A), date(E, B), A \\= B.";
+    command(&mut app, rule);
+    let mut timer = Reasoned::new(&mut app);
+    timer.moving_keys(&mut app);
+    eprintln!("{}", timer.report(opened));
+    let worst = timer.worst;
+    assert!(worst.1 < Duration::from_millis(100), "worst: {worst:?}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// One fact for each item of the 10,000: the date of an event of its own,
+/// one of a hundred years.
+fn dated_items(dir: &std::path::Path) {
+    let mut j = Journal::open(dir).unwrap();
+    j.durable = false;
+    let items: Vec<u64> = j
+        .entries()
+        .iter()
+        .filter(|e| is_create(e))
+        .map(|e| e.seq)
+        .collect();
+    for (n, item) in items.into_iter().enumerate() {
+        let date = json!({"f": "date", "args": [{"a": format!("event_{n}")}, 1900 + n % 100]});
+        let body = json!({"op": "facts", "item": item, "facts": [date]});
+        j.append("edit", body).unwrap();
+    }
+}
+
+/// Whether an entry makes an item.
+fn is_create(e: &format::record::Entry) -> bool {
+    e.kind() == "edit" && e.body().is_some_and(|b| b["op"] == "create")
+}
+
+/// Keys timed as the window handles them: handled, reasoned over if the
+/// journal moved, and drawn into a 160 x 50 test terminal.
+struct Reasoned {
+    term: Terminal<TestBackend>,
+    worst: (&'static str, Duration),
+    times: Vec<(&'static str, Duration)>,
+}
+
+impl Reasoned {
+    /// The timer, after the world is reasoned over once, as the window
+    /// does when it opens.
+    fn new(app: &mut App) -> Reasoned {
+        let mut r = Reasoned {
+            term: Terminal::new(TestBackend::new(160, 50)).unwrap(),
+            worst: ("none", Duration::ZERO),
+            times: vec![],
+        };
+        r.reason(app);
+        r
+    }
+
+    /// Reason again if the journal moved, as the window's draw does.
+    fn reason(&mut self, app: &mut App) {
+        app.reason_if_moved();
+        assert!(app.reason.eval[0].is_some(), "{}", app.session.message);
+    }
+
+    /// An action, then reasoning and drawing, timed under a name.
+    fn time(&mut self, app: &mut App, name: &'static str, act: impl FnOnce(&mut App)) {
+        let t = Instant::now();
+        act(app);
+        self.reason(app);
+        self.term.draw(|f| memex::ui::draw(f, app)).unwrap();
+        self.note(name, t.elapsed());
+    }
+
+    /// A time taken, under a name, and the worst so far.
+    fn note(&mut self, name: &'static str, took: Duration) {
+        self.times.push((name, took));
+        if took > self.worst.1 {
+            self.worst = (name, took);
+        }
+    }
+
+    /// A key pressed, timed.
+    fn key(&mut self, app: &mut App, name: &'static str, k: Key) {
+        self.time(app, name, |a| a.handle(Event::down(k)));
+    }
+
+    /// A pause, timed a step at a time, as the window takes it: a key
+    /// pressed during it waits for one step, and the reasoning that step
+    /// causes.
+    fn pause(&mut self, app: &mut App) {
+        while app.idle_work() {
+            self.time(app, "pause step", |a| {
+                a.pause_step();
+            });
+        }
+    }
+
+    /// Keys that move the journal, each timed; the keys between them that
+    /// do not (typing) are handled untimed.
+    fn moving_keys(&mut self, app: &mut App) {
+        self.writing(app);
+        self.editing(app);
+    }
+
+    /// A new item typed into, and the pause after it, during whose second
+    /// step, the first part of the lexicon, a key is pressed: the window
+    /// handles the key once the step ends, and stops the pause.
+    fn writing(&mut self, app: &mut App) {
+        self.key(app, "Enter", Key::Enter);
+        typ(app, "dated");
+        self.key(app, "Down after typing", Key::Down);
+        self.time(app, "pause step", |a| {
+            a.pause_step();
+        });
+        self.time(app, "Enter during a pause step", |a| {
+            a.pause_step();
+            a.handle(Event::down(Key::Enter));
+        });
+        self.pause(app);
+    }
+
+    /// An item made and the empty item erased, the erasing undone, and the
+    /// pause after them.
+    fn editing(&mut self, app: &mut App) {
+        self.key(app, "Enter", Key::Enter);
+        self.key(app, "Backspace erasing", Key::Backspace);
+        self.undo(app);
+        self.pause(app);
+    }
+
+    /// Ctrl+Z as the window gets it, the Command quasimode held over z:
+    /// timed from its release, which runs the undo.
+    fn undo(&mut self, app: &mut App) {
+        let command = Key::Quasi(Quasi::Command);
+        app.handle(Event::down(command));
+        typ(app, "z");
+        self.time(app, "Ctrl+Z", |a| a.handle(Event::up(command)));
+    }
+
+    /// What was measured, to log.
+    fn report(&self, opened: Duration) -> String {
+        let each: Vec<String> = self
+            .times
+            .iter()
+            .map(|(n, d)| format!("{n} {d:.1?}"))
+            .collect();
+        let (name, worst) = self.worst;
+        format!(
+            "10,000 dated items and a rule: replayed in {opened:?}; worst {worst:?} ({name}); each, with reasoning and drawing: {}",
+            each.join(", ")
+        )
+    }
+}

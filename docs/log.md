@@ -1736,6 +1736,75 @@ run). Two others the keys raised were split: the guide's Editing table
 which checked arrows and Home together. Earlier ones stand: "Plumbing"
 (15), "Pointing at an argument" (8), "The mouse" (7), Plumber::new (7).
 
+### Keys within 0.1 s while reasoning over 10,000 items (24 November 2026)
+
+Milestone 3 asks for a keystroke to visible change within 0.1 s on an
+outline of 10,000 items. The test that checked it timed keys without the
+reasoning they cause. The author asked for keys to respond within 0.1 s
+*whilst* reasoning over 10,000+ items, so reasoning stays on the
+keystroke path and the test now includes it:
+`a_key_and_the_reasoning_it_causes_take_under_100ms_on_ten_thousand_items`
+(`make test-timing`, a release build, as the window runs). Each of the
+10,000 items states a date, a rule reads them all, and each key is timed
+as the window handles it: handled, reasoned over if the journal moved,
+and drawn. A pause is timed a step at a time, and a key pressed during a
+step is timed with the step.
+
+| Timed, with reasoning and drawing | Before | After (three runs) |
+| --- | --- | --- |
+| Enter (a new item) | 347 ms | 47.9-52.7 ms |
+| Down after typing | 509 ms | 47.1-56.8 ms |
+| Backspace erasing an empty item | 398 ms | 42.2-47.7 ms |
+| Ctrl+Z | 404 ms | 72.9-79.7 ms |
+| The first pause | 2.2 s, whole | steps of 13.1-42.5 ms (34 in its two pauses) |
+| A key pressed during a pause step | not timed | 73.2-83.4 ms |
+
+The reasoning after a change went from 340-500 ms to about 40-50 ms.
+In order, with the commit for each:
+
+1. Mentions found in Rust, where the texts are (2f22cd7); no rule mined
+   from the outline, and the user's predicates found without reading
+   every fact (845678c); Wikidata labels looked for only when a subset
+   is loaded (09d1769).
+2. The engine synced by sets of terms hashed, then by groups compared
+   whole (da31030, 021d4e0); each item's text and page key kept with its
+   spans (cffa1ec, 542282b, 8892827); atoms a term lacks found in linear
+   time (c0d0ad9).
+3. A world's facts kept, and the next world reached by the entries
+   between the two: 12-18 ms to 5-6 ms (c683ddf).
+4. The window reasoned again after reasoning recorded what it showed;
+   the journal's place is now noted after reasoning (f2c3e00).
+5. The outline's facts kept out of the store of beliefs, which every
+   node reads: SWI-Prolog checked each change of it against about 10,000
+   calls a rule had made, 11-19 ms per text changed, now under 4 ms
+   (85744a5).
+6. The current world's outline borrowed, not copied: 4-5 ms (ad9489e).
+7. The unlinked mentions kept and followed: 16 ms to about 6 ms
+   (8696ad2).
+
+The first pause sent APE's user lexicon, 10,001 names, numbering each
+new atom with a message to the server and back: 2.1 s. Now the lexicon
+goes by what changed, its words as strings, in parts (ffca124, 1c7874b);
+strings of ASCII bytes are read with no UTF-8 grammar (9b315e6); APE
+starts when the window opens (0a7a50b); the lexicon's entries are found
+without printing them (edb42ff), and the parser's words are kept while
+the journal stays put (3caf59f). The pause is taken a step at a time,
+and the window stops at a key, so a key waits for one step at most
+(2cb2fb3). A lexicon of more than about 13,000 names could not be sent
+at all before: one message held at most 65,535 words.
+
+Found on the way, and not changed: library(utf8)'s grammar, which the
+Prolog end of the protocol uses for strings not ASCII, accepts the
+overlong form C0 80, which Rust refuses (9b315e6). The window tests
+failed once in a full run, under load, and passed in every run since;
+the run kept only the last line, so which test is not known (ffca124).
+
+What stays slow: an undo replays the outline from the root, about 31 ms
+of Ctrl+Z's 73-80 ms (10,002 items made, 2.7 µs each); and a key during
+a pause step has the least margin, 73.2-83.4 ms (88.5 ms in an earlier run).
+Each is timed on this build machine only, whose runs vary by about
+10 ms.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
