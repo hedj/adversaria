@@ -170,6 +170,7 @@ fn counts_match_a_hand_count() {
         ),
         (1, 1, 0)
     );
+    assert_eq!(r.violations_gone, 1, "gone, by the retraction: corrected");
     assert!(
         r.to_string()
             .contains("clerical share (searching, following links, navigating): 3 of 16, 18.8%")

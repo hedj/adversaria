@@ -25,12 +25,19 @@
 //! disagreements shown) and view offer (suggestions shown).
 //! A suggestion is adopted by an entry that carries "suggestion"; it is
 //! later retracted if a retract entry names that entry.
-//! A violation is corrected if a later observation in the actual world no
-//! longer shows it.
+//! A violation is gone if a later observation in the actual world no
+//! longer shows it. Why it went is what that observation records under
+//! `gone` (schema 2): corrected, its rule changed or deleted, an item
+//! under it deleted, or such an item's text no longer read; without a
+//! record, as in schema 1, the reason is unrecorded.
 
 use format::record::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+
+/// Why a violation went, as observed entries record it, and when they
+/// record nothing.
+pub const WHY: [&str; 5] = ["corrected", "rule", "deleted", "unread", "unrecorded"];
 
 pub const KINDS: [&str; 8] = [
     "writing",
@@ -60,7 +67,12 @@ pub struct Report {
     pub dismissed: usize,
     pub adopted_then_retracted: usize,
     pub violations_seen: usize,
+    /// Violations later gone in the actual world.
+    pub violations_gone: usize,
+    /// Of those, the ones gone because their facts were corrected.
     pub violations_corrected: usize,
+    /// Of those gone, how many went for each reason, as WHY names them.
+    pub gone_why: BTreeMap<&'static str, usize>,
     pub disagreements_seen: usize,
 }
 
@@ -173,6 +185,20 @@ fn retracted(entries: &[Entry]) -> BTreeSet<u64> {
         .collect()
 }
 
+/// Why each violation an observation records as gone went, by its name;
+/// a reason the report does not know is unrecorded.
+fn reasons(b: &serde_json::Value) -> BTreeMap<String, &'static str> {
+    let each = b["gone"].as_array().into_iter().flatten();
+    each.filter_map(|g| Some((g["finding"].as_str()?.to_string(), reason(&g["why"]))))
+        .collect()
+}
+
+/// A reason, as WHY names it.
+fn reason(why: &serde_json::Value) -> &'static str {
+    let known = WHY.iter().find(|w| why == **w);
+    known.copied().unwrap_or("unrecorded")
+}
+
 /// A list's texts.
 fn strings(v: &serde_json::Value) -> Vec<String> {
     let list = v.as_array().into_iter().flatten();
@@ -209,13 +235,13 @@ impl Offers {
 }
 
 /// What observations showed: the violations and disagreements seen, the
-/// violations later gone in the actual world, and the violations shown
-/// last.
+/// violations later gone in the actual world with why each went, and the
+/// violations shown last.
 #[derive(Default)]
 struct Watch {
     violations: BTreeSet<String>,
     disagreements: BTreeSet<String>,
-    corrected: BTreeSet<String>,
+    gone: BTreeMap<String, &'static str>,
     last: Vec<String>,
 }
 
@@ -228,24 +254,39 @@ impl Watch {
     }
 
     /// An observation: a violation that the actual world showed when last
-    /// observed and does not show now is corrected. A supposition's
-    /// observations are seen, but compared with nothing: they are not the
-    /// actual world's.
+    /// observed and does not show now is gone, for the reason recorded. A
+    /// supposition's observations are seen, but compared with nothing:
+    /// they are not the actual world's.
     fn observe(&mut self, b: &serde_json::Value) {
         let now = strings(&b["violations"]);
         self.violations.extend(now.iter().cloned());
         self.disagreements.extend(strings(&b["disagreements"]));
         if b["world"] == "actual" {
-            let gone = self.last.iter().filter(|k| !now.contains(k)).cloned();
-            self.corrected.extend(gone);
+            self.went(&now, &reasons(b));
             self.last = now;
+        }
+    }
+
+    /// Each violation shown last and not now, gone for its reason.
+    fn went(&mut self, now: &[String], why: &BTreeMap<String, &'static str>) {
+        let gone = self.last.iter().filter(|k| !now.contains(k));
+        for k in gone {
+            let reason = why.get(k).copied().unwrap_or("unrecorded");
+            self.gone.insert(k.clone(), reason);
         }
     }
 
     fn report(&self, r: &mut Report) {
         r.violations_seen = self.violations.len();
-        r.violations_corrected = self.corrected.len();
+        r.violations_gone = self.gone.len();
+        r.gone_why = WHY.iter().map(|w| (*w, self.count_gone(w))).collect();
+        r.violations_corrected = r.gone_why["corrected"];
         r.disagreements_seen = self.disagreements.len();
+    }
+
+    /// How many violations went for a reason.
+    fn count_gone(&self, why: &str) -> usize {
+        self.gone.values().filter(|w| **w == why).count()
     }
 }
 
@@ -285,8 +326,18 @@ impl fmt::Display for Report {
         )?;
         writeln!(
             f,
-            "constraint violations: {} seen, {} later gone in the actual world (corrected)",
-            self.violations_seen, self.violations_corrected
+            "constraint violations: {} seen, {} later gone in the actual world",
+            self.violations_seen, self.violations_gone
+        )?;
+        let why = |w: &str| self.gone_why.get(w).copied().unwrap_or(0);
+        writeln!(
+            f,
+            "  gone because: {} corrected, {} their rule changed or deleted, {} an item under them deleted, {} its text no longer read, {} not recorded",
+            why("corrected"),
+            why("rule"),
+            why("deleted"),
+            why("unread"),
+            why("unrecorded")
         )?;
         write!(
             f,
@@ -322,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn a_violation_gone_only_in_a_supposition_is_not_corrected() {
+    fn a_violation_gone_only_in_a_supposition_is_not_gone() {
         // Catches a supposed world counted as a correction: the actual world
         // still has the violation.
         let obs = |v: &[&str], w: &str| {
@@ -338,13 +389,13 @@ mod tests {
             obs(&["x"], "actual"),
         ]);
         let r = measure(&es);
-        assert_eq!((r.violations_seen, r.violations_corrected), (1, 0));
+        assert_eq!((r.violations_seen, r.violations_gone), (1, 0));
         let es = chain(&[
             ("edit", json!({"op": "init"})),
             obs(&["x"], "actual"),
             obs(&[], "actual"),
         ]);
-        assert_eq!(measure(&es).violations_corrected, 1);
+        assert_eq!(measure(&es).violations_gone, 1);
         // A supposition's observations are not what the actual world is
         // compared with: one seen only there is not corrected, and one
         // gone from the actual world after a supposition is (the code
@@ -354,14 +405,14 @@ mod tests {
             obs(&["z"], "suppose y"),
             obs(&[], "actual"),
         ]);
-        assert_eq!(measure(&es).violations_corrected, 0);
+        assert_eq!(measure(&es).violations_gone, 0);
         let es = chain(&[
             ("edit", json!({"op": "init"})),
             obs(&["x"], "actual"),
             obs(&[], "suppose y"),
             obs(&[], "actual"),
         ]);
-        assert_eq!(measure(&es).violations_corrected, 1);
+        assert_eq!(measure(&es).violations_gone, 1);
     }
 
     #[test]
@@ -378,6 +429,33 @@ mod tests {
         let r = measure(&es);
         assert_eq!((r.by_memex, r.actions["writing"]), (2, 1));
         assert_eq!((r.observations, r.unclassified), (1, 1));
+    }
+
+    #[test]
+    fn a_violation_gone_is_counted_by_the_reason_recorded() {
+        // Catches every violation that went counted as corrected, though
+        // its rule was deleted; or a reason lost when none is recorded.
+        let obs = |v: &[&str], gone: serde_json::Value| {
+            let b = json!({"op": "observed", "violations": v, "disagreements": [], "world": "actual", "gone": gone});
+            ("view", b)
+        };
+        let es = chain(&[
+            ("edit", json!({"op": "init"})),
+            obs(&["x", "y", "z"], json!([])),
+            obs(
+                &["z"],
+                json!([{"finding": "x", "why": "rule"}, {"finding": "y", "why": "corrected"}]),
+            ),
+            obs(&[], json!(null)),
+        ]);
+        let r = measure(&es);
+        assert_eq!(r.violations_gone, 3);
+        let why = |w| r.gone_why[w];
+        assert_eq!(
+            (why("rule"), why("corrected"), why("unrecorded")),
+            (1, 1, 1)
+        );
+        assert_eq!(r.violations_corrected, 1);
     }
 
     #[test]

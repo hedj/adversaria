@@ -262,7 +262,7 @@ As built (milestone 7): the memex records what reasoning shows as `view` entries
 * each entry as an action of one kind (writing, searching, following links, navigating, deciding, checking, importing, exporting), as an observation, as written by the memex on its own (`"by": "memex"`, schema 2), as a view where writing left the cursor (`written`, schema 2), or as unclassified;
 * the clerical share: searching, following links and navigating;
 * suggestions offered, adopted, dismissed, and adopted then retracted;
-* violations seen, and those later gone in the actual world (corrected);
+* violations seen, those later gone in the actual world, and why each went, as the observation that found it gone records: corrected; its rule changed or deleted; an item under it deleted; its text no longer read; or not recorded, as in schema 1;
 * disagreements seen.
 
 `make measures JOURNAL=…` runs it.
