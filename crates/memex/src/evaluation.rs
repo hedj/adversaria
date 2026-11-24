@@ -72,9 +72,19 @@ impl App {
         Ok(())
     }
 
-    /// The current world's engine's suggestions, if it has facts or
-    /// items: an item's text may mention another's.
+    /// The current world's suggestions, best evidence first: its engine's,
+    /// if it has facts or items, and its outline's unlinked mentions
+    /// (crate::mentions). A mention's term sorts after every other kind's,
+    /// so at equal evidence it follows them, as Prolog ordered them.
     fn engine_suggestions(&mut self) -> Result<Vec<Suggestion>, String> {
+        let mut all = self.prolog_suggestions()?;
+        all.extend(self.notebook.outline.mention_suggestions());
+        all.sort_by_key(|s| std::cmp::Reverse(s.score));
+        Ok(all)
+    }
+
+    /// The current world's engine's suggestions, if it has facts or items.
+    fn prolog_suggestions(&mut self) -> Result<Vec<Suggestion>, String> {
         let items = !self.notebook.outline.top.is_empty();
         let asked = self.reason.has_facts() || (items && self.reason.started());
         if !asked {

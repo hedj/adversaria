@@ -394,7 +394,6 @@ wd_value(V, V).
 %   the user's beliefs, or the user's outline.
 suggestion(S) :- wikidata_suggestion(S).
 suggestion(S) :- belief_suggestion(S).
-suggestion(S) :- outline_suggestion(S).
 
 wikidata_suggestion(suggestion(link, [same_as(E, Q)], Ev, Score)) :-
     \+ \+ wd_label(_, _),                 % no import: no entity to look at
@@ -450,88 +449,6 @@ belief_suggestion(suggestion(rule(Head, Body), [], Ev, Score)) :-
 
 plural(1, "") :- !.
 plural(_, "s").
-
-%   An item whose text names another item, as a short title, and does not
-%   link to it: link them? (Obsidian's unlinked mentions.) The titles are
-%   indexed by their first word, so each text is looked up by its own
-%   words, not compared with every title.
-outline_suggestion(suggestion(mention(From, To, Excerpt, Title), [], Ev, 3)) :-
-    title_index(Index),
-    unlinked_mention(Index, From, To, Text, Title),
-    excerpt(Text, Excerpt),
-    format(string(Ev), "its text names “~w” and does not link to it", [Title]).
-
-%   An item's text that names another's title, with no link from it to
-%   that item.
-unlinked_mention(Index, From, To, Text, Title) :-
-    fact_ref(_, item_text(From, Text), _),
-    named_title(Text, Index, To, Title),
-    From \== To,
-    \+ fact_ref(_, item_link(From, To, _), _).
-
-%   A title a text names, in any case, as whole words.
-named_title(Text, Index, To, Title) :-
-    string_lower(Text, Lower),
-    candidate(Lower, Index, To-Title),
-    string_lower(Title, LTitle),
-    names_whole(Lower, LTitle).
-
-%   A title that starts with one of a text's words.
-candidate(Lower, Index, Candidate) :-
-    text_words(Lower, Words),
-    member(W, Words),
-    get_assoc(W, Index, Candidates),
-    member(Candidate, Candidates).
-
-%   The items whose text reads as a title, by their first word in lower
-%   case: each word to the items and titles it starts.
-title_index(Index) :-
-    findall(W-(To-Title), title_start(W, To, Title), Pairs),
-    keysort(Pairs, Sorted),
-    group_pairs_by_key(Sorted, Grouped),
-    list_to_assoc(Grouped, Index).
-
-title_start(W, To, Title) :-
-    fact_ref(_, item_text(To, Title), _),
-    title_like(Title),
-    string_lower(Title, Lower),
-    text_words(Lower, [W|_]).
-
-%   A text short enough to be a title: 3 to 60 characters, at most six
-%   words, and not a sentence (it ends in no full stop, question mark or
-%   exclamation mark).
-title_like(Text) :-
-    string_length(Text, N), N >= 3, N =< 60,
-    split_string(Text, " ", " ", Words), length(Words, K), K =< 6,
-    sub_string(Text, _, 1, 0, Last),
-    \+ memberchk(Last, [".", "?", "!"]).
-
-text_words(Text, Words) :-
-    Seps = " \t\n.,;:!?()\"[]",
-    split_string(Text, Seps, Seps, Parts),
-    exclude(==(""), Parts, Words).
-
-%   A text names a title: it holds it, in the same case, as whole words.
-names_whole(Text, Title) :-
-    sub_string(Text, B, L, A, Title),
-    edge_before(Text, B),
-    E is B + L,
-    edge_after(Text, E, A),
-    !.
-
-edge_before(_, 0) :- !.
-edge_before(Text, B) :- B1 is B - 1, sub_string(Text, B1, 1, _, C), \+ alnum(C).
-
-edge_after(_, _, 0) :- !.
-edge_after(Text, E, _) :- sub_string(Text, E, 1, _, C), \+ alnum(C).
-
-alnum(C) :- string_code(1, C, Code), code_type(Code, alnum).
-
-%   The start of a text, for saying which item a suggestion is about.
-excerpt(Text, Text) :- string_length(Text, N), N =< 40, !.
-excerpt(Text, Excerpt) :-
-    sub_string(Text, 0, 37, _, Start),
-    string_concat(Start, "…", Excerpt).
 
 %   A reference for the claims about entity E: a work in the store whose
 %   main subject is E's item, or that works in the store cite. The memex

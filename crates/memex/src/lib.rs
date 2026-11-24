@@ -18,6 +18,7 @@ pub mod history;
 mod inferred;
 pub mod journal;
 pub mod keys;
+mod mentions;
 mod migrate;
 pub mod named;
 mod near;

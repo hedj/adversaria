@@ -121,3 +121,105 @@ fn adopt_takes_a_suggestion_as_it_takes_a_claim() {
         r.app.session.message
     );
 }
+
+#[test]
+fn a_mention_keeps_the_identity_prolog_gave_it() {
+    // Catches a mention named another way than when Prolog found it: the
+    // journal records offers and dismissals by that name, so a dismissed
+    // mention would come back.
+    let fixture = std::path::Path::new("tests/fixtures/version2");
+    let mut app = support::replayed(fixture);
+    let entries = app.journal().entries().iter().filter_map(|e| e.body());
+    let offer = entries
+        .into_iter()
+        .find(|b| b["op"] == "offer")
+        .unwrap()
+        .clone();
+    app.evaluate().unwrap();
+    let list = &app.reason.suggestions.list;
+    let names: Vec<String> = list.iter().map(|s| s.identity()).collect();
+    for key in offer["keys"].as_array().unwrap() {
+        assert!(names.iter().any(|n| key == n), "{key} not in {names:?}");
+    }
+}
+
+#[test]
+fn a_long_text_is_named_by_its_start_and_a_label_links() {
+    // Catches the excerpt not cut at 37 characters, as Prolog cut it, or a
+    // label already joining the items ignored.
+    let mut r = room(
+        "mention-excerpt",
+        &[
+            "Energia launch",
+            "A long note that mentions the energia launch near its end",
+            "Buran",
+            "More on Buran #buran",
+        ],
+    );
+    let keys = suggested_keys(&mut r);
+    let cut = r#"mention(7, 3, "A long note that mentions the energia…", "Energia launch") |  | its text names “Energia launch” and does not link to it"#;
+    assert!(
+        keys.iter().any(|k| k == cut),
+        "as Prolog named it: {keys:?}"
+    );
+    assert!(
+        !keys.iter().any(|k| k.contains("More on Buran")),
+        "{keys:?}"
+    );
+}
+
+#[test]
+fn a_title_has_at_most_60_characters_and_six_words() {
+    // Catches a title of 61 characters, or of seven words, taken for one.
+    let long_title = format!("Buran {}", "x".repeat(55));
+    assert_eq!(long_title.chars().count(), 61);
+    let naming_it = format!("See {long_title}");
+    let seven = "One two three four five six seven";
+    let items = [
+        long_title.as_str(),
+        &naming_it,
+        seven,
+        "Notes on one two three four five six seven",
+    ];
+    let keys = suggested_keys(&mut room("mention-titles", &items));
+    let titled = |title: &str| {
+        keys.iter()
+            .any(|k| k.contains(&format!(", \"{title}\") | ")))
+    };
+    assert!(!titled(&long_title), "61 characters: {keys:?}");
+    assert!(!titled(seven), "seven words: {keys:?}");
+}
+
+/// The keys of the suggestions, read and reasoned over.
+fn suggested_keys(r: &mut Room) -> Vec<String> {
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    r.app
+        .reason
+        .suggestions
+        .list
+        .iter()
+        .map(|s| s.key())
+        .collect()
+}
+
+#[test]
+fn a_mention_is_ranked_among_the_engine_s_suggestions_by_its_evidence() {
+    // Catches the mentions, worked out apart from the engine's
+    // suggestions, put after them whatever their evidence: a mention
+    // scores 3, so it comes before a rule seen twice, which scores 2.
+    let mut r = room(
+        "mention-rank",
+        &["Buran flight", "Notes on the buran flight launch"],
+    );
+    for f in ["p(a, b)", "p(c, d)", "q(a, b)", "q(c, d)"] {
+        r.command(&format!("fact {f}"));
+    }
+    r.app.evaluate().unwrap();
+    let list = &r.app.reason.suggestions.list;
+    let kinds: Vec<String> = list.iter().map(|s| s.identity()).collect();
+    let first_rule = kinds.iter().position(|k| k.starts_with("rule("));
+    let mention = kinds.iter().position(|k| k.starts_with("mention("));
+    assert!(mention.is_some() && first_rule.is_some(), "{kinds:?}");
+    assert!(mention < first_rule, "{kinds:?}");
+}

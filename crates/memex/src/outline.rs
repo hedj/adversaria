@@ -372,6 +372,12 @@ impl Outline {
         id == TOP || self.items.contains_key(&id)
     }
 
+    /// The links whose ends are both in the outline.
+    pub(crate) fn live_links(&self) -> impl Iterator<Item = &Link> {
+        let live = |l: &&Link| self.contains(l.from) && self.contains(l.to);
+        self.links.iter().filter(live)
+    }
+
     /// The items at an item's level under its parent, it among them.
     pub fn siblings(&self, id: u64) -> &[u64] {
         self.children(self.parent_or_top(id))

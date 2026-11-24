@@ -195,10 +195,7 @@ fn page_term(pages: &HashMap<String, u64>, key: String) -> Term {
 /// item_link(From, To, Type) for each link whose ends are both items,
 /// each by the item it is from.
 fn link_facts(o: &Outline) -> impl Iterator<Item = (u64, Term)> + '_ {
-    let live = o
-        .links
-        .iter()
-        .filter(|l| o.contains(l.from) && o.contains(l.to));
+    let live = o.live_links();
     live.map(|l| (l.from, item_link(l.from, l.to, &l.kind)))
 }
 
