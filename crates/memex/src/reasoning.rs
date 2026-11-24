@@ -4,6 +4,7 @@
 
 use crate::ace::Ace;
 use crate::engine::Engine;
+use crate::mentions::Mentions;
 use crate::notebook::strings;
 use crate::reason::{Shown, Suggestion, WorldEval};
 use crate::world::World;
@@ -60,6 +61,8 @@ pub struct Reasoning {
     /// Where the journal was when reasoning last ran: its tip and its
     /// length.
     pub(crate) at: Option<(u64, usize)>,
+    /// The current world's unlinked mentions, kept to follow its changes.
+    pub(crate) mentions: Mentions,
 }
 
 impl Reasoning {

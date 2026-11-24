@@ -81,7 +81,8 @@ impl App {
     /// so at equal evidence it follows them, as Prolog ordered them.
     fn engine_suggestions(&mut self) -> Result<Vec<Suggestion>, String> {
         let mut all = self.prolog_suggestions()?;
-        all.extend(self.notebook.outline.mention_suggestions());
+        self.reason.mentions.update(&self.notebook.outline);
+        all.extend(self.reason.mentions.suggestions(&self.notebook.outline));
         all.sort_by_key(|s| std::cmp::Reverse(s.score));
         Ok(all)
     }
