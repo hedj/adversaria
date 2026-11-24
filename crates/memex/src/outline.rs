@@ -338,13 +338,14 @@ impl<'a> Body<'a> {
 
 impl Item {
     /// A new item under another, with the style and origin its entry gives.
-    fn new(id: u64, parent: u64, spans: Vec<Span>, text: String, block: Block) -> Item {
+    /// It has no text until its spans are set (Outline::set_spans).
+    fn new(id: u64, parent: u64, block: Block) -> Item {
         Item {
             id,
             parent,
             children: vec![],
-            spans,
-            text,
+            spans: vec![],
+            text: String::new(),
             block,
         }
     }
@@ -608,9 +609,8 @@ impl Outline {
         if !self.spans_valid(&spans) {
             return None;
         }
-        let text = self.joined(&spans);
-        let item = Item::new(seq, under, spans, text, b.block());
-        self.items.insert(seq, item);
+        self.items.insert(seq, Item::new(seq, under, b.block()));
+        self.set_spans(seq, spans)?;
         self.place(seq, under, b.num("after"));
         Some(())
     }
@@ -619,6 +619,12 @@ impl Outline {
         let id = self.item_in(b)?;
         self.record_text(seq, id, b);
         let spans = b.spans(seq).filter(|s| self.spans_valid(s))?;
+        self.set_spans(id, spans)
+    }
+
+    /// Set an item's spans, and its text with them: the one place either
+    /// changes.
+    fn set_spans(&mut self, id: u64, spans: Vec<Span>) -> Option<()> {
         let text = self.joined(&spans);
         let item = self.items.get_mut(&id)?;
         (item.spans, item.text) = (spans, text);
