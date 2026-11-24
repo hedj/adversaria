@@ -8,10 +8,12 @@
 //! * writing: edit (create, text, move, delete, facts, derive, constraint), link, name;
 //! * searching: view leap and find;
 //! * following links: view follow;
-//! * navigating: view move, fold, pane, scope;
+//! * navigating: view move, fold, pane, scope; view go (to an address),
+//!   back and forward;
 //! * deciding: adopt, retract, suppose, undo, redo, purge, view dismiss and world;
 //! * checking: view interrogate; view move that ends with the inspector
-//!   showing a claim's questions (`inspects`); and facts that are rulings;
+//!   showing a claim's questions (`inspects`); facts that are rulings;
+//!   and view verdict, the user's word on whether a finding is right;
 //! * importing: import; exporting: view export.
 //!
 //! Clerical work is searching, following links and navigating.
@@ -86,9 +88,11 @@ pub fn kind(e: &Entry) -> Option<&'static str> {
         ("view", "leap" | "find") => Some("searching"),
         ("view", "follow") => Some("following links"),
         ("view", "move") if inspects(e) => Some("checking"),
-        ("view", "move" | "fold" | "pane" | "scope") => Some("navigating"),
+        ("view", "move" | "fold" | "pane" | "scope" | "go" | "back" | "forward") => {
+            Some("navigating")
+        }
         ("view", "dismiss" | "world") => Some("deciding"),
-        ("view", "interrogate") => Some("checking"),
+        ("view", "interrogate" | "verdict") => Some("checking"),
         ("view", "export") => Some("exporting"),
         ("view", _) => None,
         _ => None,
@@ -377,6 +381,23 @@ mod tests {
         assert_eq!(
             (kind(&es[1]), kind(&es[2])),
             (Some("checking"), Some("navigating"))
+        );
+    }
+
+    #[test]
+    fn going_to_an_address_back_or_forward_is_navigating() {
+        // Catches the jumps of go, back and forward left unclassified, as
+        // eight of the schema-1 fixture's nine unclassified entries were,
+        // and a verdict on a finding counted as no action.
+        let view = |op: &str| ("view", json!({"op": op}));
+        let ops = ["go", "back", "forward", "verdict"];
+        let mut bodies = vec![("edit", json!({"op": "init"}))];
+        bodies.extend(ops.map(view));
+        let kinds: Vec<_> = chain(&bodies)[1..].iter().map(kind).collect();
+        let navigating = Some("navigating");
+        assert_eq!(
+            kinds,
+            [navigating, navigating, navigating, Some("checking")]
         );
     }
 
