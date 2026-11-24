@@ -90,7 +90,8 @@ fn counts_match_a_hand_count() {
     // counts made from that list by hand: writing 3 5 7 8 9 14 15 16 17;
     // navigating 4 6 18 23; searching 11; deciding 12 20 21 22;
     // observations 10 13 19; entries 1 and 2 are the memex's own: the
-    // journal's first, and the session's start. Entry 19 offers two rules;
+    // journal's first, unclassified, and the session's start, marked as
+    // written by the memex on its own. Entry 19 offers two rules;
     // 20 adopts one, 21 dismisses one, 22 retracts 20. Entry 10 shows the
     // violation date(buran, 1988) · date(buran, 1989); entry 13, in the
     // actual world after the retraction, shows none.
@@ -153,7 +154,7 @@ fn counts_match_a_hand_count() {
             + r.actions["exporting"],
         0
     );
-    assert_eq!((r.observations, r.unclassified), (3, 2));
+    assert_eq!((r.observations, r.by_memex, r.unclassified), (3, 1, 1));
     assert_eq!(
         (r.offered, r.adopted, r.dismissed, r.adopted_then_retracted),
         (2, 1, 1, 1)
@@ -217,10 +218,11 @@ fn the_program_reports_a_valid_journal_and_refuses_a_broken_one() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// Every entry a report counts: as an action, an observation, or
-/// neither.
+/// Every entry a report counts: as an action, an observation, the
+/// memex's own, or none of these.
 fn counted(r: &tools::measures::Report) -> usize {
-    r.actions.values().sum::<usize>() + r.observations + r.unclassified
+    let actions: usize = r.actions.values().sum();
+    actions + r.observations + r.by_memex + r.unclassified
 }
 
 /// A report's entries, observations and actions.

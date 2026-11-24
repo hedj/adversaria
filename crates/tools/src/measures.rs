@@ -1,6 +1,9 @@
 //! The measures report (docs/plan.md, Milestone 7), from the journal alone.
 //!
-//! Every entry is one user action or one observation the memex recorded.
+//! Every entry is one user action, one observation the memex recorded, or
+//! an entry the memex wrote on its own (from schema 2, marked
+//! `"by": "memex"`: a session's start, a reading of a text and what it
+//! states, relinking), which is not the user's action.
 //! Actions by kind, after Licklider's count of his own work:
 //! * writing: edit (create, text, move, delete, facts, derive, constraint), link, name;
 //! * searching: view leap and find;
@@ -39,8 +42,10 @@ pub struct Report {
     pub entries: usize,
     pub actions: BTreeMap<&'static str, usize>,
     pub observations: usize,
-    /// Entries that are neither: the memex's first entry, or a view the
-    /// report does not know. Counted, not hidden.
+    /// Entries the memex wrote on its own, other than observations.
+    pub by_memex: usize,
+    /// Entries that are none of these: the memex's first entry, or a view
+    /// the report does not know. Counted, not hidden.
     pub unclassified: usize,
     pub offered: usize,
     pub adopted: usize,
@@ -114,12 +119,13 @@ impl Report {
         }
     }
 
-    /// An entry, as an action of its kind, an observation, or neither;
-    /// and a dismissal counted.
+    /// An entry, as an observation, the memex's own, an action of its
+    /// kind, or none of these; and a dismissal counted.
     fn count(&mut self, e: &Entry) {
         match kind(e) {
+            _ if is_view(e, &["observed", "offer"]) => self.observations += 1,
+            _ if by_memex(e) => self.by_memex += 1,
             Some(k) => *self.actions.get_mut(k).unwrap() += 1,
-            None if is_view(e, &["observed", "offer"]) => self.observations += 1,
             None => self.unclassified += 1,
         }
         if is_view(e, &["dismiss"]) {
@@ -133,6 +139,12 @@ impl Report {
 /// (docs/concepts.md, decision 4), a move to one is a check.
 fn inspects(e: &Entry) -> bool {
     e.body().is_some_and(|b| b["inspects"].is_u64())
+}
+
+/// Whether the memex wrote an entry on its own, not at the user's command
+/// or key.
+fn by_memex(e: &Entry) -> bool {
+    e.body().is_some_and(|b| b["by"] == "memex")
 }
 
 /// Whether an entry is a view of one of these ops.
@@ -230,8 +242,8 @@ impl fmt::Display for Report {
         let actions: usize = self.actions.values().sum();
         writeln!(
             f,
-            "journal: {} entries: {actions} actions, {} observations, {} unclassified",
-            self.entries, self.observations, self.unclassified
+            "journal: {} entries: {actions} actions, {} observations, {} written by the memex on its own, {} unclassified",
+            self.entries, self.observations, self.by_memex, self.unclassified
         )?;
         writeln!(f, "actions by kind:")?;
         for k in KINDS {
@@ -333,6 +345,22 @@ mod tests {
             obs(&[], "actual"),
         ]);
         assert_eq!(measure(&es).violations_corrected, 1);
+    }
+
+    #[test]
+    fn what_the_memex_writes_on_its_own_is_no_action_of_the_user() {
+        // Catches a reading's facts counted as the user's writing, which
+        // raised the actions and lowered the clerical share.
+        let es = chain(&[
+            ("edit", json!({"op": "init"})),
+            ("view", json!({"op": "start", "schema": 2, "by": "memex"})),
+            ("edit", json!({"op": "facts", "item": 2, "by": "memex"})),
+            ("edit", json!({"op": "facts", "item": 2})),
+            ("view", json!({"op": "offer", "keys": ["k"], "by": "memex"})),
+        ]);
+        let r = measure(&es);
+        assert_eq!((r.by_memex, r.actions["writing"]), (2, 1));
+        assert_eq!((r.observations, r.unclassified), (1, 1));
     }
 
     #[test]
