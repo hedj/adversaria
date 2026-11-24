@@ -15,6 +15,7 @@ mod gone;
 pub mod gui;
 mod habits;
 pub mod history;
+mod inferred;
 pub mod journal;
 pub mod keys;
 mod migrate;

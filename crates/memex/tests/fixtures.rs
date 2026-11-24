@@ -172,9 +172,8 @@ fn opening_a_version_1_journal_migrates_it_and_keeps_the_old_one() {
 
 #[test]
 fn a_migrated_journal_continues_the_old_one_once() {
-    // Catches the migrated entries cut loose from the old ones, a body
-    // changed that version 2 reads as version 1 did, or a second
-    // migration on opening again.
+    // Catches the migrated entries cut loose from the old ones, or a
+    // second migration on opening again.
     let dir = version_1_room("migrate-continues");
     let old = entries_of(&dir);
     drop(App::open(&dir).unwrap());
@@ -186,11 +185,6 @@ fn a_migrated_journal_continues_the_old_one_once() {
         shape(&new),
         shape(&old),
         "the same entries, after the same parents"
-    );
-    assert_eq!(
-        bodies(&new[1..]),
-        bodies(&old[1..]),
-        "no other body changed"
     );
     drop(App::open(&dir).unwrap());
     assert_eq!(entries_of(&dir), new, "migrated once");
@@ -209,9 +203,39 @@ fn shape(es: &[Entry]) -> Vec<(String, Option<u64>)> {
         .collect()
 }
 
-/// Each entry's body.
-fn bodies(es: &[Entry]) -> Vec<Option<serde_json::Value>> {
-    es.iter().map(|e| e.body().cloned()).collect()
+#[test]
+fn migrating_marks_the_memex_s_entries_and_where_writing_left_the_cursor() {
+    // Catches a reading, its statements, its link or an observation left
+    // as the user's; the retraction Suppose wrote (56) taken for the
+    // memex's; a move after typing left a move; or any other change.
+    let dir = version_1_room("migrate-infers");
+    let old = entries_of(&dir);
+    drop(App::open(&dir).unwrap());
+    let new = entries_of(&dir);
+    let pairs = || old[1..].iter().zip(&new[1..]);
+    let by = |e: &Entry| e.body().unwrap()["by"].clone();
+    let marked = pairs().filter(|(o, n)| by(o) != by(n));
+    let marked: Vec<u64> = marked.map(|(o, _)| o.seq).collect();
+    let mut own: Vec<u64> = (30..=39).collect();
+    own.extend([55, 57]);
+    assert_eq!(marked, own);
+    let written = pairs().filter(|(_, n)| n.body().unwrap()["op"] == "written");
+    let written: Vec<u64> = written.map(|(o, _)| o.seq).collect();
+    assert_eq!(written, (3..=29).step_by(2).collect::<Vec<u64>>());
+    for (o, n) in pairs() {
+        assert_eq!(as_version_1(n), o.body().cloned(), "entry {}", o.seq);
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A migrated entry's body with what migration adds taken off again.
+fn as_version_1(e: &Entry) -> Option<serde_json::Value> {
+    let mut b = e.body()?.clone();
+    if b["op"] == "written" {
+        b["op"] = serde_json::json!("move");
+    }
+    b.as_object_mut()?.remove("by");
+    Some(b)
 }
 
 #[test]

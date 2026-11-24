@@ -3,29 +3,42 @@
 //! converted where version 2 says it otherwise, so every hash changes;
 //! parents stay, by number. Entry 1 names the hash of the last entry of
 //! the journal it came from, which that journal's seals, kept beside it,
-//! still seal.
+//! still seal. What version 2 records and version 1 did not is inferred
+//! from version 1's entries (crate::inferred).
 
+use crate::inferred::Inferred;
 use format::record::Entry;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
 /// A journal's entries of version 1, as version 2 writes them.
 pub(crate) fn from_v1(entries: &[Entry]) -> Result<Vec<Entry>, String> {
-    let mut rewrite = Rewrite {
-        last: entries.last().map(|e| e.hash.clone()),
-        hashes: HashMap::new(),
-    };
+    let mut rewrite = Rewrite::of(entries);
     entries.iter().map(|e| rewrite.entry(e)).collect()
 }
 
 /// A journal being written again: the hash of the old journal's last
-/// entry, and each entry's new hash, by its number.
+/// entry, what version 2 records of its entries that version 1 did not,
+/// and each entry's new hash, by its number.
 struct Rewrite {
     last: Option<String>,
+    inferred: Inferred,
     hashes: HashMap<u64, String>,
 }
 
 impl Rewrite {
+    /// The rewriting of these entries, none written yet.
+    fn of(entries: &[Entry]) -> Rewrite {
+        let last = entries.last().map(|e| e.hash.clone());
+        let inferred = Inferred::of(entries);
+        let hashes = HashMap::new();
+        Rewrite {
+            last,
+            inferred,
+            hashes,
+        }
+    }
+
     /// An entry written again, its new hash kept for its children.
     fn entry(&mut self, e: &Entry) -> Result<Entry, String> {
         let new = self.rewritten(e)?;
@@ -37,26 +50,31 @@ impl Rewrite {
     /// version 2 says it otherwise, else its content as it was.
     fn rewritten(&self, e: &Entry) -> Result<Entry, String> {
         let parent = e.parent_seq().map(|p| (p, self.hashes[&p].as_str()));
-        match converted(e, self.last.as_deref()) {
+        match self.converted(e) {
             Some(b) => Entry::new(e.seq, parent, e.kind(), b),
             None => e.with_parent(parent),
         }
     }
 }
 
-/// An entry's body as version 2 writes it, if that differs: the first
-/// entry names the journal it came from, by its last hash; a session's
-/// start drops the schema, which the header now declares. A purged
-/// entry has no body to convert, and stays purged.
-fn converted(e: &Entry, last: Option<&str>) -> Option<Value> {
-    let mut body = e.body()?.clone();
-    if e.seq == 1 {
-        body["migrated_from"] = json!({"version": 1, "last": last});
-        return Some(body);
+impl Rewrite {
+    /// An entry's body as version 2 writes it, if that differs: the first
+    /// entry names the journal it came from, by its last hash; a
+    /// session's start drops the schema, which the header now declares;
+    /// what the memex wrote on its own is marked so; a view that only
+    /// records where writing left the cursor is `written`. A purged entry
+    /// has no body to convert, and stays purged.
+    fn converted(&self, e: &Entry) -> Option<Value> {
+        let mut body = e.body()?.clone();
+        if e.seq == 1 {
+            body["migrated_from"] = json!({"version": 1, "last": self.last});
+        }
+        if e.kind() == "view" && body["op"] == "start" {
+            body.as_object_mut().map(|b| b.remove("schema"));
+        }
+        self.inferred.mark(e.seq, &mut body);
+        (Some(&body) != e.body()).then_some(body)
     }
-    let start = e.kind() == "view" && body["op"] == "start";
-    let schema = body.as_object_mut().and_then(|b| b.remove("schema"));
-    (start && schema.is_some()).then_some(body)
 }
 
 #[cfg(test)]

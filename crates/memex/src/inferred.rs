@@ -1,0 +1,255 @@
+//! What version 2 of the journal records and version 1 did not, inferred
+//! from version 1's entries when a journal is migrated (docs/design.md,
+//! The journal format, Versions):
+//!
+//! * The memex's own entries, marked `"by": "memex"`: a reading's `read`
+//!   record and the statements it lists; a `relink` record; `observed`
+//!   and `offer`; an inline link (a `[[link]]` in a text), except one the
+//!   user's `make` wrote; and a retraction of a reading's statement or of
+//!   an inline link within a run of such entries that ends in a `read` or
+//!   `relink` record. A retraction that Suppose wrote, followed by no
+//!   such record, stays the user's.
+//! * A view that only records where writing left the cursor, `written`:
+//!   a `move` right after the `create` of the item it puts the cursor on,
+//!   or after the `text` of that item. A move of the text cursor in the
+//!   item just typed into, before the pause, is taken for writing too;
+//!   a view after Backspace erased an empty item stays a move.
+
+use format::record::Entry;
+use serde_json::{Value, json};
+use std::collections::HashSet;
+
+/// The entries version 2 would mark as the memex's own, and the views it
+/// would write as `written`, by their numbers.
+pub(crate) struct Inferred {
+    by_memex: HashSet<u64>,
+    written: HashSet<u64>,
+}
+
+impl Inferred {
+    pub(crate) fn of(es: &[Entry]) -> Inferred {
+        let by_memex = Runs::of(es).own(es);
+        let written = es.windows(2).filter(|w| left(&w[0], &w[1]));
+        let written = written.map(|w| w[1].seq).collect();
+        Inferred { by_memex, written }
+    }
+
+    /// Mark an entry's body as version 2 writes it.
+    pub(crate) fn mark(&self, seq: u64, body: &mut Value) {
+        if self.by_memex.contains(&seq) && body["by"].is_null() {
+            body["by"] = json!("memex");
+        }
+        if self.written.contains(&seq) {
+            body["op"] = json!("written");
+        }
+    }
+}
+
+/// What the runs of a journal hold: the statements readings list, the
+/// inline links, and the entries a `make` wrote, by their numbers.
+struct Runs {
+    stated: HashSet<u64>,
+    inline: HashSet<u64>,
+    made: HashSet<u64>,
+}
+
+impl Runs {
+    fn of(es: &[Entry]) -> Runs {
+        let stated = stated(es);
+        let inline = inline_links(es);
+        let made = made_by_make(es);
+        Runs {
+            stated,
+            inline,
+            made,
+        }
+    }
+
+    /// The entries the memex wrote on its own.
+    fn own(&self, es: &[Entry]) -> HashSet<u64> {
+        let own = (0..es.len()).filter(|i| self.is_own(es, *i));
+        own.map(|i| es[i].seq).collect()
+    }
+
+    /// Whether the entry at an index is one the memex wrote on its own.
+    fn is_own(&self, es: &[Entry], i: usize) -> bool {
+        let e = &es[i];
+        let Some(b) = e.body().filter(|_| !self.made.contains(&e.seq)) else {
+            return false;
+        };
+        match (e.kind(), b["op"].as_str().unwrap_or("")) {
+            ("edit", "read" | "relink") | ("view", "observed" | "offer" | "start") => true,
+            ("retract", _) => self.in_run(e) && self.run_ends_in_record(&es[i + 1..]),
+            _ => self.stated.contains(&e.seq) || self.inline.contains(&e.seq),
+        }
+    }
+
+    /// Whether an entry can be part of a reading's or a relinking's run:
+    /// a statement, an inline link, or a retraction of either.
+    fn in_run(&self, e: &Entry) -> bool {
+        let target = e.body().and_then(|b| b["target"].as_u64());
+        let of_run = |s: u64| self.stated.contains(&s) || self.inline.contains(&s);
+        match e.kind() {
+            "retract" => target.is_some_and(of_run),
+            _ => of_run(e.seq),
+        }
+    }
+
+    /// Whether the entries after a run's entry go on with the run to a
+    /// `read` or `relink` record that closes it.
+    fn run_ends_in_record(&self, after: &[Entry]) -> bool {
+        let next = after.iter().find(|e| !self.in_run(e));
+        let closes = |b: &Value| b["op"] == "read" || b["op"] == "relink";
+        next.is_some_and(|e| e.kind() == "edit" && e.body().is_some_and(closes))
+    }
+}
+
+/// Whether a view only records where an edit just before it left the
+/// cursor: on the item it made, or in the item it typed into.
+fn left(edit: &Entry, view: &Entry) -> bool {
+    let after = edit.kind() == "edit" && view.parent_seq() == Some(edit.seq);
+    after && is_move(view) && stays(edit, view)
+}
+
+/// Whether an entry is a view of op `move`.
+fn is_move(view: &Entry) -> bool {
+    let moved = |v: &Value| v["op"] == "move";
+    view.kind() == "view" && view.body().is_some_and(moved)
+}
+
+/// Whether a view's cursor is where an edit put it: on the item it made,
+/// or in the item it typed into.
+fn stays(edit: &Entry, view: &Entry) -> bool {
+    let (Some(e), Some(v)) = (edit.body(), view.body()) else {
+        return false;
+    };
+    let at = cursor(v);
+    match e["op"].as_str() {
+        Some("create") => at == Some(edit.seq),
+        Some("text") => at.is_some() && at == e["item"].as_u64(),
+        _ => false,
+    }
+}
+
+/// The cursor a view records: in its pane with the focus.
+fn cursor(v: &Value) -> Option<u64> {
+    let focus = v["focus"].as_u64().unwrap_or(0) as usize;
+    v["panes"][focus]["cursor"].as_u64()
+}
+
+/// The numbers of the statements readings list.
+fn stated(es: &[Entry]) -> HashSet<u64> {
+    let reads = es
+        .iter()
+        .filter(|e| e.kind() == "edit")
+        .filter_map(|e| e.body());
+    let reads = reads.filter(|b| b["op"] == "read");
+    reads.flat_map(|b| numbers(&b["entries"])).collect()
+}
+
+/// The numbers of the inline links: those a `[[link]]` in a text wrote.
+fn inline_links(es: &[Entry]) -> HashSet<u64> {
+    let inline = |e: &&Entry| e.body().is_some_and(|b| b["inline"] == true);
+    let links = es.iter().filter(|e| e.kind() == "link").filter(inline);
+    links.map(|e| e.seq).collect()
+}
+
+/// The numbers of the entries the user's `make` wrote: from the entry its
+/// record names to the record itself.
+fn made_by_make(es: &[Entry]) -> HashSet<u64> {
+    let made = |e: &Entry| e.body().filter(|b| b["op"] == "make")?["of"].as_u64();
+    let edits = es.iter().filter(|e| e.kind() == "edit");
+    edits
+        .filter_map(|e| Some(made(e)?..=e.seq))
+        .flatten()
+        .collect()
+}
+
+/// A list's numbers.
+fn numbers(v: &Value) -> Vec<u64> {
+    let list = v.as_array().into_iter().flatten();
+    list.filter_map(Value::as_u64).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Entries of these kinds and bodies, each after the one before.
+    fn chain(bodies: &[(&str, Value)]) -> Vec<Entry> {
+        let mut out: Vec<Entry> = Vec::new();
+        for (kind, body) in bodies {
+            out.push(next(&out, kind, body.clone()));
+        }
+        out
+    }
+
+    /// The entry of a kind and a body after these, numbered after the last.
+    fn next(es: &[Entry], kind: &str, body: Value) -> Entry {
+        Entry::new(es.len() as u64 + 1, after(es), kind, body).unwrap()
+    }
+
+    /// The last entry, as Entry::new names a parent.
+    fn after(es: &[Entry]) -> Option<(u64, &str)> {
+        es.last().map(|e| (e.seq, e.hash.as_str()))
+    }
+
+    /// A view of op, its cursor on an item.
+    fn view(op: &str, at: u64) -> (&'static str, Value) {
+        let panes = json!([{"kind": "outline", "cursor": at}]);
+        ("view", json!({"op": op, "focus": 0, "panes": panes}))
+    }
+
+    /// Numbers, sorted.
+    fn sorted(set: &HashSet<u64>) -> Vec<u64> {
+        let mut v: Vec<u64> = set.iter().copied().collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn runs_tell_the_memex_s_entries_from_the_user_s() {
+        // Catches a re-reading's retraction, a relinking, or a reading's
+        // link left as the user's; or the user's `make`, or a retraction
+        // Suppose wrote, taken for the memex's.
+        let es = chain(&[
+            ("edit", json!({"op": "init"})),
+            ("edit", json!({"op": "text", "item": 9})),
+            ("link", json!({"from": 9, "to": 7, "inline": true})),
+            ("edit", json!({"op": "facts", "item": 9})),
+            ("edit", json!({"op": "read", "item": 9, "entries": [4]})),
+            ("edit", json!({"op": "text", "item": 9})),
+            ("retract", json!({"target": 4})),
+            ("edit", json!({"op": "facts", "item": 9})),
+            ("edit", json!({"op": "read", "item": 9, "entries": [8]})),
+            ("retract", json!({"target": 8, "constraints": [3]})),
+            view("observed", 9),
+            ("edit", json!({"op": "create", "under": 0})),
+            ("link", json!({"from": 9, "to": 12, "inline": true})),
+            ("edit", json!({"op": "make", "item": 9, "of": 12})),
+            ("name", json!({"name": "n", "item": 7})),
+            ("link", json!({"from": 9, "to": 7, "inline": true})),
+            ("edit", json!({"op": "relink", "name": "n", "of": 15})),
+        ]);
+        let own = Runs::of(&es).own(&es);
+        assert_eq!(sorted(&own), [3, 4, 5, 7, 8, 9, 11, 16, 17]);
+    }
+
+    #[test]
+    fn a_move_is_written_only_where_writing_left_the_cursor() {
+        // Catches every move after an edit taken for writing, though the
+        // user moved the cursor elsewhere, or a move after a deletion.
+        let es = chain(&[
+            ("edit", json!({"op": "init"})),
+            ("edit", json!({"op": "create", "under": 0})),
+            view("move", 2),
+            ("edit", json!({"op": "text", "item": 2})),
+            view("move", 2),
+            ("edit", json!({"op": "text", "item": 2})),
+            view("move", 9),
+            ("edit", json!({"op": "delete", "item": 2})),
+            view("move", 9),
+        ]);
+        assert_eq!(sorted(&Inferred::of(&es).written), [3, 5]);
+    }
+}
