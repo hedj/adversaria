@@ -292,9 +292,11 @@ fn changes(held: &HashSet<Term>, wanted: &[Term]) -> (Vec<Term>, Vec<Term>) {
     (removed.cloned().collect(), added.cloned().collect())
 }
 
-/// The most cells a part of a lexicon change holds: a message holds at
-/// most 65,535 words, and a part is sent with little else.
-const PART: usize = 8_000;
+/// The most cells a part of a lexicon change holds. A message holds at
+/// most 65,535 words; and a part is a step of the pause, which a key
+/// pressed during it waits for, so it is small: about 360 names, sent in
+/// about 10 ms (measured).
+const PART: usize = 4_000;
 
 /// The first part of a change: of the entries taken out, if there are
 /// any, else of those put in.
