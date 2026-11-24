@@ -7,11 +7,9 @@ use super::offers::offer_row;
 use super::{Presented, dim, plain};
 use crate::app::App;
 use crate::history::Step;
+use crate::offers::LISTED;
 use crate::present::Presentation;
 use ratatui::text::Line;
-
-/// How many offers the inspector lists; the rest it counts.
-const LISTED: usize = 12;
 
 /// How many steps of the history it lists.
 const STEPS: usize = 8;

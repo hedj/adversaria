@@ -75,3 +75,59 @@ fn a_change_of_a_revision_says_where_it_came_from() {
     r.command(&format!("import document {}", file.display()));
     assert!(r.shows("   from the revision of a.md"), "{:#?}", r.lines());
 }
+
+#[test]
+fn the_notebook_records_the_suggestions_it_lists_as_offered_once() {
+    // Catches a suggestion the notebook shows and the measures never count.
+    let mut r = Room::new("offer-recorded");
+    r.items(&["Buran flight", "Notes on the buran flight launch"]);
+    r.app.idle();
+    r.app.evaluate().unwrap();
+    assert!(
+        offers(&r).is_empty(),
+        "offered before the notebook is drawn"
+    );
+    r.command("go parent");
+    r.app.evaluate().unwrap();
+    let listed = inspector(&r);
+    let listed = listed
+        .iter()
+        .filter(|l| l.trim_start().starts_with("suggestion "));
+    let recorded = offers(&r);
+    assert_eq!(recorded.len(), 1, "{recorded:?}");
+    let keys = recorded[0]["keys"].as_array().unwrap();
+    assert!(!keys.is_empty(), "the test needs a suggestion listed");
+    assert_eq!(keys.len(), listed.count(), "{recorded:?}");
+    assert_eq!(
+        recorded[0]["by"], "memex",
+        "the memex offered it on its own"
+    );
+    r.app.evaluate().unwrap();
+    assert_eq!(offers(&r).len(), 1, "offered again");
+}
+
+#[test]
+fn a_supposition_hides_the_notebook_so_its_suggestions_are_not_offered() {
+    // Catches offers recorded from a notebook that the worlds cover.
+    let mut r = Room::new("offer-supposed");
+    r.items(&["Buran flight", "Notes on the buran flight launch"]);
+    r.app.idle();
+    r.command("suppose that w");
+    r.command("go parent");
+    r.app.evaluate().unwrap();
+    assert!(
+        r.app.reason.supposition.is_some(),
+        "the test needs a supposition"
+    );
+    assert!(
+        !r.app.reason.suggestions.list.is_empty(),
+        "the test needs suggestions"
+    );
+    assert!(offers(&r).is_empty(), "{:?}", offers(&r));
+}
+
+/// The bodies of the offer entries, in the journal's order.
+fn offers(r: &Room) -> Vec<serde_json::Value> {
+    let bodies = r.app.journal().entries().iter().filter_map(|e| e.body());
+    bodies.filter(|b| b["op"] == "offer").cloned().collect()
+}

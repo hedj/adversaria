@@ -135,17 +135,31 @@ impl App {
         self.write_view("observed", body);
     }
 
-    /// Record the suggestions shown for the first time, while the pane
-    /// shows them.
+    /// Record the suggestions drawn for the first time: those the pane
+    /// shows, while it is shown, and those the notebook's inspector
+    /// lists, while it is drawn.
     fn record_offers(&mut self) {
-        if !self.session.view.shows(PaneKind::Suggestions) {
-            return;
-        }
-        let new = self.reason.suggestions.unoffered();
+        let new = self
+            .reason
+            .suggestions
+            .not_offered(self.suggestions_drawn());
         if new.is_empty() {
             return;
         }
         self.write_view("offer", json!({"keys": new}));
+    }
+
+    /// The suggestions drawn now, by their identities.
+    fn suggestions_drawn(&self) -> Vec<String> {
+        let mut drawn = Vec::new();
+        if self.session.view.shows(PaneKind::Suggestions) {
+            let shown = self.reason.suggestions.shown().into_iter();
+            drawn.extend(shown.map(|s| s.identity()));
+        }
+        if self.notebook_drawn() {
+            drawn.extend(self.suggestions_listed());
+        }
+        drawn
     }
 
     /// What adopting an item's claims would raise, computed in a spare

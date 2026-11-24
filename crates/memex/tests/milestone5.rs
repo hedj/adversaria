@@ -451,7 +451,7 @@ fn suggests(app: &App, text: &str) -> bool {
 
 #[test]
 fn a_suggestion_is_offered_once() {
-    // The measures count the suggestions offered (shown in the pane), so
+    // The measures count the suggestions offered (drawn on the screen), so
     // each is recorded once, even after more changes or a replay.
     let mut app = open("offered");
     typ(&mut app, "Places");

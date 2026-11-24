@@ -157,7 +157,7 @@ pub struct Suggestions {
     pub list: Vec<Suggestion>,
     /// Keys of dismissed suggestions, from the journal.
     pub dismissed: BTreeSet<String>,
-    /// Identities of those recorded as offered (shown in the pane).
+    /// Identities of those recorded as offered (drawn on the screen).
     offered: BTreeSet<String>,
     /// While the suggestions are listed, their order is kept: a suggestion
     /// never moves under the pointer, and the number that adopts it stays
@@ -212,9 +212,12 @@ impl Suggestions {
         self.offered.extend(keys);
     }
 
-    /// The identities of those shown and not yet offered.
-    pub(crate) fn unoffered(&self) -> Vec<String> {
-        let shown = self.shown().into_iter().map(|s| s.identity());
-        shown.filter(|k| !self.offered.contains(k)).collect()
+    /// Of these identities, those not yet recorded as offered, each once
+    /// in its first place.
+    pub(crate) fn not_offered(&self, keys: Vec<String>) -> Vec<String> {
+        let mut seen = self.offered.clone();
+        keys.into_iter()
+            .filter(|k| seen.insert(k.clone()))
+            .collect()
     }
 }
