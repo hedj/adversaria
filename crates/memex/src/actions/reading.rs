@@ -45,11 +45,13 @@ impl App {
     }
 
     /// Send a part of the parser's lexicon, if it is not yet the current
-    /// world's: whether a part was sent. A failure sends none, and the
-    /// reading that follows says it.
+    /// world's: whether a step was taken. The world's words, once the
+    /// journal moved, are a step of their own, so that a key pressed
+    /// during the pause waits for them or for a part, not both. A failure
+    /// sends none, and the reading that follows says it.
     fn lexicon_step(&mut self) -> bool {
-        let Ok(words) = self.words() else {
-            return false;
+        let Some(words) = self.kept_words() else {
+            return self.words().is_ok();
         };
         let Ok(ace) = self.reason.ace() else {
             return false;
@@ -147,15 +149,19 @@ impl App {
     /// stays where it is: gathering them from 10,000 facts took 16 ms, and
     /// each step of a pause, and each key on an ace line, asks for them.
     pub(crate) fn words(&mut self) -> Result<Rc<Words>, String> {
-        let at = self.journal_at();
-        if let Some((kept_at, words)) = &self.reason.words
-            && *kept_at == at
-        {
-            return Ok(words.clone());
+        if let Some(words) = self.kept_words() {
+            return Ok(words);
         }
         let words = Rc::new(words_of(&self.notebook.facts_now()?));
-        self.reason.words = Some((at, words.clone()));
+        self.reason.words = Some((self.journal_at(), words.clone()));
         Ok(words)
+    }
+
+    /// The current world's words, if they are kept for where the journal
+    /// is.
+    fn kept_words(&self) -> Option<Rc<Words>> {
+        let (at, words) = self.reason.words.as_ref()?;
+        (*at == self.journal_at()).then(|| words.clone())
     }
 
     /// State what an item's text was read as, in place of what it was read
