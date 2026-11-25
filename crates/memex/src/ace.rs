@@ -18,6 +18,37 @@ use std::collections::{BTreeSet, HashSet};
 pub struct Ace {
     p: Prolog,
     lexicon: Option<HashSet<Term>>,
+    /// What is left to send to make the lexicon held the entries last
+    /// asked for: compared once, not at each part.
+    left: Option<Left>,
+}
+
+/// The entries last asked for, and what is left to send to make the
+/// lexicon held them: entries to take out, then entries to put in, each
+/// in the order they go.
+struct Left {
+    wanted: Vec<Term>,
+    removed: Vec<Term>,
+    added: Vec<Term>,
+}
+
+impl Left {
+    /// What is left to send to make a lexicon held these entries.
+    fn of(held: &HashSet<Term>, wanted: &[Term]) -> Left {
+        let (removed, added) = changes(held, wanted);
+        let wanted = wanted.to_vec();
+        Left {
+            wanted,
+            removed,
+            added,
+        }
+    }
+
+    /// So many entries taken out, and so many put in, sent.
+    fn sent(&mut self, out: usize, put: usize) {
+        self.removed.drain(..out);
+        self.added.drain(..put);
+    }
 }
 
 /// What APE made of a text: its paraphrase and logical form (APE's DRS)
@@ -162,7 +193,11 @@ impl Ace {
         }
         let p = Prolog::start_with(&prolog_file("ace_server.pl"))?;
         let lexicon = Some(HashSet::new());
-        Ok(Ace { p, lexicon })
+        Ok(Ace {
+            p,
+            lexicon,
+            left: None,
+        })
     }
 
     /// Make the user lexicon these entries, by what changed since it was
@@ -187,10 +222,13 @@ impl Ace {
             Some(held) => held,
             None => self.emptied_lexicon()?,
         };
-        let (removed, added) = changes(&held, entries);
-        let (out, put) = first_part(&removed, &added);
+        let mut left = match self.left.take() {
+            Some(left) if left.wanted == entries => left,
+            _ => Left::of(&held, entries),
+        };
+        let (out, put) = first_part(&left.removed, &left.added);
         if out.is_empty() && put.is_empty() {
-            self.lexicon = Some(held);
+            (self.lexicon, self.left) = (Some(held), Some(left));
             return Ok(None);
         }
         let told = self.change(out, put)?;
@@ -198,7 +236,8 @@ impl Ace {
             held.remove(e);
         }
         held.extend(put.iter().cloned());
-        self.lexicon = Some(held);
+        left.sent(out.len(), put.len());
+        (self.lexicon, self.left) = (Some(held), Some(left));
         Ok(Some(told))
     }
 

@@ -50,6 +50,27 @@ fn a_lexicon_of_twenty_thousand_names_is_sent_in_parts_then_by_what_changed() {
 }
 
 #[test]
+fn a_lexicon_changed_while_it_is_sent_in_parts_ends_as_the_one_asked_last() {
+    // Catches what is left to send kept for entries no longer asked for:
+    // a name of the first list sent and not taken out, or one of the
+    // second never put in.
+    let mut ace = Ace::start().unwrap();
+    let first: Vec<Term> = (0..2_000)
+        .map(|i| proper_name(&format!("event_{i}")))
+        .collect();
+    assert!(ace.lexicon_part(&first).unwrap().is_some(), "a first part");
+    let mut second = first[1_000..].to_vec();
+    second.push(proper_name("buran_flight"));
+    assert!(is_ace(
+        &mut ace,
+        &second,
+        "The date of buran_flight is 1988."
+    ));
+    assert!(is_ace(&mut ace, &second, "The date of event_1999 is 1988."));
+    assert!(!is_ace(&mut ace, &second, "The date of event_0 is 1988."));
+}
+
+#[test]
 fn after_ape_refuses_an_entry_the_lexicon_is_sent_whole_again() {
     // Catches the lexicon taken as still held after APE refused a change,
     // which empties it: the same lexicon set again was not sent.
