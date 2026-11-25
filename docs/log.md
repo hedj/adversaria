@@ -1839,6 +1839,39 @@ What stays slow: a key pressed during a pause step. It broke the limit
 in one of the three runs after (104.1 ms), as it did before; it does
 not undo, and this change does not touch it.
 
+### A key during a pause step (25 November 2026)
+
+A key pressed during a pause waits for the step under way. The test
+timed a key during the second step only; it now also holds the slowest
+step, with what the key took after its own step, to 0.1 s (fc84607).
+That sum is of two measurements, not one key timed. At efb368d the
+slowest step took 31.4-45.8 ms, and a key during it 87.5-109.1 ms; one
+run in three broke the limit.
+
+Timed inside the slowest step, the first after the journal moved: the
+world's facts 5.5-6.2 ms, the parser's words from them 8.0-8.4 ms, the
+lexicon compared with what APE held 3.0-9.3 ms, and a part of about 300
+names sent 9.4-18.8 ms. Each step now does one of these:
+
+1. The words are a step of their own (b4fcfa1).
+2. The lexicon is compared once for each list, and what is left to send
+   kept; each later part checks the list in 0.9-1.3 ms (20f5f5d).
+3. The words are made from the facts the reasoning after the last change
+   gathered, when it ran where the journal is: 8.2-11.3 ms (4cd650d).
+4. The comparison is a step of its own, 4.7 ms (6b0f177).
+
+| Three runs each | efb368d | 6b0f177 |
+| --- | --- | --- |
+| The slowest pause step | 31.4-45.8 ms | 16.1-19.7 ms |
+| A key during it | 87.5-109.1 ms | 63.6-83.0 ms |
+
+Every run passed from the first change on: twelve runs, the worst 98.9
+ms, before the third and fourth changes.
+
+What stays slow: what the key takes after its step, handled, reasoned
+over and drawn, 47.5-63.6 ms in the last three runs, is now most of
+every key. The parts of the lexicon, 10-17 ms, are the slowest steps.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
