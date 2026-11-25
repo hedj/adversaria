@@ -1805,6 +1805,40 @@ a pause step has the least margin, 73.2-83.4 ms (88.5 ms in an earlier run).
 Each is timed on this build machine only, whose runs vary by about
 10 ms.
 
+### Undo from an outline kept in a pause (25 November 2026)
+
+On 25 November the 100 ms test failed in some runs: Ctrl+Z took
+90.8-101.3 ms in three runs (5387f63), and 82.9-104.7 ms at eb3a02f,
+where the work above ended. The build machine was slower than on the day
+before; the code had not changed. An undo replayed the outline from the
+root. Timed once inside Ctrl+Z, on 10,000 items: the path and its lists
+0.9-1.0 ms, applying 20,006 content entries 25.7-26.5 ms, and dropping
+the outline replaced 3.7-3.9 ms. A copy of the outline took 5.7-6.2 ms
+and added about 7 MB of resident memory.
+
+Now a pause, after it writes and reads, keeps a copy of the outline,
+named by the last entry that changed it. A rebuild walks back from the
+new tip to the nearest copy on its path, copies it, and applies only the
+content entries after it. It replays from the root, as before, if it
+meets a retraction first or finds no copy; a purge drops every copy. The
+outline replaced is kept as well, which a redo may start from. The
+notebook keeps at most 8, and the least lately used goes; at about 7 MB
+each, that is about 56 MB at 10,000 items (an estimate from the one
+measurement).
+
+| Timed, with reasoning and drawing | Before (three runs) | After (three runs) |
+| --- | --- | --- |
+| Ctrl+Z | 90.8-101.3 ms | 53.1-66.5 ms |
+| A key pressed during a pause step | 89.4-113.3 ms | 91.1-104.1 ms |
+
+A pause takes one step more, the copy, its shortest: 4.7-5.1 ms with
+drawing. An undo further back than the copies still replays from the
+root.
+
+What stays slow: a key pressed during a pause step. It broke the limit
+in one of the three runs after (104.1 ms), as it did before; it does
+not undo, and this change does not touch it.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:

@@ -793,7 +793,8 @@ impl App {
 
     /// One step of what the memex does when the user pauses: write what is
     /// pending, or send a part of the parser's lexicon, or read one item's
-    /// text; whether more remains. Reading is slower than a keystroke may
+    /// text, or keep a copy of the outline that an undo can start from;
+    /// whether more remains. Reading is slower than a keystroke may
     /// be, so the window takes a step at a time, and stops when a key
     /// comes: a key waits for one step at most, and text is read only
     /// while the user pauses.
@@ -802,13 +803,15 @@ impl App {
             self.flush();
         } else if self.session.waits_to_read() {
             self.read_step();
+        } else {
+            self.notebook.keep_outline();
         }
         self.idle_work()
     }
 
     /// Whether a pause has anything to do.
     pub fn idle_work(&self) -> bool {
-        self.pending() || self.session.waits_to_read()
+        self.pending() || self.session.waits_to_read() || !self.notebook.outline_kept()
     }
 
     /// Write whatever is pending: typed text, then cursor moves.
@@ -930,19 +933,6 @@ impl App {
     // ------------------------------------------------------------------
     // Commands.
 
-    /// The last entry on the path that changed content: what undo undoes.
-    pub(crate) fn content_tip(&self, from: u64) -> Option<u64> {
-        let mut at = Some(from);
-        while let Some(s) = at {
-            let e = self.notebook.entry(s)?;
-            if CONTENT.contains(&e.kind()) || e.kind() == "retract" {
-                return Some(s);
-            }
-            at = e.parent_seq();
-        }
-        None
-    }
-
     /// Why an entry cannot be retracted, if it cannot: it is not in this
     /// world, is its first, is no change, or is retracted already. It
     /// reads the branch, not a replay, so it is quick enough to ask as the
@@ -1012,6 +1002,22 @@ mod tests {
         let body = last.body().unwrap();
         assert_eq!((last.kind(), body["op"].as_str()), ("edit", Some("text")));
         assert!(body.get("by").is_none(), "{body}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_pause_after_a_change_keeps_a_copy_of_the_outline_in_one_step() {
+        // Catches a pause with nothing to do after a change, or one that
+        // never keeps the copy: an undo then replays from the root
+        // (Notebook::rebuild).
+        let dir = std::env::temp_dir().join(format!("adversaria-pause-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut app = App::open(&dir).unwrap();
+        app.idle();
+        app.new_item_after(TOP).unwrap();
+        assert!(app.idle_work(), "a copy to keep");
+        assert!(!app.pause_step(), "kept in one step");
+        assert!(app.notebook.outline_kept());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

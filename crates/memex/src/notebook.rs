@@ -1,7 +1,7 @@
-//! The notebook: the journal, the outline replayed from it at the tip, and
-//! the store of the facts of the world last asked for
-//! (docs/structure.md § The code's structure). It changes only by an
-//! entry, the one way state changes.
+//! The notebook: the journal, the outline replayed from it at the tip, the
+//! outlines it had, kept to start a replay from, and the store of the
+//! facts of the world last asked for (docs/structure.md § The code's
+//! structure). It changes only by an entry, the one way state changes.
 
 use crate::docs::Quote;
 use crate::journal::{Error as JournalError, Journal};
@@ -17,6 +17,11 @@ use std::path::{Path, PathBuf};
 /// Entry kinds that change the outline.
 pub(crate) const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
 
+/// How many outlines the notebook keeps to start a replay from. Each is a
+/// whole outline: about 7 MB at 10,000 items, measured as the memory one
+/// copy added.
+const KEPT: usize = 8;
+
 /// The build this memex is: its git commit, from build.rs.
 pub const BUILD: &str = env!("MEMEX_BUILD");
 
@@ -30,6 +35,11 @@ pub struct Notebook {
     pub redo: Vec<u64>,
     /// The facts of the world last asked for, kept to reach the next.
     store: RefCell<Store>,
+    /// Outlines the notebook has had, each by its content tip, the least
+    /// lately used first: a replay starts from a copy of the nearest on the
+    /// new tip's path, so that an undo need not replay from the root. They
+    /// never change.
+    kept: Vec<(u64, Outline)>,
 }
 
 /// The strings of a list in an entry's body; none if it is no list.
@@ -193,6 +203,7 @@ impl Notebook {
             tip: 0,
             redo: vec![],
             store: RefCell::default(),
+            kept: vec![],
         }
     }
 
@@ -244,8 +255,89 @@ impl Notebook {
         out
     }
 
-    fn rebuild(&mut self) {
-        self.outline = self.outline_at(self.tip);
+    /// The outline at the tip, from the nearest outline kept on its path,
+    /// else replayed from the root; the outline it replaces is kept.
+    fn rebuild(&mut self, was: u64) {
+        let outline = match self.nearest_kept(self.tip) {
+            Some((i, ahead)) => self.kept_copy(i, &ahead),
+            None => self.outline_at(self.tip),
+        };
+        let replaced = std::mem::replace(&mut self.outline, outline);
+        self.keep(self.content_tip(was), replaced);
+    }
+
+    /// The outline kept nearest a tip on its path, by its place among those
+    /// kept, and the content entries after it to the tip, oldest first.
+    /// None is near if a retract comes first: it may take back an entry
+    /// the outline kept holds.
+    fn nearest_kept(&self, tip: u64) -> Option<(usize, Vec<u64>)> {
+        let mut ahead = vec![];
+        for e in self.back_from(tip) {
+            if let Some(i) = self.kept.iter().position(|(at, _)| *at == e.seq) {
+                ahead.reverse();
+                return Some((i, ahead));
+            }
+            if e.kind() == "retract" {
+                return None;
+            }
+            if CONTENT.contains(&e.kind()) {
+                ahead.push(e.seq);
+            }
+        }
+        None
+    }
+
+    /// A copy of an outline kept, by its place among them, with content
+    /// entries applied; the one kept is now the last lately used.
+    fn kept_copy(&mut self, i: usize, ahead: &[u64]) -> Outline {
+        let kept = self.kept.remove(i);
+        let outline = self.applied(kept.1.clone(), ahead);
+        self.kept.push(kept);
+        outline
+    }
+
+    /// An outline with these content entries applied, in order.
+    fn applied(&self, mut outline: Outline, entries: &[u64]) -> Outline {
+        let each = entries.iter().filter_map(|s| self.entry(*s));
+        for e in each {
+            if let Some(b) = e.body() {
+                outline.apply(e.seq, e.kind(), b);
+            }
+        }
+        outline
+    }
+
+    /// Keep an outline, by its content tip, unless one is kept there; the
+    /// least lately used goes beyond KEPT.
+    fn keep(&mut self, at: Option<u64>, outline: Outline) {
+        let Some(at) = at.filter(|at| !self.kept.iter().any(|(k, _)| k == at)) else {
+            return;
+        };
+        self.kept.push((at, outline));
+        if self.kept.len() > KEPT {
+            self.kept.remove(0);
+        }
+    }
+
+    /// Whether an outline is kept for the tip, or none is needed.
+    pub(crate) fn outline_kept(&self) -> bool {
+        let at = self.content_tip(self.tip);
+        at.is_none_or(|at| self.kept.iter().any(|(k, _)| *k == at))
+    }
+
+    /// Keep a copy of the outline at the tip, which a later change may be
+    /// undone back to: what a pause does last (App::pause_step).
+    pub(crate) fn keep_outline(&mut self) {
+        if !self.outline_kept() {
+            let copy = self.outline.clone();
+            self.keep(self.content_tip(self.tip), copy);
+        }
+    }
+
+    /// The last entry on the path that changed content: what undo undoes.
+    pub(crate) fn content_tip(&self, from: u64) -> Option<u64> {
+        let changed = |e: &&Entry| CONTENT.contains(&e.kind()) || e.kind() == "retract";
+        self.back_from(from).find(changed).map(|e| e.seq)
     }
 
     /// The facts stated in the world whose head is an entry, by that
@@ -465,7 +557,7 @@ impl Notebook {
     pub(crate) fn apply(&mut self, e: &Entry) {
         let follows = e.parent_seq() == Some(self.tip);
         let incremental = follows && CONTENT.contains(&e.kind());
-        self.tip = e.seq;
+        let was = std::mem::replace(&mut self.tip, e.seq);
         self.follow_undone(e);
         match e.kind() {
             "view" if follows => {}
@@ -474,8 +566,16 @@ impl Notebook {
                     self.outline.apply(e.seq, e.kind(), b);
                 }
             }
-            _ => self.rebuild(),
+            "purge" => self.purged(),
+            _ => self.rebuild(was),
         }
+    }
+
+    /// A purge took a body that the outlines kept may hold: none is kept,
+    /// and the outline is replayed from the root.
+    fn purged(&mut self) {
+        self.kept.clear();
+        self.outline = self.outline_at(self.tip);
     }
 
     /// The entries undone after an entry: an undo adds the entry it undoes,
@@ -494,5 +594,125 @@ impl Notebook {
             }
             _ => self.redo.clear(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A notebook of a journal of its own, its first entry applied.
+    fn opened(name: &str) -> Notebook {
+        let dir =
+            std::env::temp_dir().join(format!("adversaria-kept-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (mut n, _) = Notebook::open(&dir).unwrap();
+        n.journal.durable = false;
+        let first = n.entry(1).unwrap().clone();
+        n.apply(&first);
+        n
+    }
+
+    /// An entry written after another and applied; its number.
+    fn written(n: &mut Notebook, after: u64, kind: &str, body: Value) -> u64 {
+        let e = n.append(Some(after), kind, body).unwrap();
+        n.apply(&e);
+        e.seq
+    }
+
+    /// An item of a text made at the top, after the tip; its number.
+    fn made(n: &mut Notebook, text: &str) -> u64 {
+        let spans = [[0, 0, text.chars().count()]];
+        let body = json!({"op": "create", "under": TOP, "add": text, "spans": spans});
+        written(n, n.tip, "edit", body)
+    }
+
+    /// The texts of the items, sorted: each is made first at the top.
+    fn texts(n: &Notebook) -> Vec<String> {
+        let mut texts: Vec<String> = n
+            .outline
+            .in_order()
+            .iter()
+            .map(|i| n.outline.text(*i))
+            .collect();
+        texts.sort();
+        texts
+    }
+
+    #[test]
+    fn an_undo_starts_from_the_outline_kept_and_applies_what_follows_it() {
+        // Catches an undo that replays from the root though an outline is
+        // kept on its path, or applies the entries after it out of order.
+        let mut n = opened("undo");
+        made(&mut n, "Alder");
+        n.keep_outline();
+        let birch = made(&mut n, "Birch");
+        let spans = [[birch, 0, 5], [0, 0, 5]];
+        let text = json!({"op": "text", "item": birch, "add": " bark", "spans": spans});
+        let bark = written(&mut n, birch, "edit", text);
+        let cedar = made(&mut n, "Cedar");
+        let undo = n
+            .append(Some(bark), "undo", json!({"undoes": cedar}))
+            .unwrap();
+        assert_eq!(n.nearest_kept(undo.seq), Some((0, vec![birch, bark])));
+        n.apply(&undo);
+        assert_eq!(texts(&n), ["Alder", "Birch bark"]);
+        assert_eq!(n.outline, n.outline_at(n.tip));
+    }
+
+    /// The texts after an undo of an entry, back to another.
+    fn undone(n: &mut Notebook, to: u64, undoes: u64) -> Vec<String> {
+        let undo = n
+            .append(Some(to), "undo", json!({"undoes": undoes}))
+            .unwrap();
+        n.apply(&undo);
+        texts(n)
+    }
+
+    #[test]
+    fn an_undo_shows_the_outline_kept_not_one_replayed_from_the_root() {
+        // Catches the outlines kept never started from, or one changed by
+        // an undo that starts from it: one marked with an item that no
+        // entry made shows through an undo past it and one back to it.
+        let mut n = opened("used");
+        let alder = made(&mut n, "Alder");
+        n.keep_outline();
+        let marker = json!({"op": "create", "under": TOP, "add": "marker", "spans": [[0, 0, 6]]});
+        n.kept[0].1.apply(1_000, "edit", &marker);
+        let birch = made(&mut n, "Birch");
+        let cedar = made(&mut n, "Cedar");
+        assert_eq!(undone(&mut n, birch, cedar), ["Alder", "Birch", "marker"]);
+        assert_eq!(undone(&mut n, alder, birch), ["Alder", "marker"]);
+    }
+
+    #[test]
+    fn a_retraction_after_the_outline_kept_is_replayed_from_the_root() {
+        // Catches an outline kept that holds what a later retraction takes
+        // back used to start from.
+        let mut n = opened("retract");
+        let alder = made(&mut n, "Alder");
+        made(&mut n, "Birch");
+        n.keep_outline();
+        let retract = n
+            .append(Some(n.tip), "retract", json!({"target": alder}))
+            .unwrap();
+        assert_eq!(n.nearest_kept(retract.seq), None);
+        n.apply(&retract);
+        assert_eq!(texts(&n), ["Birch"]);
+    }
+
+    #[test]
+    fn a_purge_drops_the_outlines_kept_that_hold_what_it_took() {
+        // Catches an outline kept from before a purge started from after
+        // it: it holds the text the purge took.
+        let mut n = opened("purge");
+        made(&mut n, "Alder");
+        let secret = made(&mut n, "secret");
+        n.keep_outline();
+        let purge = n.journal.purge(secret, "privacy").unwrap();
+        n.apply(&purge);
+        let after = written(&mut n, purge.seq, "undo", json!({"undoes": secret}));
+        assert_eq!(n.tip, after);
+        assert_eq!(texts(&n), ["Alder"]);
     }
 }

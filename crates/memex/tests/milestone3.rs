@@ -396,6 +396,39 @@ fn retraction_lists_dependents_then_keeps_later_work() {
     assert_eq!(r.text(claim), "a claim (revised)");
 }
 
+/// Whether the notebook's outline is the one replayed from the root to
+/// its tip.
+fn as_replayed(r: &Room) -> bool {
+    let n = &r.app.notebook;
+    n.outline == n.outline_at(n.tip)
+}
+
+#[test]
+fn undo_redo_retraction_and_worlds_give_the_outline_replayed_from_the_root() {
+    // Catches an outline started from one kept in a pause that is not
+    // the outline a replay from the root gives: one kept off the tip's
+    // path, the entries after it missed, or one kept past a retraction.
+    let (mut r, claim) = claim_with_dependents("kept-outlines");
+    r.app.idle();
+    r.items(&["", "later", "last"]);
+    let steps = ["undo", "undo", "redo", "undo", "undo", "undo", "redo"];
+    for (n, line) in steps.into_iter().enumerate() {
+        r.command(line);
+        assert!(as_replayed(&r), "{n}: {line}");
+        if n % 2 == 1 {
+            r.app.idle();
+        }
+    }
+    r.command(&format!("retract {claim}"));
+    r.tap(&[Key::Enter]);
+    assert!(as_replayed(&r), "the retraction");
+    for line in ["undo", "suppose maybe", "close", "redo"] {
+        r.command(line);
+        assert!(as_replayed(&r), "{line}");
+        r.app.idle();
+    }
+}
+
 #[test]
 fn replay_reproduces_the_screen() {
     // Plan: "Every edit, undo and retraction is a journal entry, and replay

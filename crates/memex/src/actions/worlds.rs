@@ -18,7 +18,10 @@ impl App {
     /// content, unless it is the journal's first.
     /// A text edit and its reading are one change: undo takes back both.
     fn undoable(&self) -> Option<u64> {
-        let t = self.content_tip(self.notebook.tip).filter(|t| *t > 1)?;
+        let t = self
+            .notebook
+            .content_tip(self.notebook.tip)
+            .filter(|t| *t > 1)?;
         Some(self.read_from(t).unwrap_or(t))
     }
 
