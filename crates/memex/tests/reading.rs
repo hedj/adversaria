@@ -58,6 +58,7 @@ fn a_lexicon_changed_while_it_is_sent_in_parts_ends_as_the_one_asked_last() {
     let first: Vec<Term> = (0..2_000)
         .map(|i| proper_name(&format!("event_{i}")))
         .collect();
+    assert!(ace.lexicon_part(&first).unwrap().is_some(), "compared");
     assert!(ace.lexicon_part(&first).unwrap().is_some(), "a first part");
     let mut second = first[1_000..].to_vec();
     second.push(proper_name("buran_flight"));

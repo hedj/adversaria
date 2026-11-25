@@ -214,9 +214,11 @@ impl Ace {
 
     /// Send the first part of what makes the user lexicon these entries,
     /// those taken out before those put in: APE's messages about it, or
-    /// none if the lexicon is these entries already. A part fits a
-    /// message, so a lexicon of thousands of names can be sent a part at
-    /// a time, between keys.
+    /// none if the lexicon is these entries already. Entries not asked
+    /// for last are first only compared with the lexicon held, a part of
+    /// its own with no messages, so that a key waits for the comparison
+    /// or for a part, not both. A part fits a message, so a lexicon of
+    /// thousands of names can be sent a part at a time, between keys.
     pub fn lexicon_part(&mut self, entries: &[Term]) -> Result<Option<Vec<Message>>, Error> {
         let mut held = match self.lexicon.take() {
             Some(held) => held,
@@ -224,7 +226,11 @@ impl Ace {
         };
         let mut left = match self.left.take() {
             Some(left) if left.wanted == entries => left,
-            _ => Left::of(&held, entries),
+            _ => {
+                let left = Left::of(&held, entries);
+                (self.lexicon, self.left) = (Some(held), Some(left));
+                return Ok(Some(vec![]));
+            }
         };
         let (out, put) = first_part(&left.removed, &left.added);
         if out.is_empty() && put.is_empty() {
