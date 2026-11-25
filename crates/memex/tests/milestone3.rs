@@ -904,6 +904,8 @@ fn a_key_and_the_reasoning_it_causes_take_under_100ms_on_ten_thousand_items() {
     // each move the journal. A pause, which writes what is pending and
     // reads it, is timed a step at a time, as the window takes it, and a
     // key pressed during a step is timed with the step, as it waits for it.
+    // A key may come during any step, so the slowest step, with what the
+    // key took after its step, is held to the limit too.
     let dir = temp("timing-reasoned");
     ten_thousand_items(&dir);
     dated_items(&dir);
@@ -916,6 +918,11 @@ fn a_key_and_the_reasoning_it_causes_take_under_100ms_on_ten_thousand_items() {
     eprintln!("{}", timer.report(opened));
     let worst = timer.worst;
     assert!(worst.1 < Duration::from_millis(100), "worst: {worst:?}");
+    let any = timer.during_any_step();
+    assert!(
+        any < Duration::from_millis(100),
+        "during the slowest step: {any:?}"
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -948,6 +955,10 @@ struct Reasoned {
     term: Terminal<TestBackend>,
     worst: (&'static str, Duration),
     times: Vec<(&'static str, Duration)>,
+    /// The slowest step of a pause, alone: what a key waits for at most.
+    slowest_step: Duration,
+    /// What the key pressed during a step took after the step.
+    after_step: Duration,
 }
 
 impl Reasoned {
@@ -958,9 +969,24 @@ impl Reasoned {
             term: Terminal::new(TestBackend::new(160, 50)).unwrap(),
             worst: ("none", Duration::ZERO),
             times: vec![],
+            slowest_step: Duration::ZERO,
+            after_step: Duration::ZERO,
         };
         r.reason(app);
         r
+    }
+
+    /// A key pressed during the slowest step of a pause: that step and
+    /// what the key took after its own, each measured, added.
+    fn during_any_step(&self) -> Duration {
+        self.slowest_step + self.after_step
+    }
+
+    /// A step of a pause, timed, and alone: the slowest so far noted.
+    fn pause_step(&mut self, app: &mut App) {
+        let mut step = Duration::ZERO;
+        self.time(app, "pause step", |a| step = timed(|| a.pause_step()));
+        self.slowest_step = self.slowest_step.max(step);
     }
 
     /// Reason again if the journal moved, as the window's draw does.
@@ -969,13 +995,15 @@ impl Reasoned {
         assert!(app.reason.eval[0].is_some(), "{}", app.session.message);
     }
 
-    /// An action, then reasoning and drawing, timed under a name.
-    fn time(&mut self, app: &mut App, name: &'static str, act: impl FnOnce(&mut App)) {
+    /// An action, then reasoning and drawing, timed under a name; how
+    /// long they took.
+    fn time(&mut self, app: &mut App, name: &'static str, act: impl FnOnce(&mut App)) -> Duration {
         let t = Instant::now();
         act(app);
         self.reason(app);
         self.term.draw(|f| memex::ui::draw(f, app)).unwrap();
         self.note(name, t.elapsed());
+        t.elapsed()
     }
 
     /// A time taken, under a name, and the worst so far.
@@ -996,9 +1024,7 @@ impl Reasoned {
     /// causes.
     fn pause(&mut self, app: &mut App) {
         while app.idle_work() {
-            self.time(app, "pause step", |a| {
-                a.pause_step();
-            });
+            self.pause_step(app);
         }
     }
 
@@ -1016,13 +1042,14 @@ impl Reasoned {
         self.key(app, "Enter", Key::Enter);
         typ(app, "dated");
         self.key(app, "Down after typing", Key::Down);
-        self.time(app, "pause step", |a| {
-            a.pause_step();
-        });
-        self.time(app, "Enter during a pause step", |a| {
-            a.pause_step();
+        self.pause_step(app);
+        let mut step = Duration::ZERO;
+        let took = self.time(app, "Enter during a pause step", |a| {
+            step = timed(|| a.pause_step());
             a.handle(Event::down(Key::Enter));
         });
+        self.slowest_step = self.slowest_step.max(step);
+        self.after_step = took - step;
         self.pause(app);
     }
 
@@ -1052,9 +1079,17 @@ impl Reasoned {
             .map(|(n, d)| format!("{n} {d:.1?}"))
             .collect();
         let (name, worst) = self.worst;
+        let (step, after) = (self.slowest_step, self.after_step);
         format!(
-            "10,000 dated items and a rule: replayed in {opened:?}; worst {worst:?} ({name}); each, with reasoning and drawing: {}",
+            "10,000 dated items and a rule: replayed in {opened:?}; worst {worst:?} ({name}); slowest pause step {step:.1?}, and a key after its step {after:.1?}; each, with reasoning and drawing: {}",
             each.join(", ")
         )
     }
+}
+
+/// How long something took.
+fn timed<T>(f: impl FnOnce() -> T) -> Duration {
+    let t = Instant::now();
+    f();
+    t.elapsed()
 }
