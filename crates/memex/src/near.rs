@@ -18,6 +18,29 @@ pub fn edits_allowed(pattern: &str) -> usize {
     }
 }
 
+/// Whether two words are one edit apart, ignoring case: a letter put in,
+/// taken out or changed, or two side by side swapped. Equal words are
+/// not.
+pub fn one_edit_apart(a: &str, b: &str) -> bool {
+    let a: Vec<char> = a.to_lowercase().chars().collect();
+    let b: Vec<char> = b.to_lowercase().chars().collect();
+    let same = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let (a, b) = (&a[same..], &b[same..]);
+    match (a.len(), b.len()) {
+        (0, 0) => false,
+        (m, n) if m == n => a[1..] == b[1..] || swapped(a, b),
+        (m, n) if m + 1 == n => a == &b[1..],
+        (m, n) if n + 1 == m => &a[1..] == b,
+        _ => false,
+    }
+}
+
+/// Whether two equally long runs of letters, which differ at their first,
+/// are the same but for their first two swapped.
+fn swapped(a: &[char], b: &[char]) -> bool {
+    a.len() >= 2 && a[0] == b[1] && a[1] == b[0] && a[2..] == b[2..]
+}
+
 /// The stretch of a text nearest a pattern, ignoring case, and how many
 /// edits apart they are, if it is near: within the edits allowed, and
 /// at least one (an exact match is not near, it is a match).
@@ -99,6 +122,32 @@ fn next_column(before: &[(usize, usize)], p: &[char], c: char, j: usize) -> Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn words_one_edit_apart_differ_by_one_letter_or_one_swap() {
+        // Catches an edit missed (put in, taken out, changed, swapped), two
+        // edits taken for one, case taken for an edit, or a word taken as
+        // an edit from itself.
+        let one = [
+            ("fnd", "find"),
+            ("deleete", "delete"),
+            ("lonk", "link"),
+            ("fnid", "find"),
+            ("FND", "find"),
+            ("köln", "koln"),
+        ];
+        for (a, b) in one {
+            assert!(one_edit_apart(a, b), "{a} {b}");
+        }
+        for (a, b) in [
+            ("find", "find"),
+            ("fold", "find"),
+            ("fn", "find"),
+            ("dlte", "delete"),
+        ] {
+            assert!(!one_edit_apart(a, b), "{a} {b}");
+        }
+    }
 
     #[test]
     fn a_typo_is_near_and_names_what_it_is_near() {

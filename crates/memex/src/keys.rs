@@ -266,6 +266,7 @@ impl App {
             }
             Key::Tab => match a.q() {
                 Quasi::LeapDown | Quasi::LeapUp => a.input = self.leap_complete(&a),
+                _ if a.take_offer() => {}
                 _ if a.apply_repair() => {}
                 _ => a.input = complete_command(&a.input),
             },

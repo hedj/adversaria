@@ -417,7 +417,10 @@ Within a quasimode:
 - **A line refused stays open,** latched, and the foot says why, with
   `Esc cancels`: a mistyped command (`no command “fnd”, and it has no
   reading to suppose`), or a verb that needs a part it has no default
-  for. Change the line, and the foot says again how it ends.
+  for. Where the first word is one edit from a command, and from one
+  alone (a letter put in, taken out, changed, or two swapped), the foot
+  says `did you mean “find”? Tab mends`, and Tab puts it in place. Change
+  the line, and the foot says again how it ends.
 - **`?` lists** the commands that match (Command; once a command's name
   and a space are typed, its form and help instead), every match (Leap), or
   everything that may come next, each kind of word with a line of help
@@ -1497,7 +1500,8 @@ The hints on screen (such as "F3 adopts") follow your bindings.
 - **"memex: configuration: …"**: the file and the reason are named; fix the
   line it names. `memex --print-config` shows a file that works.
 - **"no command …"**: `?` in Command lists the commands that match what you
-  typed; F1 lists them all.
+  typed; F1 lists them all. A word one edit from a command is offered
+  it (`did you mean “delete”?`).
 - **"not a Prolog fact" / "not a Prolog rule"**: check brackets, commas and
   quotes. Variables start with a capital letter; atoms with a small one.
 - **A constraint is "not kept"**: it did not fire on the planted violation,

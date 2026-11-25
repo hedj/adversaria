@@ -4,6 +4,7 @@
 use super::nouns::{Alone, Noun, alone, asking, complete_noun, noun, prompts, takes_text};
 use crate::actions::{NO_RULE, VERDICTS};
 use crate::app::{Active, App, Mode};
+use crate::near::one_edit_apart;
 use crate::outline::TOP;
 
 /// What a command's slot takes: what may be typed in it, and what may be
@@ -730,8 +731,7 @@ fn parse_line(line: &str) -> Result<Option<(&'static Command, Vec<&str>)>, Strin
     if words.is_empty() {
         return Ok(None);
     }
-    let cmd =
-        find_command(words[0]).ok_or_else(|| format!("no command “{}”; ? lists them", words[0]))?;
+    let cmd = find_command(words[0]).ok_or_else(|| no_command(words[0]))?;
     words.remove(0);
     Ok(Some((cmd, words)))
 }
@@ -798,6 +798,36 @@ pub(crate) fn read_by_form(line: &str) -> bool {
 }
 
 /// The command a word names: exactly, or as the start of only one.
+/// Why a word is no command: that it is none, the command it is one edit
+/// from, if one alone is, and where the commands are listed.
+fn no_command(word: &str) -> String {
+    let near = near_command(word).map(|c| format!("; did you mean “{c}”?"));
+    format!(
+        "no command “{word}”{}; ? lists them",
+        near.unwrap_or_default()
+    )
+}
+
+/// The command a word of three letters or more is one edit from, if one
+/// alone is and the word names none: "fnd" for find.
+pub(crate) fn near_command(word: &str) -> Option<&'static str> {
+    if word.chars().count() < 3 || find_command(word).is_some() {
+        return None;
+    }
+    let names = COMMANDS.iter().map(|c| c.name);
+    let near: Vec<&str> = names.filter(|n| one_edit_apart(word, n)).collect();
+    (near.len() == 1).then(|| near[0])
+}
+
+/// A line with its first word put right: the command it is one edit
+/// from, if one alone is.
+pub(crate) fn mended_line(line: &str) -> Option<String> {
+    let trimmed = line.trim_start();
+    let first = trimmed.split_whitespace().next()?;
+    let command = near_command(first)?;
+    Some(format!("{command}{}", &trimmed[first.len()..]))
+}
+
 pub(crate) fn find_command(w: &str) -> Option<&'static Command> {
     let w = w.to_lowercase();
     if let Some(c) = COMMANDS.iter().find(|c| c.name == w) {
@@ -989,6 +1019,21 @@ fn usage(c: &Command) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_word_one_edit_from_one_command_is_near_it() {
+        // Catches a mistyped command not put right, a command or a start of
+        // one taken for a typo, a short word guessed at, or a word near two
+        // commands given one of them.
+        assert_eq!(near_command("fnd"), Some("find"));
+        assert_eq!(near_command("delte"), Some("delete"));
+        assert_eq!(near_command("find"), None, "a command");
+        assert_eq!(near_command("fol"), None, "a start of fold");
+        assert_eq!(near_command("og"), None, "too short to guess at");
+        assert_eq!(near_command("newt"), None, "next and new");
+        assert_eq!(mended_line("fnd draft"), Some("find draft".into()));
+        assert!(no_command("delte").contains("did you mean “delete”?"));
+    }
 
     #[test]
     fn a_line_waits_for_the_slot_after_what_was_typed() {

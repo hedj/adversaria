@@ -420,6 +420,10 @@ pub struct Near {
 pub struct English {
     pub hint: Option<Hint>,
     pub free: Option<String>,
+    /// A line refused, and the line its refusal offered in its place, its
+    /// first word put right as a command: Tab takes it while the line is
+    /// as it was refused (crate::actions::reader).
+    pub offered: Option<(String, String)>,
     /// Whether the line is read by its form, its first word naming no
     /// command (crate::actions::reader), as last checked.
     pub reads: bool,
@@ -550,6 +554,27 @@ impl Active {
 
     /// Put the first repair of the sentence typed in its place, after its
     /// verb; whether there was one (Tab in a sentence).
+    /// Offer a line in place of this one, if there is one: Tab takes it
+    /// while the line stays as it is.
+    pub(crate) fn offer_mend(&mut self, mended: Option<String>) {
+        if let Kind::Command(english) = &mut self.kind {
+            english.offered = mended.map(|m| (self.input.clone(), m));
+        }
+    }
+
+    /// Take the line offered in place of this one, if this is the line it
+    /// was offered for: whether one was taken.
+    pub(crate) fn take_offer(&mut self) -> bool {
+        let Kind::Command(english) = &mut self.kind else {
+            return false;
+        };
+        match english.offered.take() {
+            Some((refused, mended)) if refused == self.input => self.input = mended,
+            _ => return false,
+        }
+        true
+    }
+
     pub(crate) fn apply_repair(&mut self) -> bool {
         let Some(mended) = self.hint().and_then(|h| h.mended.clone()) else {
             return false;

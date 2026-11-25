@@ -177,9 +177,12 @@ fn a_heading_is_offered_no_repair_and_adopt_fix_says_there_is_none() {
     );
 }
 
-/// The foot of the screen, as drawn at 160 by 40: its last four rows.
+/// The foot of the screen, as drawn at 160 by 40: its last four rows,
+/// each without the spaces after its end.
 fn foot(r: &Room) -> String {
-    r.lines_at(160, 40)[36..].join(" ")
+    let rows = r.lines_at(160, 40);
+    let rows: Vec<&str> = rows[36..].iter().map(|l| l.trim_end()).collect();
+    rows.join(" ")
 }
 
 #[test]
@@ -227,5 +230,31 @@ fn a_quasimode_entered_shows_its_guide_not_the_last_message() {
     assert!(
         held.contains("release now to type without holding"),
         "{held}"
+    );
+}
+
+#[test]
+fn a_mistyped_command_is_offered_and_tab_puts_it_right() {
+    // Catches a mistyped command refused with no way to put it right, a
+    // Tab that does not take the command offered, or one that takes it
+    // after the line has changed.
+    let mut r = Room::new("mistyped-mended");
+    r.items(&["Paper #draft"]);
+    r.command("fnd draft");
+    let refused = foot(&r);
+    assert!(
+        refused.contains("did you mean “find”? Tab mends"),
+        "{refused}"
+    );
+    r.tap(&[Key::Tab]);
+    assert_eq!(kept(&r).as_deref(), Some("find draft"));
+    r.tap(&[Key::Escape]);
+    r.command("fnd draft");
+    r.typ("s");
+    r.tap(&[Key::Tab]);
+    assert_eq!(
+        kept(&r).as_deref(),
+        Some("fnd drafts"),
+        "offered for the line refused"
     );
 }

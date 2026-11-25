@@ -6,6 +6,7 @@
 //! mistyped command makes no world, and Tab can mend it; `suppose`
 //! before a text still opens a world of that name.
 
+use crate::actions::dispatch::{mended_line, near_command};
 use crate::app::{Active, App, Hold, Mode};
 use crate::reason::believed_already;
 
@@ -38,6 +39,7 @@ impl App {
             Ok(mode) => mode,
             Err(why) => {
                 self.session.message = why;
+                a.offer_mend(mended_line(&a.input));
                 a.hold = Hold::Latched;
                 Mode::Quasi(a)
             }
@@ -46,14 +48,17 @@ impl App {
 }
 
 /// Why a line read by its form is refused: no command, and nothing to
-/// suppose.
+/// suppose; and the command its first word is one edit from, if one is,
+/// which Tab puts in its place (Active::offer_mend).
 fn refusal(line: &str, believed: bool) -> String {
     let first = line.split_whitespace().next().unwrap_or("");
     let why = match believed {
         true => "it is believed already, so there is nothing to suppose",
         false => "it has no reading to suppose",
     };
+    let near = near_command(first).map(|c| format!(" · did you mean “{c}”? Tab mends"));
     format!(
-        "no command “{first}”, and {why} · suppose before it makes a world of that name · ? lists the commands"
+        "no command “{first}”, and {why}{} · suppose before it makes a world of that name · ? lists the commands",
+        near.unwrap_or_default()
     )
 }
