@@ -2286,7 +2286,7 @@ fn foot_lines(app: &App) -> [Line<'static>; 2] {
 /// The foot's two lines, by the mode.
 fn foot(app: &App) -> (Line<'static>, String) {
     match &app.session.mode {
-        Mode::Quasi(a) => (quasi_line(app, a), quasi_guide(a)),
+        Mode::Quasi(a) => (quasi_line(app, a), quasi_said(app, a)),
         Mode::ConfirmRetract { target, dependents } => retract_foot(*target, dependents),
         Mode::ConfirmSuppose {
             text, readings, at, ..
@@ -2313,6 +2313,17 @@ fn quasi_line(app: &App, a: &Active) -> Line<'static> {
 fn quasi_name(a: &Active) -> Span<'static> {
     let latched = if a.latched() { " (latched)" } else { "" };
     Span::styled(format!(" {}{latched} ", a.q().label()), reversed())
+}
+
+/// What the memex says under a quasimode: why it did not end, if it was
+/// refused, with how to leave it; else what it does and how it ends.
+fn quasi_said(app: &App, a: &Active) -> String {
+    let refused = &app.session.message;
+    match (refused.is_empty(), refused.contains("Esc")) {
+        (true, _) => quasi_guide(a),
+        (false, true) => refused.clone(),
+        (false, false) => format!("{refused} · Esc cancels"),
+    }
 }
 
 /// What a held quasimode does, and how it ends. While its key is down
@@ -2393,7 +2404,7 @@ fn sentence_doing(a: &Active, end: &str) -> String {
 fn read_doing(a: &Active, end: &str) -> String {
     let (read, does) = line_read_as(&a.input);
     let said = ape_said(a);
-    format!("no command, so read as {read} · {said}{end} {does}")
+    format!("no command, so read as {read} · {said}Esc cancels · {end} {does}")
 }
 
 /// What APE makes of a Command line's sentence, and a stop after it; or

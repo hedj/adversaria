@@ -176,3 +176,56 @@ fn a_heading_is_offered_no_repair_and_adopt_fix_says_there_is_none() {
         r.app.session.message
     );
 }
+
+/// The foot of the screen, as drawn at 160 by 40: its last four rows.
+fn foot(r: &Room) -> String {
+    r.lines_at(160, 40)[36..].join(" ")
+}
+
+#[test]
+fn a_line_refused_says_why_and_how_to_leave_it() {
+    // Catches a refusal set but not drawn: a mistyped command stayed open,
+    // latched, its foot saying only what the line would do, with no way
+    // out named (the UX review, finding 3).
+    let mut r = Room::new("refused-drawn");
+    r.items(&["Paper #draft"]);
+    r.command("fnd draft");
+    assert_eq!(kept(&r).as_deref(), Some("fnd draft"));
+    let refused = foot(&r);
+    assert!(refused.contains("no command “fnd”"), "{refused}");
+    assert!(refused.contains("Esc cancels"), "{refused}");
+    r.typ("s");
+    let typed = foot(&r);
+    assert!(!typed.contains("no command “fnd”"), "{typed}");
+    assert!(typed.contains("Esc cancels"), "{typed}");
+}
+
+#[test]
+fn a_command_that_prompts_says_why() {
+    // Catches the reason a command prompts set but not drawn: move alone,
+    // with no jump to follow, opened its prompt without saying so.
+    let mut r = Room::new("prompt-says-why");
+    r.items(&["Paper", "Notes"]);
+    r.command("move");
+    let prompted = foot(&r);
+    assert!(
+        prompted.contains("no jump came from another item"),
+        "{prompted}"
+    );
+}
+
+#[test]
+fn a_quasimode_entered_shows_its_guide_not_the_last_message() {
+    // Catches a message left from before a quasimode drawn in place of its
+    // guide.
+    let mut r = Room::new("guide-not-message");
+    r.items(&["Paper"]);
+    r.app.session.message = "an earlier message".into();
+    r.hold(Quasi::Command, "");
+    let held = foot(&r);
+    assert!(!held.contains("an earlier message"), "{held}");
+    assert!(
+        held.contains("release now to type without holding"),
+        "{held}"
+    );
+}

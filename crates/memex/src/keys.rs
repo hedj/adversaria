@@ -63,6 +63,7 @@ impl App {
     /// A Leap moves the cursor, so it ends the selection.
     fn enter_quasi(&mut self, q: Quasi) -> Mode {
         self.flush();
+        self.session.message.clear();
         if leaps(q) {
             self.session.selection = None;
         }
@@ -250,6 +251,7 @@ impl App {
             self.run_command(&format!("go {way}"));
             return Mode::Quasi(a);
         }
+        let typed = a.input.clone();
         match ev.key {
             Key::Char('?') if asks_help(&a) => a.listing = !a.listing,
             Key::Char(c) => a.input.push(c),
@@ -279,6 +281,11 @@ impl App {
             }
             Key::Enter => return self.finish(a),
             _ => {}
+        }
+        // A refusal is of the line as it was: once it changes, the foot
+        // says again what the line does.
+        if a.input != typed {
+            self.session.message.clear();
         }
         self.recheck(&mut a);
         self.leap_preview(&a);

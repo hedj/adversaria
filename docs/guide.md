@@ -293,7 +293,8 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   itself, the inspector lists what waits for you to decide, as the next
   part tells.
 - **Foot:** the message line, and, while a quasimode is on (held or
-  latched), what you have typed and how it ends.
+  latched), what you have typed and how it ends, or, if it could not end,
+  why, with `Esc cancels`.
 
 With the cursor on an item with findings, the foot suggests a what-if
 (`Try a what-if: tap Super to suppose a statement, …`), dim, until you have used Suppose
@@ -413,6 +414,10 @@ Within a quasimode:
   puts the repair the line below offers first in place.
 - **Esc cancels,** as everywhere: the quasimode ends and nothing acts; a
   Leap puts the cursor back where it began.
+- **A line refused stays open,** latched, and the foot says why, with
+  `Esc cancels`: a mistyped command (`no command “fnd”, and it has no
+  reading to suppose`), or a verb that needs a part it has no default
+  for. Change the line, and the foot says again how it ends.
 - **`?` lists** the commands that match (Command; once a command's name
   and a space are typed, its form and help instead), every match (Leap), or
   everything that may come next, each kind of word with a line of help
