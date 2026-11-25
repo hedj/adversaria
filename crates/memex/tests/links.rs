@@ -112,17 +112,22 @@ fn each_part_of_the_hint_under_an_interrogation_is_a_click_on_its_command() {
 }
 
 #[test]
-fn a_hint_with_no_room_under_the_interrogation_is_no_click() {
-    // Catches the hint's clicks placed below the pane, over the foot.
+fn a_hint_with_no_room_under_the_interrogation_keeps_the_pane_s_last_row() {
+    // Catches the hint's clicks placed below the pane, over the foot. The
+    // hint was left out when nothing fitted under the interrogation; since
+    // the inspector scrolls, it keeps the pane's last row instead (the UX
+    // review, finding 4: "F3 adopts · F4 retracts" was cut).
     let room = interrogated("hint-no-room");
     let lines = room.lines_at(80, 7);
-    assert!(!lines.concat().contains("adopts"), "no room for the hint");
+    let foot = lines.len() - 2;
+    let hint = lines.iter().position(|l| l.contains("F3 adopts"));
+    assert_eq!(hint, Some(foot - 1), "{lines:#?}");
     let clicks = room.hits_at(80, 7).0;
-    assert!(
-        !clicks
-            .iter()
-            .any(|(_, c)| format!("{c:?}").contains("adopt"))
-    );
+    let adopt: Vec<_> = clicks
+        .iter()
+        .filter(|(_, c)| format!("{c:?}").contains("adopt"))
+        .collect();
+    assert!(!adopt.is_empty() && adopt.iter().all(|(r, _)| usize::from(r.y) < foot));
 }
 
 /// The right pane's rows, one per line.

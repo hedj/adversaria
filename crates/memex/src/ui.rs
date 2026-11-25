@@ -7,6 +7,7 @@ mod matches;
 mod notebook;
 mod offers;
 mod pages;
+mod scroll;
 mod wrap;
 
 use crate::app::{Active, App, Hold, Mode, PaneKind, Quasi, View};
@@ -20,6 +21,8 @@ use ratatui::layout::{Alignment, Constraint, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
+pub use scroll::Fit;
+use scroll::draw_scrolled;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use wrap::{Hung, Wrapped, hung, wrap};
 
@@ -94,9 +97,10 @@ fn touching(a: &Rect, b: &Rect) -> bool {
 }
 
 /// The presentations of the frame just drawn, each with the place it
-/// was drawn in: where a click lands, and what it stands for.
+/// was drawn in: where a click lands, and what it stands for; and what
+/// was drawn of the inspector, which the wheel and PageDown scroll.
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct Presentations(pub Vec<(Rect, Presentation)>);
+pub struct Presentations(pub Vec<(Rect, Presentation)>, pub Option<Fit>);
 
 impl Presentations {
     /// What a click at (x, y) would act on, if anything.
@@ -280,7 +284,9 @@ impl MenuBox {
         clear_round(f, area);
         f.render_widget(self.widget(), area);
         let mut hits = self.hits(area);
-        hits.0.extend(under.outside(area).0);
+        let under = under.outside(area);
+        hits.0.extend(under.0);
+        hits.1 = under.1;
         hits
     }
 
@@ -339,6 +345,7 @@ impl MenuBox {
         Presentations(
             each.map(|(i, e)| (entry_row(area, i), e.2.clone()))
                 .collect(),
+            None,
         )
     }
 }
@@ -1712,7 +1719,7 @@ fn draw_links(f: &mut Frame, app: &App, area: Rect) -> Presentations {
     let inner = inset(area);
     match app.inspected_claim() {
         Some(item) => draw_claimed(f, app, item, inner),
-        None => draw_presented(f, selected_panel(app), inner),
+        None => draw_scrolled(f, selected_panel(app), inner, app.inspector_rows()),
     }
 }
 
@@ -1806,13 +1813,41 @@ fn wrapped(lines: Vec<Line<'static>>) -> Paragraph<'static> {
 
 /// A claim item in the inspector, and under it the hint of what adopts
 /// and what takes an adoption back, each part a click on its command.
+/// Taller than the inspector, the lines scroll, and the hint keeps its
+/// last row.
 fn draw_claimed(f: &mut Frame, app: &App, item: u64, inner: Rect) -> Presentations {
     let lines = claimed(app, item);
-    let used = rows_of(&lines, inner.width);
-    let mut hits = draw_presented(f, lines, inner);
-    hits.0
-        .extend(draw_adopt_hint(f, app, row_below(inner, used)).0);
+    let (above, hint) = hint_place(inner, rows_of(&lines, inner.width));
+    let mut hits = draw_scrolled(f, lines, above, app.inspector_rows());
+    hits.0.extend(draw_adopt_hint(f, app, hint).0);
     hits
+}
+
+/// Where a claim's lines, of so many rows, and the hint under them go in
+/// an area: the hint right under the lines if they fit, else on its last
+/// row, the lines scrolling above it.
+fn hint_place(area: Rect, used: u16) -> (Rect, Rect) {
+    match used < area.height {
+        true => (area, row_below(area, used)),
+        false => last_row_apart(area),
+    }
+}
+
+/// An area less its last row, and that row.
+fn last_row_apart(area: Rect) -> (Rect, Rect) {
+    let rest = area.height.saturating_sub(1);
+    let last = Rect {
+        y: area.y + rest,
+        height: area.height.min(1),
+        ..area
+    };
+    (
+        Rect {
+            height: rest,
+            ..area
+        },
+        last,
+    )
 }
 
 /// The rows that lines take, hung at a width.

@@ -17,7 +17,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
@@ -280,8 +280,7 @@ impl Memex {
     /// The pointer moved: noted in points, as the cells are measured, and
     /// its cell told to the app (crate::present).
     fn pointer_moved(&mut self, at: winit::dpi::PhysicalPosition<f64>) {
-        let scale = self.window.gfx().map_or(1.0, |g| g.window.scale_factor());
-        let at = at.to_logical::<f32>(scale);
+        let at = at.to_logical::<f32>(self.scale());
         self.input.pointer = Some(Vec2::new(at.x, at.y));
         self.tell_pointer();
         if let Some(to) = self.pointed() {
@@ -297,7 +296,8 @@ impl Memex {
     }
 
     /// Lay the screen out in cells as many as the window holds, and paint
-    /// them.
+    /// them; then tell the app what was drawn of the inspector, which it
+    /// scrolls.
     fn draw(&mut self) {
         self.app.reason_if_moved();
         let Some(g) = self.window.gfx_mut() else {
@@ -305,7 +305,35 @@ impl Memex {
         };
         let out = frame(g, &mut self.screen, &self.app);
         g.present(out);
+        self.app.fit_inspector(&self.screen.mouse.hits);
     }
+
+    /// The wheel turned: over the inspector, if the configuration takes
+    /// the mouse, it scrolls it, three rows a notch, a notch towards the
+    /// user scrolling down; a touchpad by the rows it moved.
+    fn wheeled(&mut self, delta: MouseScrollDelta) {
+        let (Some(cell), true) = (self.pointed(), self.input.config.mouse) else {
+            return;
+        };
+        let rows = rows_turned(delta, self.scale(), self.screen.cell_size.y);
+        self.app.wheel(&self.screen.mouse.hits, cell, rows);
+    }
+
+    /// The window's pixels to its points.
+    fn scale(&self) -> f64 {
+        self.window.gfx().map_or(1.0, |g| g.window.scale_factor())
+    }
+}
+
+/// The rows a turn of the wheel scrolls, down if more than none: three a
+/// notch, a notch towards the user scrolling down; a touchpad's pixels,
+/// at a scale, in rows of a height in points.
+fn rows_turned(delta: MouseScrollDelta, scale: f64, row: f32) -> i32 {
+    let rows = match delta {
+        MouseScrollDelta::LineDelta(_, notches) => -3.0 * notches,
+        MouseScrollDelta::PixelDelta(p) => -p.to_logical::<f32>(scale).y / row,
+    };
+    rows.round() as i32
 }
 
 /// egui's frame of the screen. egui has fonts only within a frame, so the
@@ -462,6 +490,7 @@ impl ApplicationHandler for Memex {
                 button: MouseButton::Forward,
                 ..
             } => self.side_button("go forward"),
+            WindowEvent::MouseWheel { delta, .. } => self.wheeled(delta),
             WindowEvent::Resized(s) => self.resized(s),
             _ => return,
         }
@@ -489,6 +518,23 @@ impl Memex {
 mod tests {
     use super::*;
     use ratatui::style::Modifier;
+    use winit::dpi::PhysicalPosition;
+
+    #[test]
+    fn a_turn_of_the_wheel_scrolls_three_rows_a_notch_and_a_touchpad_its_rows() {
+        // Catches the wheel scrolling the wrong way, a notch of one row, or
+        // a touchpad's pixels taken in points at a scale of 2.
+        assert_eq!(
+            rows_turned(MouseScrollDelta::LineDelta(0.0, -1.0), 1.0, 18.0),
+            3
+        );
+        assert_eq!(
+            rows_turned(MouseScrollDelta::LineDelta(0.0, 2.0), 1.0, 18.0),
+            -6
+        );
+        let pixels = MouseScrollDelta::PixelDelta(PhysicalPosition::new(0.0, -72.0));
+        assert_eq!(rows_turned(pixels, 2.0, 18.0), 2);
+    }
 
     /// An app on a journal of its own, and its directory.
     fn opened(name: &str) -> (std::path::PathBuf, App) {

@@ -63,6 +63,8 @@ pub struct Session {
     pub quit: bool,
     /// The cell under the mouse pointer, if it is over the window.
     pub pointer: Option<(u16, u16)>,
+    /// How far the inspector is scrolled (crate::present).
+    pub inspector: InspectorScroll,
     /// Whether this session has written its start entry, which goes
     /// before the first entry it writes (App::write).
     pub(crate) started: bool,
@@ -70,6 +72,25 @@ pub struct Session {
     /// key (App::on_its_own).
     pub(crate) on_its_own: bool,
     outside: Outside,
+}
+
+/// How far the inspector is scrolled, for the item it shows, and what the
+/// screen last drew of it: the rows a page shows, and the most it can be
+/// scrolled. Not journalled, as the pointer is not.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct InspectorScroll {
+    pub of: u64,
+    pub rows: u16,
+    pub page: u16,
+    pub max: u16,
+}
+
+impl InspectorScroll {
+    /// The rows scrolled for an item: none for one it was not scrolled for,
+    /// so that the inspector of another item starts at its top.
+    pub fn rows_for(&self, item: u64) -> u16 {
+        if self.of == item { self.rows } else { 0 }
+    }
 }
 
 /// What is selected (crate::selection).

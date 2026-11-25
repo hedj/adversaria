@@ -75,7 +75,8 @@ For exchanging with files outside. `import`, `export`; a co-author's revision op
 The pane beside the outline is the **inspector**: it shows what is known
 about the item the cursor is on (its links, its findings, what its text
 was read as, its claims and who else makes them, its view's layers),
-and it never takes the keys. `find` shows a list in its place.
+and it takes no keys but PageUp and PageDown, which scroll it. `find`
+shows a list in its place.
 
 ### 1.2 The record
 
@@ -287,7 +288,14 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   claim in the two rows of any offer (`claim  2: …`, then, dim, `from` its
   source; dim, ending `(adopted)`, once adopted), and asks of it who else
   claims it, who claims the contrary, the source's record, and what
-  adopting it would do (`CLAIMS OF 2 · WHO SAYS THEM`). The inspector follows the cursor and never takes the keys.
+  adopting it would do (`CLAIMS OF 2 · WHO SAYS THEM`). The inspector follows the cursor.
+  When what it shows is taller than it, its last line says how many rows
+  are hidden below (`↓ 7 rows below · PageDown`), and its first how many
+  above, once it is scrolled; PageDown and PageUp scroll it a page, and
+  the wheel over it three rows a notch. On a claim, `F3 adopts · F4
+  retracts` keeps the pane's last row. Another item's inspector starts at
+  its top. PageUp and PageDown take no other part: bound to a command
+  (§ 2.3), they run it instead.
   `find` shows a list in its place, and `find` alone shows the inspector
   again (§ 2.4). With the cursor above the first item, on the notebook
   itself, the inspector lists what waits for you to decide, as the next
@@ -622,8 +630,9 @@ does not exist, or an unknown setting is refused when the memex starts,
 as any configuration it would have to guess at is.
 
 A click does nothing while a quasimode or a confirmation is open, and
-nothing on a finding's line, a heading or empty space. The middle button and
-the wheel do nothing. A click is recorded in the journal as the keyboard
+nothing on a finding's line, a heading or empty space. The middle button
+does nothing; the wheel scrolls the inspector when the pointer is over it,
+and does nothing elsewhere. A click is recorded in the journal as the keyboard
 action it stands for; a selection and an open menu are not recorded, but
 the command an offer runs is.
 

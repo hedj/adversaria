@@ -54,6 +54,11 @@ impl App {
         if ev.key == Key::Special(Special::Menu) {
             return self.menu_at_cursor();
         }
+        if let Some(pages) = pages(ev.key) {
+            let page = i32::from(self.session.inspector.page.max(1));
+            self.scroll_inspector(pages * page);
+            return Mode::Normal;
+        }
         self.session.message.clear();
         self.edit_key(ev.key);
         Mode::Normal
@@ -677,4 +682,14 @@ pub(crate) fn supposed_body(
         body["facts"] = json!([f]);
     }
     body
+}
+
+/// The pages PageDown (one) and PageUp (one back) scroll the inspector by,
+/// with no binding of their own: the inspector takes no keys but these.
+fn pages(key: Key) -> Option<i32> {
+    match key {
+        Key::Special(Special::PageDown) => Some(1),
+        Key::Special(Special::PageUp) => Some(-1),
+        _ => None,
+    }
 }

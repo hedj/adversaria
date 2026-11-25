@@ -269,6 +269,44 @@ impl App {
         self.session.mode = Mode::Menu(Menu::new(about, offers, at));
     }
 
+    /// The item the inspector shows: the claim it interrogates, or the
+    /// one under the cursor.
+    pub fn inspector_subject(&self) -> u64 {
+        let selected = self.session.view.selected();
+        self.inspected_claim().unwrap_or(selected)
+    }
+
+    /// How far the inspector is scrolled, for the item it shows now.
+    pub fn inspector_rows(&self) -> u16 {
+        self.session.inspector.rows_for(self.inspector_subject())
+    }
+
+    /// Note what the frame just drawn showed of the inspector, so that
+    /// scrolling stops at its end and pages by what it shows.
+    pub fn fit_inspector(&mut self, drawn: &Presentations) {
+        let Some(fit) = drawn.1 else { return };
+        let scroll = &mut self.session.inspector;
+        (scroll.page, scroll.max) = (fit.page, fit.max);
+    }
+
+    /// Scroll the inspector by so many rows, down if more than none, up if
+    /// fewer, within what the screen last drew of it.
+    pub fn scroll_inspector(&mut self, by: i32) {
+        let of = self.inspector_subject();
+        let scroll = &mut self.session.inspector;
+        let from = i32::from(scroll.rows_for(of));
+        scroll.rows = (from + by).clamp(0, i32::from(scroll.max)) as u16;
+        scroll.of = of;
+    }
+
+    /// The wheel turned by so many rows, down if more than none, over a
+    /// cell: the inspector scrolls, if the cell is in it.
+    pub fn wheel(&mut self, drawn: &Presentations, cell: (u16, u16), rows: i32) {
+        if drawn.1.is_some_and(|fit| fit.holds(cell)) {
+            self.scroll_inspector(rows);
+        }
+    }
+
     /// A click at a cell: on what is presented there, if anything.
     pub fn click_at(&mut self, presented: &Presentations, (x, y): (u16, u16)) {
         if let Some(p) = presented.at(x, y).cloned() {
