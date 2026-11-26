@@ -6,9 +6,9 @@
 //! and the measures report need not replay the journal to work it out.
 
 use crate::app::App;
+use crate::marks::items_of;
 use crate::outline::Outline;
 use crate::reason::{ConstraintEval, Shown, Solution, WorldEval};
-use crate::ui::items_of;
 use serde_json::{Value, json};
 
 /// The violations a world shows, each with what it rests on.

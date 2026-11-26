@@ -4,7 +4,7 @@
 //! findings that caught real errors from those that did not.
 
 use crate::app::App;
-use crate::ui::marked_under;
+use crate::marks::marked_under;
 use serde_json::json;
 
 /// How a verdict is given.

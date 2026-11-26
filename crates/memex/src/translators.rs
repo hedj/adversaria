@@ -94,7 +94,7 @@ impl App {
     /// with a belief, or with another claim.
     fn disputed(&self, id: u64) -> bool {
         let e = self.reason.eval[0].as_ref();
-        e.is_some_and(|e| !crate::ui::item_marks(e, &self.notebook.outline, id).is_empty())
+        e.is_some_and(|e| !crate::marks::item_marks(e, &self.notebook.outline, id).is_empty())
     }
 
     /// Its branch folded or shown, if it has items under it.

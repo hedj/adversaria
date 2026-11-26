@@ -6,10 +6,10 @@
 //! revision is open its changes fill the screen, the notebook hidden.
 
 use crate::app::App;
+use crate::marks::MarkLine;
 use crate::outline::Outline;
 use crate::present::Presentation;
 use crate::reason::{ConstraintEval, Suggestion, WorldEval};
-use crate::ui::MarkLine;
 use format::terms::Term;
 use std::collections::HashMap;
 
@@ -73,7 +73,7 @@ impl App {
             return vec![];
         };
         let rules = self.rules(e);
-        let marked = crate::ui::marks_by_item(e, &self.notebook.outline).into_iter();
+        let marked = crate::marks::marks_by_item(e, &self.notebook.outline).into_iter();
         let marks = marked.flat_map(|(id, marks)| marks.into_iter().map(move |m| (id, m)));
         marks
             .filter_map(|(id, m)| self.finding(id, m, &rules))
@@ -194,7 +194,7 @@ impl Rule {
     /// A rule, as evaluated, in an outline.
     fn of(c: &ConstraintEval, outline: &Outline) -> Rule {
         let name = &c.constraint.name;
-        let item = crate::ui::stating_rule(outline, name);
+        let item = crate::marks::stating_rule(outline, name);
         let source = format!("your rule “{name}”");
         Rule {
             entry: c.seq,

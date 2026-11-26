@@ -2,9 +2,9 @@
 //! a text, that carry a label, or that a kind of finding marks. Leap
 //! finds a text too, so the list after a leap is its matches.
 
+use crate::marks::item_marks;
 use crate::outline::{Outline, tags};
 use crate::reason::WorldEval;
-use crate::ui::item_marks;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Found {
