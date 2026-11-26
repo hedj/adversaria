@@ -61,12 +61,8 @@ impl T {
     }
     fn command(&mut self, line: &str) {
         self.tapped(Quasi::Command, line);
-        assert!(
-            !self.app.session.message.starts_with("no command")
-                && !self.app.session.message.starts_with("not a"),
-            "{line}: {}",
-            self.app.session.message
-        );
+        let said = &self.app.session.message;
+        assert!(!self.app.session.refused, "{line}: {said}");
     }
     /// Pause, as the user does: the memex writes what is pending and reads
     /// what waits to be read, as the window does after a second.

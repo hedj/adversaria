@@ -38,13 +38,7 @@ fn run(app: &mut App, line: &str) -> String {
 /// Run a command that must succeed.
 fn command(app: &mut App, line: &str) -> String {
     let m = run(app, line);
-    assert!(
-        !m.starts_with("no command")
-            && !m.starts_with("not a")
-            && !m.contains("not kept")
-            && !m.contains("not allowed"),
-        "{line}: {m}"
-    );
+    assert!(!app.session.refused, "{line}: {m}");
     m
 }
 

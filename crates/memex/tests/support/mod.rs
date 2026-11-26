@@ -49,9 +49,22 @@ impl Room {
         self.app.handle(Event::up(Key::Quasi(q)));
     }
 
+    /// A command line typed, and not refused.
+    #[track_caller]
     pub fn command(&mut self, line: &str) {
-        self.hold(Quasi::Command, line);
-        self.release(Quasi::Command);
+        command(&mut self.app, line);
+    }
+
+    /// A command line typed, and refused: why.
+    #[track_caller]
+    pub fn refused(&mut self, line: &str) -> String {
+        refused(&mut self.app, line)
+    }
+
+    /// A command line typed, kept or refused: for a test of both, which
+    /// reads `app.session.refused`.
+    pub fn typed_command(&mut self, line: &str) {
+        typed_command(&mut self.app, line);
     }
 
     /// Leap to the next item, forward or back, whose text holds a pattern.
@@ -264,4 +277,34 @@ fn copy_dir(from: &Path, to: &Path) {
             false => drop(std::fs::copy(&path, &target).unwrap()),
         }
     }
+}
+
+/// A line typed in the Command quasimode, which reads it on release.
+pub fn typed_command(app: &mut App, line: &str) {
+    app.handle(Event::down(Key::Quasi(Quasi::Command)));
+    for c in line.chars() {
+        app.handle(Event::down(Key::Char(c)));
+        app.handle(Event::up(Key::Char(c)));
+    }
+    app.handle(Event::up(Key::Quasi(Quasi::Command)));
+}
+
+/// A command line typed, and not refused: what the memex says of a
+/// refusal is not read, so rewording it weakens no test.
+#[track_caller]
+pub fn command(app: &mut App, line: &str) {
+    typed_command(app, line);
+    assert!(!app.session.refused, "{line}: {}", app.session.message);
+}
+
+/// A command line typed, and refused: why.
+#[track_caller]
+pub fn refused(app: &mut App, line: &str) -> String {
+    typed_command(app, line);
+    assert!(
+        app.session.refused,
+        "{line} was not refused: {}",
+        app.session.message
+    );
+    app.session.message.clone()
 }

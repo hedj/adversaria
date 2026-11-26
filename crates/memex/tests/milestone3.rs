@@ -40,8 +40,7 @@ fn release(app: &mut App, q: Quasi) {
 }
 
 fn command(app: &mut App, line: &str) {
-    hold(app, Quasi::Command, line);
-    release(app, Quasi::Command);
+    support::command(app, line);
 }
 
 /// Write a new item after the cursor's (Enter), with its text.
@@ -274,7 +273,7 @@ fn command_guide_words_recognition_and_help() {
     );
     // An unknown command writes nothing.
     let n = app.journal().entries().len();
-    command(&mut app, "frobnicate");
+    support::refused(&mut app, "frobnicate");
     assert_eq!(app.journal().entries().len(), n);
     assert!(app.session.message.contains("no command"));
     std::fs::remove_dir_all(&dir).unwrap();
@@ -299,7 +298,7 @@ fn undo_redo_and_branches() {
     r.command("redo");
     r.command("redo");
     assert_eq!(r.text(second), "second");
-    r.command("redo");
+    r.refused("redo");
     assert!(r.app.session.message.contains("nothing to redo"));
 }
 
@@ -390,7 +389,7 @@ fn retraction_lists_dependents_then_keeps_later_work() {
     assert!(!r.outline().contains(claim));
     let first = r.outline().by_number("1").unwrap();
     assert_eq!(r.text(first), "independent work");
-    r.command(&retract);
+    r.refused(&retract);
     assert!(r.app.session.message.contains("already retracted"));
     r.command("undo"); // undoing the retraction brings the claim back
     assert_eq!(r.text(claim), "a claim (revised)");
@@ -422,7 +421,7 @@ fn undo_redo_retraction_and_worlds_give_the_outline_replayed_from_the_root() {
     r.command(&format!("retract {claim}"));
     r.tap(&[Key::Enter]);
     assert!(as_replayed(&r), "the retraction");
-    for line in ["undo", "suppose maybe", "close", "redo"] {
+    for line in ["suppose maybe", "close", "undo", "redo"] {
         r.command(line);
         assert!(as_replayed(&r), "{line}");
         r.app.idle();
@@ -674,8 +673,8 @@ fn editing_steps() -> Vec<Step> {
     ]
 }
 
-/// Fold, undo, redo, fold again (showing it), Leap, a link, a switch of
-/// pane and back, and a word deleted.
+/// Fold, undo, redo, fold again (showing it), Leap, a link, a second
+/// outline pane, a switch to it and back, and a word deleted.
 fn command_steps() -> Vec<Step> {
     vec![
         Box::new(|a| command(a, "fold")),
@@ -687,6 +686,7 @@ fn command_steps() -> Vec<Step> {
             release(a, Quasi::LeapDown)
         }),
         Box::new(|a| command(a, "link 1 1.1 as supports")),
+        Box::new(|a| command(a, "pane outline")),
         Box::new(|a| command(a, "switch")),
         Box::new(|a| command(a, "switch")),
         Box::new(|a| command(a, "delete word")),
@@ -778,7 +778,7 @@ fn a_command_on_an_item_needs_one() {
     // Catches a command that acts on the target run with no item at all.
     let mut r = Room::new("no-target");
     let before = r.app.journal().entries().len();
-    r.command("fold");
+    r.refused("fold");
     assert_eq!(r.app.session.message, "there is no item to act on");
     assert_eq!(r.app.journal().entries().len(), before);
 }

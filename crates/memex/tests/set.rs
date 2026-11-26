@@ -8,7 +8,7 @@ use support::Room;
 #[test]
 fn a_fact_with_nowhere_to_go_is_refused() {
     let mut r = Room::new("set-nowhere");
-    r.command("set date(f, 1)");
+    r.refused("set date(f, 1)");
     assert_eq!(r.app.session.message, "there is no item to put the fact on");
 }
 

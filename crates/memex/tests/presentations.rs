@@ -481,7 +481,7 @@ fn a_verdict_typed_takes_the_one_rule_marked_under_the_target() {
     };
     r.put_cursor(rule_item);
     let before = r.entry_count();
-    r.command("verdict error");
+    r.refused("verdict error");
     assert_eq!(r.entry_count(), before, "no finding under the rule's item");
     let said = &r.app.session.message;
     assert!(said.starts_with("no rule's finding is marked"), "{said}");

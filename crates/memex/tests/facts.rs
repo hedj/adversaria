@@ -36,7 +36,7 @@ fn a_statement_that_cannot_be_read_is_told_as_prolog_writes_it() {
             "not a mark and a goal: syntax_error(operator_expected)",
         ),
     ] {
-        r.command(command);
+        r.refused(command);
         assert_eq!(r.app.session.message, said, "{command}");
     }
 }

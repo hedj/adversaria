@@ -62,7 +62,7 @@ fn a_sentence_not_ace_says_where_and_why() {
 fn a_command_without_a_sentence_says_what_it_wants() {
     // Catches the empty text sent to APE.
     let mut r = Room::new("english-empty");
-    r.command("ace");
+    r.refused("ace");
     assert_eq!(
         r.app.session.message,
         "ace (sentence) a sentence of controlled English"

@@ -22,16 +22,9 @@ fn typ(app: &mut App, s: &str) {
 }
 
 fn command(app: &mut App, line: &str) -> String {
-    app.handle(Event::down(Key::Quasi(Quasi::Command)));
-    typ(app, line);
-    app.handle(Event::up(Key::Quasi(Quasi::Command)));
+    support::command(app, line);
     app.evaluate().unwrap();
-    let m = app.session.message.clone();
-    assert!(
-        !m.starts_with("no command") && !m.starts_with("not a") && !m.contains("not allowed"),
-        "{line}: {m}"
-    );
-    m
+    app.session.message.clone()
 }
 
 fn suppose(app: &mut App, text: &str) -> String {
@@ -233,7 +226,7 @@ fn each_bad_rule_is_refused(app: &mut Room) {
         ("rule bad(X) :- box(X, _), shell(ls).", "not allowed"),
         ("rule rule_def(a, b, c) :- true.", "reserved"),
     ] {
-        app.command(line);
+        app.typed_command(line);
         let m = &app.session.message;
         let refused = m.contains("not kept") && m.contains(why);
         assert!(

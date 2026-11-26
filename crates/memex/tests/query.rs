@@ -49,7 +49,7 @@ fn a_query_that_would_act_is_refused() {
     // fact, or running a program.
     let mut r = fish("query-refused");
     for goal in ["assertz(fish(bubbles))", "shell(\"ls\")"] {
-        r.command(&format!("query {goal}"));
+        r.refused(&format!("query {goal}"));
         assert!(
             r.app.session.message.starts_with("not asked"),
             "{goal}: {}",

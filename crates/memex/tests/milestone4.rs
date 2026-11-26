@@ -23,14 +23,7 @@ fn typ(app: &mut App, s: &str) {
 }
 
 fn command(app: &mut App, line: &str) {
-    app.handle(Event::down(Key::Quasi(Quasi::Command)));
-    typ(app, line);
-    app.handle(Event::up(Key::Quasi(Quasi::Command)));
-    assert!(
-        !app.session.message.starts_with("no command") && !app.session.message.starts_with("not a"),
-        "{line}: {}",
-        app.session.message
-    );
+    support::command(app, line);
 }
 
 fn item(app: &mut App, text: &str) {
@@ -469,7 +462,7 @@ fn a_constraint_on_negative_or_zero_values_can_be_kept() {
         ),
         ("constraint never: false :- n(X), X < 0, X > 0.", false),
     ] {
-        app.command(line);
+        app.typed_command(line);
         let said = &app.session.message;
         assert_eq!(said.contains("kept: it fires"), kept, "{line}: {said}");
     }
@@ -681,7 +674,7 @@ fn an_item_with_no_claim_cannot_be_adopted() {
     item(&mut app, "the sky");
     command(&mut app, "fact colour(sky, blue)");
     let before = app.entry_count();
-    command(&mut app, "adopt");
+    support::refused(&mut app, "adopt");
     assert_eq!(app.session.message, "the target states no claim to adopt");
     assert_eq!(app.entry_count(), before);
 }

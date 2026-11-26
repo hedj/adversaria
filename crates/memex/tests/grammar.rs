@@ -188,7 +188,7 @@ fn the_item_jumped_from_is_no_default_for_itself() {
 fn a_verb_with_no_target_refuses_before_it_asks() {
     // Catches a prompt for where to move to with nothing to move.
     let mut r = Room::new("grammar-no-target");
-    r.command("move");
+    r.refused("move");
     assert_eq!(asked(&r), None);
     assert_eq!(r.app.session.message, "there is no item to act on");
 }
@@ -223,7 +223,7 @@ fn delete_alone_erases_characters_selected_and_refuses_text_dragged() {
     r.command("delete");
     assert_eq!(texts(&r), ["Alder", "Birch", "Ce"]);
     r.app.select_text("Birch");
-    r.command("delete");
+    r.refused("delete");
     assert_eq!(texts(&r), ["Alder", "Birch", "Ce"], "nothing deleted");
     let said = &r.app.session.message;
     assert_eq!(
@@ -270,7 +270,7 @@ fn a_verb_on_one_item_refuses_several_selected() {
     // so the others stayed where they were.
     let mut r = abc("grammar-several");
     shift(&mut r, memex::app::Special::ShiftUp, 1);
-    r.command("move after 1");
+    r.refused("move after 1");
     assert_eq!(texts(&r), ["Alder", "Birch", "Cedar"]);
     let said = &r.app.session.message;
     assert_eq!(
@@ -293,7 +293,7 @@ fn text_selected_fills_no_noun_after_the_target() {
 fn import_alone(r: &mut Room, name: &str, text: &str) -> String {
     let file = r.dir.join(name);
     std::fs::write(&file, text).unwrap();
-    r.command(&format!("import {}", file.display()));
+    r.typed_command(&format!("import {}", file.display()));
     r.app.session.message.clone()
 }
 

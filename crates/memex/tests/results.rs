@@ -10,7 +10,7 @@ use support::Room;
 fn import(r: &mut Room, text: &str) -> String {
     let file = r.dir.join("results.json");
     std::fs::write(&file, text).unwrap();
-    r.command(&format!("import results {}", file.display()));
+    r.typed_command(&format!("import results {}", file.display()));
     r.app.session.message.clone()
 }
 

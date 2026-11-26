@@ -42,6 +42,9 @@ pub struct Session {
     pub view: View,
     pub mode: Mode,
     pub message: String,
+    /// Whether the last command line was refused, the message saying why:
+    /// what tests read, not the message's words.
+    pub refused: bool,
     /// Text typed into an item and not yet written.
     pub(crate) pending_text: Option<PendingText>,
     /// What changed the view since its last entry, if anything.

@@ -119,7 +119,7 @@ fn each_part_is_read_as_its_own_statements() {
 fn one_sentence_is_not_split() {
     let mut r = Room::new("split-one");
     r.items(&["Only one sentence here."]);
-    r.command("split");
+    r.refused("split");
     assert!(
         r.app.session.message.contains("nothing to split"),
         "{}",

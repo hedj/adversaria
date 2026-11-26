@@ -126,7 +126,7 @@ fn a_message_takes_the_place_of_the_fading_hint() {
         !foot(&room)[1].contains("more time"),
         "no count of its showings"
     );
-    room.command("outdent");
+    room.refused("outdent");
     assert_eq!(foot(&room)[1], "a top-level item cannot be outdented");
 }
 

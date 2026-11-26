@@ -29,7 +29,7 @@ fn a_bound_command_that_asks_keeps_its_question() {
 fn an_editing_key_clears_the_message() {
     let mut r = Room::new("clears");
     r.items(&["one"]);
-    r.command("outdent");
+    r.refused("outdent");
     assert_eq!(
         r.app.session.message,
         "a top-level item cannot be outdented"
@@ -191,7 +191,7 @@ fn a_pane_that_shows_links_or_suggestions_takes_no_focus() {
     // took the keyboard (docs/concepts.md, decision 4).
     for kind in ["links", "suggestions"] {
         let mut r = beside(kind);
-        r.command("switch");
+        r.refused("switch");
         let said = format!("only an outline takes keys; the other pane shows {kind}");
         assert_eq!(r.app.session.message, said);
         the_outline_takes_keys(r);

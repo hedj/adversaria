@@ -22,7 +22,7 @@ fn go_goes_to_an_address_or_the_next_item_holding_the_text() {
     assert_eq!(r.here(), "notes on buran");
     r.command("go buran");
     assert_eq!(r.here(), "Buran again");
-    r.command("go no such words");
+    r.refused("go no such words");
     assert_eq!(r.here(), "Buran again");
     assert_eq!(r.app.session.message, "no item is or holds “no such words”");
 }

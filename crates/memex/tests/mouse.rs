@@ -26,14 +26,7 @@ fn typ(app: &mut App, s: &str) {
 }
 
 fn command(app: &mut App, line: &str) {
-    app.handle(Event::down(Key::Quasi(Quasi::Command)));
-    typ(app, line);
-    app.handle(Event::up(Key::Quasi(Quasi::Command)));
-    assert!(
-        !app.session.message.starts_with("no command") && !app.session.message.starts_with("not a"),
-        "{line}: {}",
-        app.session.message
-    );
+    support::command(app, line);
     app.evaluate().unwrap();
 }
 

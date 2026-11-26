@@ -34,11 +34,13 @@ impl App {
     /// it open, latched, to be mended.
     pub(crate) fn read_typed(&mut self, mut a: Active) -> Mode {
         self.flush();
+        self.session.refused = false;
         let english = self.confirmed_english(&a, a.input.trim());
         match self.read_line(&a.input, english) {
             Ok(mode) => mode,
             Err(why) => {
                 self.session.message = why;
+                self.session.refused = true;
                 a.offer_mend(mended_line(&a.input));
                 a.hold = Hold::Latched;
                 Mode::Quasi(a)

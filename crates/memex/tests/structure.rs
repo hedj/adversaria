@@ -61,10 +61,10 @@ fn parent_and_child_go_up_and_down_a_level() {
 fn a_move_with_nowhere_to_go_says_so_and_stays() {
     let mut r = tree("structure-none");
     r.command("last");
-    r.command("next");
+    r.refused("next");
     assert_eq!(r.app.session.message, "no item after it at its level");
     assert_eq!(at(&r), "B3");
-    r.command("child");
+    r.refused("child");
     assert_eq!(r.app.session.message, "nothing is under it");
 }
 

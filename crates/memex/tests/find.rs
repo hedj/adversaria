@@ -80,7 +80,7 @@ fn a_question_found_is_answered_once_and_not_kept() {
 fn a_question_that_does_not_read_says_so() {
     let mut r = Room::new("find-unread");
     r.items(&["notes"]);
-    r.command("find Whither the frobnication?");
+    r.refused("find Whither the frobnication?");
     let said = &r.app.session.message;
     assert!(said.starts_with("not read as a question"), "{said}");
 }

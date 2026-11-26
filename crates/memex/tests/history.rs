@@ -88,8 +88,7 @@ fn ops(r: &Room, op: &str) -> usize {
 fn the_history_lists_eight_and_says_when_there_is_none() {
     let r = walked("history-eight");
     assert_eq!(history(&r).len(), 8, "{:#?}", history(&r));
-    let mut empty = Room::new("history-none");
-    empty.command("go parent");
+    let empty = Room::new("history-none");
     assert_eq!(history(&empty), vec!["nothing done yet"]);
 }
 
@@ -118,7 +117,6 @@ fn a_change_retracted_is_dim_and_offers_nothing() {
     let entry = entry_of(&r, "linked 1");
     r.command(&format!("retract entry {entry}"));
     r.tap(&[Key::Enter]);
-    r.command("go parent");
     let row = format!("entry {entry} ");
     let shown = history(&r)
         .into_iter()
@@ -192,7 +190,6 @@ fn a_retraction_s_own_row_offers_nothing() {
     let entry = entry_of(&r, "linked 1");
     r.command(&format!("retract entry {entry}"));
     r.tap(&[Key::Enter]);
-    r.command("go parent");
     let said = format!("retracted entry {entry}");
     let row = history(&r).into_iter().find(|l| l.contains(&said)).unwrap();
     assert!(right_click_on(&mut r, &row).is_empty(), "{row}");

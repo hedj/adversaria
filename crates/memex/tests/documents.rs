@@ -317,7 +317,7 @@ fn an_export_of_a_section_that_is_not_there_says_so() {
     let mut r = Room::new("export-no-section");
     r.items(&["Alpha"]);
     let out = r.dir.join("out.md");
-    r.command(&format!("export {} 99", out.display()));
+    r.refused(&format!("export {} 99", out.display()));
     assert_eq!(r.app.session.message, "there is no item 99");
     assert!(!out.exists());
 }
@@ -395,7 +395,7 @@ fn an_item_not_imported_is_no_document_to_revise() {
     r.items(&["Notes"]);
     let file = r.dir.join("essay.md");
     std::fs::write(&file, "# Essay\n").unwrap();
-    r.command(&format!("import document {} as 1", file.display()));
+    r.refused(&format!("import document {} as 1", file.display()));
     assert_eq!(
         r.app.session.message,
         "1 did not come from an imported document"

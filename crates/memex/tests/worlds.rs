@@ -74,7 +74,7 @@ fn a_statement_with_no_reading_starts_a_named_world_and_says_so() {
     // action said.
     let mut r = Room::new("no-reading");
     r.items(&["Notes"]);
-    r.command("outdent");
+    r.refused("outdent");
     r.hold(Quasi::Suppose, "zzz qqq");
     r.release(Quasi::Suppose);
     assert_eq!(r.app.reason.world(), "zzz qqq");

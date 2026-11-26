@@ -10,7 +10,7 @@ fn stated(name: &str, constraint: &str) -> String {
     let mut r = Room::new(name);
     r.items(&["rent"]);
     r.command("fact box(rent, 1200)");
-    r.command(&format!("constraint {constraint}"));
+    r.typed_command(&format!("constraint {constraint}"));
     r.app.session.message.clone()
 }
 

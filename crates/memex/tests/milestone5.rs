@@ -3,7 +3,7 @@
 //! Wikidata (CC0), made by `wikidata --items Q2548,Q4273185,Q1010251,Q80811`.
 
 use format::terms::Term;
-use memex::app::{App, Event, Key, PaneKind, Quasi};
+use memex::app::{App, Event, Key, PaneKind};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
@@ -27,23 +27,7 @@ fn typ(app: &mut App, s: &str) {
 }
 
 fn command(app: &mut App, line: &str) {
-    app.handle(Event::down(Key::Quasi(Quasi::Command)));
-    typ(app, line);
-    app.handle(Event::up(Key::Quasi(Quasi::Command)));
-    assert!(
-        ![
-            "no command",
-            "not a",
-            "there is no",
-            "import (",
-            "cannot",
-            "no item"
-        ]
-        .iter()
-        .any(|p| app.session.message.starts_with(p)),
-        "{line}: {}",
-        app.session.message
-    );
+    support::command(app, line);
     app.evaluate().unwrap();
 }
 

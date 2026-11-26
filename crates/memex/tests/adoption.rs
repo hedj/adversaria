@@ -29,7 +29,7 @@ fn adopting_claims_again_adds_no_belief_twice() {
     // the source's record counting them twice.
     let mut r = two_claims("adopt-twice");
     r.command("adopt");
-    r.command("adopt");
+    r.refused("adopt");
     assert_eq!(
         r.app.session.message,
         "the target's claims are beliefs already"
@@ -138,7 +138,7 @@ fn retract_takes_an_entry_as_entry_n_and_as_before() {
         assert!(asks, "{line}: {:?}", r.app.session.mode);
         r.tap(&[Key::Escape]);
     }
-    r.command("retract entry");
+    r.refused("retract entry");
     assert!(
         r.app.session.message.starts_with("retract (entry)"),
         "{}",

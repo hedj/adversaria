@@ -80,7 +80,7 @@ fn show_with_a_mark_adds_that_layer_as_layer_did() {
 fn show_as_a_kind_it_does_not_know_says_what_it_takes() {
     let mut r = budget("show-unknown");
     let view = r.app.cursor();
-    r.command("show as pie");
+    r.refused("show as pie");
     let said = &r.app.session.message;
     assert_eq!(
         said,

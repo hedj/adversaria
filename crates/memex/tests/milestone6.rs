@@ -5,6 +5,8 @@ use memex::app::{App, Event, Key, Quasi};
 use memex::docs::{self, Block};
 use std::path::{Path, PathBuf};
 
+mod support;
+
 fn temp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("adversaria-m6-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
@@ -18,25 +20,7 @@ fn tap(app: &mut App, k: Key) {
 }
 
 fn command(app: &mut App, line: &str) {
-    app.handle(Event::down(Key::Quasi(Quasi::Command)));
-    for c in line.chars() {
-        tap(app, Key::Char(c));
-    }
-    app.handle(Event::up(Key::Quasi(Quasi::Command)));
-    let bad = [
-        "no command",
-        "not a",
-        "cannot",
-        "pandoc:",
-        "check quote, or",
-        "the target",
-        "there is no",
-    ];
-    assert!(
-        !bad.iter().any(|b| app.session.message.starts_with(b)),
-        "{line}: {}",
-        app.session.message
-    );
+    support::command(app, line);
 }
 
 fn typ(app: &mut App, text: &str) {

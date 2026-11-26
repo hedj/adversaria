@@ -519,8 +519,10 @@ impl App {
     /// and says nothing does not leave an earlier refusal on show.
     fn command_or_message(&mut self, line: &str) -> Mode {
         self.session.message.clear();
+        self.session.refused = false;
         self.command(line).unwrap_or_else(|m| {
             self.session.message = m;
+            self.session.refused = true;
             Mode::Normal
         })
     }

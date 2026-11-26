@@ -169,7 +169,7 @@ fn a_heading_is_offered_no_repair_and_adopt_fix_says_there_is_none() {
     // Catches a heading, not meant to be read, offered a mended sentence.
     let mut r = unread("reader-item-heading", "The flight was in 1989");
     assert!(!r.shows("did you mean"), "{:#?}", r.lines());
-    r.command("adopt fix");
+    r.refused("adopt fix");
     assert!(
         r.app.session.message.starts_with("nothing to fix"),
         "{}",
@@ -192,7 +192,7 @@ fn a_line_refused_says_why_and_how_to_leave_it() {
     // out named (the UX review, finding 3).
     let mut r = Room::new("refused-drawn");
     r.items(&["Paper #draft"]);
-    r.command("fnd draft");
+    r.refused("fnd draft");
     assert_eq!(kept(&r).as_deref(), Some("fnd draft"));
     let refused = foot(&r);
     assert!(refused.contains("no command “fnd”"), "{refused}");
@@ -240,7 +240,7 @@ fn a_mistyped_command_is_offered_and_tab_puts_it_right() {
     // after the line has changed.
     let mut r = Room::new("mistyped-mended");
     r.items(&["Paper #draft"]);
-    r.command("fnd draft");
+    r.refused("fnd draft");
     let refused = foot(&r);
     assert!(
         refused.contains("did you mean “find”? Tab mends"),
@@ -249,7 +249,7 @@ fn a_mistyped_command_is_offered_and_tab_puts_it_right() {
     r.tap(&[Key::Tab]);
     assert_eq!(kept(&r).as_deref(), Some("find draft"));
     r.tap(&[Key::Escape]);
-    r.command("fnd draft");
+    r.refused("fnd draft");
     r.typ("s");
     r.tap(&[Key::Tab]);
     assert_eq!(

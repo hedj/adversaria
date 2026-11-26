@@ -173,7 +173,7 @@ fn text_typed_and_erased_writes_no_edit() {
 fn a_command_that_works_leaves_no_earlier_refusal_on_the_message_line() {
     let mut r = Room::new("stale-message");
     r.items(&["Alpha", "Beta"]);
-    r.command("outdent");
+    r.refused("outdent");
     assert_eq!(
         r.app.session.message,
         "a top-level item cannot be outdented"
@@ -189,7 +189,7 @@ fn a_name_that_reads_as_an_item_or_an_entry_number_is_refused() {
     let mut r = Room::new("names-unreachable");
     r.items(&["Alpha"]);
     for name in ["1", "1.2", "#2"] {
-        r.command(&format!("name {name}"));
+        r.refused(&format!("name {name}"));
         assert!(r.app.session.message.starts_with("name not kept"), "{name}");
     }
     assert!(r.app.notebook.outline.names.is_empty());

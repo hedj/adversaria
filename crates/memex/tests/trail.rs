@@ -59,7 +59,7 @@ fn a_new_jump_empties_the_way_forward() {
     r.command("follow 1");
     r.command("back");
     r.command("go 3");
-    r.command("forward");
+    r.refused("forward");
     assert_eq!(r.app.session.message, "nothing to go forward to");
     r.command("back");
     assert_eq!(r.app.cursor(), buran);
@@ -69,7 +69,7 @@ fn a_new_jump_empties_the_way_forward() {
 fn with_no_jump_back_says_so() {
     let mut r = Room::new("trail-empty");
     r.items(&["Buran"]);
-    r.command("back");
+    r.refused("back");
     assert_eq!(r.app.session.message, "nothing to go back to");
 }
 
@@ -155,6 +155,6 @@ fn go_link_go_back_and_go_forward_do_as_follow_back_and_forward_did() {
 #[test]
 fn go_link_with_no_item_to_go_from_says_so() {
     let mut r = Room::new("trail-go-nothing");
-    r.command("go link 1");
+    r.refused("go link 1");
     assert_eq!(r.app.session.message, "there is no item to go from");
 }
