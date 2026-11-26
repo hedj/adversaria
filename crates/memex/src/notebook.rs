@@ -7,6 +7,7 @@ use crate::docs::Quote;
 use crate::journal::{Error as JournalError, Journal};
 use crate::outline::{Constraint, Outline, TOP};
 use crate::store::Store;
+use format::body::Body;
 use format::record::{Entry, EntryKind};
 use format::terms::Term;
 use serde_json::Value;
@@ -49,20 +50,15 @@ pub struct Notebook {
     kept: Vec<(u64, Outline)>,
 }
 
-/// The strings of a list in an entry's body; none if it is no list.
-pub(crate) fn strings(list: &Value) -> Vec<String> {
-    let items = list.as_array().into_iter().flatten();
-    items.filter_map(|x| x.as_str().map(String::from)).collect()
-}
-
 /// The inputs of a results import whose files no longer match the hashes
 /// it recorded; none if it is no results import, or none changed.
-fn changed_inputs(b: &Value) -> Option<Vec<String>> {
-    if b["format"] != "memex-results" {
+fn changed_inputs(b: Body) -> Option<Vec<String>> {
+    if b.format() != Some("memex-results") {
         return None;
     }
-    let base = Path::new(b["base"].as_str().unwrap_or(""));
-    let used = b["prov"]["used"].as_array().into_iter().flatten();
+    let base = Path::new(b.base().unwrap_or(""));
+    let used = b.prov().and_then(|p| p["used"].as_array());
+    let used = used.into_iter().flatten();
     let changed = used.filter(|input| input_changed(base, input));
     let paths: Vec<String> = changed
         .map(|input| input["path"].as_str().unwrap_or("").into())
@@ -71,8 +67,8 @@ fn changed_inputs(b: &Value) -> Option<Vec<String>> {
 }
 
 /// Where a move puts an item: under another, or at the top.
-fn placed(outline: &Outline, under: &Value) -> String {
-    match under.as_u64().filter(|u| *u != TOP) {
+fn placed(outline: &Outline, under: Option<u64>) -> String {
+    match under.filter(|u| *u != TOP) {
         Some(u) => format!("under “{}”", outline.text(u)),
         None => "to the top".into(),
     }
@@ -123,7 +119,7 @@ pub(crate) struct Trial {
 
 /// The entry a retract entry retracts.
 fn target(e: &Entry) -> Option<u64> {
-    e.body().and_then(|b| b["target"].as_u64())
+    e.body().map(Body::of).and_then(Body::target)
 }
 
 /// The entries from the root to a head, oldest first, and those they
@@ -400,8 +396,10 @@ impl Notebook {
     /// tip.
     pub(crate) fn document_imports(&self, name: &str) -> Vec<u64> {
         let path = self.path(self.tip).into_iter();
-        let of = |b: &Value| b["format"] == "document" && b["file"] == name;
-        let imports = path.filter(|e| e.kind() == EntryKind::Import && e.body().is_some_and(of));
+        let of = |b: Body| b.format() == Some("document") && b.file() == Some(name);
+        let import =
+            |e: &&Entry| e.kind() == EntryKind::Import && e.body().map(Body::of).is_some_and(of);
+        let imports = path.filter(import);
         imports.map(|e| e.seq).collect()
     }
 
@@ -462,9 +460,9 @@ impl Notebook {
 
     /// The entry and the blob of a Wikidata import.
     fn wikidata_blob(&self, e: &Entry) -> Option<(u64, PathBuf)> {
-        let b = e.body()?;
-        let blob = b["blob"].as_str()?;
-        (b["source"] == "Wikidata").then(|| (e.seq, self.blob(blob)))
+        let b = Body::of(e.body()?);
+        let blob = b.blob()?;
+        (b.source() == Some("Wikidata")).then(|| (e.seq, self.blob(blob)))
     }
 
     /// Keep a file the memex is given (read_input) as a blob; its hash.
@@ -490,10 +488,10 @@ impl Notebook {
         let origin = self.outline.items.get(&item).and_then(|i| i.block.origin);
         let origin = origin.ok_or("the target was not imported from a document")?;
         let e = self.entry(origin).ok_or("no import entry")?;
-        let b = e.body().ok_or("the import was purged")?;
-        let file = Path::new(b["file"].as_str().unwrap_or(""));
+        let b = Body::of(e.body().ok_or("the import was purged")?);
+        let file = Path::new(b.file().unwrap_or(""));
         let fmt = crate::docs::format_of(file).ok_or("the import is not a document")?;
-        let blob = b["blob"].as_str().unwrap_or("").to_string();
+        let blob = b.blob().unwrap_or("").to_string();
         let source = crate::docs::plain_text(&self.blob(&blob), fmt)?;
         let span = self.outline.text(item);
         Ok(Quote { span, source, blob })
@@ -514,18 +512,18 @@ impl Notebook {
     /// What an edit does, beside the actual outline: an item changed,
     /// added, deleted or moved.
     fn change(&self, e: &Entry, actual: &Outline) -> Option<String> {
-        let b = e.body()?;
-        let item = b["item"].as_u64().unwrap_or(e.seq);
+        let b = Body::of(e.body()?);
+        let item = b.item().unwrap_or(e.seq);
         let was = || actual.labelled(item);
-        match b["op"].as_str()? {
+        match b.op()? {
             "text" => Some(format!(
                 "changed {} → “{}”",
                 was(),
                 self.outline_at(e.seq).text(item)
             )),
-            "create" => Some(format!("added: “{}”", b["add"].as_str().unwrap_or(""))),
+            "create" => Some(format!("added: “{}”", b.add().unwrap_or(""))),
             "delete" => Some(format!("deleted {}", was())),
-            "move" => Some(format!("moved {} {}", was(), placed(actual, &b["under"]))),
+            "move" => Some(format!("moved {} {}", was(), placed(actual, b.under()))),
             _ => None,
         }
     }
@@ -537,7 +535,7 @@ impl Notebook {
             .path(self.tip)
             .into_iter()
             .filter(|e| e.kind() == EntryKind::Import);
-        let changed = imports.filter_map(|e| Some((e.seq, changed_inputs(e.body()?)?)));
+        let changed = imports.filter_map(|e| Some((e.seq, changed_inputs(Body::of(e.body()?))?)));
         let marked = changed.flat_map(|(seq, files)| {
             self.outline
                 .items_from(seq)
@@ -552,7 +550,7 @@ impl Notebook {
         let may_remove = match e.kind() {
             EntryKind::View => false,
             k if CONTENT.contains(&k) && e.parent_seq() == Some(self.tip) => {
-                e.body().is_some_and(|b| b["op"] == "delete")
+                e.body().is_some_and(|b| Body::of(b).op() == Some("delete"))
             }
             _ => true,
         };
@@ -594,13 +592,12 @@ impl Notebook {
     /// a redo takes the last back, and a change clears them. Leaving a
     /// world is a change: what was undone there is not redone in another.
     fn follow_undone(&mut self, e: &Entry) {
-        let leaves = e.body().is_some_and(|b| b["op"] == "world");
+        let body = e.body().map(Body::of);
+        let leaves = body.is_some_and(|b| b.op() == Some("world"));
         match e.kind() {
             EntryKind::View if leaves => self.redo.clear(),
             EntryKind::View | EntryKind::Purge => {}
-            EntryKind::Undo => self
-                .redo
-                .extend(e.body().and_then(|b| b["undoes"].as_u64())),
+            EntryKind::Undo => self.redo.extend(body.and_then(Body::undoes)),
             EntryKind::Redo => {
                 self.redo.pop();
             }

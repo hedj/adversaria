@@ -33,6 +33,7 @@
 //! values. An op that names an item not in the outline (after a retraction,
 //! say) is skipped.
 
+use format::body::Body;
 use format::record::EntryKind;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -286,9 +287,8 @@ pub fn span_json(spans: &[Span]) -> Value {
     )
 }
 
-fn parse_spans(v: &Value, seq: u64) -> Option<Vec<Span>> {
-    v.as_array()?
-        .iter()
+fn parse_spans(list: &[Value], seq: u64) -> Option<Vec<Span>> {
+    list.iter()
         .map(|s| {
             let a = s.as_array()?;
             let n = |i: usize| a.get(i).and_then(|x| x.as_u64());
@@ -302,46 +302,19 @@ fn parse_spans(v: &Value, seq: u64) -> Option<Vec<Span>> {
         .collect()
 }
 
-/// An entry's body, read by key. A value that is missing, or of another
-/// type, reads as none; as text it reads as empty.
-struct Body<'a>(&'a Value);
-
-impl<'a> Body<'a> {
-    fn num(&self, key: &str) -> Option<u64> {
-        self.0.get(key).and_then(Value::as_u64)
+/// The block an item's entry makes: its style, and the import it came
+/// from.
+fn block_of(b: &Body) -> Block {
+    let style = b.style().unwrap_or("").to_string();
+    Block {
+        style,
+        origin: b.import(),
     }
+}
 
-    fn opt(&self, key: &str) -> Option<&'a str> {
-        self.0.get(key).and_then(Value::as_str)
-    }
-
-    fn text(&self, key: &str) -> &'a str {
-        self.opt(key).unwrap_or("")
-    }
-
-    /// A list's texts.
-    fn texts(&self, key: &str) -> Vec<String> {
-        let list = self.0.get(key).and_then(Value::as_array);
-        list.into_iter()
-            .flatten()
-            .filter_map(|n| n.as_str().map(String::from))
-            .collect()
-    }
-
-    /// The block an item's entry makes: its style, and the import it came
-    /// from.
-    fn block(&self) -> Block {
-        let style = self.text("style").to_string();
-        Block {
-            style,
-            origin: self.num("import"),
-        }
-    }
-
-    /// The spans the body gives for an item's text.
-    fn spans(&self, seq: u64) -> Option<Vec<Span>> {
-        parse_spans(&self.0["spans"], seq)
-    }
+/// The spans a body gives for an item's text, by the entry it is.
+fn spans_of(b: &Body, seq: u64) -> Option<Vec<Span>> {
+    parse_spans(b.spans()?, seq)
 }
 
 impl Item {
@@ -543,7 +516,7 @@ impl Outline {
     /// it names an item that is not there. Each kind of entry, and each
     /// kind of edit, is one method below.
     pub fn apply(&mut self, seq: u64, kind: EntryKind, body: &Value) -> bool {
-        let b = Body(body);
+        let b = Body::of(body);
         let done = match kind {
             EntryKind::Edit => self.edit(seq, &b),
             EntryKind::Adopt => self.adopt(seq, &b),
@@ -556,7 +529,7 @@ impl Outline {
 
     /// An edit of the items: their text and their places.
     fn edit(&mut self, seq: u64, b: &Body) -> Option<()> {
-        match b.text("op") {
+        match b.op().unwrap_or("") {
             "init" => Some(()),
             "create" => self.create(seq, b),
             "text" => self.retext(seq, b),
@@ -568,7 +541,7 @@ impl Outline {
 
     /// An edit of what an item states or shows.
     fn annotate(&mut self, seq: u64, b: &Body) -> Option<()> {
-        match b.text("op") {
+        match b.op().unwrap_or("") {
             "facts" => self.state_facts(seq, b),
             "constraint" => self.keep_constraint(seq, b),
             "layer" => self.add_layer(seq, b),
@@ -607,28 +580,28 @@ impl Outline {
 
     /// The item a body names, if it is in the outline.
     fn item_in(&self, b: &Body) -> Option<u64> {
-        b.num("item").filter(|i| self.items.contains_key(i))
+        b.item().filter(|i| self.items.contains_key(i))
     }
 
     // Items: their text and their places.
 
     fn create(&mut self, seq: u64, b: &Body) -> Option<()> {
-        let under = b.num("under").filter(|u| self.contains(*u))?;
+        let under = b.under().filter(|u| self.contains(*u))?;
         self.record_text(seq, seq, b);
-        let spans = b.spans(seq).unwrap_or_default();
+        let spans = spans_of(b, seq).unwrap_or_default();
         if !self.spans_valid(&spans) {
             return None;
         }
-        self.items.insert(seq, Item::new(seq, under, b.block()));
+        self.items.insert(seq, Item::new(seq, under, block_of(b)));
         self.set_spans(seq, spans)?;
-        self.place(seq, under, b.num("after"));
+        self.place(seq, under, b.after());
         Some(())
     }
 
     fn retext(&mut self, seq: u64, b: &Body) -> Option<()> {
         let id = self.item_in(b)?;
         self.record_text(seq, id, b);
-        let spans = b.spans(seq).filter(|s| self.spans_valid(s))?;
+        let spans = spans_of(b, seq).filter(|s| self.spans_valid(s))?;
         self.set_spans(id, spans)
     }
 
@@ -643,12 +616,13 @@ impl Outline {
 
     /// Keep the characters an entry adds, written for an item.
     fn record_text(&mut self, seq: u64, item: u64, b: &Body) {
-        self.added.insert(seq, b.text("add").chars().collect());
+        self.added
+            .insert(seq, b.add().unwrap_or("").chars().collect());
         self.owner.insert(seq, item);
     }
 
     fn move_item(&mut self, b: &Body) -> Option<()> {
-        let (id, under, after) = (self.item_in(b)?, b.num("under")?, b.num("after"));
+        let (id, under, after) = (self.item_in(b)?, b.under()?, b.after());
         if !self.can_move(id, under, after) {
             return None;
         }
@@ -677,21 +651,21 @@ impl Outline {
     fn state_facts(&mut self, seq: u64, b: &Body) -> Option<()> {
         let id = self.item_in(b)?;
         self.fact_item.insert(seq, id);
-        if let Some(src) = b.opt("source") {
+        if let Some(src) = b.source() {
             self.source.insert(id, src.to_string());
         }
         Some(())
     }
 
     fn keep_constraint(&mut self, seq: u64, b: &Body) -> Option<()> {
-        let (name, rule) = (b.text("name").into(), b.text("rule").into());
+        let (name, rule) = (b.name().unwrap_or("").into(), b.rule().unwrap_or("").into());
         self.constraints.insert(seq, Constraint { name, rule });
         Some(())
     }
 
     fn add_layer(&mut self, seq: u64, b: &Body) -> Option<()> {
         let id = self.item_in(b)?;
-        let (mark, goal) = (b.text("mark").into(), b.text("goal").into());
+        let (mark, goal) = (b.mark().unwrap_or("").into(), b.goal().unwrap_or("").into());
         self.views
             .entry(id)
             .or_default()
@@ -701,8 +675,8 @@ impl Outline {
 
     fn set_derived(&mut self, b: &Body) -> Option<()> {
         let id = self.item_in(b)?;
-        let (template, names) = (b.text("template").into(), b.texts("names"));
-        let under = b.0.get("under") == Some(&Value::Bool(true));
+        let (template, names) = (b.template().unwrap_or("").into(), b.names());
+        let under = b.shown_under();
         self.derived.insert(
             id,
             Derive {
@@ -719,10 +693,10 @@ impl Outline {
     /// An adoption: of a suggested constraint, or of facts, which belong to
     /// an item if the entry names one.
     fn adopt(&mut self, seq: u64, b: &Body) -> Option<()> {
-        if b.text("op") == "constraint" {
+        if b.op() == Some("constraint") {
             return self.keep_constraint(seq, b);
         }
-        if b.num("item").is_some() {
+        if b.item().is_some() {
             let id = self.item_in(b)?;
             self.fact_item.insert(seq, id);
         }
@@ -734,7 +708,7 @@ impl Outline {
         if !self.items.contains_key(&link.from) || !self.items.contains_key(&link.to) {
             return None;
         }
-        if b.0.get("inline") == Some(&Value::Bool(true)) {
+        if b.inline() {
             self.inline_links.insert(link.seq);
         }
         self.links.push(link);
@@ -742,7 +716,7 @@ impl Outline {
     }
 
     fn name(&mut self, b: &Body) -> Option<()> {
-        let name = b.opt("name")?;
+        let name = b.name()?;
         let id = self.item_in(b)?;
         self.names.insert(name.to_string(), id);
         Some(())
@@ -1331,9 +1305,9 @@ fn tag_of(rest: &str) -> Option<String> {
 
 /// A read record's reading: the text, its entries and its statements.
 fn reading_of(b: &Body) -> Option<Reading> {
-    let entries = entries_of(b.0.get("entries")?)?;
-    let text = b.text("text").to_string();
-    let said = said_of(b.0.get("said"));
+    let entries = b.entries()?;
+    let text = b.read_text().unwrap_or("").to_string();
+    let said = said_of(b.said());
     Some(Reading {
         text,
         entries,
@@ -1341,15 +1315,10 @@ fn reading_of(b: &Body) -> Option<Reading> {
     })
 }
 
-/// A list of entries' numbers.
-fn entries_of(v: &Value) -> Option<Vec<u64>> {
-    Some(v.as_array()?.iter().filter_map(Value::as_u64).collect())
-}
-
 /// A reading's statements, each [kind, text]; none for a record written
 /// before readings kept them.
-fn said_of(v: Option<&Value>) -> Vec<(String, String)> {
-    let pairs = v.and_then(Value::as_array).into_iter().flatten();
+fn said_of(list: Option<&[Value]>) -> Vec<(String, String)> {
+    let pairs = list.into_iter().flatten();
     let pair = |p: &Value| {
         Some((
             p.get(0)?.as_str()?.to_string(),
@@ -1361,8 +1330,8 @@ fn said_of(v: Option<&Value>) -> Vec<(String, String)> {
 
 /// A link entry's link: its ends, and its type (link, if none).
 fn link_of(seq: u64, b: &Body) -> Option<Link> {
-    let (from, to) = (b.num("from")?, b.num("to")?);
-    let kind = b.opt("type").unwrap_or("link").to_string();
+    let (from, to) = (b.from()?, b.to()?);
+    let kind = b.link_type().unwrap_or("link").to_string();
     Some(Link {
         seq,
         from,

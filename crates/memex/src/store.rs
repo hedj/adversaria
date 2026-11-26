@@ -7,6 +7,7 @@
 //! (docs/design.md § The journal, § The journal format.)
 
 use crate::prolog::{self, Prolog};
+use format::body::Body;
 use format::record::{Entry, EntryKind};
 use format::terms::{self, Term};
 use serde_json::Value;
@@ -140,8 +141,7 @@ impl Store {
     }
 
     fn retract(&mut self, entries: &[Entry], seq: u64, body: &Value) -> Result<(), String> {
-        let target = body.get("target").and_then(Value::as_u64);
-        let t = target.ok_or("a retract needs a target")?;
+        let t = Body::of(body).target().ok_or("a retract needs a target")?;
         self.check_target(entries, seq, t)?;
         self.facts.remove(&t);
         Ok(())
@@ -166,10 +166,7 @@ impl Store {
 
     /// Add the facts a body carries, if it carries any.
     fn add(&mut self, seq: u64, body: &Value) -> Result<(), String> {
-        let Some(list) = body.get("facts") else {
-            return Ok(());
-        };
-        let list = list.as_array().ok_or("facts must be a list")?;
+        let list = Body::of(body).facts()?;
         let fs = list
             .iter()
             .map(fact)
@@ -184,9 +181,7 @@ impl Store {
 /// The entry a retraction names, if this entry is one that names one.
 fn retract_target(e: &Entry) -> Option<u64> {
     let retracts = e.kind() == EntryKind::Retract;
-    retracts
-        .then(|| e.body()?.get("target")?.as_u64())
-        .flatten()
+    retracts.then(|| Body::of(e.body()?).target()).flatten()
 }
 
 /// A fact as the journal encodes it: an atom or a compound term.

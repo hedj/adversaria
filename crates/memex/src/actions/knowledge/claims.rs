@@ -6,6 +6,7 @@ use crate::actions::worlds::with_left;
 use crate::app::{App, TakeBack};
 use crate::notebook::Notebook;
 use crate::reason::{Suggestion, show};
+use format::body::Body;
 use format::record::{Entry, EntryKind};
 use format::terms::Term;
 use serde_json::{Value, json};
@@ -239,11 +240,11 @@ fn check_adoptable(claims: &[Claim]) -> Result<(), String> {
 /// The claim an adopt entry adopted, if it is one.
 fn adopted_claim(e: &Entry) -> Option<u64> {
     let body = e.body().filter(|_| e.kind() == EntryKind::Adopt)?;
-    body["claim"].as_u64()
+    Body::of(body).claim()
 }
 
 pub(crate) fn adopts(e: &Entry, item: u64) -> bool {
-    e.kind() == EntryKind::Adopt && e.body().and_then(|b| b["item"].as_u64()) == Some(item)
+    e.kind() == EntryKind::Adopt && e.body().map(Body::of).and_then(Body::item) == Some(item)
 }
 
 impl App {

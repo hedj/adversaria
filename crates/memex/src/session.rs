@@ -4,11 +4,10 @@
 
 use crate::app::{Active, Event, Key, Mode, PendingText, Press, Quasi, View};
 use crate::found::Found;
-use crate::notebook::strings;
 use crate::plumb::Offer;
 use crate::present::Presentation;
+use format::body::Body;
 use format::record::{Entry, EntryKind};
-use serde_json::Value;
 use std::collections::BTreeMap;
 
 /// The violations and the disagreements shown, by key.
@@ -261,11 +260,11 @@ pub struct Trail {
 impl Trail {
     /// Follow a view entry: a jump puts where it came from on the back
     /// list and empties the forward one; back and forward move between.
-    fn apply(&mut self, b: &Value) {
-        let (Some(from), to) = (b["from"].as_u64(), b["to"].as_u64()) else {
+    fn apply(&mut self, b: Body) {
+        let (Some(from), to) = (b.from(), b.to()) else {
             return;
         };
-        match b["op"].as_str() {
+        match b.op() {
             Some("back") => step(&mut self.back, &mut self.forward, from, to),
             Some("forward") => step(&mut self.forward, &mut self.back, from, to),
             _ if to != Some(from) => {
@@ -290,20 +289,20 @@ fn step(along: &mut Vec<u64>, other: &mut Vec<u64>, from: u64, to: Option<u64>) 
 }
 
 /// The pattern and direction of a leap entry.
-fn leap_of(b: &Value) -> Option<(String, bool)> {
-    let pattern = b["pattern"].as_str()?;
-    Some((pattern.to_string(), b["forward"] != false))
+fn leap_of(b: Body) -> Option<(String, bool)> {
+    let pattern = b.pattern()?;
+    Some((pattern.to_string(), b.forward()))
 }
 
 /// What a find entry lists, if it names a list.
-fn found_of(b: &Value) -> Option<Found> {
-    let filter = b["filter"].as_str().filter(|f| !f.is_empty())?;
+fn found_of(b: Body) -> Option<Found> {
+    let filter = b.filter().filter(|f| !f.is_empty())?;
     Some(Found::of(filter))
 }
 
 /// The violations and the disagreements an observed entry records.
-fn observed_of(b: &Value) -> Observed {
-    (strings(&b["violations"]), strings(&b["disagreements"]))
+fn observed_of(b: Body) -> Observed {
+    (b.violations(), b.disagreements())
 }
 
 /// The keys of the configuration, as the screen names them: those bound
@@ -399,8 +398,8 @@ impl Keys {
 /// Whether a view entry records what reasoning found, and no view: an
 /// observation or an offer. From version 3 they hold none; of versions 1
 /// and 2, the view as it then was, which restoring changes nothing of.
-fn is_record(b: &Value) -> bool {
-    matches!(b["op"].as_str(), Some("observed" | "offer"))
+fn is_record(b: Body) -> bool {
+    matches!(b.op(), Some("observed" | "offer"))
 }
 
 impl Session {
@@ -467,14 +466,18 @@ impl Session {
     /// Apply a view entry: what it shows, and what it records of a leap or
     /// of what reasoning showed.
     pub(crate) fn apply(&mut self, e: &Entry) {
-        let Some(b) = e.body().filter(|_| e.kind() == EntryKind::View) else {
+        let Some(b) = e
+            .body()
+            .filter(|_| e.kind() == EntryKind::View)
+            .map(Body::of)
+        else {
             return;
         };
         if !is_record(b) {
             self.view.restore(b);
         }
         self.trail.apply(b);
-        match b["op"].as_str() {
+        match b.op() {
             Some("leap") => {
                 if let Some((pattern, forward)) = leap_of(b) {
                     self.leapt(&pattern, forward);

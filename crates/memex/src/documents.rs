@@ -7,6 +7,7 @@ use crate::docs::{Block, Losses};
 use crate::notebook::Notebook;
 use crate::outline::Revised;
 use crate::outline::TOP;
+use format::body::Body;
 use format::record::EntryKind;
 use format::terms::{self, Term};
 use serde_json::json;
@@ -357,7 +358,7 @@ impl Notebook {
         let not = || format!("{place} did not come from an imported document");
         let import = self.outline.origin(item).ok_or_else(not)?;
         let body = self.entry(import).and_then(|e| e.body());
-        let name = body.and_then(|b| b["file"].as_str().map(String::from));
+        let name = body.and_then(|b| Body::of(b).file().map(String::from));
         name.ok_or_else(not)
     }
 }

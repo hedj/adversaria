@@ -19,6 +19,7 @@ use crate::notebook::{CONTENT, Notebook};
 use crate::outline::{Outline, TOP, TextChange, span_json};
 use crate::reasoning::Reasoning;
 use crate::session::Session;
+use format::body::Body;
 use format::record::{Entry, EntryKind};
 use format::terms::Term;
 use serde_json::{Value, json};
@@ -297,26 +298,23 @@ impl View {
         v
     }
 
-    pub(crate) fn restore(&mut self, b: &Value) {
-        if let Some(ps) = b.get("panes").and_then(|p| p.as_array()) {
+    pub(crate) fn restore(&mut self, b: Body) {
+        if let Some(ps) = b.panes() {
             for (i, p) in ps.iter().take(2).enumerate() {
-                self.panes[i].kind = match p["kind"].as_str() {
+                self.panes[i].kind = match p.kind() {
                     Some("links") => PaneKind::Links,
                     Some("suggestions") => PaneKind::Suggestions,
                     Some("matches") => PaneKind::Matches,
                     _ => PaneKind::Outline,
                 };
-                self.panes[i].cursor = p["cursor"].as_u64().unwrap_or(TOP);
+                self.panes[i].cursor = p.cursor().unwrap_or(TOP);
             }
         }
-        self.focus = (b["focus"].as_u64().unwrap_or(0) as usize).min(1);
+        self.focus = (b.focus().unwrap_or(0) as usize).min(1);
         self.focus_an_outline();
-        self.pos = b["pos"].as_u64().unwrap_or(0) as usize;
-        self.folded = b["folded"]
-            .as_array()
-            .map(|f| f.iter().filter_map(|x| x.as_u64()).collect())
-            .unwrap_or_default();
-        self.interrogate = b["interrogate"].as_u64();
+        self.pos = b.pos().unwrap_or(0) as usize;
+        self.folded = b.folded().into_iter().collect();
+        self.interrogate = b.interrogate();
     }
 }
 
@@ -1081,7 +1079,7 @@ mod tests {
                 .map(|k| json!({"kind": k, "cursor": 2}))
                 .collect();
             let mut view = View::default();
-            view.restore(&json!({"op": "pane", "panes": panes, "focus": 1}));
+            view.restore(Body::of(&json!({"op": "pane", "panes": panes, "focus": 1})));
             let focused = view.focused().kind;
             assert_eq!(focused, PaneKind::Outline, "{kinds:?}");
         }

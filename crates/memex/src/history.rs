@@ -5,8 +5,8 @@
 
 use crate::notebook::Notebook;
 use crate::outline::Outline;
+use format::body::Body;
 use format::record::{Entry, EntryKind};
-use serde_json::Value;
 use std::collections::BTreeSet;
 
 /// One step of the history: its entry, what it did, and whether a later
@@ -47,46 +47,30 @@ impl Met {
 /// The entry a retract entry takes back, if it is one.
 fn retract_target(e: &Entry) -> Option<u64> {
     let b = e.body().filter(|_| e.kind() == EntryKind::Retract)?;
-    b["target"].as_u64()
+    Body::of(b).target()
 }
 
 /// The entries a reading of a text wrote, if an entry is one.
 fn read_entries(e: &Entry) -> Vec<u64> {
-    let b = e
-        .body()
-        .filter(|b| e.kind() == EntryKind::Edit && b["op"] == "read");
-    let entries = b
-        .and_then(|b| b["entries"].as_array())
-        .into_iter()
-        .flatten();
-    entries.filter_map(Value::as_u64).collect()
+    let b = e.body().map(Body::of);
+    let read = b.filter(|b| e.kind() == EntryKind::Edit && b.op() == Some("read"));
+    read.and_then(Body::entries).unwrap_or_default()
 }
 
 /// What an entry did, if it is a step of the history; a reading of a
 /// text, which follows its edit, and the rest of the view, are not.
 fn said(e: &Entry, o: &Outline) -> Option<String> {
-    let b = e.body()?;
+    let b = Body::of(e.body()?);
     match e.kind() {
         EntryKind::Edit => edit_said(e.seq, b, o),
-        EntryKind::Link => Some(format!(
-            "linked {} to {}",
-            at(o, &b["from"]),
-            at(o, &b["to"])
-        )),
-        EntryKind::Name => Some(format!(
-            "named {} “{}”",
-            at(o, &b["item"]),
-            b["name"].as_str()?
-        )),
-        EntryKind::Suppose => Some(format!("supposed “{}”", b["name"].as_str()?)),
-        EntryKind::Adopt => Some(format!("adopted, in {}", at(o, &b["item"]))),
-        EntryKind::Import => Some(format!(
-            "imported {}",
-            b["file"].as_str().or(b["source"].as_str())?
-        )),
-        EntryKind::Retract => Some(format!("retracted entry {}", b["target"].as_u64()?)),
-        EntryKind::Undo => Some(format!("undid entry {}", b["undoes"].as_u64()?)),
-        EntryKind::Redo => Some(format!("redid entry {}", b["redoes"].as_u64()?)),
+        EntryKind::Link => Some(format!("linked {} to {}", at(o, b.from()), at(o, b.to()))),
+        EntryKind::Name => Some(format!("named {} “{}”", at(o, b.item()), b.name()?)),
+        EntryKind::Suppose => Some(format!("supposed “{}”", b.name()?)),
+        EntryKind::Adopt => Some(format!("adopted, in {}", at(o, b.item()))),
+        EntryKind::Import => Some(format!("imported {}", b.file().or(b.source())?)),
+        EntryKind::Retract => Some(format!("retracted entry {}", b.target()?)),
+        EntryKind::Undo => Some(format!("undid entry {}", b.undoes()?)),
+        EntryKind::Redo => Some(format!("redid entry {}", b.redoes()?)),
         EntryKind::View => jump_said(b, o),
         _ => None,
     }
@@ -94,9 +78,9 @@ fn said(e: &Entry, o: &Outline) -> Option<String> {
 
 /// What an edit did to the outline: to its item, which an item's
 /// creation is, by its entry's number, if it names none.
-fn edit_said(seq: u64, b: &Value, o: &Outline) -> Option<String> {
-    let item = at(o, &b["item"].as_u64().unwrap_or(seq).into());
-    match b["op"].as_str()? {
+fn edit_said(seq: u64, b: Body, o: &Outline) -> Option<String> {
+    let item = at(o, Some(b.item().unwrap_or(seq)));
+    match b.op()? {
         "text" => Some(format!("edited {item}")),
         "create" => Some(format!("added {item}")),
         "delete" => Some("deleted an item".into()),
@@ -110,12 +94,12 @@ fn edit_said(seq: u64, b: &Value, o: &Outline) -> Option<String> {
 }
 
 /// What a jump did: how it went, to which item, and from which.
-fn jump_said(b: &Value, o: &Outline) -> Option<String> {
-    let (from, to) = (b["from"].as_u64()?, b["to"].as_u64()?);
+fn jump_said(b: Body, o: &Outline) -> Option<String> {
+    let (from, to) = (b.from()?, b.to()?);
     if from == to {
         return None;
     }
-    let how = match b["op"].as_str()? {
+    let how = match b.op()? {
         "back" => "went back to",
         "forward" => "went forward to",
         "follow" => "followed a link to",
@@ -124,15 +108,15 @@ fn jump_said(b: &Value, o: &Outline) -> Option<String> {
     };
     Some(format!(
         "{how} {} from {}",
-        at(o, &b["to"]),
+        at(o, Some(to)),
         number(o, from)
     ))
 }
 
 /// An item, as the outline addresses it now: its number and text, or
 /// that it is gone.
-fn at(o: &Outline, id: &Value) -> String {
-    match id.as_u64().filter(|i| o.contains(*i)) {
+fn at(o: &Outline, id: Option<u64>) -> String {
+    match id.filter(|i| o.contains(*i)) {
         Some(i) => o.labelled(i),
         None => "an item since deleted".into(),
     }
@@ -172,7 +156,7 @@ impl Notebook {
     /// row is never right-clicked.
     pub(crate) fn jumped_to(&self, seq: u64) -> Option<u64> {
         let e = self.entry(seq)?;
-        let b = e.body().filter(|_| e.kind() == EntryKind::View)?;
-        b["from"].as_u64().and(b["to"].as_u64())
+        let b = Body::of(e.body().filter(|_| e.kind() == EntryKind::View)?);
+        b.from().and(b.to())
     }
 }

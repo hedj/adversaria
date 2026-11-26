@@ -4,6 +4,7 @@
 //! (docs/guide.md § 2.4, Worlds and history).
 
 use super::*;
+use format::body::Body;
 use format::record::EntryKind;
 
 /// A world's column, by its place, in its half.
@@ -551,13 +552,8 @@ fn reasons_of(app: &App, set_aside: &[u64]) -> BTreeMap<u64, Vec<u64>> {
 /// A retraction's target and the constraints it records, if it records
 /// any.
 fn recorded_reason(e: &format::record::Entry) -> Option<(u64, Vec<u64>)> {
-    let body = e.body().filter(|_| e.kind() == EntryKind::Retract)?;
-    let target = body["target"].as_u64()?;
-    let constraints = body.get("constraints")?.as_array()?;
-    Some((
-        target,
-        constraints.iter().filter_map(|c| c.as_u64()).collect(),
-    ))
+    let body = Body::of(e.body().filter(|_| e.kind() == EntryKind::Retract)?);
+    Some((body.target()?, body.constraints()?))
 }
 
 fn set_aside(worlds: &[Side; 2]) -> Vec<u64> {

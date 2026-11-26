@@ -14,6 +14,7 @@ use crate::ace::{Kind, Reading, Said, Unread, Words, words_of};
 use crate::app::App;
 use crate::engine::told;
 use crate::notebook::Notebook;
+use format::body::Body;
 use format::record::EntryKind;
 use format::terms::Term;
 use serde_json::json;
@@ -371,14 +372,12 @@ impl Notebook {
     /// all from there back together.
     pub(crate) fn read_from(&self, seq: u64) -> Option<u64> {
         let e = self.entry(seq)?;
-        let closes = |b: &&serde_json::Value| {
-            ["read", "split", "make", "relink"].contains(&b["op"].as_str().unwrap_or(""))
-        };
+        let closes = |b: &Body| matches!(b.op(), Some("read" | "split" | "make" | "relink"));
         let b = e
             .body()
             .filter(|_| e.kind() == EntryKind::Edit)
-            .filter(closes)?;
-        b["of"].as_u64()
+            .map(Body::of);
+        b.filter(closes)?.of_entry()
     }
 }
 

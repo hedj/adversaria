@@ -15,6 +15,7 @@
 //!   item just typed into, before the pause, is taken for writing too;
 //!   a view after Backspace erased an empty item stays a move.
 
+use format::body::Body;
 use format::record::{Entry, EntryKind};
 use serde_json::{Value, json};
 use std::collections::HashSet;
@@ -77,7 +78,7 @@ impl Runs {
         let Some(b) = e.body().filter(|_| !self.made.contains(&e.seq)) else {
             return false;
         };
-        match (e.kind(), b["op"].as_str().unwrap_or("")) {
+        match (e.kind(), Body::of(b).op().unwrap_or("")) {
             (EntryKind::Edit, "read" | "relink")
             | (EntryKind::View, "observed" | "offer" | "start") => true,
             (EntryKind::Retract, _) => self.in_run(e) && self.run_ends_in_record(&es[i + 1..]),
@@ -88,7 +89,7 @@ impl Runs {
     /// Whether an entry can be part of a reading's or a relinking's run:
     /// a statement, an inline link, or a retraction of either.
     fn in_run(&self, e: &Entry) -> bool {
-        let target = e.body().and_then(|b| b["target"].as_u64());
+        let target = e.body().map(Body::of).and_then(Body::target);
         let of_run = |s: u64| self.stated.contains(&s) || self.inline.contains(&s);
         match e.kind() {
             EntryKind::Retract => target.is_some_and(of_run),
@@ -100,8 +101,10 @@ impl Runs {
     /// `read` or `relink` record that closes it.
     fn run_ends_in_record(&self, after: &[Entry]) -> bool {
         let next = after.iter().find(|e| !self.in_run(e));
-        let closes = |b: &Value| b["op"] == "read" || b["op"] == "relink";
-        next.is_some_and(|e| e.kind() == EntryKind::Edit && e.body().is_some_and(closes))
+        let closes = |b: Body| matches!(b.op(), Some("read" | "relink"));
+        next.is_some_and(|e| {
+            e.kind() == EntryKind::Edit && e.body().map(Body::of).is_some_and(closes)
+        })
     }
 }
 
@@ -114,28 +117,28 @@ fn left(edit: &Entry, view: &Entry) -> bool {
 
 /// Whether an entry is a view of op `move`.
 fn is_move(view: &Entry) -> bool {
-    let moved = |v: &Value| v["op"] == "move";
-    view.kind() == EntryKind::View && view.body().is_some_and(moved)
+    let moved = |v: Body| v.op() == Some("move");
+    view.kind() == EntryKind::View && view.body().map(Body::of).is_some_and(moved)
 }
 
 /// Whether a view's cursor is where an edit put it: on the item it made,
 /// or in the item it typed into.
 fn stays(edit: &Entry, view: &Entry) -> bool {
-    let (Some(e), Some(v)) = (edit.body(), view.body()) else {
+    let (Some(e), Some(v)) = (edit.body().map(Body::of), view.body().map(Body::of)) else {
         return false;
     };
     let at = cursor(v);
-    match e["op"].as_str() {
+    match e.op() {
         Some("create") => at == Some(edit.seq),
-        Some("text") => at.is_some() && at == e["item"].as_u64(),
+        Some("text") => at.is_some() && at == e.item(),
         _ => false,
     }
 }
 
 /// The cursor a view records: in its pane with the focus.
-fn cursor(v: &Value) -> Option<u64> {
-    let focus = v["focus"].as_u64().unwrap_or(0) as usize;
-    v["panes"][focus]["cursor"].as_u64()
+fn cursor(v: Body) -> Option<u64> {
+    let focus = v.focus().unwrap_or(0) as usize;
+    v.panes()?.get(focus)?.cursor()
 }
 
 /// The numbers of the statements readings list.
@@ -143,14 +146,16 @@ fn stated(es: &[Entry]) -> HashSet<u64> {
     let reads = es
         .iter()
         .filter(|e| e.kind() == EntryKind::Edit)
-        .filter_map(|e| e.body());
-    let reads = reads.filter(|b| b["op"] == "read");
-    reads.flat_map(|b| numbers(&b["entries"])).collect()
+        .filter_map(|e| e.body().map(Body::of));
+    let reads = reads.filter(|b| b.op() == Some("read"));
+    reads
+        .flat_map(|b| b.entries().unwrap_or_default())
+        .collect()
 }
 
 /// The numbers of the inline links: those a `[[link]]` in a text wrote.
 fn inline_links(es: &[Entry]) -> HashSet<u64> {
-    let inline = |e: &&Entry| e.body().is_some_and(|b| b["inline"] == true);
+    let inline = |e: &&Entry| e.body().is_some_and(|b| Body::of(b).inline());
     let links = es
         .iter()
         .filter(|e| e.kind() == EntryKind::Link)
@@ -161,18 +166,15 @@ fn inline_links(es: &[Entry]) -> HashSet<u64> {
 /// The numbers of the entries the user's `make` wrote: from the entry its
 /// record names to the record itself.
 fn made_by_make(es: &[Entry]) -> HashSet<u64> {
-    let made = |e: &Entry| e.body().filter(|b| b["op"] == "make")?["of"].as_u64();
+    let made = |e: &Entry| {
+        let b = e.body().map(Body::of)?;
+        (b.op() == Some("make")).then_some(b)?.of_entry()
+    };
     let edits = es.iter().filter(|e| e.kind() == EntryKind::Edit);
     edits
         .filter_map(|e| Some(made(e)?..=e.seq))
         .flatten()
         .collect()
-}
-
-/// A list's numbers.
-fn numbers(v: &Value) -> Vec<u64> {
-    let list = v.as_array().into_iter().flatten();
-    list.filter_map(Value::as_u64).collect()
 }
 
 #[cfg(test)]

@@ -5,11 +5,10 @@
 use crate::ace::{Ace, Words};
 use crate::engine::Engine;
 use crate::mentions::Mentions;
-use crate::notebook::strings;
 use crate::reason::{Shown, Suggestion, WorldEval};
 use crate::world::World;
+use format::body::Body;
 use format::record::{Entry, EntryKind};
-use serde_json::Value;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
@@ -25,8 +24,8 @@ pub struct Supposition {
 
 impl Supposition {
     /// The supposition a suppose entry opens, from the world at its parent.
-    fn of(e: &Entry, b: &Value) -> Supposition {
-        let name = b["name"].as_str().unwrap_or("supposed").to_string();
+    fn of(e: &Entry, b: Body) -> Supposition {
+        let name = b.name().unwrap_or("supposed").to_string();
         let actual = e.parent_seq().unwrap_or(1);
         Supposition {
             name,
@@ -73,22 +72,23 @@ impl Reasoning {
     /// Apply an entry: a supposition opens or closes, and a suggestion is
     /// dismissed or offered.
     pub(crate) fn apply(&mut self, e: &Entry) {
-        let Some(b) = e.body() else { return };
-        let opened = |s: &Option<Supposition>, key: &str| {
-            s.as_ref()
-                .is_some_and(|s| b[key].as_u64() == Some(s.opened))
+        let Some(b) = e.body().map(Body::of) else {
+            return;
         };
-        match (e.kind(), b["op"].as_str()) {
+        let opened = |s: &Option<Supposition>, entry: Option<u64>| {
+            s.as_ref().is_some_and(|s| entry == Some(s.opened))
+        };
+        match (e.kind(), b.op()) {
             // Undoing the suppose leaves its world; redoing it returns.
-            (EntryKind::Undo, _) if opened(&self.supposition, "undoes") => {
+            (EntryKind::Undo, _) if opened(&self.supposition, b.undoes()) => {
                 self.undone_supposition = self.supposition.take();
             }
-            (EntryKind::Redo, _) if opened(&self.undone_supposition, "redoes") => {
+            (EntryKind::Redo, _) if opened(&self.undone_supposition, b.redoes()) => {
                 self.supposition = self.undone_supposition.take();
             }
             (EntryKind::View, Some("world")) => self.supposition = None,
-            (EntryKind::View, Some("dismiss")) => self.suggestions.dismiss(b["key"].as_str()),
-            (EntryKind::View, Some("offer")) => self.suggestions.offer(strings(&b["keys"])),
+            (EntryKind::View, Some("dismiss")) => self.suggestions.dismiss(b.key()),
+            (EntryKind::View, Some("offer")) => self.suggestions.offer(b.keys()),
             (EntryKind::Suppose, _) => self.supposition = Some(Supposition::of(e, b)),
             _ => {}
         }

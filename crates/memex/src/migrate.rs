@@ -10,6 +10,7 @@
 //! each suggestion made.
 
 use crate::inferred::Inferred;
+use format::body::Body;
 use format::record::{Entry, EntryKind};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -79,7 +80,7 @@ impl Rewrite {
         if let Some(inferred) = &self.inferred {
             to_v2(e, inferred, &mut body);
         }
-        if e.kind() == EntryKind::View && body["op"] == "offer" {
+        if e.kind() == EntryKind::View && Body::of(&body).op() == Some("offer") {
             body["drawn"] = json!(true);
         }
         (Some(&body) != e.body()).then_some(body)
@@ -91,7 +92,7 @@ impl Rewrite {
 /// on its own is marked so; a view that only records where writing left
 /// the cursor is `written`.
 fn to_v2(e: &Entry, inferred: &Inferred, body: &mut Value) {
-    if e.kind() == EntryKind::View && body["op"] == "start" {
+    if e.kind() == EntryKind::View && Body::of(body).op() == Some("start") {
         body.as_object_mut().map(|b| b.remove("schema"));
     }
     inferred.mark(e.seq, body);

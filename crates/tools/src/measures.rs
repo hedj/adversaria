@@ -39,6 +39,7 @@
 //! under it deleted, or such an item's text no longer read; without a
 //! record, as in version 1, the reason is unrecorded.
 
+use format::body::{Body, Gone};
 use format::record::{Entry, EntryKind};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -95,20 +96,21 @@ pub struct Report {
 
 /// Whether a facts edit states a ruling: a fact ruling(...), not any
 /// fact that holds the word.
-fn states_a_ruling(body: &serde_json::Value) -> bool {
-    let facts = body["facts"].as_array().into_iter().flatten();
-    facts.into_iter().any(|f| f["f"] == "ruling")
+fn states_a_ruling(body: Body) -> bool {
+    let facts = body.facts().unwrap_or_default();
+    facts.iter().any(|f| f["f"] == "ruling")
 }
 
 /// The kind of action an entry is, or None for an observation (or the first
 /// entry, which the memex writes itself).
 pub fn kind(e: &Entry) -> Option<&'static str> {
-    let op = e.body().and_then(|b| b["op"].as_str()).unwrap_or("");
+    let body = e.body().map(Body::of);
+    let op = body.and_then(Body::op).unwrap_or("");
     match (e.kind(), op) {
         (EntryKind::Edit, "init") => None,
-        (EntryKind::Edit, "facts") if e.body().is_some_and(states_a_ruling) => Some("checking"),
+        (EntryKind::Edit, "facts") if body.is_some_and(states_a_ruling) => Some("checking"),
         (EntryKind::Edit, _) | (EntryKind::Link, _) | (EntryKind::Name, _)
-            if e.body().is_some_and(|b| b.get("suggestion").is_some()) =>
+            if body.is_some_and(|b| b.suggestion().is_some()) =>
         {
             Some("deciding")
         }
@@ -179,18 +181,18 @@ impl Report {
 /// the inspector shows them at the selected claim item, without a command
 /// (docs/concepts.md, decision 4), a move to one is a check.
 fn inspects(e: &Entry) -> bool {
-    e.body().is_some_and(|b| b["inspects"].is_u64())
+    e.body().is_some_and(|b| Body::of(b).inspects().is_some())
 }
 
 /// Whether the memex wrote an entry on its own, not at the user's command
 /// or key.
 fn by_memex(e: &Entry) -> bool {
-    e.body().is_some_and(|b| b["by"] == "memex")
+    e.body().is_some_and(|b| Body::of(b).by_memex())
 }
 
 /// Whether an entry is a view of one of these ops.
 fn is_view(e: &Entry, ops: &[&str]) -> bool {
-    let op = e.body().and_then(|b| b["op"].as_str());
+    let op = e.body().map(Body::of).and_then(Body::op);
     e.kind() == EntryKind::View && op.is_some_and(|o| ops.contains(&o))
 }
 
@@ -198,7 +200,7 @@ fn is_view(e: &Entry, ops: &[&str]) -> bool {
 fn retracted(entries: &[Entry]) -> BTreeSet<u64> {
     let retracts = entries.iter().filter(|e| e.kind() == EntryKind::Retract);
     retracts
-        .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
+        .filter_map(|e| e.body().map(Body::of).and_then(Body::target))
         .collect()
 }
 
@@ -216,13 +218,13 @@ struct Judged(BTreeMap<String, &'static str>);
 impl Judged {
     /// A verdict entry: its word, for each finding it names.
     fn read(&mut self, e: &Entry) {
-        let Some(b) = e.body().filter(|_| is_view(e, &["verdict"])) else {
+        let Some(b) = e.body().filter(|_| is_view(e, &["verdict"])).map(Body::of) else {
             return;
         };
-        let Some(word) = VERDICTS.iter().find(|v| b["verdict"] == **v) else {
+        let Some(word) = VERDICTS.iter().find(|v| b.verdict() == Some(**v)) else {
             return;
         };
-        let named = strings(&b["findings"]).into_iter();
+        let named = b.findings().into_iter();
         self.0.extend(named.map(|f| (f, *word)));
     }
 
@@ -235,22 +237,15 @@ impl Judged {
 
 /// Why each violation an observation records as gone went, by its name;
 /// a reason the report does not know is unrecorded.
-fn reasons(b: &serde_json::Value) -> BTreeMap<String, &'static str> {
-    let each = b["gone"].as_array().into_iter().flatten();
-    each.filter_map(|g| Some((g["finding"].as_str()?.to_string(), reason(&g["why"]))))
-        .collect()
+fn reasons(b: Body) -> BTreeMap<String, &'static str> {
+    let each = |g: Gone| Some((g.finding()?.to_string(), reason(g.why())));
+    b.gone().into_iter().filter_map(each).collect()
 }
 
 /// A reason, as WHY names it.
-fn reason(why: &serde_json::Value) -> &'static str {
-    let known = WHY.iter().find(|w| why == **w);
+fn reason(why: Option<&str>) -> &'static str {
+    let known = WHY.iter().find(|w| why == Some(**w));
     known.copied().unwrap_or("unrecorded")
-}
-
-/// A list's texts.
-fn strings(v: &serde_json::Value) -> Vec<String> {
-    let list = v.as_array().into_iter().flatten();
-    list.filter_map(|x| x.as_str().map(String::from)).collect()
 }
 
 /// The offers recorded by version 1 or 2, if any were: they recorded a
@@ -278,16 +273,18 @@ struct Offers {
 
 impl Offers {
     fn read(&mut self, e: &Entry) {
-        let Some(b) = e.body() else { return };
+        let Some(b) = e.body().map(Body::of) else {
+            return;
+        };
         if e.seq == 1 {
-            self.before_3 = b["version"].as_u64().is_none_or(|v| v < 3);
+            self.before_3 = b.version().is_none_or(|v| v < 3);
         }
-        if b.get("suggestion").is_some() {
+        if b.suggestion().is_some() {
             self.adopted.push(e.seq);
         }
         if is_view(e, &["offer"]) {
-            let keys = strings(&b["keys"]);
-            if self.before_3 || b["drawn"] == true {
+            let keys = b.keys();
+            if self.before_3 || b.drawn() {
                 self.drawn.extend(keys.iter().cloned());
             }
             self.offered.extend(keys);
@@ -319,7 +316,9 @@ struct Watch {
 
 impl Watch {
     fn read(&mut self, e: &Entry) {
-        let Some(b) = e.body() else { return };
+        let Some(b) = e.body().map(Body::of) else {
+            return;
+        };
         if is_view(e, &["observed"]) {
             self.observe(b);
         }
@@ -329,11 +328,11 @@ impl Watch {
     /// observed and does not show now is gone, for the reason recorded. A
     /// supposition's observations are seen, but compared with nothing:
     /// they are not the actual world's.
-    fn observe(&mut self, b: &serde_json::Value) {
-        let now = strings(&b["violations"]);
+    fn observe(&mut self, b: Body) {
+        let now = b.violations();
         self.violations.extend(now.iter().cloned());
-        self.disagreements.extend(strings(&b["disagreements"]));
-        if b["world"] == "actual" {
+        self.disagreements.extend(b.disagreements());
+        if b.world() == Some("actual") {
             self.went(&now, &reasons(b));
             self.last = now;
         }
