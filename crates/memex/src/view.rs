@@ -174,6 +174,14 @@ pub struct Hit {
     pub prov: Vec<u64>,
 }
 
+/// A place on a figure: its column, x, and its row, y, as a rectangle's
+/// corner is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Point {
+    pub x: usize,
+    pub y: usize,
+}
+
 /// A rectangle of a figure: its top left corner, its width and its height.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rect {
@@ -199,11 +207,11 @@ impl Rect {
         Rect { x, y, w, h }
     }
 
-    /// Each line it covers, moved to start at a line and a column: the
-    /// line, its first column, and its width.
-    pub fn lines_at(&self, (top, left): (usize, usize)) -> Vec<(usize, usize, usize)> {
+    /// Each line it covers, moved to start at a place: the line, its
+    /// first column, and its width.
+    pub fn lines_at(&self, at: Point) -> Vec<(usize, usize, usize)> {
         let lines = self.y..self.y + self.h;
-        lines.map(|y| (top + y, left + self.x, self.w)).collect()
+        lines.map(|y| (at.y + y, at.x + self.x, self.w)).collect()
     }
 
     /// The column just right of it.
@@ -676,19 +684,19 @@ impl Canvas {
 
     /// A line from a point to a column on its right, up or down that
     /// column, and back left to another point, with an arrow there.
-    fn round_right(&mut self, from: (usize, usize), to: (usize, usize), column: usize, ink: Ink) {
-        self.hline(Run::of(from.0, column), from.1, ink);
-        self.vline(column, Run::of(to.1, from.1), ink);
-        self.hline(Run::of(to.0, column), to.1, ink);
-        self.put(to.0, to.1, '◀', ink);
+    fn round_right(&mut self, from: Point, to: Point, column: usize, ink: Ink) {
+        self.hline(Run::of(from.x, column), from.y, ink);
+        self.vline(column, Run::of(to.y, from.y), ink);
+        self.hline(Run::of(to.x, column), to.y, ink);
+        self.put(to.x, to.y, '◀', ink);
     }
 
     /// A line down from a point to a row, across, and down to another
     /// point.
     fn elbow(&mut self, p: &Path, ink: Ink) {
-        self.vline(p.from.0, Run::of(p.from.1, p.row), ink);
-        self.hline(Run::of(p.from.0, p.to.0), p.row, ink);
-        self.vline(p.to.0, Run::of(p.row, p.to.1), ink);
+        self.vline(p.from.x, Run::of(p.from.y, p.row), ink);
+        self.hline(Run::of(p.from.x, p.to.x), p.row, ink);
+        self.vline(p.to.x, Run::of(p.row, p.to.y), ink);
     }
 
     /// One character at each of these columns of a row.
@@ -699,16 +707,16 @@ impl Canvas {
     }
 
     /// Text at the first of these places where it has room; else none.
-    fn text_where_free(&mut self, places: [(usize, usize); 2], text: &str, ink: Ink) {
-        let Some((x, y)) = self.first_free(places, text.width()) else {
+    fn text_where_free(&mut self, places: [Point; 2], text: &str, ink: Ink) {
+        let Some(p) = self.first_free(places, text.width()) else {
             return;
         };
-        self.text(x, y, text, ink);
+        self.text(p.x, p.y, text, ink);
     }
 
     /// The first of these places with n free cells from it.
-    fn first_free(&self, places: [(usize, usize); 2], n: usize) -> Option<(usize, usize)> {
-        places.into_iter().find(|(x, y)| self.free(*x, *y, n))
+    fn first_free(&self, places: [Point; 2], n: usize) -> Option<Point> {
+        places.into_iter().find(|p| self.free(p.x, p.y, n))
     }
 
     /// A rectangle of one character.
@@ -1073,8 +1081,10 @@ impl Frame {
     }
 
     /// Where a mark of an x and a y lands.
-    fn point_of(&self, m: &M) -> Option<(usize, usize)> {
-        Some((self.mid_col(m.get("x")?)?, self.mid_row(m.get("y")?)?))
+    fn point_of(&self, m: &M) -> Option<Point> {
+        let x = self.mid_col(m.get("x")?)?;
+        let y = self.mid_row(m.get("y")?)?;
+        Some(Point { x, y })
     }
 
     /// A span's columns, from x1 to x2, and its row: that of its y, or the
@@ -1428,27 +1438,27 @@ impl Plot {
     }
 
     /// Where a series' marks land, in order of x.
-    fn series_points<'a>(&self, ms: &'a [M], s: &str) -> Vec<((usize, usize), &'a M)> {
+    fn series_points<'a>(&self, ms: &'a [M], s: &str) -> Vec<(Point, &'a M)> {
         let of_series = ms.iter().filter(|m| m.kind == "line" && series_of(m) == s);
         let landed = of_series.filter_map(|m| Some((self.frame.point_of(m)?, m)));
-        let mut pts: Vec<((usize, usize), &M)> = landed.collect();
-        pts.sort_by_key(|(p, _)| p.0);
+        let mut pts: Vec<(Point, &M)> = landed.collect();
+        pts.sort_by_key(|(p, _)| p.x);
         pts
     }
 
     /// Dotted lines between points in turn, where nothing is drawn yet.
-    fn join(&mut self, pts: &[((usize, usize), &M)]) {
+    fn join(&mut self, pts: &[(Point, &M)]) {
         for w in pts.windows(2) {
-            for (x, y) in between(w[0].0, w[1].0) {
-                self.cv.put_if_free(x, y, '·', Ink::Plain);
+            for p in between(w[0].0, w[1].0) {
+                self.cv.put_if_free(p.x, p.y, '·', Ink::Plain);
             }
         }
     }
 
-    fn points_of(&mut self, pts: &[((usize, usize), &M)], p: char) {
-        for ((x, y), m) in pts {
-            self.cv.put(*x, *y, p, m.ink());
-            self.cv.hit(Rect::cell(*x, *y), &m.prov);
+    fn points_of(&mut self, pts: &[(Point, &M)], c: char) {
+        for (p, m) in pts {
+            self.cv.put(p.x, p.y, c, m.ink());
+            self.cv.hit(Rect::cell(p.x, p.y), &m.prov);
         }
     }
 
@@ -1487,17 +1497,17 @@ impl Plot {
     }
 
     /// A dot, labelled with its text if it has one.
-    fn dot(&mut self, m: &M, (x, y): (usize, usize)) {
-        self.cv.put(x, y, '●', m.ink());
+    fn dot(&mut self, m: &M, p: Point) {
+        self.cv.put(p.x, p.y, '●', m.ink());
         if let Some(t) = m.get("text").map(V::text) {
-            self.cv.text(x + 2, y, &t, m.ink());
+            self.cv.text(p.x + 2, p.y, &t, m.ink());
         }
-        self.cv.hit(Rect::cell(x, y), &m.prov);
+        self.cv.hit(Rect::cell(p.x, p.y), &m.prov);
     }
 
-    fn text_mark(&mut self, m: &M, place: (usize, usize)) {
+    fn text_mark(&mut self, m: &M, p: Point) {
         let t = m.get("text").map(V::text).unwrap_or_default();
-        let at = Rect::row(place.0, place.1, t.width());
+        let at = Rect::row(p.x, p.y, t.width());
         self.cv.text_in(at, &t, m.ink());
         self.cv.hit(at, &m.prov);
     }
@@ -1579,15 +1589,18 @@ fn each_once(texts: impl Iterator<Item = String>) -> Vec<String> {
 }
 
 /// The cells strictly between two points, along a straight line.
-fn between(p: (usize, usize), q: (usize, usize)) -> Vec<(usize, usize)> {
-    let n = p.0.abs_diff(q.0).max(p.1.abs_diff(q.1)).max(1);
+fn between(p: Point, q: Point) -> Vec<Point> {
+    let n = p.x.abs_diff(q.x).max(p.y.abs_diff(q.y)).max(1);
     (1..n).map(|i| step(p, q, i, n)).collect()
 }
 
 /// The point i of n steps along the line from p to q.
-fn step(p: (usize, usize), q: (usize, usize), i: usize, n: usize) -> (usize, usize) {
+fn step(p: Point, q: Point, i: usize, n: usize) -> Point {
     let t = i as f64 / n as f64;
-    (lerp(p.0, q.0, t), lerp(p.1, q.1, t))
+    Point {
+        x: lerp(p.x, q.x, t),
+        y: lerp(p.y, q.y, t),
+    }
 }
 
 /// The cell a fraction t of the way from a to b.
@@ -1907,7 +1920,7 @@ impl Edge {
 
     /// Its label, to go where given, else where it may go instead; none
     /// if it has no text.
-    fn label(&self, at: (usize, usize), or: (usize, usize)) -> Option<Label> {
+    fn label(&self, at: Point, or: Point) -> Option<Label> {
         let (text, ink) = (self.text.clone(), self.ink());
         (!self.text.is_empty()).then_some(Label { at, or, text, ink })
     }
@@ -2266,8 +2279,11 @@ impl Layout {
     }
 
     /// The middle of a vertex's right side, just outside it.
-    fn right_of(&self, v: usize) -> (usize, usize) {
-        (self.cols[v].hi + 1, self.top(v) + 1)
+    fn right_of(&self, v: usize) -> Point {
+        Point {
+            x: self.cols[v].hi + 1,
+            y: self.top(v) + 1,
+        }
     }
 
     /// The column of port k of n along a vertex: a lone one at its
@@ -2480,8 +2496,8 @@ fn set(ports: &mut [usize], placed: Vec<(usize, usize)>) {
 
 /// A label to place: where it goes, else where it may go instead.
 struct Label {
-    at: (usize, usize),
-    or: (usize, usize),
+    at: Point,
+    or: Point,
     text: String,
     ink: Ink,
 }
@@ -2495,20 +2511,26 @@ impl Label {
 /// The way a part of an edge is drawn down: from where it leaves, to a
 /// row across, and on to where it ends.
 struct Path {
-    from: (usize, usize),
+    from: Point,
     row: usize,
-    to: (usize, usize),
+    to: Point,
 }
 
 impl Path {
     /// Beside the arrow at its end.
-    fn beside(&self) -> (usize, usize) {
-        (self.to.0 + 2, self.to.1)
+    fn beside(&self) -> Point {
+        Point {
+            x: self.to.x + 2,
+            y: self.to.y,
+        }
     }
 
     /// On its run across, after both its ends.
-    fn on_run(&self) -> (usize, usize) {
-        (self.from.0.max(self.to.0) + 2, self.row)
+    fn on_run(&self) -> Point {
+        Point {
+            x: self.from.x.max(self.to.x) + 2,
+            y: self.row,
+        }
     }
 }
 
@@ -2550,7 +2572,11 @@ impl<'a> Draw<'a> {
     fn back_up(&mut self, e: &Edge, column: usize) -> Option<Label> {
         let (from, to) = (self.at.right_of(e.ends.0), self.at.right_of(e.ends.1));
         self.cv.round_right(from, to, column, e.ink());
-        e.label((column + 1, (from.1 + to.1) / 2), from)
+        let beside = Point {
+            x: column + 1,
+            y: (from.y + to.y) / 2,
+        };
+        e.label(beside, from)
     }
 
     /// The parts of edges drawn down, each from its upper vertex to the
@@ -2572,7 +2598,7 @@ impl<'a> Draw<'a> {
         if !last {
             return None;
         }
-        self.cv.put(path.to.0, path.to.1, '▼', e.ink());
+        self.cv.put(path.to.x, path.to.y, '▼', e.ink());
         e.label(path.beside(), path.on_run())
     }
 
@@ -2590,13 +2616,19 @@ impl<'a> Draw<'a> {
     }
 
     /// Where a part of an edge leaves its upper vertex.
-    fn leaves(&self, si: usize) -> (usize, usize) {
-        (self.ports.out[si], self.at.leaving_row(si))
+    fn leaves(&self, si: usize) -> Point {
+        Point {
+            x: self.ports.out[si],
+            y: self.at.leaving_row(si),
+        }
     }
 
     /// Where a part of an edge ends, above its lower vertex.
-    fn enters(&self, si: usize) -> (usize, usize) {
-        (self.ports.into[si], self.at.entering_row(si))
+    fn enters(&self, si: usize) -> Point {
+        Point {
+            x: self.ports.into[si],
+            y: self.at.entering_row(si),
+        }
     }
 
     /// Each label where it goes if there is room, else where it may go
@@ -2760,11 +2792,12 @@ mod tests {
         out
     }
 
-    /// Column of the first occurrence of text in a row, and the row.
-    fn at(lines: &[String], text: &str) -> (usize, usize) {
+    /// Where text first occurs: its column, and its row.
+    fn at(lines: &[String], text: &str) -> Point {
         for (y, l) in lines.iter().enumerate() {
             if let Some(b) = l.find(text) {
-                return (l[..b].chars().count(), y);
+                let x = l[..b].chars().count();
+                return Point { x, y };
             }
         }
         panic!("no {text:?} in\n{}", lines.join("\n"))
@@ -2855,12 +2888,12 @@ mod tests {
 
     /// The columns where these texts are found.
     fn columns_of(l: &[String], texts: [&str; 3]) -> [usize; 3] {
-        texts.map(|t| at(l, t).0)
+        texts.map(|t| at(l, t).x)
     }
 
     /// The rows where these texts are found.
     fn rows_of(l: &[String], texts: [&str; 3]) -> [usize; 3] {
-        texts.map(|t| at(l, t).1)
+        texts.map(|t| at(l, t).y)
     }
 
     /// Where a row's span starts.
@@ -2880,7 +2913,7 @@ mod tests {
         let l = budget_bars();
         let x = columns_of(&l, ["food", "income", "rent"]);
         assert!(rising(x), "categories in order:\n{}", l.join("\n"));
-        assert_eq!(at(&l, "food").1, l.len() - 1, "labels on the last row");
+        assert_eq!(at(&l, "food").y, l.len() - 1, "labels on the last row");
     }
 
     #[test]
@@ -2963,7 +2996,7 @@ mod tests {
         );
         let xs: Vec<usize> = ["Energia", "Buran flight", "Cancelled"]
             .iter()
-            .map(|t| at(&l, t).0)
+            .map(|t| at(&l, t).x)
             .collect();
         assert!(xs[0] < xs[1] && xs[1] < xs[2], "{}", l.join("\n"));
         at(&l, "Close one");
@@ -3036,13 +3069,13 @@ mod tests {
             60,
             0,
         );
-        let (_, ys) = at(&l, "Start");
-        let (_, ya) = at(&l, "Is it late?");
-        let (xg, yg) = at(&l, "Go home");
+        let ys = at(&l, "Start").y;
+        let ya = at(&l, "Is it late?").y;
+        let Point { x: xg, y: yg } = at(&l, "Go home");
         assert!(ys < ya && ya < yg, "{}", l.join("\n"));
         assert_eq!(l.iter().map(|x| x.matches('▼').count()).sum::<usize>(), 3);
         assert_eq!(l.iter().map(|x| x.matches('◀').count()).sum::<usize>(), 1);
-        let (xy, yy) = at(&l, "yes");
+        let Point { x: xy, y: yy } = at(&l, "yes");
         assert_eq!(yy, yg - 2, "beside the arrow into Go home");
         assert!(xy < xg + 8);
         assert!(
@@ -3061,8 +3094,8 @@ mod tests {
             40,
             0,
         );
-        let (_, yb) = at(&l, "│ b │");
-        let (_, yc) = at(&l, "│ c │");
+        let yb = at(&l, "│ b │").y;
+        let yc = at(&l, "│ c │").y;
         assert_eq!(
             l.iter().map(|x| x.matches('▼').count()).sum::<usize>(),
             3,

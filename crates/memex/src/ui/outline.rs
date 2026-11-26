@@ -376,7 +376,11 @@ impl<'a> OutlinePane<'a> {
     /// item that states its fact.
     fn view_lines(&self, drawn: &mut Drawn, id: u64, indent: usize) {
         let fig = self.figure(id, indent);
-        let places = self.view_places(&fig, (drawn.lines.len(), indent));
+        let at = view::Point {
+            x: indent,
+            y: drawn.lines.len(),
+        };
+        let places = self.view_places(&fig, at);
         drawn.push_lines(figure_lines(&fig, indent), indent);
         drawn.places.extend(places);
     }
@@ -389,14 +393,14 @@ impl<'a> OutlinePane<'a> {
 
     /// The places of a view's marks, for a figure that starts at a line
     /// and a column.
-    fn view_places(&self, fig: &view::Figure, at: (usize, usize)) -> Vec<Place> {
+    fn view_places(&self, fig: &view::Figure, at: view::Point) -> Vec<Place> {
         let places = fig.hits.iter().filter_map(|hit| self.hit_places(hit, at));
         places.flatten().collect()
     }
 
     /// A mark of a view, presenting its fact on each of its lines, if an
     /// item states the fact.
-    fn hit_places(&self, hit: &view::Hit, at: (usize, usize)) -> Option<Vec<Place>> {
+    fn hit_places(&self, hit: &view::Hit, at: view::Point) -> Option<Vec<Place>> {
         let click = self.fact_presented(hit)?;
         let lines = hit.area.lines_at(at).into_iter();
         Some(lines.map(|l| Place::of(l, click.clone())).collect())
