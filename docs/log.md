@@ -1911,6 +1911,31 @@ stage-1 record reads; the reason a text was not read is the session's,
 not the journal's; unread sentences have no mark but their colour; and
 the measure's count of helpers used once has no limit yet.
 
+### The language suggested, recorded from the action (26 November 2026)
+
+The window's draw reasoned, and reasoning recorded what the screen
+showed: an `offer` named the suggestions drawn, so its count hung on
+which panes were open. The author's decision: the journal records the
+language suggested and adopted, not screens. Version 3 of the journal
+(168cba9) reasons after each action, records each suggestion made, the
+first time, by its keys and its words, and no view; drawing writes
+nothing. A journal of version 2 is migrated on opening and kept in
+`v2/`, each of its offers marked drawn, and the measures report counts
+those apart.
+
+Two faults came out of it. A record with no view reset the view on
+replay, as `View::restore` resets the fields an entry lacks; records
+now leave the view alone. And a header changed from version 3 to 2
+still checked, as the seals sign entries, not the header: entry 1 now
+names the version, by the author's choice of the strict rule (a
+journal of version 3 whose entry 1 names none is refused, and entry 1
+is not purged).
+
+Measured: 1,162 tests pass; 46 elements hold 7 or more, from 44
+(`Report::fmt`, and the test that a migrated journal's offers are
+marked drawn, each 7); the deepest chain of helpers used once is 13,
+from 12, as `open_offers` now has one caller.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
