@@ -566,7 +566,7 @@ fn a_second_adoption_is_the_one_retracted() {
     assert!(
         app.session
             .message
-            .starts_with(&format!("entry {second} retracted")),
+            .starts_with(&format!("retracted entry {second}: adopted")),
         "{}",
         app.session.message
     );

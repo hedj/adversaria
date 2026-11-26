@@ -1,7 +1,7 @@
 //! Commands that move along the journal's history and between worlds
 //! (docs/guide.md, § 2.4, Worlds and history).
 
-use crate::app::{App, Mode};
+use crate::app::{App, Mode, TakeBack};
 use crate::notebook::Notebook;
 use crate::reason::{Contradicted, direct_conflicts};
 use format::terms::{self, Term};
@@ -10,9 +10,10 @@ use serde_json::{Value, json};
 impl App {
     pub(crate) fn cmd_undo(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let t = self.undoable().ok_or("nothing to undo on this branch")?;
+        let what = self.notebook.said_of(t);
         self.write(self.notebook.parent_of(t), "undo", json!({"undoes": t}))?;
         self.read_changed();
-        Ok(format!("undid entry {t}"))
+        Ok(format!("undid entry {t}: {what}"))
     }
 
     /// The entry undo would undo: the last on this branch that changed
@@ -32,13 +33,23 @@ impl App {
         };
         self.write(Some(t), "redo", json!({"redoes": t}))?;
         self.read_changed();
-        Ok(format!("redid entry {t}"))
+        Ok(format!("redid entry {t}: {}", self.notebook.said_of(t)))
     }
 
     /// Ask before retracting an entry, listing what depends on it: the
     /// entry named, or, with none named, the target's own last entry that
     /// can still be retracted (an adoption, a fact or a layer of it).
     pub(crate) fn cmd_retract(&mut self, words: &[&str], _: u64) -> Result<String, String> {
+        self.ask_to_take_back(words, TakeBack::Retract)
+    }
+
+    /// Ask before taking back an entry, for a command: `retract`, or
+    /// `dismiss change`.
+    pub(crate) fn ask_to_take_back(
+        &mut self,
+        words: &[&str],
+        asked: TakeBack,
+    ) -> Result<String, String> {
         let t = match words.is_empty() {
             true => self.targets_last().ok_or(
                 "the target has nothing to retract: no adoption, fact or layer of its own",
@@ -47,7 +58,7 @@ impl App {
                 .ok_or("retract (entry) seq, or retract alone for the target's last")?,
         };
         let dependents = self.retractable(t)?;
-        self.ask_retract(t, dependents);
+        self.ask_retract(t, dependents, asked);
         Ok(String::new())
     }
 
@@ -67,9 +78,13 @@ impl App {
         own.map(|e| e.seq).find(|s| self.retractable(*s).is_ok())
     }
 
-    fn ask_retract(&mut self, target: u64, dependents: Vec<u64>) {
+    fn ask_retract(&mut self, target: u64, dependents: Vec<u64>, asked: TakeBack) {
         self.session.message.clear();
-        self.session.mode = Mode::ConfirmRetract { target, dependents };
+        self.session.mode = Mode::ConfirmRetract {
+            target,
+            dependents,
+            asked,
+        };
     }
 
     /// The target's text, if the memex reads it as statements: what

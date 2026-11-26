@@ -3,7 +3,7 @@
 
 use super::{encoded, functor_of, node_def, reserved};
 use crate::actions::worlds::with_left;
-use crate::app::App;
+use crate::app::{App, TakeBack};
 use crate::notebook::Notebook;
 use crate::reason::{Suggestion, show};
 use format::record::Entry;
@@ -87,7 +87,7 @@ impl App {
     pub(crate) fn cmd_dismiss(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         match words {
             ["world"] => self.cmd_close(&[], target),
-            ["change", n] => self.cmd_retract(&[n], target),
+            ["change", n] => self.ask_to_take_back(&[n], TakeBack::Dismiss),
             _ => {
                 let s = self.suggestion(words, "dismiss")?;
                 self.dismiss_suggestion(&s);

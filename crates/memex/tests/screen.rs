@@ -92,8 +92,8 @@ fn the_foot_asks_before_a_retraction_and_says_when_nothing_depends_on_it() {
     room.command("fact box(rent, 3000)");
     let entry = room.last("edit");
     room.command(&format!("retract {entry}"));
-    let asked = format!(" RETRACT  entry {entry}");
-    let said = "nothing depends on it · Enter retracts · Esc keeps it";
+    let asked = format!(" RETRACT  entry {entry}: stated facts in 1: “rent”");
+    let said = "nothing depends on it · Enter retracts it · Esc keeps it";
     assert_eq!(foot(&room), [asked.as_str(), said]);
 }
 

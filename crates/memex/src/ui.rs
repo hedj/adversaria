@@ -15,7 +15,7 @@ mod scroll;
 mod worlds;
 mod wrap;
 
-use crate::app::{Active, App, Hold, Mode, PaneKind, Quasi, View};
+use crate::app::{Active, App, Hold, Mode, PaneKind, Quasi, TakeBack, View};
 use crate::marks::{MarkLine, difference, inner, item_marks, stating_rule, where_from};
 use crate::outline::{Layer, Link, Outline, Run, TOP};
 use crate::present::Presentation;

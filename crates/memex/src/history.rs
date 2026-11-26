@@ -145,6 +145,13 @@ fn number(o: &Outline, id: u64) -> String {
 }
 
 impl Notebook {
+    /// What an entry did, in the words of the history, said by the outline
+    /// as it is now; nothing for an entry that is no step of it.
+    pub(crate) fn said_of(&self, seq: u64) -> String {
+        let e = self.entry(seq);
+        e.and_then(|e| said(e, &self.outline)).unwrap_or_default()
+    }
+
     /// The latest steps of this branch, newest first, up to a number:
     /// each change, retraction, undo and redo, and each jump. Walked back
     /// from the tip, so only as far as the steps asked for.

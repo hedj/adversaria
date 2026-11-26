@@ -605,15 +605,60 @@ impl Active {
     }
 }
 
+/// The command a retraction answers: `retract`, of an entry, or
+/// `dismiss change`, of a revision's change; the retraction says its
+/// verb.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TakeBack {
+    Retract,
+    Dismiss,
+}
+
+impl TakeBack {
+    /// What it is called while it asks, and what it asks of: the entry,
+    /// and what the entry did.
+    pub fn asking(self, target: u64, what: &str) -> (&'static str, String) {
+        let [name, noun, ..] = self.words();
+        (name, format!(" {noun} {target}: {what}"))
+    }
+
+    /// How it is answered.
+    pub fn answers(self) -> String {
+        format!("Enter {} it · Esc keeps it", self.words()[2])
+    }
+
+    /// What it says once done, with the entry that records it.
+    pub fn done(self, target: u64, what: &str, by: u64) -> String {
+        let [_, noun, _, did] = self.words();
+        format!("{did} {noun} {target}: {what} (entry {by})")
+    }
+
+    /// What it says once the entry is kept.
+    pub fn kept(self, target: u64, what: &str) -> String {
+        format!("kept {} {target}: {what}", self.words()[1])
+    }
+
+    /// What it is called asking, what it calls the entry, and its verb
+    /// now and done.
+    fn words(self) -> [&'static str; 4] {
+        match self {
+            TakeBack::Retract => ["RETRACT", "entry", "retracts", "retracted"],
+            TakeBack::Dismiss => ["DISMISS", "change", "dismisses", "dismissed"],
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum Mode {
     #[default]
     Normal,
     Quasi(Active),
-    /// A retraction waits for Enter; the list is what depends on the entry.
+    /// A retraction waits for Enter: of which entry, what depends on it,
+    /// and the command that asked.
     ConfirmRetract {
         target: u64,
         dependents: Vec<u64>,
+        asked: TakeBack,
     },
     /// "Do you mean?": a supposition's readings, the one shown, waiting for
     /// Enter (yes), Esc (no) or Tab (the next reading); and the free

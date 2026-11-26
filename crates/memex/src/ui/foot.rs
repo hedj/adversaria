@@ -22,7 +22,11 @@ pub(super) fn foot_lines(app: &App) -> [Line<'static>; 2] {
 fn foot(app: &App) -> (Line<'static>, String) {
     match &app.session.mode {
         Mode::Quasi(a) => (quasi_line(app, a), quasi_said(app, a)),
-        Mode::ConfirmRetract { target, dependents } => retract_foot(*target, dependents),
+        Mode::ConfirmRetract {
+            target,
+            dependents,
+            asked,
+        } => retract_foot(app, *target, dependents, *asked),
         Mode::ConfirmSuppose {
             text, readings, at, ..
         } => suppose_foot(app, text, readings, *at),
@@ -173,11 +177,14 @@ fn release_text(a: &Active) -> String {
 
 /// The foot while a retraction is asked: the entry, what depends on it,
 /// and how to answer.
-fn retract_foot(target: u64, dependents: &[u64]) -> (Line<'static>, String) {
-    (
-        asked("RETRACT", format!(" entry {target}")),
-        retract_guide(dependents),
-    )
+fn retract_foot(
+    app: &App,
+    target: u64,
+    dependents: &[u64],
+    by: TakeBack,
+) -> (Line<'static>, String) {
+    let (name, about) = by.asking(target, &app.notebook.said_of(target));
+    (asked(name, about), retract_guide(dependents, by))
 }
 
 /// The foot while a supposition's reading is offered: the statement, the
@@ -198,7 +205,7 @@ fn asked(name: &str, about: String) -> Line<'static> {
 }
 
 /// What retracting an entry would undo, and how to answer.
-fn retract_guide(dependents: &[u64]) -> String {
+fn retract_guide(dependents: &[u64], by: TakeBack) -> String {
     let numbers: Vec<String> = dependents.iter().map(u64::to_string).collect();
     let dep = match numbers.is_empty() {
         true => "nothing depends on it".to_string(),
@@ -207,7 +214,7 @@ fn retract_guide(dependents: &[u64]) -> String {
             numbers.join(", ")
         ),
     };
-    format!("{dep} · Enter retracts · Esc keeps it")
+    format!("{dep} · {}", by.answers())
 }
 
 /// The reading of a supposition offered, restated, and how to answer.

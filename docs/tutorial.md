@@ -208,7 +208,7 @@ The top bar says `1 constraint violation`, and the finding is loud:
 
 Two beliefs now conflict. Press **F4** to take the adoption back:
 `retract`, the item's last entry. The foot asks first,
-`Enter retracts · Esc keeps it`; press Enter. The notebook says the
+`Enter retracts it · Esc keeps it`; press Enter. The notebook says the
 adoption is retracted, and the violation is gone.
 Because the source is kept with every adoption, you can take back what
 rests on a source if it proves wrong; the adoption and its retraction
@@ -324,8 +324,9 @@ changes in a world of their own, one entry each:
 Say your own sources name two teams. Dismiss that change: right-click it,
 and the menu offers `dismiss this change`; or run, by its number,
 `dismiss change 53`. The foot of the screen says
-`nothing depends on it · Enter retracts · Esc keeps it`; press Enter.
-Then run `adopt world` to keep the rest. The essay keeps
+`nothing depends on it · Enter dismisses it · Esc keeps it`; press Enter,
+and it says `dismissed change 53` and what the change did. Then run
+`adopt world` to keep the rest. The essay keeps
 `Two teams reviewed the flight software.` and gains
 `Each team wrote its findings in the DRAKON language.` If your numbers
 differ (they count every entry, so a typo adds one), use the numbers on

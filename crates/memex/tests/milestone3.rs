@@ -293,6 +293,11 @@ fn undo_redo_and_branches() {
     let (mut r, second) = two_items("undo");
     r.command("undo"); // the text of "second"
     assert_eq!(r.text(second), "");
+    let said = &r.app.session.message;
+    assert!(
+        said.contains(": edited 2: “second”"),
+        "says what it undid: {said}"
+    );
     r.command("undo"); // the creation of "second"
     assert!(!r.outline().contains(second));
     r.command("redo");

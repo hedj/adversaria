@@ -21,7 +21,7 @@ impl App {
         self.session.mode = match mode {
             Mode::Normal => self.normal(ev),
             Mode::Quasi(a) => self.quasi(a, ev),
-            Mode::ConfirmRetract { target, dependents } => self.confirm(target, dependents, ev),
+            Mode::ConfirmRetract { .. } => self.confirm(mode, ev),
             Mode::ConfirmSuppose {
                 text,
                 readings,
@@ -444,27 +444,25 @@ impl App {
         Mode::Normal
     }
 
-    fn confirm(&mut self, target: u64, dependents: Vec<u64>, ev: Event) -> Mode {
-        if ev.press == Press::Up {
-            return Mode::ConfirmRetract { target, dependents };
-        }
-        match ev.key {
-            Key::Enter => {
+    /// A key while a retraction waits: Enter takes the entry back, saying
+    /// what it did, by the verb of the command that asked; Esc keeps it.
+    fn confirm(&mut self, waiting: Mode, ev: Event) -> Mode {
+        let Mode::ConfirmRetract { target, asked, .. } = waiting else {
+            return waiting;
+        };
+        let what = self.notebook.said_of(target);
+        let said = match (ev.press, ev.key) {
+            (Press::Down, Key::Enter) => {
                 match self.write_here("retract", json!({"target": target})) {
-                    Ok(e) => {
-                        self.session.message =
-                            format!("entry {target} retracted by entry {}", e.seq)
-                    }
-                    Err(m) => self.session.message = m,
+                    Ok(e) => asked.done(target, &what, e.seq),
+                    Err(m) => m,
                 }
-                Mode::Normal
             }
-            Key::Escape => {
-                self.session.message = format!("entry {target} kept");
-                Mode::Normal
-            }
-            _ => Mode::ConfirmRetract { target, dependents },
-        }
+            (Press::Down, Key::Escape) => asked.kept(target, &what),
+            _ => return waiting,
+        };
+        self.session.message = said;
+        Mode::Normal
     }
 
     /// Suppose a reading, and say what was set aside.

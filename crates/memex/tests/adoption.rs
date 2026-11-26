@@ -58,7 +58,10 @@ fn retract_alone_takes_back_each_adoption_in_turn() {
     assert_eq!(adoptions.len(), 2, "one adoption a claim");
     for a in adoptions.iter().rev() {
         let said = retract_last(&mut r);
-        assert!(said.starts_with(&format!("entry {a} retracted")), "{said}");
+        assert!(
+            said.starts_with(&format!("retracted entry {a}: adopted")),
+            "{said}"
+        );
     }
     assert_eq!(dates(&mut r), 0, "both adoptions taken back");
     r.command("retract");
