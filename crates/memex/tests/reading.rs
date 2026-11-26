@@ -327,7 +327,7 @@ fn what_a_source_says_is_read_as_its_claim() {
     r.app.idle();
     let claims = r.app.notebook.claims_of(r.app.cursor());
     assert_eq!(claims.len(), 1, "{claims:?}");
-    assert_eq!(claims[0].1, "Talk-notes");
+    assert_eq!(claims[0].source, "Talk-notes");
 }
 
 #[test]
@@ -509,7 +509,7 @@ fn a_rule_a_constraint_and_a_claim_in_backticks_are_kept_as_their_kinds() {
     assert_eq!(names, ["One date per event"], "named by the prose");
     let claims = r.app.notebook.claims_of(r.app.cursor());
     assert_eq!(claims.len(), 1, "{claims:?}");
-    assert_eq!(claims[0].1, "Talk-notes");
+    assert_eq!(claims[0].source, "Talk-notes");
 }
 
 #[test]

@@ -189,7 +189,7 @@ impl App {
             .notebook
             .claims_of(item)
             .into_iter()
-            .map(|c| c.2)
+            .map(|c| c.fact)
             .collect();
         if claims.is_empty() {
             return Ok("no claims to adopt".into());

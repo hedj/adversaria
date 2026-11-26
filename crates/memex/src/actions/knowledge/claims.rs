@@ -11,6 +11,17 @@ use format::terms::Term;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
+/// A claim: a fact as a source states it, by the entry that states it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Claim {
+    /// The entry that states the claim.
+    pub seq: u64,
+    /// Who states it.
+    pub source: String,
+    /// What it states.
+    pub fact: Term,
+}
+
 impl App {
     /// The claim item whose questions the inspector shows: one being
     /// interrogated, else the selected item if, as the current world was
@@ -25,7 +36,7 @@ impl App {
 
     /// An item's claims as the current world was last evaluated: what the
     /// screen shows, without reading the journal again.
-    pub fn claims_shown(&self, item: u64) -> Vec<(u64, String, Term)> {
+    pub fn claims_shown(&self, item: u64) -> Vec<Claim> {
         let Some(e) = self.reason.eval[0].as_ref() else {
             return vec![];
         };
@@ -107,8 +118,8 @@ impl App {
             return Err("the target's claims are beliefs already".into());
         }
         let mut left = vec![];
-        for (_, _, fact) in new.iter().filter(|_| instead) {
-            let (replaced, still) = self.replaced_by(fact)?;
+        for claim in new.iter().filter(|_| instead) {
+            let (replaced, still) = self.replaced_by(&claim.fact)?;
             self.retract_all(&replaced)?;
             left.extend(still);
         }
@@ -120,7 +131,7 @@ impl App {
     /// Every claim not yet adopted, as the current world was last
     /// evaluated, each with the item that states it, in the outline's
     /// order: one pass over the facts, not one for each item.
-    pub(crate) fn claims_open_by_item(&self) -> Vec<(u64, (u64, String, Term))> {
+    pub(crate) fn claims_open_by_item(&self) -> Vec<(u64, Claim)> {
         let mut by_item = self.claims_open_grouped();
         let order = self.notebook.outline.in_order().into_iter();
         let claims = |id| {
@@ -134,14 +145,14 @@ impl App {
     }
 
     /// The claims not yet adopted, by the item that states each.
-    fn claims_open_grouped(&self) -> HashMap<u64, Vec<(u64, String, Term)>> {
+    fn claims_open_grouped(&self) -> HashMap<u64, Vec<Claim>> {
         let mut by_item: HashMap<u64, Vec<_>> = HashMap::new();
         let Some(e) = self.reason.eval[0].as_ref() else {
             return by_item;
         };
         let fact_item = &self.notebook.outline.fact_item;
         for claim in self.notebook.not_adopted(claims_among_all(&e.facts)) {
-            if let Some(id) = fact_item.get(&claim.0) {
+            if let Some(id) = fact_item.get(&claim.seq) {
                 by_item.entry(*id).or_default().push(claim);
             }
         }
@@ -149,16 +160,12 @@ impl App {
     }
 
     /// One adopt entry for each claim, keeping its source.
-    fn write_adoptions(
-        &mut self,
-        item: u64,
-        claims: Vec<(u64, String, Term)>,
-    ) -> Result<(), String> {
-        for (seq, src, p) in claims {
-            let f = encoded(&p)?;
+    fn write_adoptions(&mut self, item: u64, claims: Vec<Claim>) -> Result<(), String> {
+        for Claim { seq, source, fact } in claims {
+            let f = encoded(&fact)?;
             self.write_here(
                 EntryKind::Adopt,
-                json!({"claim": seq, "item": item, "source": src, "facts": [f]}),
+                json!({"claim": seq, "item": item, "source": source, "facts": [f]}),
             )?;
         }
         Ok(())
@@ -215,14 +222,14 @@ fn claims(source: &str, fact: Term) -> Term {
 }
 
 /// Claims can be adopted unless they are reserved definitions.
-fn check_adoptable(claims: &[(u64, String, Term)]) -> Result<(), String> {
+fn check_adoptable(claims: &[Claim]) -> Result<(), String> {
     if claims.is_empty() {
         return Err("the target states no claim to adopt".into());
     }
-    match claims.iter().find(|(_, _, p)| reserved(p)) {
-        Some((_, _, p)) => Err(format!(
+    match claims.iter().find(|c| reserved(&c.fact)) {
+        Some(c) => Err(format!(
             "not adopted: the claim is a {}, which is reserved for constraint, derive and accept",
-            functor_of(p)
+            functor_of(&c.fact)
         )),
         None => Ok(()),
     }
@@ -329,31 +336,27 @@ impl App {
 
 /// A name, as a term gives it: a string's text, or any other term shown,
 /// as an atom is by its own text.
-/// The claims, of these facts, that an item states: (entry seq, source,
-/// claimed fact).
-fn claims_among(
-    facts: &[(u64, Term)],
-    outline: &crate::outline::Outline,
-    item: u64,
-) -> Vec<(u64, String, Term)> {
+/// The claims, of these facts, that an item states.
+fn claims_among(facts: &[(u64, Term)], outline: &crate::outline::Outline, item: u64) -> Vec<Claim> {
     let stated = facts
         .iter()
         .filter(|(s, _)| outline.fact_item.get(s) == Some(&item));
     stated.filter_map(claim_of).collect()
 }
 
-/// Every claim among facts: its entry, its source and what it claims.
-fn claims_among_all(facts: &[(u64, Term)]) -> Vec<(u64, String, Term)> {
+/// Every claim among facts.
+fn claims_among_all(facts: &[(u64, Term)]) -> Vec<Claim> {
     facts.iter().filter_map(claim_of).collect()
 }
 
-/// A fact as a claim, if it is one: its entry, its source and what it
-/// claims.
-fn claim_of((s, f): &(u64, Term)) -> Option<(u64, String, Term)> {
+/// A fact, by its entry, as a claim, if it is one.
+fn claim_of((s, f): &(u64, Term)) -> Option<Claim> {
     match f {
-        Term::Compound(n, a) if n == "claims" && a.len() == 2 => {
-            Some((*s, name_of(&a[0]), a[1].clone()))
-        }
+        Term::Compound(n, a) if n == "claims" && a.len() == 2 => Some(Claim {
+            seq: *s,
+            source: name_of(&a[0]),
+            fact: a[1].clone(),
+        }),
         _ => None,
     }
 }
@@ -366,19 +369,19 @@ fn name_of(t: &Term) -> String {
 }
 
 impl Notebook {
-    /// An item's claims at the tip: (entry seq, source, claimed fact).
-    pub fn claims_of(&self, item: u64) -> Vec<(u64, String, Term)> {
+    /// An item's claims at the tip.
+    pub fn claims_of(&self, item: u64) -> Vec<Claim> {
         let facts = self.facts_now().unwrap_or_default();
         claims_among(&facts, &self.outline, item)
     }
 
     /// The claims with no adoption in effect on this branch.
-    pub(crate) fn not_adopted(&self, claims: Vec<(u64, String, Term)>) -> Vec<(u64, String, Term)> {
+    pub(crate) fn not_adopted(&self, claims: Vec<Claim>) -> Vec<Claim> {
         let branch = self.branch(self.tip);
         let adopted: Vec<u64> = branch.live().filter_map(adopted_claim).collect();
         claims
             .into_iter()
-            .filter(|(seq, ..)| !adopted.contains(seq))
+            .filter(|c| !adopted.contains(&c.seq))
             .collect()
     }
 }

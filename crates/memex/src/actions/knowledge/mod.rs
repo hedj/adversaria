@@ -4,6 +4,7 @@
 //! Claims and suggestions).
 
 mod claims;
+pub use claims::Claim;
 pub(crate) use claims::adopts;
 mod definitions;
 mod layers;

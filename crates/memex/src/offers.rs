@@ -5,6 +5,7 @@
 //! the first item. A revision's changes are not among them: while a
 //! revision is open its changes fill the screen, the notebook hidden.
 
+use crate::actions::Claim;
 use crate::app::App;
 use crate::marks::MarkLine;
 use crate::notebook::Notebook;
@@ -72,13 +73,13 @@ impl App {
     /// The claims of each item not yet adopted, from their sources.
     fn claims_open(&self) -> Vec<Open> {
         let claims = self.claims_open_by_item().into_iter();
-        let claim = |(id, (_, source, fact))| self.claim_open(id, source, &fact);
-        claims.map(claim).collect()
+        claims.map(|(id, c)| self.claim_open(id, &c)).collect()
     }
 
     /// A claim an item states, not yet adopted, from its source.
-    pub(crate) fn claim_open(&self, id: u64, source: String, fact: &Term) -> Open {
-        let what = self.about(id, &self.restated(fact));
+    pub(crate) fn claim_open(&self, id: u64, claim: &Claim) -> Open {
+        let what = self.about(id, &self.restated(&claim.fact));
+        let source = claim.source.clone();
         let presents = Presentation::Item { pane: 0, id };
         Open {
             kind: "claim".into(),
