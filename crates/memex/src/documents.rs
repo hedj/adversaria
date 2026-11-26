@@ -196,7 +196,7 @@ impl App {
         let import = self.open_revision(doc, earlier, name)?;
         self.write_revision(&revised, &doc.blocks, import)?;
         Ok(format!(
-            "revision of {name}: the changes are in a supposed world; retract any with retract N, then commit or close"
+            "revision of {name}: the changes are in a supposed world; dismiss any with dismiss change N, then adopt world or dismiss world"
         ))
     }
 

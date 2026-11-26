@@ -156,8 +156,8 @@ pub const COMMANDS: &[Command] = &[
         run: App::cmd_dismiss,
         target: false,
         slots: &[noun("suggestion", Slot::Suggestion).among(DISMISSED)],
-        help: "set aside what is offered: the nth suggestion shown, which returns only if its evidence changes; `dismiss world`, the supposed world, back to the actual one; `dismiss change N`, one change of a revision",
-        brief: "set a suggestion or world aside",
+        help: "drop what is offered: the nth suggestion shown, which returns only if its evidence changes; `dismiss world`, the supposed world, back to the actual one; `dismiss change N`, one change of a revision",
+        brief: "drop a suggestion or a world",
     },
     Command {
         name: "derive",

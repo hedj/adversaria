@@ -321,8 +321,8 @@ changes in a world of their own, one entry each:
     change 54  added: “Each team wrote its findings in the DRAKON language.”
        from the revision of essay.md
 
-Say your own sources name two teams. Reject that change: right-click it,
-and the menu offers `reject this change`; or run, by its number,
+Say your own sources name two teams. Dismiss that change: right-click it,
+and the menu offers `dismiss this change`; or run, by its number,
 `dismiss change 53`. The foot of the screen says
 `nothing depends on it · Enter retracts · Esc keeps it`; press Enter.
 Then run `adopt world` to keep the rest. The essay keeps

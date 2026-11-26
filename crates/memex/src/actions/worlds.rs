@@ -94,14 +94,18 @@ impl App {
     pub(crate) fn cmd_close(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let (name, actual) = self.supposed()?;
         self.leave_world(actual, "close")?;
-        Ok(format!("closed “{name}”; it stays in the journal"))
+        Ok(format!(
+            "dismissed the world “{name}”; it stays in the journal"
+        ))
     }
 
     /// Make the supposed world the actual one.
     pub(crate) fn cmd_commit(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let (name, _) = self.supposed()?;
         self.leave_world(self.notebook.tip, "commit")?;
-        Ok(format!("“{name}” is now the actual world"))
+        Ok(format!(
+            "adopted the world “{name}”: it is now the actual world"
+        ))
     }
 
     /// The open supposition's name, and the actual world's head it left.

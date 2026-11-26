@@ -213,11 +213,11 @@ fn suggestion_of(p: &Presentation) -> Option<usize> {
     }
 }
 
-/// What a revision's change offers: rejecting it, or keeping the rest.
+/// What a revision's change offers: dismissing it, or keeping the rest.
 fn change_offers(entry: u64) -> Vec<Offer> {
-    let reject = offer("reject this change", &format!("dismiss change {entry}"));
+    let dismiss = offer("dismiss this change", &format!("dismiss change {entry}"));
     vec![
-        reject,
+        dismiss,
         offer("keep the changes not rejected", "adopt world"),
     ]
 }

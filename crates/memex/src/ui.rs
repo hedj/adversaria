@@ -1181,7 +1181,7 @@ fn links_found(outline: &Outline, id: u64, labels: &[u64]) -> Vec<Presented> {
 /// does.
 fn completions_said(typed: &str, found: &[String]) -> String {
     match found.len() {
-        0 => format!("[[ no item is named “{typed}…”; make makes one once the link is closed"),
+        0 => format!("[[ no item is named “{typed}…”; adopt fix makes one once the link is closed"),
         _ => format!("[[ {} · Tab completes", listed_names(found)),
     }
 }
@@ -1694,7 +1694,7 @@ fn leap_step(app: &App) -> String {
         keys.quasi_key(Quasi::LeapDown),
         keys.quasi_key(Quasi::LeapUp),
     );
-    format!("hold {leap} (Leap) and type, to jump to an item with that text · {back} jumps back")
+    format!("hold {leap} (Leap) and type, to jump to an item with that text · {back} leaps up")
 }
 
 /// How to undo a mistake.

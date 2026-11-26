@@ -413,7 +413,7 @@ fn a_revision_taken_in(t: &mut T) {
     t.shows("   from the revision of essay.md");
     t.shows("change 54  added: “Each team wrote its findings in the DRAKON language.”");
     t.right_click_on("change 53");
-    t.shows("reject this change");
+    t.shows("dismiss this change");
     t.key(Key::Escape);
     t.command("dismiss change 53");
     t.shows("nothing depends on it · Enter retracts · Esc keeps it");

@@ -543,7 +543,7 @@ offers the commands that apply to what it presents, as it is now:
 | a finding under an item (the cursor goes to that item first) | what the item offers, as above, since the finding is about it; then go to the item that states the rule; retract the constraint; then your verdict on the finding: a real error, the rule is wrong, the text was misread, or known already (`verdict`, § 2.4) |
 | a mark of a view | go to the item that states its fact |
 | a layer | retract it; go to its view |
-| a revision's change | reject it (`dismiss change N`, which asks first); keep the rest (`adopt world`) |
+| a revision's change | dismiss it (`dismiss change N`, which asks first); keep the rest (`adopt world`) |
 | a suggestion | adopt it; dismiss it |
 
 After them come the commands plumbing offers (below) for the word under
@@ -770,7 +770,7 @@ the text without its brackets, so `The date of [[Buran-flight]] is
 | Command | Form | Does |
 | --- | --- | --- |
 | `adopt` | `adopt` (F3), `adopt instead`, `adopt suggestion N`, `adopt fix`, `adopt world` | `adopt` makes the target's claims beliefs, keeping their source, one adoption for each claim; `adopt instead` also retracts the beliefs they directly contradict (each that breaks a constraint with them and nothing else); `adopt suggestion N`, the Nth suggestion shown, with its evidence; `adopt fix`, the fix of a finding: the items the target's `[[links]]` name, made at the foot of the top level and linked, one `undo` taking it all back; or, if it has none to make and its text, a sentence, was not read, its text mended as APE would mend it (`not read: did you mean “…”?` under it); `adopt world`, the supposed world as the actual one |
-| `dismiss` | `dismiss suggestion N`, `dismiss world`, `dismiss change N` | `dismiss suggestion N` sets the Nth suggestion aside; it returns only if its evidence changes. `dismiss world` closes the supposition and returns to the actual world; it stays in the journal. `dismiss change N` rejects one change of a revision (§ 4.1), asking first |
+| `dismiss` | `dismiss suggestion N`, `dismiss world`, `dismiss change N` | `dismiss suggestion N` drops the Nth suggestion; it returns only if its evidence changes. `dismiss world` drops the supposition and returns to the actual world; it stays in the journal. `dismiss change N` drops one change of a revision (§ 4.1), asking first |
 | `import` | `import FILE [as ADDRESS]`; or the kind first: `import wikidata FILE`, `import document FILE [as ADDRESS]`, `import results FILE` | imports a file of the kind its name ends in: a Wikidata subset (`.pl`), an analysis's results (`.json`), or else a document (with `as`, as a revision of the document the item at ADDRESS came from) (§ 3.4, § 4.1). Alone, it asks for the file |
 | `export` | `export FILE [NUMBER]` | exports the outline, or the section at item NUMBER, as a document |
 
