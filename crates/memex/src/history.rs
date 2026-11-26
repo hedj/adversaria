@@ -3,7 +3,6 @@
 //! what it did, said by the outline as it is now. The notebook's
 //! inspector ends with it, so an entry's number is seen, not recalled.
 
-use crate::app::App;
 use crate::notebook::Notebook;
 use crate::outline::Outline;
 use format::record::Entry;
@@ -18,8 +17,6 @@ pub struct Step {
     pub said: String,
     pub retracted: bool,
 }
-
-impl App {}
 
 /// What a walk back along a branch has met: the entries retracted, and
 /// those a reading of a text wrote. A retraction and a reading come after
