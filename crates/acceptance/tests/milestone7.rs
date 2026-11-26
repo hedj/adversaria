@@ -88,12 +88,13 @@ pub fn session(dir: &Path) -> App {
 fn counts_match_a_hand_count() {
     // The entries of the small session, read by hand (kind and op), and the
     // counts made from that list by hand: writing 3 5 7 8 9 14 15 16 17;
-    // navigating 18 23; searching 11; deciding 12 20 21 22; entries 4 and 6
+    // navigating 19 23; searching 11; deciding 12 20 21 22; entries 4 and 6
     // record only where writing (the item made, the text typed) left the
     // cursor, so are no action;
-    // observations 10 13 19; entries 1 and 2 are the memex's own: the
+    // observations 10 13 18; entries 1 and 2 are the memex's own: the
     // journal's first, unclassified, and the session's start, marked as
-    // written by the memex on its own. Entry 19 offers two rules;
+    // written by the memex on its own. Entry 18, written when the fourth
+    // fact made them, before the pane that shows them, offers two rules;
     // 20 adopts one, 21 dismisses one, 22 retracts 20. Entry 10 shows the
     // violation date(buran, 1988) · date(buran, 1989); entry 13, in the
     // actual world after the retraction, shows none.
@@ -128,8 +129,8 @@ fn counts_match_a_hand_count() {
         ("edit", "facts"),
         ("edit", "facts"),
         ("edit", "facts"),
-        ("view", "pane"),
         ("view", "offer"),
+        ("view", "pane"),
         ("adopt", ""),
         ("view", "dismiss"),
         ("retract", ""),
@@ -185,11 +186,12 @@ fn counts_match_a_hand_count() {
 
 #[test]
 fn the_report_of_an_empty_journal_counts_nothing() {
-    let dir = temp("empty");
-    let j = memex::journal::Journal::open(&dir).unwrap();
-    let r = tools::measures::measure(j.entries());
+    // A journal of its header alone, which the memex never leaves: opening
+    // one writes entry 1.
+    let header = format::record::header(format::record::JOURNAL_FORMAT) + "\n";
+    let entries = format::chain::check_journal(&header).unwrap();
+    let r = tools::measures::measure(&entries);
     assert_eq!(totals(&r), (0, 0, 0));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -234,12 +236,13 @@ fn totals(r: &tools::measures::Report) -> (usize, usize, usize) {
     (r.entries, r.observations, r.actions.values().sum())
 }
 
-/// A journal of 10,000 entries of every kind, with arbitrary bodies.
+/// A journal of 10,000 entries: entry 1, which opening it writes, then
+/// entries of every kind, with arbitrary bodies.
 fn arbitrary_journal(dir: &Path) -> memex::journal::Journal {
     let mut j = memex::journal::Journal::open(dir).unwrap();
     j.durable = false;
     let mut x: u64 = 7;
-    for i in 0..10_000u64 {
+    for i in 1..10_000u64 {
         x = x
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
@@ -335,7 +338,7 @@ actions by kind:
   importing        0
   exporting        0
 clerical share (searching, following links, navigating): 10 of 38, 26.3%
-suggestions: 1 offered, 0 adopted, 0 dismissed, 0 adopted and later retracted
+suggestions: 1 offered, 0 adopted, 0 dismissed, 0 adopted and later retracted; 1 of those offered recorded by version 1 or 2, which recorded only those drawn
 constraint violations: 2 seen, 1 later gone in the actual world
   gone because: 1 corrected, 0 their rule changed or deleted, 0 an item under them deleted, 0 its text no longer read, 0 not recorded
 disagreements between sources: 2 seen

@@ -77,53 +77,59 @@ fn a_change_of_a_revision_says_where_it_came_from() {
 }
 
 #[test]
-fn the_notebook_records_the_suggestions_it_lists_as_offered_once() {
-    // Catches a suggestion the notebook shows and the measures never count.
+fn each_suggestion_made_is_recorded_once_in_its_words_with_no_view() {
+    // Catches a suggestion recorded only once drawn, as version 2 did,
+    // which counted fewer than were made; a record that holds the screen's
+    // view; or a suggestion recorded twice.
     let mut r = Room::new("offer-recorded");
     r.items(&["Buran flight", "Notes on the buran flight launch"]);
     r.app.idle();
     r.app.evaluate().unwrap();
-    assert!(
-        offers(&r).is_empty(),
-        "offered before the notebook is drawn"
-    );
-    r.command("go parent");
-    r.app.evaluate().unwrap();
-    let listed = inspector(&r);
-    let listed = listed
-        .iter()
-        .filter(|l| l.trim_start().starts_with("suggestion "));
+    let made = r.app.reason.suggestions.list.len();
+    assert!(made > 0, "the test needs a suggestion made");
     let recorded = offers(&r);
-    assert_eq!(recorded.len(), 1, "{recorded:?}");
-    let keys = recorded[0]["keys"].as_array().unwrap();
-    assert!(!keys.is_empty(), "the test needs a suggestion listed");
-    assert_eq!(keys.len(), listed.count(), "{recorded:?}");
     assert_eq!(
-        recorded[0]["by"], "memex",
-        "the memex offered it on its own"
+        recorded.len(),
+        1,
+        "made, though no pane shows it: {recorded:?}"
     );
+    let offer = &recorded[0];
+    assert_eq!(offer["keys"].as_array().unwrap().len(), made, "{offer}");
+    let said = offer["said"][0].as_str().unwrap_or("");
+    assert!(said.starts_with("link “"), "its words: {offer}");
+    assert!(
+        offer.get("panes").is_none() && offer.get("pos").is_none(),
+        "no view: {offer}"
+    );
+    assert_eq!(offer["by"], "memex", "the memex offered it on its own");
+    r.command("go parent");
     r.app.evaluate().unwrap();
     assert_eq!(offers(&r).len(), 1, "offered again");
 }
 
 #[test]
-fn a_supposition_hides_the_notebook_so_its_suggestions_are_not_offered() {
-    // Catches offers recorded from a notebook that the worlds cover.
-    let mut r = Room::new("offer-supposed");
+fn a_record_replayed_leaves_the_view_as_it_was() {
+    // Catches a record of what reasoning found, which holds no view,
+    // taken on replay for an empty view: the text cursor put back at the
+    // start of its item.
+    let mut r = Room::new("offer-replayed");
     r.items(&["Buran flight", "Notes on the buran flight launch"]);
     r.app.idle();
-    r.command("suppose that w");
-    r.command("go parent");
     r.app.evaluate().unwrap();
-    assert!(
-        r.app.reason.supposition.is_some(),
-        "the test needs a supposition"
-    );
-    assert!(
-        !r.app.reason.suggestions.list.is_empty(),
-        "the test needs suggestions"
-    );
-    assert!(offers(&r).is_empty(), "{:?}", offers(&r));
+    let last = r
+        .app
+        .journal()
+        .entries()
+        .last()
+        .unwrap()
+        .body()
+        .unwrap()
+        .clone();
+    assert_eq!(last["op"], "offer", "the test needs an offer last: {last}");
+    let pos = r.app.session.view.pos;
+    assert!(pos > 0, "the test needs the text cursor past the start");
+    let again = support::replayed(&r.dir);
+    assert_eq!(again.session.view.pos, pos);
 }
 
 /// The bodies of the offer entries, in the journal's order.

@@ -552,7 +552,7 @@ fn date_fact(e: &str, y: i64) -> serde_json::Value {
     format::terms::encode(&c("date", vec![a(e), i(y)])).unwrap()
 }
 
-/// The facts at the head of a journal of an edit, an import, a
+/// The facts at the head of a journal of entry 1, an edit, an import, a
 /// supposition on another branch, a retraction of the import, and an
 /// adoption.
 fn branching_journal_facts(dir: &std::path::Path) -> Vec<(u64, Term)> {
@@ -564,8 +564,8 @@ fn branching_journal_facts(dir: &std::path::Path) -> Vec<(u64, Term)> {
     j.append("import", json!({"facts": [date_fact("talk", 1989)]}))
         .unwrap();
     let elsewhere = json!({"facts": [date_fact("other_branch", 1)]});
-    j.append_after(Some(1), "suppose", elsewhere).unwrap();
-    j.append_after(Some(2), "retract", json!({"target": 2}))
+    j.append_after(Some(2), "suppose", elsewhere).unwrap();
+    j.append_after(Some(3), "retract", json!({"target": 3}))
         .unwrap();
     j.append(
         "adopt",

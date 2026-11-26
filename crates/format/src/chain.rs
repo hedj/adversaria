@@ -86,7 +86,32 @@ pub fn check_journal(text: &str) -> Result<Vec<Entry>, LineError> {
     for line in records(JOURNAL, JOURNAL_FORMAT, text)? {
         journal.read(line.text)?;
     }
-    journal.finish()
+    let entries = journal.finish()?;
+    versions_agree(text, &entries)?;
+    Ok(entries)
+}
+
+/// The header's version is the one entry 1 names: the seals sign the
+/// entries, not the header, so from version 3 entry 1 names the version
+/// where they cover it, and a header changed to another version is
+/// found, at the header's line. Entry 1 of version 1 or 2 names none.
+fn versions_agree(text: &str, entries: &[Entry]) -> Result<(), LineError> {
+    let Some(first) = entries.first() else {
+        return Ok(());
+    };
+    let header = text.lines().next().unwrap_or_default();
+    let declared = record::header_version(header, JOURNAL_FORMAT);
+    let named = first.body().and_then(|b| b["version"].as_u64());
+    let said = match (declared, named) {
+        (Some(d), Some(n)) if d != n => {
+            format!("the header says version {d}, and entry 1 was written in version {n}")
+        }
+        (Some(d), None) if d >= 3 => format!(
+            "the header says version {d}, and entry 1 names no version, as it must from version 3"
+        ),
+        _ => return Ok(()),
+    };
+    Err(line_error(JOURNAL, 1, said))
 }
 
 /// A journal being checked: the entries read so far, and for each one
@@ -206,10 +231,38 @@ mod tests {
     }
 
     fn three() -> Vec<Entry> {
-        let a = Entry::new(1, None, "edit", json!({"t": "a"})).unwrap();
+        let a = Entry::new(1, None, "edit", json!({"t": "a", "version": 3})).unwrap();
         let b = Entry::new(2, Some((1, &a.hash)), "edit", json!({"t": "b"})).unwrap();
         let c = Entry::new(3, Some((1, &a.hash)), "undo", json!({"t": "c"})).unwrap(); // a branch
         vec![a, b, c]
+    }
+
+    #[test]
+    fn a_header_that_disagrees_with_the_version_entry_1_names_is_refused_there() {
+        // Catches a header changed to another version that is read, which
+        // no seal covers, passing: entry 1 names its version from version
+        // 3, and the seals cover it.
+        let text = journal(&three());
+        assert!(check_journal(&text).is_ok());
+        let as_two = text.replacen(r#""version":3}"#, r#""version":2}"#, 1);
+        assert_ne!(as_two, text, "the header changed");
+        assert_eq!(check_journal(&as_two).unwrap_err().line, 1);
+    }
+
+    #[test]
+    fn a_header_of_version_3_over_an_entry_1_that_names_none_is_refused_there() {
+        // Catches a journal of version 2, whose entry 1 names no version,
+        // given the header of version 3 and read as written by it.
+        let first = Entry::new(1, None, "edit", json!({"op": "init"})).unwrap();
+        let three = journal(&[first]);
+        let two = three.replacen(r#""version":3}"#, r#""version":2}"#, 1);
+        assert!(check_journal(&two).is_ok(), "version 2 names none");
+        let refused = check_journal(&three).unwrap_err();
+        assert_eq!(refused.line, 1);
+        assert!(
+            refused.to_string().contains("names no version"),
+            "{refused}"
+        );
     }
 
     #[test]

@@ -9,7 +9,7 @@ use crate::outline::{Constraint, Outline, TOP};
 use crate::store::Store;
 use format::record::Entry;
 use format::terms::Term;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -183,15 +183,11 @@ impl Replayed {
 }
 
 impl Notebook {
-    /// Open a journal directory, writing its first entry if it is new. The
-    /// state is at no entry yet: each entry is to be applied.
     /// Open a notebook's journal, and say what opening it set aside, if
-    /// anything (Journal::opened).
+    /// anything (Journal::opened). The state is at no entry yet: each
+    /// entry is to be applied.
     pub fn open(dir: &Path) -> Result<(Notebook, Option<String>), JournalError> {
-        let (mut journal, note) = Journal::opened(dir)?;
-        if journal.entries().is_empty() {
-            journal.append("edit", json!({"op": "init"}))?;
-        }
+        let (journal, note) = Journal::opened(dir)?;
         Ok((Notebook::at_no_entry(journal), note))
     }
 
@@ -600,6 +596,7 @@ impl Notebook {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     /// A notebook of a journal of its own, its first entry applied.
     fn opened(name: &str) -> Notebook {

@@ -836,7 +836,7 @@ fn a_purge_leaves_what_can_be_redone() {
     command(&mut app, "undo");
     let redo = std::mem::take(&mut app.notebook.redo);
     drop(app);
-    Journal::open(&dir).unwrap().purge(1, "privacy").unwrap();
+    Journal::open(&dir).unwrap().purge(2, "privacy").unwrap();
     assert_eq!(
         (App::open(&dir).unwrap().notebook.redo, redo.len()),
         (redo, 1)

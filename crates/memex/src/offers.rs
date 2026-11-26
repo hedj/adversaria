@@ -30,32 +30,6 @@ pub struct Open {
 pub(crate) const LISTED: usize = 12;
 
 impl App {
-    /// Whether the notebook's inspector is drawn: an inspector is shown
-    /// with the cursor above the first item, no claim is questioned in
-    /// it, and no supposition's worlds fill the screen in place of the
-    /// panes (crate::ui::notebook).
-    pub(crate) fn notebook_drawn(&self) -> bool {
-        let view = &self.session.view;
-        let inspector = view.shows(crate::app::PaneKind::Links);
-        let at_top = view.selected() == crate::outline::TOP;
-        let plain = self.inspected_claim().is_none() && self.reason.supposition.is_none();
-        inspector && at_top && plain
-    }
-
-    /// The suggestions the notebook's inspector lists, among its first
-    /// offers, by their identities.
-    pub(crate) fn suggestions_listed(&self) -> Vec<String> {
-        let open = self.open_offers();
-        let listed = open
-            .into_iter()
-            .take(LISTED)
-            .filter_map(|o| suggestion_number(&o.presents));
-        let shown = self.reason.suggestions.shown();
-        listed
-            .filter_map(|n| shown.get(n - 1).map(|s| s.identity()))
-            .collect()
-    }
-
     /// Every offer not yet decided, the most pressing first: findings,
     /// claims not adopted, a text to mend, then the memex's suggestions,
     /// as ranked.
@@ -214,14 +188,6 @@ impl Rule {
             item,
             under: Some(id),
         }
-    }
-}
-
-/// The number of the suggestion an offer presents, if it presents one.
-fn suggestion_number(p: &Presentation) -> Option<usize> {
-    match p {
-        Presentation::Suggestion(n) => Some(*n),
-        _ => None,
     }
 }
 

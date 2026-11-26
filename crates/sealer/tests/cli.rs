@@ -56,9 +56,10 @@ fn seals_once_there_are(n: usize, dir: &Path) -> usize {
     }
 }
 
-/// Write 200 entries, pausing after every 20 so the sealer runs between.
+/// Write 199 entries after entry 1, which opening the journal wrote, so
+/// that it holds 200, pausing after every 20 so the sealer runs between.
 fn write_entries(j: &mut Journal) {
-    for i in 0..200 {
+    for i in 0..199 {
         j.append("edit", json!({"n": i})).unwrap();
         if i % 20 == 0 {
             std::thread::sleep(Duration::from_millis(7));

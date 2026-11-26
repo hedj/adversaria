@@ -26,7 +26,11 @@
 //!
 //! Clerical work is searching, following links and navigating.
 //! Observations (not actions): view observed (the violations and
-//! disagreements shown) and view offer (suggestions shown).
+//! disagreements reasoning found) and view offer (each suggestion the
+//! memex made, in its words, from version 3; an offer of version 1 or 2,
+//! recorded only once drawn on the screen, is marked `drawn` when
+//! migrated, and those counted apart; so is each offer of a journal of
+//! version 1 or 2 not migrated, whose entry 1 names no version).
 //! A suggestion is adopted by an entry that carries "suggestion"; it is
 //! later retracted if a retract entry names that entry.
 //! A violation is gone if a later observation in the actual world no
@@ -70,6 +74,9 @@ pub struct Report {
     /// the report does not know. Counted, not hidden.
     pub unclassified: usize,
     pub offered: usize,
+    /// Of those offered, the ones recorded by version 1 or 2, which
+    /// recorded a suggestion only once it was drawn.
+    pub offered_drawn: usize,
     pub adopted: usize,
     pub dismissed: usize,
     pub adopted_then_retracted: usize,
@@ -247,26 +254,50 @@ fn strings(v: &serde_json::Value) -> Vec<String> {
     list.filter_map(|x| x.as_str().map(String::from)).collect()
 }
 
+/// The offers recorded by version 1 or 2, if any were: they recorded a
+/// suggestion only once drawn, so they count fewer than were made.
+fn drawn_said(drawn: usize) -> String {
+    match drawn {
+        0 => String::new(),
+        n => format!(
+            "; {n} of those offered recorded by version 1 or 2, which recorded only those drawn"
+        ),
+    }
+}
+
 /// The suggestions offered, by key, and the entries that adopted one.
 #[derive(Default)]
 struct Offers {
     offered: BTreeSet<String>,
+    drawn: BTreeSet<String>,
     adopted: Vec<u64>,
+    /// Entry 1 names no version of 3 or later: the journal was written
+    /// by version 1 or 2 and not migrated, so each of its offers was
+    /// recorded only once drawn.
+    before_3: bool,
 }
 
 impl Offers {
     fn read(&mut self, e: &Entry) {
         let Some(b) = e.body() else { return };
+        if e.seq == 1 {
+            self.before_3 = b["version"].as_u64().is_none_or(|v| v < 3);
+        }
         if b.get("suggestion").is_some() {
             self.adopted.push(e.seq);
         }
         if is_view(e, &["offer"]) {
-            self.offered.extend(strings(&b["keys"]));
+            let keys = strings(&b["keys"]);
+            if self.before_3 || b["drawn"] == true {
+                self.drawn.extend(keys.iter().cloned());
+            }
+            self.offered.extend(keys);
         }
     }
 
     fn report(&self, r: &mut Report, retracted: &BTreeSet<u64>) {
         r.offered = self.offered.len();
+        r.offered_drawn = self.drawn.len();
         r.adopted = self.adopted.len();
         r.adopted_then_retracted = self
             .adopted
@@ -363,8 +394,12 @@ impl fmt::Display for Report {
         )?;
         writeln!(
             f,
-            "suggestions: {} offered, {} adopted, {} dismissed, {} adopted and later retracted",
-            self.offered, self.adopted, self.dismissed, self.adopted_then_retracted
+            "suggestions: {} offered, {} adopted, {} dismissed, {} adopted and later retracted{}",
+            self.offered,
+            self.adopted,
+            self.dismissed,
+            self.adopted_then_retracted,
+            drawn_said(self.offered_drawn)
         )?;
         writeln!(
             f,
@@ -483,6 +518,43 @@ mod tests {
         let r = measure(&es);
         assert_eq!((r.by_memex, r.actions["writing"]), (2, 1));
         assert_eq!((r.observations, r.unclassified), (1, 1));
+    }
+
+    #[test]
+    fn an_offer_recorded_only_once_drawn_is_counted_apart() {
+        // Catches an offer of version 1 or 2, which recorded only the
+        // suggestions drawn, counted as if it recorded each one made; or
+        // a suggestion offered twice counted twice.
+        let offer = |keys: &[&str], drawn: bool| {
+            let mut b = json!({"op": "offer", "keys": keys, "by": "memex"});
+            if drawn {
+                b["drawn"] = json!(true);
+            }
+            ("view", b)
+        };
+        let es = chain(&[
+            ("edit", json!({"op": "init", "version": 3})),
+            offer(&["a", "b"], true),
+            offer(&["b", "c"], false),
+        ]);
+        let r = measure(&es);
+        assert_eq!((r.offered, r.offered_drawn), (3, 2));
+        assert!(
+            r.to_string()
+                .contains("2 of those offered recorded by version 1 or 2"),
+            "{r}"
+        );
+    }
+
+    #[test]
+    fn each_offer_of_a_journal_not_migrated_from_version_2_is_counted_drawn() {
+        // Catches a version 2 journal read as it was written, its offers
+        // not marked, counted as if it recorded each suggestion made.
+        let es = chain(&[
+            ("edit", json!({"op": "init"})),
+            ("view", json!({"op": "offer", "keys": ["a"], "by": "memex"})),
+        ]);
+        assert_eq!(measure(&es).offered_drawn, 1);
     }
 
     #[test]

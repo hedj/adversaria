@@ -13,6 +13,7 @@ use support::{Room, replayed};
 
 const VERSION1: &str = "tests/fixtures/version1";
 const VERSION2: &str = "tests/fixtures/version2";
+const VERSION3: &str = "tests/fixtures/version3";
 
 /// The items the sessions write: the version-1 session the first seven,
 /// the version-2 session also one that mentions another unlinked, so that
@@ -109,7 +110,17 @@ fn reason(r: &mut Room) {
 }
 
 #[test]
-#[ignore = "writes the fixture: run it by hand when version 2 changes, before stage 1"]
+#[ignore = "writes the fixture: run it by hand when version 3 changes, before stage 1"]
+fn write_version3() {
+    let mut r = Room::new("fixture-version3");
+    session2(&mut r);
+    std::fs::create_dir_all(VERSION3).unwrap();
+    let journal = r.dir.join("journal.jsonl");
+    std::fs::copy(journal, format!("{VERSION3}/journal.jsonl")).unwrap();
+}
+
+#[test]
+#[ignore = "writes the fixture: run it by hand, once, when a version is made"]
 fn write_version2() {
     let mut r = Room::new("fixture-version2");
     session2(&mut r);
@@ -189,19 +200,21 @@ fn the_version_1_journal_replays_to_the_same_facts() {
     assert_eq!(facts(&mut app), expected);
 }
 
-/// A copy of the version-1 fixture, with seals and public keys beside its
-/// journal (stand-ins: a migration moves and copies them, never reads
+/// A copy of the fixture of a version, with seals and public keys beside
+/// its journal (stand-ins: a migration moves and copies them, never reads
 /// them), in a directory of this test's own.
-fn version_1_room(name: &str) -> std::path::PathBuf {
+fn version_room(name: &str, version: u64) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("adversaria-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
+    let fixture = [VERSION1, VERSION2][version as usize - 1];
     std::fs::copy(
-        format!("{VERSION1}/journal.jsonl"),
+        format!("{fixture}/journal.jsonl"),
         dir.join("journal.jsonl"),
     )
     .unwrap();
-    std::fs::write(dir.join("seals.jsonl"), "the seals of version 1\n").unwrap();
+    let seals = format!("the seals of version {version}\n");
+    std::fs::write(dir.join("seals.jsonl"), seals).unwrap();
     std::fs::write(dir.join("keys.jsonl"), "the public keys\n").unwrap();
     dir
 }
@@ -216,11 +229,11 @@ fn opening_a_version_1_journal_migrates_it_and_keeps_the_old_one() {
     // Catches a journal of version 1 appended to as if it were version 2,
     // the old journal or its seals lost or changed, or the seals left
     // beside a journal they no longer seal.
-    let dir = version_1_room("migrate");
+    let dir = version_room("migrate", 1);
     let before = text_of(&dir, "journal.jsonl");
     let app = App::open(&dir).unwrap();
     let said = &app.session.message;
-    assert!(said.contains("migrated to version 2"), "{said}");
+    assert!(said.contains("migrated to version 3"), "{said}");
     drop(app);
     let header = format::record::header(format::record::JOURNAL_FORMAT);
     let after = text_of(&dir, "journal.jsonl");
@@ -234,10 +247,42 @@ fn opening_a_version_1_journal_migrates_it_and_keeps_the_old_one() {
 }
 
 #[test]
+fn opening_a_version_2_journal_migrates_it_and_keeps_the_old_one() {
+    // Catches the journal of version 2 or its seals lost, or kept where
+    // those of version 1 are.
+    let dir = version_room("migrate-2", 2);
+    let before = text_of(&dir, "journal.jsonl");
+    let said = App::open(&dir).unwrap().session.message.clone();
+    assert!(
+        said.contains("of version 2: it is migrated to version 3"),
+        "{said}"
+    );
+    assert_eq!(text_of(&dir, "v2/journal.jsonl"), before, "kept unchanged");
+    assert_eq!(text_of(&dir, "v2/seals.jsonl"), "the seals of version 2\n");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_version_2_journal_migrated_has_its_offers_marked_drawn() {
+    // Catches a journal of version 2 appended to as version 3: its offers,
+    // recorded only once drawn, then counted as every suggestion made.
+    let dir = version_room("migrate-2-drawn", 2);
+    let app = App::open(&dir).unwrap();
+    let bodies = app.journal().entries().iter().filter_map(|e| e.body());
+    let offers: Vec<_> = bodies.filter(|b| b["op"] == "offer").cloned().collect();
+    assert!(!offers.is_empty(), "the fixture records an offer");
+    assert!(offers.iter().all(|b| b["drawn"] == true), "{offers:?}");
+    let first = app.journal().entries()[0].body().unwrap().clone();
+    assert_eq!(first["migrated_from"]["version"], 2, "{first}");
+    drop(app);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn a_migrated_journal_continues_the_old_one_once() {
     // Catches the migrated entries cut loose from the old ones, or a
     // second migration on opening again.
-    let dir = version_1_room("migrate-continues");
+    let dir = version_room("migrate-continues", 1);
     let old = entries_of(&dir);
     drop(App::open(&dir).unwrap());
     let new = entries_of(&dir);
@@ -271,7 +316,7 @@ fn migrating_marks_the_memex_s_entries_and_where_writing_left_the_cursor() {
     // Catches a reading, its statements, its link or an observation left
     // as the user's; the retraction Suppose wrote (56) taken for the
     // memex's; a move after typing left a move; or any other change.
-    let dir = version_1_room("migrate-infers");
+    let dir = version_room("migrate-infers", 1);
     let old = entries_of(&dir);
     drop(App::open(&dir).unwrap());
     let new = entries_of(&dir);
@@ -306,7 +351,7 @@ fn a_version_1_journal_with_a_torn_line_is_kept_as_version_1() {
     // Catches the torn line set aside by writing the old journal under
     // the new header, so that the journal kept in v1/ claims a version
     // its entries are not in.
-    let dir = version_1_room("migrate-torn");
+    let dir = version_room("migrate-torn", 1);
     let whole = text_of(&dir, "journal.jsonl");
     std::fs::write(dir.join("journal.jsonl"), format!("{whole}{{\"seq\":62,")).unwrap();
     drop(App::open(&dir).unwrap());
@@ -319,15 +364,15 @@ fn the_version_2_journal_checks_at_version_2() {
     // Catches a change to the record's format that a journal of version
     // 2 already written no longer passes.
     let text = text_of(std::path::Path::new(VERSION2), "journal.jsonl");
-    let header = format::record::header(format::record::JOURNAL_FORMAT);
-    assert_eq!(text.lines().next(), Some(header.as_str()));
+    let header = r#"{"format":"memex-journal","version":2}"#;
+    assert_eq!(text.lines().next(), Some(header));
     assert_eq!(format::chain::check_journal(&text).unwrap().len(), 73);
 }
 
 #[test]
-fn the_version_2_journal_replays_unmigrated_to_the_same_outline_and_facts() {
-    // Catches a change to what a journal of version 2 means, or one
-    // migrated again.
+fn the_version_2_journal_migrated_has_the_same_outline_and_facts() {
+    // Catches a change to what a journal of version 2 means, by its
+    // migration to version 3 or otherwise.
     let mut app = replayed(std::path::Path::new(VERSION2));
     let items = [
         "1 Buran",
@@ -347,7 +392,39 @@ fn the_version_2_journal_replays_unmigrated_to_the_same_outline_and_facts() {
         r#"node_def(41, constraint("Nothing has more than 1 date", [_0, _1, _2], date(_0, _1), date(_0, _2), \==(_1, _2)))"#,
     ];
     assert_eq!(facts(&mut app), expected);
-    assert!(!app.journal().dir().join("v1").exists(), "not migrated");
+    assert!(app.journal().dir().join("v2").exists(), "migrated");
+}
+
+#[test]
+fn the_version_3_journal_checks_at_version_3() {
+    // Catches a change to the record's format that a journal of version
+    // 3 already written no longer passes.
+    let text = text_of(std::path::Path::new(VERSION3), "journal.jsonl");
+    let header = r#"{"format":"memex-journal","version":3}"#;
+    assert_eq!(text.lines().next(), Some(header));
+    assert!(format::chain::check_journal(&text).is_ok());
+}
+
+#[test]
+fn the_version_3_journal_records_each_suggestion_in_its_words_and_no_view() {
+    // Catches an offer of version 3 recorded only once drawn, without its
+    // words, or with the view; or an observation with the view.
+    let es = entries_of(std::path::Path::new(VERSION3));
+    let bodies: Vec<&serde_json::Value> = es.iter().filter_map(|e| e.body()).collect();
+    let records = |op: &str| bodies.iter().filter(|b| b["op"] == op).count();
+    assert!(records("offer") > 0 && records("observed") > 0);
+    let with_view = bodies
+        .iter()
+        .filter(|b| b["op"] == "offer" || b["op"] == "observed");
+    assert!(
+        with_view.clone().all(|b| b.get("panes").is_none()),
+        "no view"
+    );
+    let offers = bodies.iter().filter(|b| b["op"] == "offer");
+    for o in offers {
+        let (keys, said) = (o["keys"].as_array().unwrap(), o["said"].as_array().unwrap());
+        assert_eq!(keys.len(), said.len(), "each in its words: {o}");
+    }
 }
 
 #[test]

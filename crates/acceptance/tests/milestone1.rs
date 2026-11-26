@@ -73,12 +73,12 @@ fn generate(name: &str, n: u64, purges: u64) -> (PathBuf, PathBuf) {
     (dir, key)
 }
 
-/// n entries, of every kind, with branches; then the purges.
+/// n entries: entry 1, which opening the journal writes, then entries of
+/// every kind, with branches; then the purges.
 fn write_entries(dir: &Path, n: u64, purges: u64) {
     let mut j = Journal::open(dir).unwrap();
     j.durable = false;
     let mut rng = Rng(n);
-    j.append("edit", body(&mut rng, 1)).unwrap();
     while (j.entries().len() as u64) < n - purges {
         append_one(&mut j, &mut rng);
     }
@@ -293,11 +293,11 @@ fn purged_entry_still_verifies() {
     let mut j = Journal::open(&dir).unwrap();
     j.append("edit", json!({"text": "a private note"})).unwrap();
     j.append("edit", json!({"text": "a public note"})).unwrap();
-    assert_eq!(sealer::seal_pending(&dir, &k, &clock).unwrap(), 2);
-    j.purge(1, "privacy").unwrap();
+    assert_eq!(sealer::seal_pending(&dir, &k, &clock).unwrap(), 3);
+    j.purge(2, "privacy").unwrap();
     assert_eq!(sealer::seal_pending(&dir, &k, &clock).unwrap(), 1);
     let r = check::check_dir(&dir).unwrap();
-    assert_eq!(r.entries[0].body(), None);
+    assert_eq!(r.entries[1].body(), None);
     assert!(
         !fs::read_to_string(dir.join(JOURNAL))
             .unwrap()
@@ -373,12 +373,11 @@ fn a_seal_dated_before_the_seal_before_fails_naming_its_line() {
     sealer::init(&dir, &key).unwrap();
     let k = sealer::load_key(&key).unwrap();
     let mut j = Journal::open(&dir).unwrap();
-    for text in ["first", "second"] {
-        j.append("edit", json!({ "text": text })).unwrap();
-    }
+    j.append("edit", json!({ "text": "second" })).unwrap();
     assert_eq!(
         sealer::seal_pending(&dir, &k, &clock_of(&[10, 10])).unwrap(),
-        2
+        2,
+        "entry 1, which opening the journal wrote, and the second"
     );
     j.append("edit", json!({ "text": "third" })).unwrap();
     let forger = Forger { dir: &dir, key: &k };
@@ -411,7 +410,7 @@ fn the_sealer_stops_rather_than_seal_before_the_last_seal() {
     sealer::init(&dir, &key).unwrap();
     let k = sealer::load_key(&key).unwrap();
     let mut j = Journal::open(&dir).unwrap();
-    for text in ["first", "second", "third"] {
+    for text in ["second", "third"] {
         j.append("edit", json!({ "text": text })).unwrap();
     }
     let refused = sealer::seal_pending(&dir, &k, &clock_of(&[10, 11, 9])).unwrap_err();

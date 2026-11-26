@@ -8,7 +8,7 @@ use crate::notebook::Notebook;
 use crate::reason::{Suggestion, WorldEval};
 use crate::world::World;
 use format::terms::Term;
-use serde_json::json;
+use serde_json::{Value, json};
 use std::borrow::Cow;
 
 impl App {
@@ -120,13 +120,22 @@ impl App {
         self.reason.engine(0)
     }
 
-    /// Record in the journal what reasoning showed, when it changes: the
-    /// current world's violations and disagreements, and the suggestions
-    /// shown for the first time. A query and its answer are journal entries
-    /// (§ The journal, rule 6), so the measures report can count them.
+    /// Record in the journal what reasoning found, when it changes: the
+    /// current world's violations and disagreements, and each suggestion
+    /// it made for the first time, in its words. A query and its answer
+    /// are journal entries (§ The journal, rule 6), so the measures report
+    /// can count them. A record holds no view: it says what reasoning
+    /// found, not what the screen showed (version 3).
     pub(crate) fn record_observations(&mut self) {
         self.record_shown();
         self.record_offers();
+    }
+
+    /// Write a record of what reasoning found: a view entry, of no view.
+    fn write_record(&mut self, op: &str, mut body: Value) {
+        body["op"] = json!(op);
+        let written = self.write_here("view", body);
+        self.session.report(written);
     }
 
     /// Record what reasoning shows of the current world, when it changes,
@@ -146,34 +155,30 @@ impl App {
         if !gone.is_empty() {
             body["gone"] = json!(gone);
         }
-        self.write_view("observed", body);
+        self.write_record("observed", body);
     }
 
-    /// Record the suggestions drawn for the first time: those the pane
-    /// shows, while it is shown, and those the notebook's inspector
-    /// lists, while it is drawn.
+    /// Record each suggestion reasoning made for the first time: its
+    /// identity, which an adoption of it names, and its words.
     fn record_offers(&mut self) {
-        let new = self
-            .reason
-            .suggestions
-            .not_offered(self.suggestions_drawn());
+        let made = self.reason.suggestions.list.iter();
+        let ids = made.map(|s| s.identity()).collect();
+        let new = self.reason.suggestions.not_offered(ids);
         if new.is_empty() {
             return;
         }
-        self.write_view("offer", json!({"keys": new}));
+        let said: Vec<String> = new
+            .iter()
+            .filter_map(|k| self.said_of_suggestion(k))
+            .collect();
+        self.write_record("offer", json!({"keys": new, "said": said}));
     }
 
-    /// The suggestions drawn now, by their identities.
-    fn suggestions_drawn(&self) -> Vec<String> {
-        let mut drawn = Vec::new();
-        if self.session.view.shows(PaneKind::Suggestions) {
-            let shown = self.reason.suggestions.shown().into_iter();
-            drawn.extend(shown.map(|s| s.identity()));
-        }
-        if self.notebook_drawn() {
-            drawn.extend(self.suggestions_listed());
-        }
-        drawn
+    /// A suggestion's words, by its identity.
+    fn said_of_suggestion(&self, identity: &str) -> Option<String> {
+        let mut list = self.reason.suggestions.list.iter();
+        list.find(|s| s.identity() == identity)
+            .map(|s| s.describe())
     }
 
     /// What adopting an item's claims would raise, computed in a spare

@@ -396,6 +396,13 @@ impl Keys {
     }
 }
 
+/// Whether a view entry records what reasoning found, and no view: an
+/// observation or an offer. From version 3 they hold none; of versions 1
+/// and 2, the view as it then was, which restoring changes nothing of.
+fn is_record(b: &Value) -> bool {
+    matches!(b["op"].as_str(), Some("observed" | "offer"))
+}
+
 impl Session {
     /// A session that starts by saying this.
     pub(crate) fn saying(message: String) -> Session {
@@ -463,7 +470,9 @@ impl Session {
         let Some(b) = e.body().filter(|_| e.kind() == "view") else {
             return;
         };
-        self.view.restore(b);
+        if !is_record(b) {
+            self.view.restore(b);
+        }
         self.trail.apply(b);
         match b["op"].as_str() {
             Some("leap") => {

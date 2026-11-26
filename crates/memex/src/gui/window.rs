@@ -297,9 +297,9 @@ impl Memex {
 
     /// Lay the screen out in cells as many as the window holds, and paint
     /// them; then tell the app what was drawn of the inspector, which it
-    /// scrolls.
+    /// scrolls. Drawing writes nothing: reasoning, and what it records,
+    /// follow the action that moved the journal (acted).
     fn draw(&mut self) {
-        self.app.reason_if_moved();
         let Some(g) = self.window.gfx_mut() else {
             return;
         };
@@ -423,9 +423,7 @@ impl ApplicationHandler for Memex {
     fn new_events(&mut self, _: &ActiveEventLoop, cause: StartCause) {
         if matches!(cause, StartCause::ResumeTimeReached { .. }) && self.app.idle_work() {
             self.input.pausing = self.app.pause_step();
-            if let Some(g) = self.window.gfx() {
-                g.window.request_redraw();
-            }
+            self.acted();
         }
     }
 
@@ -494,13 +492,20 @@ impl ApplicationHandler for Memex {
             WindowEvent::Resized(s) => self.resized(s),
             _ => return,
         }
-        if let Some(g) = self.window.gfx() {
-            g.window.request_redraw();
-        }
+        self.acted();
     }
 }
 
 impl Memex {
+    /// After an action: reason again if it moved the journal, recording
+    /// what reasoning found, then ask for a frame that shows it.
+    fn acted(&mut self) {
+        self.app.reason_if_moved();
+        if let Some(g) = self.window.gfx() {
+            g.window.request_redraw();
+        }
+    }
+
     /// The painter told the window's new size.
     fn resized(&mut self, s: winit::dpi::PhysicalSize<u32>) {
         let (Some(g), Some(w), Some(h)) = (

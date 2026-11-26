@@ -126,13 +126,24 @@ fn notes_of_1989(name: &str) -> Room {
     app
 }
 
-/// The last entry is an import from Wikidata, whose blob is kept.
+/// The last import is from Wikidata, its blob is kept, and nothing but
+/// what reasoning records of what it found follows it.
 fn the_import_is_kept(app: &Room) {
-    let import = app.journal().entries().last().unwrap().body().unwrap();
+    let entries = app.journal().entries();
+    let at = entries.iter().rposition(|e| e.kind() == "import").unwrap();
+    let import = entries[at].body().unwrap();
     assert_eq!(import["source"], "Wikidata");
     let blob = app.dir.join("blobs").join(import["blob"].as_str().unwrap());
     assert!(blob.exists());
-    assert_eq!(app.journal().entries().last().unwrap().kind(), "import");
+    let record = |e: &format::record::Entry| {
+        e.body()
+            .is_some_and(|b| b["op"] == "offer" || b["op"] == "observed")
+    };
+    assert!(
+        entries[at + 1..].iter().all(record),
+        "{:?}",
+        &entries[at + 1..]
+    );
 }
 
 /// The spaceplane, not the village of the same name, comes first, for a

@@ -26,11 +26,14 @@ pub const VERSION: u64 = 1;
 /// they are written. Version 2 (24 November 2026) marks what the memex
 /// writes on its own, tells where writing left the cursor from a move,
 /// and records offers from the notebook, verdicts on findings, and why a
-/// violation went (docs/design.md, The journal format, Versions). The
-/// memex migrates a journal of version 1 when it opens one.
-pub const JOURNAL_VERSION: u64 = 2;
+/// violation went. Version 3 (26 November 2026) records each suggestion
+/// the memex makes, in its words, as reasoning makes it after an action,
+/// not once it is drawn; and offers and observations hold no view
+/// (docs/design.md, The journal format, Versions). The memex migrates a
+/// journal of an earlier version when it opens one.
+pub const JOURNAL_VERSION: u64 = 3;
 
-/// The kinds of entry in versions 1 and 2 of the journal.
+/// The kinds of entry in versions 1 to 3 of the journal.
 /// `view` (a change to what is shown: cursor, folds, panes, a Leap) was added
 /// to version 1 before any journal was kept, for milestone 3.
 pub const KINDS: [&str; 11] = [
@@ -56,11 +59,11 @@ fn current(format: &str) -> u64 {
     }
 }
 
-/// The versions of a format that are read: for the journal, version 1 as
-/// well, so that it can be checked and migrated.
+/// The versions of a format that are read: for the journal, the earlier
+/// ones as well, so that they can be checked and migrated.
 fn read_versions(format: &str) -> Vec<u64> {
     match format {
-        JOURNAL_FORMAT => vec![1, JOURNAL_VERSION],
+        JOURNAL_FORMAT => (1..=JOURNAL_VERSION).collect(),
         _ => vec![VERSION],
     }
 }
@@ -976,7 +979,7 @@ mod tests {
         // Catches a wrong format name or version accepted.
         assert_eq!(
             header(JOURNAL_FORMAT),
-            r#"{"format":"memex-journal","version":2}"#
+            r#"{"format":"memex-journal","version":3}"#
         );
         assert_eq!(
             header(SEALS_FORMAT),
@@ -990,7 +993,13 @@ mod tests {
             Some(1),
             "read, to migrate"
         );
-        assert!(check_header(r#"{"format":"memex-journal","version":3}"#, JOURNAL_FORMAT).is_err());
+        let v2 = r#"{"format":"memex-journal","version":2}"#;
+        assert_eq!(
+            header_version(v2, JOURNAL_FORMAT),
+            Some(2),
+            "read, to migrate"
+        );
+        assert!(check_header(r#"{"format":"memex-journal","version":4}"#, JOURNAL_FORMAT).is_err());
         assert!(check_header(r#"{"format":"memex-seals","version":2}"#, SEALS_FORMAT).is_err());
         assert!(
             check_header(

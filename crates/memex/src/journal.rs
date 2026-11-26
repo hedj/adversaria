@@ -68,6 +68,7 @@ impl Journal {
     }
 
     /// Open a journal directory, as open does, and say what was set aside:
+    /// a journal with no entries gets its entry 1, which names its version;
     /// a last line that a crash left unfinished (unfinished_from) is kept in
     /// journal.jsonl.torn, and the journal is written without it. The rest
     /// must check, as a journal does, or the journal is refused.
@@ -83,25 +84,30 @@ impl Journal {
         let header = header_of(&bytes);
         let torn = &bytes[keep..];
         let set_aside = (!torn.is_empty()).then(|| journal.set_aside(&header, torn));
-        let old = record::header_version(&header, JOURNAL_FORMAT) == Some(1);
-        let migrated = old.then(|| journal.migrate());
+        let version = record::header_version(&header, JOURNAL_FORMAT);
+        let old = version.filter(|v| *v < JOURNAL_VERSION);
+        let migrated = old.map(|from| journal.migrate(from));
         let notes = [set_aside.transpose()?, migrated.transpose()?];
+        if journal.entries.is_empty() {
+            journal.append("edit", json!({"op": "init", "version": JOURNAL_VERSION}))?;
+        }
         let said: Vec<String> = notes.into_iter().flatten().collect();
         Ok((journal, (!said.is_empty()).then(|| said.join("; "))))
     }
 
-    /// Migrate a journal of version 1 to version 2: keep it, with its
-    /// seals, in v1/, where they still check, and write its entries
-    /// converted in its place (crate::migrate). What opening it says.
-    fn migrate(&mut self) -> Result<String, Error> {
-        let entries = crate::migrate::from_v1(&self.entries)?;
+    /// Migrate a journal of an earlier version to this one: keep it, with
+    /// its seals, in v1/ or v2/, where they still check, and write its
+    /// entries converted in its place (crate::migrate). What opening it
+    /// says.
+    fn migrate(&mut self, from: u64) -> Result<String, Error> {
+        let entries = crate::migrate::migrated(&self.entries, from)?;
         let tmp = self.written_aside(&record::header(JOURNAL_FORMAT), &entries)?;
-        let kept = layout::archive(&self.dir, 1)?;
+        let kept = layout::archive(&self.dir, from)?;
         self.replace_with(&tmp)?;
         self.entries = entries;
         let kept = kept.file_name().unwrap_or_default().to_string_lossy();
         Ok(format!(
-            "the journal was of version 1: it is migrated to version {JOURNAL_VERSION}, and the old journal and its seals are kept in {kept}/; seal the journal again"
+            "the journal was of version {from}: it is migrated to version {JOURNAL_VERSION}, and the old journal and its seals are kept in {kept}/; seal the journal again"
         ))
     }
 
@@ -237,6 +243,10 @@ impl Journal {
     /// purge entry whose target keeps its body, which no check accepts.
     pub fn purge(&mut self, target: u64, reason: &str) -> Result<Entry, Error> {
         self.whole()?;
+        if target == 1 {
+            let said = "entry 1 names the journal's version, and cannot be purged";
+            return Err(Error::Refused(said.into()));
+        }
         let t = self.entry(target)?;
         if t.kind() == "purge" {
             return Err(Error::Refused(format!(
@@ -412,7 +422,7 @@ mod tests {
                 .append("edit", json!({}))
                 .unwrap()
                 .seq,
-            2
+            3
         );
         fs::remove_dir_all(&d).unwrap();
     }
@@ -424,8 +434,8 @@ mod tests {
         let mut j = Journal::open(&d).unwrap();
         j.append("edit", json!({"t": "a"})).unwrap();
         j.append("edit", json!({"t": "b"})).unwrap();
-        let c = j.append_after(Some(1), "undo", json!({})).unwrap();
-        assert_eq!((c.seq, c.parent_seq()), (3, Some(1)));
+        let c = j.append_after(Some(2), "undo", json!({})).unwrap();
+        assert_eq!((c.seq, c.parent_seq()), (4, Some(2)));
         fs::remove_dir_all(&d).unwrap();
     }
 
@@ -465,7 +475,7 @@ mod tests {
             j.append("edit", json!({"\u{e9}": 1, "e\u{301}": 2}))
                 .is_err()
         );
-        let p = j.purge(1, "Bure\u{301}").unwrap();
+        let p = j.purge(2, "Bure\u{301}").unwrap();
         assert_eq!(p.body().unwrap()["reason"], json!("Bur\u{e9}"));
         fs::remove_dir_all(&d).unwrap();
     }
@@ -475,17 +485,17 @@ mod tests {
         // Catches a second root, a missing parent or a hand-written purge accepted.
         let d = temp_dir("refuse");
         let mut j = Journal::open(&d).unwrap();
-        assert!(j.append_after(Some(1), "edit", json!({})).is_err());
+        assert!(j.append_after(Some(2), "edit", json!({})).is_err());
         j.append("edit", json!({})).unwrap();
         assert!(j.append_after(None, "edit", json!({})).is_err());
         assert!(j.append_after(Some(0), "edit", json!({})).is_err());
-        assert!(j.append_after(Some(2), "edit", json!({})).is_err());
+        assert!(j.append_after(Some(3), "edit", json!({})).is_err());
         assert!(
             j.append("purge", json!({"target": 1, "reason": "x"}))
                 .is_err()
         );
         assert!(j.append("edit", json!("not an object")).is_err());
-        assert_eq!(j.entries().len(), 1);
+        assert_eq!(j.entries().len(), 2);
         fs::remove_dir_all(&d).unwrap();
     }
 
@@ -494,15 +504,15 @@ mod tests {
         // Catches a refusal that reaches the user without its reason.
         let d = temp_dir("why");
         let mut j = Journal::open(&d).unwrap();
-        let missing = j.append_after(Some(1), "edit", json!({})).unwrap_err();
-        assert_eq!(missing.to_string(), "entry 1 does not exist");
+        let missing = j.append_after(Some(2), "edit", json!({})).unwrap_err();
+        assert_eq!(missing.to_string(), "entry 2 does not exist");
         let not_object = j.append("edit", json!("x")).unwrap_err();
         assert_eq!(not_object.to_string(), "a body must be a JSON object");
         fs::remove_dir_all(&d).unwrap();
     }
 
-    /// A journal of two entries, closed, then these bytes added to its file,
-    /// as a crash would leave them; the file's bytes before.
+    /// A journal of entry 1 and two more, closed, then these bytes added to
+    /// its file, as a crash would leave them; the file's bytes before.
     fn left_by_a_crash(d: &Path, tail: &[u8]) -> Vec<u8> {
         let mut j = Journal::open(d).unwrap();
         j.append("edit", json!({"t": "a"})).unwrap();
@@ -520,7 +530,7 @@ mod tests {
         let d = temp_dir("cut-short");
         let before = left_by_a_crash(&d, br#"{"body":{"op":"te"#);
         let (j, note) = Journal::opened(&d).unwrap();
-        assert_eq!(j.entries().len(), 2);
+        assert_eq!(j.entries().len(), 3);
         assert!(note.is_some_and(|n| n.ends_with("journal.jsonl.torn")));
         assert_eq!(
             fs::read(d.join(JOURNAL)).unwrap(),
@@ -540,7 +550,7 @@ mod tests {
         let d = temp_dir("zero-bytes");
         let before = left_by_a_crash(&d, b"{\"body\":\0\0\0\n");
         let (j, note) = Journal::opened(&d).unwrap();
-        assert!(note.is_some() && j.entries().len() == 2);
+        assert!(note.is_some() && j.entries().len() == 3);
         assert_eq!(fs::read(d.join(JOURNAL)).unwrap(), before);
         fs::remove_dir_all(&d).unwrap();
     }
@@ -588,7 +598,7 @@ mod tests {
         let second = Journal::open(&d).err().map(|e| e.to_string());
         assert!(second.is_some_and(|m| m.ends_with("is open in another memex")));
         drop(first);
-        assert_eq!(Journal::open(&d).unwrap().entries().len(), 1, "free again");
+        assert_eq!(Journal::open(&d).unwrap().entries().len(), 2, "free again");
         fs::remove_dir_all(&d).unwrap();
     }
 
@@ -601,12 +611,12 @@ mod tests {
         j.append("edit", json!({"t": "a"})).unwrap();
         fs::create_dir(d.join(format!("{JOURNAL}.tmp"))).unwrap();
         assert!(
-            j.purge(1, "privacy").is_err(),
+            j.purge(2, "privacy").is_err(),
             "the rewrite cannot make its file"
         );
-        assert_eq!(j.entries().len(), 1, "nothing changed in memory");
+        assert_eq!(j.entries().len(), 2, "nothing changed in memory");
         drop(j);
-        assert_eq!(Journal::open(&d).unwrap().entries().len(), 1);
+        assert_eq!(Journal::open(&d).unwrap().entries().len(), 2);
         fs::remove_dir_all(&d).unwrap();
     }
 
@@ -617,13 +627,13 @@ mod tests {
         let mut j = Journal::open(&d).unwrap();
         j.append("edit", json!({"t": "private"})).unwrap();
         j.append("edit", json!({"t": "public"})).unwrap();
-        j.purge(1, "privacy").unwrap();
+        j.purge(2, "privacy").unwrap();
         let text = fs::read_to_string(d.join(JOURNAL)).unwrap();
         assert!(!text.contains("private"));
         let entries = chain::check_journal(&text).unwrap();
-        assert_eq!(entries[0].body(), None);
-        assert!(j.purge(1, "again").is_err());
-        assert!(j.purge(3, "a purge").is_err());
+        assert_eq!(entries[1].body(), None);
+        assert!(j.purge(2, "again").is_err());
+        assert!(j.purge(4, "a purge").is_err());
         assert!(j.purge(9, "missing").is_err());
         assert!(!d.join(format!("{JOURNAL}.tmp")).exists());
         fs::remove_dir_all(&d).unwrap();
@@ -639,7 +649,22 @@ mod tests {
         let p = d.join(JOURNAL);
         let text = fs::read_to_string(&p).unwrap().replace("\"a\"", "\"b\"");
         fs::write(&p, text).unwrap();
-        assert!(matches!(Journal::open(&d), Err(Error::Format(e)) if e.line == 2));
+        assert!(matches!(Journal::open(&d), Err(Error::Format(e)) if e.line == 3));
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_new_journal_starts_with_entry_1_naming_its_version_which_is_not_purged() {
+        // Catches a journal begun with no entry, so its header's version,
+        // which no seal covers, is named nowhere a seal covers; or entry 1
+        // purged, which would leave the version unnamed.
+        let d = temp_dir("entry-1");
+        let mut j = Journal::open(&d).unwrap();
+        let first = j.entries()[0].body().cloned();
+        let named = json!({"op": "init", "version": JOURNAL_VERSION});
+        assert_eq!(first, Some(named));
+        let refused = j.purge(1, "privacy").unwrap_err().to_string();
+        assert!(refused.contains("cannot be purged"), "{refused}");
         fs::remove_dir_all(&d).unwrap();
     }
 }
