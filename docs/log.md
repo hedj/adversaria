@@ -1936,6 +1936,29 @@ Measured: 1,162 tests pass; 46 elements hold 7 or more, from 44
 marked drawn, each 7); the deepest chain of helpers used once is 13,
 from 12, as `open_offers` now has one caller.
 
+### Entry kinds and claims typed (26 November 2026)
+
+The code-smell review's findings 2 and 6, first steps.
+
+1. Entry kinds (a54bf44): `format::record::EntryKind`, read once from a
+   line; every reader and writer of a kind uses it. The 51 comparisons
+   of `kind()` with a string are gone, so a misspelt kind no longer
+   compiles, and a `match` on a kind is checked for every kind. The
+   journal's bytes are unchanged: the version 3 fixture written again
+   differs only in the build its start entry names.
+2. Claims (9d2c3d7): `Claim { seq, source, fact }` in place of
+   `(u64, String, Term)`, which was read by position at 15 places.
+
+Both are trade-offs in the measures: a function that named a string
+or read a tuple by position, which the measure did not count, now
+names `EntryKind` or `Claim`. Units of src over 4: 853 to 879 to 882.
+Elements at 7 or more: 46 to 48 to 51. The message of 9d2c3d7 says 48
+to 50 and two higher; it was 48 to 51: three new (`adopt_claims`,
+`Asking::contrary`, `claim_of`) and one higher (`offers.rs`, 7 to 8).
+
+Not done: typed accessors for bodies, still read by string key, and
+`Point` for view.rs's coordinates (the next steps of findings 2 and 6).
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
