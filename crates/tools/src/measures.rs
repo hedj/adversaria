@@ -39,7 +39,7 @@
 //! under it deleted, or such an item's text no longer read; without a
 //! record, as in version 1, the reason is unrecorded.
 
-use format::record::Entry;
+use format::record::{Entry, EntryKind};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -105,32 +105,31 @@ fn states_a_ruling(body: &serde_json::Value) -> bool {
 pub fn kind(e: &Entry) -> Option<&'static str> {
     let op = e.body().and_then(|b| b["op"].as_str()).unwrap_or("");
     match (e.kind(), op) {
-        ("edit", "init") => None,
-        ("edit", "facts") if e.body().is_some_and(states_a_ruling) => Some("checking"),
-        ("edit", _) | ("link", _) | ("name", _)
+        (EntryKind::Edit, "init") => None,
+        (EntryKind::Edit, "facts") if e.body().is_some_and(states_a_ruling) => Some("checking"),
+        (EntryKind::Edit, _) | (EntryKind::Link, _) | (EntryKind::Name, _)
             if e.body().is_some_and(|b| b.get("suggestion").is_some()) =>
         {
             Some("deciding")
         }
-        ("edit", _) | ("link", _) | ("name", _) => Some("writing"),
-        ("adopt", _)
-        | ("retract", _)
-        | ("suppose", _)
-        | ("undo", _)
-        | ("redo", _)
-        | ("purge", _) => Some("deciding"),
-        ("import", _) => Some("importing"),
-        ("view", "leap" | "find") => Some("searching"),
-        ("view", "follow") => Some("following links"),
-        ("view", "move") if inspects(e) => Some("checking"),
-        ("view", "move" | "fold" | "pane" | "scope" | "go" | "back" | "forward") => {
+        (EntryKind::Edit, _) | (EntryKind::Link, _) | (EntryKind::Name, _) => Some("writing"),
+        (EntryKind::Adopt, _)
+        | (EntryKind::Retract, _)
+        | (EntryKind::Suppose, _)
+        | (EntryKind::Undo, _)
+        | (EntryKind::Redo, _)
+        | (EntryKind::Purge, _) => Some("deciding"),
+        (EntryKind::Import, _) => Some("importing"),
+        (EntryKind::View, "leap" | "find") => Some("searching"),
+        (EntryKind::View, "follow") => Some("following links"),
+        (EntryKind::View, "move") if inspects(e) => Some("checking"),
+        (EntryKind::View, "move" | "fold" | "pane" | "scope" | "go" | "back" | "forward") => {
             Some("navigating")
         }
-        ("view", "dismiss" | "world") => Some("deciding"),
-        ("view", "interrogate" | "verdict") => Some("checking"),
-        ("view", "export") => Some("exporting"),
-        ("view", _) => None,
-        _ => None,
+        (EntryKind::View, "dismiss" | "world") => Some("deciding"),
+        (EntryKind::View, "interrogate" | "verdict") => Some("checking"),
+        (EntryKind::View, "export") => Some("exporting"),
+        (EntryKind::View, _) => None,
     }
 }
 
@@ -192,12 +191,12 @@ fn by_memex(e: &Entry) -> bool {
 /// Whether an entry is a view of one of these ops.
 fn is_view(e: &Entry, ops: &[&str]) -> bool {
     let op = e.body().and_then(|b| b["op"].as_str());
-    e.kind() == "view" && op.is_some_and(|o| ops.contains(&o))
+    e.kind() == EntryKind::View && op.is_some_and(|o| ops.contains(&o))
 }
 
 /// The entries that retract entries, by the entry each retracts.
 fn retracted(entries: &[Entry]) -> BTreeSet<u64> {
-    let retracts = entries.iter().filter(|e| e.kind() == "retract");
+    let retracts = entries.iter().filter(|e| e.kind() == EntryKind::Retract);
     retracts
         .filter_map(|e| e.body().and_then(|b| b["target"].as_u64()))
         .collect()
@@ -438,7 +437,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn chain(bodies: &[(&str, serde_json::Value)]) -> Vec<Entry> {
+    fn chain(bodies: &[(EntryKind, serde_json::Value)]) -> Vec<Entry> {
         let mut out: Vec<Entry> = Vec::new();
         for body in bodies {
             let entry = next(&out, body);
@@ -449,8 +448,8 @@ mod tests {
 
     /// The entry of a kind and a body after these, numbered after the
     /// last.
-    fn next(es: &[Entry], (kind, body): &(&str, serde_json::Value)) -> Entry {
-        Entry::new(es.len() as u64 + 1, after(es), kind, body.clone()).unwrap()
+    fn next(es: &[Entry], (kind, body): &(EntryKind, serde_json::Value)) -> Entry {
+        Entry::new(es.len() as u64 + 1, after(es), *kind, body.clone()).unwrap()
     }
 
     /// The last entry, as Entry::new names a parent.
@@ -464,12 +463,12 @@ mod tests {
         // still has the violation.
         let obs = |v: &[&str], w: &str| {
             (
-                "view",
+                EntryKind::View,
                 json!({"op": "observed", "violations": v, "disagreements": [], "world": w}),
             )
         };
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "init"})),
             obs(&["x"], "actual"),
             obs(&[], "suppose y"),
             obs(&["x"], "actual"),
@@ -477,7 +476,7 @@ mod tests {
         let r = measure(&es);
         assert_eq!((r.violations_seen, r.violations_gone), (1, 0));
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "init"})),
             obs(&["x"], "actual"),
             obs(&[], "actual"),
         ]);
@@ -487,13 +486,13 @@ mod tests {
         // gone from the actual world after a supposition is (the code
         // review, B1).
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "init"})),
             obs(&["z"], "suppose y"),
             obs(&[], "actual"),
         ]);
         assert_eq!(measure(&es).violations_gone, 0);
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "init"})),
             obs(&["x"], "actual"),
             obs(&[], "suppose y"),
             obs(&[], "actual"),
@@ -506,14 +505,20 @@ mod tests {
         // Catches a reading's facts counted as the user's writing, which
         // raised the actions and lowered the clerical share.
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "init"})),
             (
-                "view",
+                EntryKind::View,
                 json!({"op": "start", "build": "abc", "by": "memex"}),
             ),
-            ("edit", json!({"op": "facts", "item": 2, "by": "memex"})),
-            ("edit", json!({"op": "facts", "item": 2})),
-            ("view", json!({"op": "offer", "keys": ["k"], "by": "memex"})),
+            (
+                EntryKind::Edit,
+                json!({"op": "facts", "item": 2, "by": "memex"}),
+            ),
+            (EntryKind::Edit, json!({"op": "facts", "item": 2})),
+            (
+                EntryKind::View,
+                json!({"op": "offer", "keys": ["k"], "by": "memex"}),
+            ),
         ]);
         let r = measure(&es);
         assert_eq!((r.by_memex, r.actions["writing"]), (2, 1));
@@ -530,10 +535,10 @@ mod tests {
             if drawn {
                 b["drawn"] = json!(true);
             }
-            ("view", b)
+            (EntryKind::View, b)
         };
         let es = chain(&[
-            ("edit", json!({"op": "init", "version": 3})),
+            (EntryKind::Edit, json!({"op": "init", "version": 3})),
             offer(&["a", "b"], true),
             offer(&["b", "c"], false),
         ]);
@@ -551,8 +556,11 @@ mod tests {
         // Catches a version 2 journal read as it was written, its offers
         // not marked, counted as if it recorded each suggestion made.
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
-            ("view", json!({"op": "offer", "keys": ["a"], "by": "memex"})),
+            (EntryKind::Edit, json!({"op": "init"})),
+            (
+                EntryKind::View,
+                json!({"op": "offer", "keys": ["a"], "by": "memex"}),
+            ),
         ]);
         assert_eq!(measure(&es).offered_drawn, 1);
     }
@@ -563,10 +571,10 @@ mod tests {
         // its rule was deleted; or a reason lost when none is recorded.
         let obs = |v: &[&str], gone: serde_json::Value| {
             let b = json!({"op": "observed", "violations": v, "disagreements": [], "world": "actual", "gone": gone});
-            ("view", b)
+            (EntryKind::View, b)
         };
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "init"})),
             obs(&["x", "y", "z"], json!([])),
             obs(
                 &["z"],
@@ -590,10 +598,10 @@ mod tests {
         // twice.
         let verdict = |word: &str, findings: &[&str]| {
             let b = json!({"op": "verdict", "verdict": word, "rule": 3, "under": 2, "findings": findings});
-            ("view", b)
+            (EntryKind::View, b)
         };
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "init"})),
             verdict("known", &["a"]),
             verdict("rule", &["b", "c"]),
             verdict("error", &["a"]),
@@ -610,10 +618,11 @@ mod tests {
     fn a_move_to_a_claims_questions_is_checking() {
         // Catches a check made by selecting a claim item counted as
         // navigating: checking would fall with no less of it done.
-        let moved =
-            |inspects: serde_json::Value| ("view", json!({"op": "move", "inspects": inspects}));
+        let moved = |inspects: serde_json::Value| {
+            (EntryKind::View, json!({"op": "move", "inspects": inspects}))
+        };
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "init"})),
             moved(json!(3)),
             moved(json!(null)),
         ]);
@@ -628,10 +637,10 @@ mod tests {
         // Catches the view entry after each burst of typing counted as a
         // move of the user's, as all 14 moves of the version-1 fixture were.
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
-            ("edit", json!({"op": "text", "item": 2})),
-            ("view", json!({"op": "written"})),
-            ("view", json!({"op": "move"})),
+            (EntryKind::Edit, json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "text", "item": 2})),
+            (EntryKind::View, json!({"op": "written"})),
+            (EntryKind::View, json!({"op": "move"})),
         ]);
         let r = measure(&es);
         assert_eq!(r.left_by_writing, 1);
@@ -644,9 +653,9 @@ mod tests {
         // Catches the jumps of go, back and forward left unclassified, as
         // eight of the version-1 fixture's nine unclassified entries were,
         // and a verdict on a finding counted as no action.
-        let view = |op: &str| ("view", json!({"op": op}));
+        let view = |op: &str| (EntryKind::View, json!({"op": op}));
         let ops = ["go", "back", "forward", "verdict"];
-        let mut bodies = vec![("edit", json!({"op": "init"}))];
+        let mut bodies = vec![(EntryKind::Edit, json!({"op": "init"}))];
         bodies.extend(ops.map(view));
         let kinds: Vec<_> = chain(&bodies)[1..].iter().map(kind).collect();
         let navigating = Some("navigating");
@@ -660,8 +669,12 @@ mod tests {
     fn a_find_is_searching_as_a_leap_is() {
         // Catches the find command's view entry counted as no action, so
         // searching by it was missing from the clerical share.
-        let view = |op: &str| ("view", json!({"op": op}));
-        let es = chain(&[("edit", json!({"op": "init"})), view("find"), view("leap")]);
+        let view = |op: &str| (EntryKind::View, json!({"op": op}));
+        let es = chain(&[
+            (EntryKind::Edit, json!({"op": "init"})),
+            view("find"),
+            view("leap"),
+        ]);
         assert_eq!(
             (kind(&es[1]), kind(&es[2])),
             (Some("searching"), Some("searching"))
@@ -672,11 +685,19 @@ mod tests {
     fn a_fact_is_checking_only_if_it_is_a_ruling() {
         // Catches a fact that holds the word ruling, topic(x, ruling),
         // taken for a check (the code review, B2).
-        let facts =
-            |f: serde_json::Value| ("edit", json!({"op": "facts", "item": 2, "facts": [f]}));
+        let facts = |f: serde_json::Value| {
+            (
+                EntryKind::Edit,
+                json!({"op": "facts", "item": 2, "facts": [f]}),
+            )
+        };
         let ruling = json!({"f": "ruling", "args": [2, "doi", "found", "h"]});
         let topic = json!({"f": "topic", "args": [{"a": "x"}, {"a": "ruling"}]});
-        let es = chain(&[("edit", json!({"op": "init"})), facts(ruling), facts(topic)]);
+        let es = chain(&[
+            (EntryKind::Edit, json!({"op": "init"})),
+            facts(ruling),
+            facts(topic),
+        ]);
         assert_eq!(kind(&es[1]), Some("checking"));
         assert_eq!(kind(&es[2]), Some("writing"));
     }
@@ -686,9 +707,9 @@ mod tests {
         // Catches disagreements not counted, or counted at each showing.
         let shown = || {
             let b = json!({"op": "observed", "violations": [], "disagreements": ["d1"], "world": "actual"});
-            ("view", b)
+            (EntryKind::View, b)
         };
-        let es = chain(&[("edit", json!({"op": "init"})), shown(), shown()]);
+        let es = chain(&[(EntryKind::Edit, json!({"op": "init"})), shown(), shown()]);
         assert_eq!(measure(&es).disagreements_seen, 1);
     }
 
@@ -696,9 +717,9 @@ mod tests {
     fn an_adoption_later_retracted_is_counted() {
         // Catches a retraction of an adopted suggestion missed.
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
-            ("edit", json!({"op": "facts", "suggestion": "k1"})),
-            ("retract", json!({"target": 2})),
+            (EntryKind::Edit, json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "facts", "suggestion": "k1"})),
+            (EntryKind::Retract, json!({"target": 2})),
         ]);
         assert_eq!(measure(&es).adopted_then_retracted, 1);
     }

@@ -7,6 +7,7 @@ use crate::docs::{Block, Losses};
 use crate::notebook::Notebook;
 use crate::outline::Revised;
 use crate::outline::TOP;
+use format::record::EntryKind;
 use format::terms::{self, Term};
 use serde_json::json;
 use std::collections::HashSet;
@@ -80,7 +81,7 @@ impl App {
         let n = b.text.chars().count();
         let (under, after) = (spot.under, spot.after);
         let e = self.write_here(
-            "edit",
+            EntryKind::Edit,
             json!({"op": "create", "under": under, "after": after, "add": b.text, "spans": [[0, 0, n]], "style": b.style, "import": import}),
         )?;
         if !b.cites.is_empty() {
@@ -96,7 +97,7 @@ impl App {
                 })
                 .collect::<Result<_, _>>()?;
             self.write_here(
-                "edit",
+                EntryKind::Edit,
                 json!({"op": "facts", "item": e.seq, "facts": facts}),
             )?;
         }
@@ -148,7 +149,7 @@ impl App {
         if let Some(earlier) = revises {
             body["revises"] = json!(earlier);
         }
-        Ok(self.write_here("import", body)?.seq)
+        Ok(self.write_here(EntryKind::Import, body)?.seq)
     }
 
     /// The blocks of a document, each last under the nearest block before
@@ -207,7 +208,10 @@ impl App {
         earlier: &[u64],
         name: &str,
     ) -> Result<u64, String> {
-        self.write_here("suppose", json!({"name": format!("revision of {name}")}))?;
+        self.write_here(
+            EntryKind::Suppose,
+            json!({"name": format!("revision of {name}")}),
+        )?;
         self.write_document_import(doc, earlier.last().copied(), name)
     }
 
@@ -260,7 +264,7 @@ impl App {
         let spot = stack.spot(b.depth);
         if self.notebook.outline.parent_or_top(id) != spot.under {
             let body = json!({"op": "move", "item": id, "under": spot.under, "after": spot.after});
-            self.write_here("edit", body)?;
+            self.write_here(EntryKind::Edit, body)?;
         }
         Ok(id)
     }
@@ -279,7 +283,7 @@ impl App {
         for &o in dropped {
             let outline = &self.notebook.outline;
             if outline.items.contains_key(&o) && outline.branch_within(o, &all) {
-                self.write_here("edit", json!({"op": "delete", "item": o}))?;
+                self.write_here(EntryKind::Edit, json!({"op": "delete", "item": o}))?;
             }
         }
         Ok(())

@@ -12,6 +12,7 @@ use crate::app::App;
 use crate::notebook::Notebook;
 use crate::outline::TOP;
 use crate::session::{Clip, ViewChange};
+use format::record::EntryKind;
 use serde_json::json;
 
 impl App {
@@ -27,7 +28,7 @@ impl App {
         }
         let next = self.neighbour(item);
         self.flush_text();
-        let deleted = self.write_here("edit", json!({"op": "delete", "item": item}));
+        let deleted = self.write_here(EntryKind::Edit, json!({"op": "delete", "item": item}));
         self.session.report(deleted);
         self.set_cursor(next);
         self.session.view_changed(ViewChange::Written);

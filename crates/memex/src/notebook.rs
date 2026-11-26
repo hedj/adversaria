@@ -7,7 +7,7 @@ use crate::docs::Quote;
 use crate::journal::{Error as JournalError, Journal};
 use crate::outline::{Constraint, Outline, TOP};
 use crate::store::Store;
-use format::record::Entry;
+use format::record::{Entry, EntryKind};
 use format::terms::Term;
 use serde_json::Value;
 use std::cell::RefCell;
@@ -15,7 +15,14 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// Entry kinds that change the outline.
-pub(crate) const CONTENT: [&str; 6] = ["edit", "link", "name", "suppose", "adopt", "import"];
+pub(crate) const CONTENT: [EntryKind; 6] = [
+    EntryKind::Edit,
+    EntryKind::Link,
+    EntryKind::Name,
+    EntryKind::Suppose,
+    EntryKind::Adopt,
+    EntryKind::Import,
+];
 
 /// How many outlines the notebook keeps to start a replay from. Each is a
 /// whole outline: about 7 MB at 10,000 items, measured as the memory one
@@ -128,7 +135,7 @@ pub(crate) struct Branch<'a> {
 
 impl<'a> Branch<'a> {
     fn new(entries: Vec<&'a Entry>) -> Branch<'a> {
-        let retracts = entries.iter().filter(|e| e.kind() == "retract");
+        let retracts = entries.iter().filter(|e| e.kind() == EntryKind::Retract);
         let retracted = retracts.filter_map(|e| target(e)).collect();
         Branch { entries, retracted }
     }
@@ -147,7 +154,7 @@ impl<'a> Branch<'a> {
 
     /// The edits after an entry, each with whether the branch retracts it.
     fn edits_after(&self, seq: u64) -> Vec<(&'a Entry, bool)> {
-        let edits = self.entries.iter().filter(|e| e.kind() == "edit");
+        let edits = self.entries.iter().filter(|e| e.kind() == EntryKind::Edit);
         let after = edits.filter(|e| e.seq > seq);
         after.map(|e| (*e, self.retracts(e.seq))).collect()
     }
@@ -176,7 +183,12 @@ impl Replayed {
     /// it only states facts.
     fn apply(&mut self, e: &Entry, b: &Value) {
         let applied = self.outline.apply(e.seq, e.kind(), b);
-        if !applied && !matches!(e.kind(), "suppose" | "adopt" | "import") {
+        if !applied
+            && !matches!(
+                e.kind(),
+                EntryKind::Suppose | EntryKind::Adopt | EntryKind::Import
+            )
+        {
             self.failed.push(e.seq);
         }
     }
@@ -216,7 +228,7 @@ impl Notebook {
     pub(crate) fn append(
         &mut self,
         parent: Option<u64>,
-        kind: &str,
+        kind: EntryKind,
         body: Value,
     ) -> Result<Entry, String> {
         let appended = self.journal.append_after(parent, kind, body);
@@ -273,7 +285,7 @@ impl Notebook {
                 ahead.reverse();
                 return Some((i, ahead));
             }
-            if e.kind() == "retract" {
+            if e.kind() == EntryKind::Retract {
                 return None;
             }
             if CONTENT.contains(&e.kind()) {
@@ -332,7 +344,7 @@ impl Notebook {
 
     /// The last entry on the path that changed content: what undo undoes.
     pub(crate) fn content_tip(&self, from: u64) -> Option<u64> {
-        let changed = |e: &&Entry| CONTENT.contains(&e.kind()) || e.kind() == "retract";
+        let changed = |e: &&Entry| CONTENT.contains(&e.kind()) || e.kind() == EntryKind::Retract;
         self.back_from(from).find(changed).map(|e| e.seq)
     }
 
@@ -389,7 +401,7 @@ impl Notebook {
     pub(crate) fn document_imports(&self, name: &str) -> Vec<u64> {
         let path = self.path(self.tip).into_iter();
         let of = |b: &Value| b["format"] == "document" && b["file"] == name;
-        let imports = path.filter(|e| e.kind() == "import" && e.body().is_some_and(of));
+        let imports = path.filter(|e| e.kind() == EntryKind::Import && e.body().is_some_and(of));
         imports.map(|e| e.seq).collect()
     }
 
@@ -439,7 +451,11 @@ impl Notebook {
     /// not retracted, and the file its blob is in.
     pub(crate) fn import_on(&self, head: u64) -> Option<(u64, PathBuf)> {
         let branch = self.branch(head);
-        let imports = branch.entries.iter().rev().filter(|e| e.kind() == "import");
+        let imports = branch
+            .entries
+            .iter()
+            .rev()
+            .filter(|e| e.kind() == EntryKind::Import);
         let kept = imports.filter(|e| !branch.retracts(e.seq));
         kept.into_iter().find_map(|e| self.wikidata_blob(e))
     }
@@ -520,7 +536,7 @@ impl Notebook {
         let imports = self
             .path(self.tip)
             .into_iter()
-            .filter(|e| e.kind() == "import");
+            .filter(|e| e.kind() == EntryKind::Import);
         let changed = imports.filter_map(|e| Some((e.seq, changed_inputs(e.body()?)?)));
         let marked = changed.flat_map(|(seq, files)| {
             self.outline
@@ -534,7 +550,7 @@ impl Notebook {
     /// one; else nothing.
     pub(crate) fn order_before(&self, e: &Entry) -> Vec<u64> {
         let may_remove = match e.kind() {
-            "view" => false,
+            EntryKind::View => false,
             k if CONTENT.contains(&k) && e.parent_seq() == Some(self.tip) => {
                 e.body().is_some_and(|b| b["op"] == "delete")
             }
@@ -556,13 +572,13 @@ impl Notebook {
         let was = std::mem::replace(&mut self.tip, e.seq);
         self.follow_undone(e);
         match e.kind() {
-            "view" if follows => {}
+            EntryKind::View if follows => {}
             _ if incremental => {
                 if let Some(b) = &e.body() {
                     self.outline.apply(e.seq, e.kind(), b);
                 }
             }
-            "purge" => self.purged(),
+            EntryKind::Purge => self.purged(),
             _ => self.rebuild(was),
         }
     }
@@ -580,12 +596,12 @@ impl Notebook {
     fn follow_undone(&mut self, e: &Entry) {
         let leaves = e.body().is_some_and(|b| b["op"] == "world");
         match e.kind() {
-            "view" if leaves => self.redo.clear(),
-            "view" | "purge" => {}
-            "undo" => self
+            EntryKind::View if leaves => self.redo.clear(),
+            EntryKind::View | EntryKind::Purge => {}
+            EntryKind::Undo => self
                 .redo
                 .extend(e.body().and_then(|b| b["undoes"].as_u64())),
-            "redo" => {
+            EntryKind::Redo => {
                 self.redo.pop();
             }
             _ => self.redo.clear(),
@@ -611,7 +627,7 @@ mod tests {
     }
 
     /// An entry written after another and applied; its number.
-    fn written(n: &mut Notebook, after: u64, kind: &str, body: Value) -> u64 {
+    fn written(n: &mut Notebook, after: u64, kind: EntryKind, body: Value) -> u64 {
         let e = n.append(Some(after), kind, body).unwrap();
         n.apply(&e);
         e.seq
@@ -621,7 +637,7 @@ mod tests {
     fn made(n: &mut Notebook, text: &str) -> u64 {
         let spans = [[0, 0, text.chars().count()]];
         let body = json!({"op": "create", "under": TOP, "add": text, "spans": spans});
-        written(n, n.tip, "edit", body)
+        written(n, n.tip, EntryKind::Edit, body)
     }
 
     /// The texts of the items, sorted: each is made first at the top.
@@ -646,10 +662,10 @@ mod tests {
         let birch = made(&mut n, "Birch");
         let spans = [[birch, 0, 5], [0, 0, 5]];
         let text = json!({"op": "text", "item": birch, "add": " bark", "spans": spans});
-        let bark = written(&mut n, birch, "edit", text);
+        let bark = written(&mut n, birch, EntryKind::Edit, text);
         let cedar = made(&mut n, "Cedar");
         let undo = n
-            .append(Some(bark), "undo", json!({"undoes": cedar}))
+            .append(Some(bark), EntryKind::Undo, json!({"undoes": cedar}))
             .unwrap();
         assert_eq!(n.nearest_kept(undo.seq), Some((0, vec![birch, bark])));
         n.apply(&undo);
@@ -660,7 +676,7 @@ mod tests {
     /// The texts after an undo of an entry, back to another.
     fn undone(n: &mut Notebook, to: u64, undoes: u64) -> Vec<String> {
         let undo = n
-            .append(Some(to), "undo", json!({"undoes": undoes}))
+            .append(Some(to), EntryKind::Undo, json!({"undoes": undoes}))
             .unwrap();
         n.apply(&undo);
         texts(n)
@@ -675,7 +691,7 @@ mod tests {
         let alder = made(&mut n, "Alder");
         n.keep_outline();
         let marker = json!({"op": "create", "under": TOP, "add": "marker", "spans": [[0, 0, 6]]});
-        n.kept[0].1.apply(1_000, "edit", &marker);
+        n.kept[0].1.apply(1_000, EntryKind::Edit, &marker);
         let birch = made(&mut n, "Birch");
         let cedar = made(&mut n, "Cedar");
         assert_eq!(undone(&mut n, birch, cedar), ["Alder", "Birch", "marker"]);
@@ -691,7 +707,7 @@ mod tests {
         made(&mut n, "Birch");
         n.keep_outline();
         let retract = n
-            .append(Some(n.tip), "retract", json!({"target": alder}))
+            .append(Some(n.tip), EntryKind::Retract, json!({"target": alder}))
             .unwrap();
         assert_eq!(n.nearest_kept(retract.seq), None);
         n.apply(&retract);
@@ -708,7 +724,12 @@ mod tests {
         n.keep_outline();
         let purge = n.journal.purge(secret, "privacy").unwrap();
         n.apply(&purge);
-        let after = written(&mut n, purge.seq, "undo", json!({"undoes": secret}));
+        let after = written(
+            &mut n,
+            purge.seq,
+            EntryKind::Undo,
+            json!({"undoes": secret}),
+        );
         assert_eq!(n.tip, after);
         assert_eq!(texts(&n), ["Alder"]);
     }

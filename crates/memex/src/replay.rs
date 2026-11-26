@@ -5,12 +5,12 @@
 
 use crate::journal::Error;
 use format::chain;
-use format::record::JOURNAL;
+use format::record::{EntryKind, JOURNAL};
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
 
-pub type Fact = (u64, Option<u64>, String, Option<Value>);
+pub type Fact = (u64, Option<u64>, EntryKind, Option<Value>);
 
 /// Read and check the journal, then rebuild the store from it.
 pub fn replay(dir: &Path) -> Result<Vec<Fact>, Error> {
@@ -18,13 +18,6 @@ pub fn replay(dir: &Path) -> Result<Vec<Fact>, Error> {
     let entries = chain::check_journal(&text).map_err(Error::Format)?;
     Ok(entries
         .into_iter()
-        .map(|e| {
-            (
-                e.seq,
-                e.parent_seq(),
-                e.kind().to_string(),
-                e.body().cloned(),
-            )
-        })
+        .map(|e| (e.seq, e.parent_seq(), e.kind(), e.body().cloned()))
         .collect())
 }

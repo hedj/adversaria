@@ -2,6 +2,7 @@
 //! suggestions without a model. tests/fixtures/wikidata-buran.pl is real
 //! Wikidata (CC0), made by `wikidata --items Q2548,Q4273185,Q1010251,Q80811`.
 
+use format::record::EntryKind;
 use format::terms::Term;
 use memex::app::{App, Event, Key, PaneKind};
 use ratatui::Terminal;
@@ -81,7 +82,7 @@ fn accept(app: &mut App, start: &str) {
 }
 
 /// The number of the last entry of a kind.
-fn last_of(app: &App, kind: &str) -> u64 {
+fn last_of(app: &App, kind: EntryKind) -> u64 {
     let entries = app.journal().entries().iter();
     entries.rev().find(|e| e.kind() == kind).unwrap().seq
 }
@@ -130,7 +131,10 @@ fn notes_of_1989(name: &str) -> Room {
 /// what reasoning records of what it found follows it.
 fn the_import_is_kept(app: &Room) {
     let entries = app.journal().entries();
-    let at = entries.iter().rposition(|e| e.kind() == "import").unwrap();
+    let at = entries
+        .iter()
+        .rposition(|e| e.kind() == EntryKind::Import)
+        .unwrap();
     let import = entries[at].body().unwrap();
     assert_eq!(import["source"], "Wikidata");
     let blob = app.dir.join("blobs").join(import["blob"].as_str().unwrap());
@@ -162,7 +166,7 @@ fn the_spaceplane_comes_first(app: &App) {
 
 /// The last adoption keeps the evidence of what it accepted.
 fn the_adoption_keeps_its_evidence(app: &App) {
-    let adopt = &app.journal().entries()[last_of(app, "adopt") as usize - 1];
+    let adopt = &app.journal().entries()[last_of(app, EntryKind::Adopt) as usize - 1];
     let evidence = adopt.body().unwrap()["suggestion"]["evidence"].as_str();
     assert!(
         evidence.unwrap().contains("Q2548"),
@@ -204,7 +208,7 @@ fn wikidata_offers_its_own_constraint() {
     let e = app.journal().entries().last().unwrap();
     assert_eq!(
         (e.kind(), &e.body().unwrap()["op"]),
-        ("adopt", &serde_json::json!("constraint"))
+        (EntryKind::Adopt, &serde_json::json!("constraint"))
     );
     assert!(
         !described(&app).iter().any(|d| d.starts_with("constraint")),
@@ -490,7 +494,7 @@ fn a_retracted_import_is_not_read() {
         !described(&app).is_empty(),
         "the test needs the import read"
     );
-    let retract = format!("retract {}", last_of(&app, "import"));
+    let retract = format!("retract {}", last_of(&app, EntryKind::Import));
     command(&mut app, &retract);
     tap(&mut app, Key::Enter);
     app.evaluate().unwrap();
@@ -508,7 +512,7 @@ fn an_adopted_constraint_keeps_its_rule() {
 fn an_adopted_rule_is_numbered_by_its_own_entry() {
     let mut app = mined("rule-number");
     accept(&mut app, "rule located_in(_");
-    let seq = Term::Int(last_of(&app, "adopt") as i64);
+    let seq = Term::Int(last_of(&app, EntryKind::Adopt) as i64);
     assert!(matches!(last_fact(&app), Term::Compound(_, a) if a[0] == seq));
 }
 

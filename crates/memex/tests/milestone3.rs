@@ -1,6 +1,7 @@
 //! Milestone 3's acceptance checks (docs/plan.md, Milestone 3): the outline
 //! and the quasimodes, driven by key events and drawn into a test terminal.
 
+use format::record::EntryKind;
 use memex::app::{App, Event, Key, Mode, Quasi};
 use memex::journal::Journal;
 use ratatui::Terminal;
@@ -168,7 +169,7 @@ fn leap_released_lands_on_drakon(app: &App, before: usize) {
         (&leap["op"], &leap["pattern"]),
         (&json!("leap"), &json!("dra"))
     );
-    assert_eq!(after.last().unwrap().kind(), "view");
+    assert_eq!(after.last().unwrap().kind(), EntryKind::View);
 }
 
 /// Scene 1, on DRAKON: the right pane lists what it supports, what cites
@@ -310,7 +311,9 @@ fn undo_redo_and_branches() {
 /// The first edit after an entry.
 fn edit_after(r: &Room, seq: u64) -> &format::record::Entry {
     let mut entries = r.app.journal().entries().iter();
-    entries.find(|e| e.seq > seq && e.kind() == "edit").unwrap()
+    entries
+        .find(|e| e.seq > seq && e.kind() == EntryKind::Edit)
+        .unwrap()
 }
 
 /// Whether the journal holds an entry that adds an item of a text.
@@ -465,7 +468,10 @@ fn every_kind_of_action(app: &mut App) {
     hold(app, Quasi::LeapDown, "energia");
     release(app, Quasi::LeapDown);
     command(app, "delete word");
-    command(app, &format!("retract {}", last_of_kind(app, "link")));
+    command(
+        app,
+        &format!("retract {}", last_of_kind(app, EntryKind::Link)),
+    );
     tap(app, Key::Enter);
     hold(app, Quasi::Suppose, "the flight was in 1989");
     release(app, Quasi::Suppose);
@@ -477,7 +483,7 @@ fn every_kind_of_action(app: &mut App) {
 }
 
 /// The number of the last entry of a kind.
-fn last_of_kind(app: &App, kind: &str) -> u64 {
+fn last_of_kind(app: &App, kind: EntryKind) -> u64 {
     let mut entries = app.journal().entries().iter().rev();
     entries.find(|e| e.kind() == kind).unwrap().seq
 }
@@ -511,12 +517,19 @@ fn same_state(replayed: &App, app: &App, at: &str) {
 
 /// Every kind of entry the session used is in the journal.
 fn journal_holds_every_kind(app: &App) {
-    let kinds: std::collections::BTreeSet<&str> =
+    let kinds: std::collections::BTreeSet<EntryKind> =
         app.journal().entries().iter().map(|e| e.kind()).collect();
     for k in [
-        "edit", "link", "name", "undo", "redo", "retract", "suppose", "view",
+        EntryKind::Edit,
+        EntryKind::Link,
+        EntryKind::Name,
+        EntryKind::Undo,
+        EntryKind::Redo,
+        EntryKind::Retract,
+        EntryKind::Suppose,
+        EntryKind::View,
     ] {
-        assert!(kinds.contains(k), "no {k} entry");
+        assert!(kinds.contains(&k), "no {k} entry");
     }
 }
 
@@ -545,7 +558,7 @@ fn keystroke_to_visible_change_on_ten_thousand_items() {
 fn ten_thousand_items(dir: &std::path::Path) {
     let mut j = Journal::open(dir).unwrap();
     j.durable = false;
-    j.append("edit", json!({"op": "init"})).unwrap();
+    j.append(EntryKind::Edit, json!({"op": "init"})).unwrap();
     let mut last_top = None;
     for t in 0..100u64 {
         last_top = Some(section(&mut j, t, last_top));
@@ -578,7 +591,7 @@ fn items_under(j: &mut Journal, top: u64, texts: impl Iterator<Item = String>) {
 fn create(j: &mut Journal, under: u64, after: Option<u64>, text: String) -> u64 {
     let spans = [[0, 0, text.chars().count()]];
     let body = json!({"op":"create","under":under,"after":after,"add":text,"spans":spans});
-    j.append("edit", body).unwrap().seq
+    j.append(EntryKind::Edit, body).unwrap().seq
 }
 
 /// A memex opened on a directory of 10,000 items, and how long its replay
@@ -945,13 +958,13 @@ fn dated_items(dir: &std::path::Path) {
     for (n, item) in items.into_iter().enumerate() {
         let date = json!({"f": "date", "args": [{"a": format!("event_{n}")}, 1900 + n % 100]});
         let body = json!({"op": "facts", "item": item, "facts": [date]});
-        j.append("edit", body).unwrap();
+        j.append(EntryKind::Edit, body).unwrap();
     }
 }
 
 /// Whether an entry makes an item.
 fn is_create(e: &format::record::Entry) -> bool {
-    e.kind() == "edit" && e.body().is_some_and(|b| b["op"] == "create")
+    e.kind() == EntryKind::Edit && e.body().is_some_and(|b| b["op"] == "create")
 }
 
 /// Keys timed as the window handles them: handled, reasoned over if the

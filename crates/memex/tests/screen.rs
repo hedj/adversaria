@@ -4,6 +4,7 @@
 use memex::app::{Key, Quasi};
 use memex::present::Presentation;
 
+use format::record::EntryKind;
 use ratatui::style::Modifier;
 mod support;
 use support::{Room, replayed};
@@ -90,7 +91,7 @@ fn the_foot_asks_before_a_retraction_and_says_when_nothing_depends_on_it() {
     let mut room = Room::new("foot-retract");
     room.items(&["rent"]);
     room.command("fact box(rent, 3000)");
-    let entry = room.last("edit");
+    let entry = room.last(EntryKind::Edit);
     room.command(&format!("retract {entry}"));
     let asked = format!(" RETRACT  entry {entry}: stated facts in 1: “rent”");
     let said = "nothing depends on it · Enter retracts it · Esc keeps it";

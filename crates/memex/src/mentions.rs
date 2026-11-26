@@ -262,10 +262,11 @@ fn excerpt(text: &str) -> String {
 mod tests {
     use super::*;
     use crate::outline::TOP;
+    use format::record::EntryKind;
     use serde_json::{Value, json};
 
     /// The changes the test makes, each numbered by its entry.
-    fn changes() -> Vec<(&'static str, Value)> {
+    fn changes() -> Vec<(EntryKind, Value)> {
         let text = |item: u64, t: &str| {
             let n = t.chars().count();
             json!({"op": "text", "item": item, "add": t, "spans": [[0, 0, n]]})
@@ -275,20 +276,23 @@ mod tests {
             json!({"op": "create", "under": TOP, "add": t, "spans": [[0, 0, n]]})
         };
         vec![
-            ("edit", create("Buran flight")),
-            ("edit", create("Notes on the buran flight launch")),
-            ("edit", create("Energia")),
+            (EntryKind::Edit, create("Buran flight")),
+            (EntryKind::Edit, create("Notes on the buran flight launch")),
+            (EntryKind::Edit, create("Energia")),
             (
-                "edit",
+                EntryKind::Edit,
                 create("The Energia rocket carried Buran flight hardware"),
             ),
-            ("edit", text(3, "Energia rocket")),
-            ("edit", text(1, "Buran")),
-            ("edit", json!({"op": "delete", "item": 3})),
-            ("link", json!({"from": 4, "to": 1, "type": "cites"})),
-            ("edit", text(2, "Notes #buran")),
-            ("edit", create("A note on Buran")),
-            ("edit", json!({"op": "delete", "item": 10})),
+            (EntryKind::Edit, text(3, "Energia rocket")),
+            (EntryKind::Edit, text(1, "Buran")),
+            (EntryKind::Edit, json!({"op": "delete", "item": 3})),
+            (
+                EntryKind::Link,
+                json!({"from": 4, "to": 1, "type": "cites"}),
+            ),
+            (EntryKind::Edit, text(2, "Notes #buran")),
+            (EntryKind::Edit, create("A note on Buran")),
+            (EntryKind::Edit, json!({"op": "delete", "item": 10})),
         ]
     }
 
@@ -307,7 +311,7 @@ mod tests {
     impl Followed {
         /// Apply an entry, and check that the mentions kept are those
         /// worked out from nothing: how many there are.
-        fn step(&mut self, seq: u64, (kind, body): (&str, Value)) -> usize {
+        fn step(&mut self, seq: u64, (kind, body): (EntryKind, Value)) -> usize {
             assert!(self.o.apply(seq, kind, &body), "{seq}: {body}");
             self.kept.update(&self.o);
             let fresh = kinds(self.o.mention_suggestions());

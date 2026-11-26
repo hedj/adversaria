@@ -6,7 +6,7 @@ use crate::actions::worlds::with_left;
 use crate::app::{App, TakeBack};
 use crate::notebook::Notebook;
 use crate::reason::{Suggestion, show};
-use format::record::Entry;
+use format::record::{Entry, EntryKind};
 use format::terms::Term;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -157,7 +157,7 @@ impl App {
         for (seq, src, p) in claims {
             let f = encoded(&p)?;
             self.write_here(
-                "adopt",
+                EntryKind::Adopt,
                 json!({"claim": seq, "item": item, "source": src, "facts": [f]}),
             )?;
         }
@@ -231,12 +231,12 @@ fn check_adoptable(claims: &[(u64, String, Term)]) -> Result<(), String> {
 /// Whether an entry adopts a claim of an item.
 /// The claim an adopt entry adopted, if it is one.
 fn adopted_claim(e: &Entry) -> Option<u64> {
-    let body = e.body().filter(|_| e.kind() == "adopt")?;
+    let body = e.body().filter(|_| e.kind() == EntryKind::Adopt)?;
     body["claim"].as_u64()
 }
 
 pub(crate) fn adopts(e: &Entry, item: u64) -> bool {
-    e.kind() == "adopt" && e.body().and_then(|b| b["item"].as_u64()) == Some(item)
+    e.kind() == EntryKind::Adopt && e.body().and_then(|b| b["item"].as_u64()) == Some(item)
 }
 
 impl App {
@@ -279,7 +279,7 @@ impl App {
         let rule = format!("false :- {}", show(&a[2]));
         let fact = encoded(&node_def(self.next_entry(), defines))?;
         let body = json!({"suggestion": mark, "op": "constraint", "name": name, "rule": rule, "facts": [fact]});
-        self.write_here("adopt", body)?;
+        self.write_here(EntryKind::Adopt, body)?;
         Ok(())
     }
 
@@ -308,7 +308,7 @@ impl App {
             vec![Term::Int(from as i64), Term::Int(to as i64)],
         );
         let body = json!({"from": from, "to": to, "type": "cites", "facts": [encoded(&cites)?], "suggestion": mark});
-        self.write_here("link", body)?;
+        self.write_here(EntryKind::Link, body)?;
         Ok(())
     }
 
@@ -319,7 +319,10 @@ impl App {
     }
 
     fn write_adopted(&mut self, mark: Value, facts: Vec<Value>) -> Result<(), String> {
-        self.write_here("adopt", json!({"suggestion": mark, "facts": facts}))?;
+        self.write_here(
+            EntryKind::Adopt,
+            json!({"suggestion": mark, "facts": facts}),
+        )?;
         Ok(())
     }
 }

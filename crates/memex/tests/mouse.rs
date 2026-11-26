@@ -2,6 +2,7 @@
 //! (App::click). The window's end, a click turned into a cell, is checked
 //! by tests/memex_in_a_window.py.
 
+use format::record::EntryKind;
 use memex::app::{App, Event, Key, Mode, PaneKind, Quasi};
 use memex::present::Presentation;
 use memex::ui::Presentations;
@@ -51,7 +52,7 @@ fn last_kind(app: &App) -> String {
         .entries()
         .iter()
         .rev()
-        .find(|e| e.kind() != "view")
+        .find(|e| e.kind() != EntryKind::View)
         .unwrap()
         .kind()
         .to_string()

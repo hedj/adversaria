@@ -1,6 +1,7 @@
 //! Milestone 2's acceptance checks (docs/plan.md, Milestone 2), against a
 //! real SWI-Prolog child process.
 
+use format::record::EntryKind;
 use format::terms::Term;
 use memex::prolog::{End, Error, Prolog, Query};
 use protocol::Kind;
@@ -560,15 +561,19 @@ fn branching_journal_facts(dir: &std::path::Path) -> Vec<(u64, Term)> {
     let mut j = memex::journal::Journal::open(dir).unwrap();
     j.durable = false;
     let first = json!({"facts": [date_fact("buran", 1988), date_fact("energia", 1987)]});
-    j.append("edit", first).unwrap();
-    j.append("import", json!({"facts": [date_fact("talk", 1989)]}))
-        .unwrap();
+    j.append(EntryKind::Edit, first).unwrap();
+    j.append(
+        EntryKind::Import,
+        json!({"facts": [date_fact("talk", 1989)]}),
+    )
+    .unwrap();
     let elsewhere = json!({"facts": [date_fact("other_branch", 1)]});
-    j.append_after(Some(2), "suppose", elsewhere).unwrap();
-    j.append_after(Some(3), "retract", json!({"target": 3}))
+    j.append_after(Some(2), EntryKind::Suppose, elsewhere)
+        .unwrap();
+    j.append_after(Some(3), EntryKind::Retract, json!({"target": 3}))
         .unwrap();
     j.append(
-        "adopt",
+        EntryKind::Adopt,
         json!({"facts": [date_fact("buran_landing", 1988)]}),
     )
     .unwrap();

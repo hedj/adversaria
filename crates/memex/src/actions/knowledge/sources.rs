@@ -3,6 +3,7 @@
 
 use crate::app::App;
 use crate::outline::reads_as_number;
+use format::record::EntryKind;
 use serde_json::json;
 use std::path::Path;
 
@@ -55,7 +56,7 @@ impl App {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
         self.write_here(
-            "import",
+            EntryKind::Import,
             json!({"blob": hash, "format": "wikidata-subset", "source": "Wikidata", "file": name,
                    "prov": {"prov:wasDerivedFrom": "https://www.wikidata.org/", "license": "CC0-1.0", "prov:wasGeneratedBy": "crates/tools/src/bin/wikidata.rs"}}),
         )?;

@@ -4,6 +4,7 @@
 use crate::app::{App, Mode, TakeBack};
 use crate::notebook::Notebook;
 use crate::reason::{Contradicted, direct_conflicts};
+use format::record::EntryKind;
 use format::terms::{self, Term};
 use serde_json::{Value, json};
 
@@ -11,7 +12,11 @@ impl App {
     pub(crate) fn cmd_undo(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let t = self.undoable().ok_or("nothing to undo on this branch")?;
         let what = self.notebook.said_of(t);
-        self.write(self.notebook.parent_of(t), "undo", json!({"undoes": t}))?;
+        self.write(
+            self.notebook.parent_of(t),
+            EntryKind::Undo,
+            json!({"undoes": t}),
+        )?;
         self.read_changed();
         Ok(format!("undid entry {t}: {what}"))
     }
@@ -31,7 +36,7 @@ impl App {
         let Some(&t) = self.notebook.redo.last() else {
             return Err("nothing to redo".into());
         };
-        self.write(Some(t), "redo", json!({"redoes": t}))?;
+        self.write(Some(t), EntryKind::Redo, json!({"redoes": t}))?;
         self.read_changed();
         Ok(format!("redid entry {t}: {}", self.notebook.said_of(t)))
     }
@@ -137,7 +142,7 @@ impl App {
         self.stop_interrogating();
         self.flush_text();
         let body = self.world_body(op);
-        self.write(Some(parent), "view", body)?;
+        self.write(Some(parent), EntryKind::View, body)?;
         Ok(())
     }
 
@@ -173,7 +178,7 @@ impl App {
     ) -> Result<String, String> {
         let f = terms::encode(fact).map_err(|e| e.0)?;
         let body = crate::keys::supposed_body(name, english, Some(f));
-        let s = self.write_here("suppose", body)?;
+        let s = self.write_here(EntryKind::Suppose, body)?;
         let (set_aside, left) = self.set_aside_conflicts(s.seq)?;
         self.evaluate()?;
         let places: Vec<String> = set_aside.iter().map(|t| self.fact_place(*t)).collect();
@@ -242,7 +247,7 @@ impl App {
     pub(crate) fn retract_all(&mut self, targets: &[Contradicted]) -> Result<(), String> {
         for (t, constraints) in targets {
             let body = json!({"target": t, "constraints": constraints});
-            self.write_here("retract", body)?;
+            self.write_here(EntryKind::Retract, body)?;
         }
         Ok(())
     }

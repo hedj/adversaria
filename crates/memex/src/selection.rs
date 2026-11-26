@@ -9,6 +9,7 @@
 
 use crate::app::{Active, App, Key, Mode, Special};
 use crate::session::Selection;
+use format::record::EntryKind;
 use serde_json::json;
 use std::ops::Range;
 
@@ -165,7 +166,7 @@ impl App {
             .filter(|i| !items.contains(&outline.parent_or_top(**i)));
         let heads: Vec<u64> = heads.copied().collect();
         for item in &heads {
-            self.write_here("edit", json!({"op": "delete", "item": item}))?;
+            self.write_here(EntryKind::Edit, json!({"op": "delete", "item": item}))?;
         }
         let n = heads.len();
         Ok(format!(

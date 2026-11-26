@@ -1,6 +1,7 @@
 //! Milestone 4's acceptance checks (docs/plan.md, Milestone 4): claims,
 //! constraints and worlds, with a real SWI-Prolog behind each world.
 
+use format::record::EntryKind;
 use memex::app::{App, Event, Key, Mode, Quasi};
 use memex::config::Config;
 use ratatui::Terminal;
@@ -179,7 +180,7 @@ fn adopting_turns_a_disagreement_into_a_violation_and_back() {
     leap(&mut app, "talk notes");
     tap(&mut app, Key::F(3));
     let adopt = app.journal().entries().last().unwrap().clone();
-    assert_eq!(adopt.kind(), "adopt");
+    assert_eq!(adopt.kind(), EntryKind::Adopt);
     assert_eq!(
         adopt.body().unwrap()["source"],
         "my notes, conference talk",
@@ -326,7 +327,7 @@ fn scene_three_as_written() {
     // The actual world is untouched.
     assert_eq!(facts_at(&app, actual_head), actual_facts);
     // A world is a branch of the undo tree: the supposition hangs off the actual head.
-    let sup = first_of_kind(&app, "suppose").expect("a supposition");
+    let sup = first_of_kind(&app, EntryKind::Suppose).expect("a supposition");
     assert_eq!(sup.parent_seq(), Some(actual_head));
     // Close it: back to the actual world, the branch kept.
     command(&mut app, "close");
@@ -339,7 +340,7 @@ fn facts_at(app: &App, head: u64) -> Vec<(u64, format::terms::Term)> {
 }
 
 /// The first entry of a kind, if there is one.
-fn first_of_kind<'a>(app: &'a App, kind: &str) -> Option<&'a format::record::Entry> {
+fn first_of_kind(app: &App, kind: EntryKind) -> Option<&format::record::Entry> {
     app.journal().entries().iter().find(|e| e.kind() == kind)
 }
 
@@ -423,7 +424,7 @@ fn closing_returns_to_the_actual_world(app: &mut App, actual_facts: &[(u64, form
     s.assert("1 disagreement between sources");
     s.assert("The flight came a year after Energia's first launch.");
     assert_eq!(facts_at(app, app.notebook.tip), actual_facts);
-    let kept = first_of_kind(app, "suppose").is_some();
+    let kept = first_of_kind(app, EntryKind::Suppose).is_some();
     assert!(kept, "the supposition stays in the journal");
 }
 
@@ -649,7 +650,7 @@ fn ended_by(app: &App) -> &'static str {
 /// The body of the last view entry that ends a world.
 fn last_world_ending(app: &App) -> &serde_json::Value {
     let ends = |e: &format::record::Entry| {
-        e.kind() == "view" && e.body().is_some_and(|b| b["op"] == "world")
+        e.kind() == EntryKind::View && e.body().is_some_and(|b| b["op"] == "world")
     };
     let e = app.journal().entries().iter().rev().find(|e| ends(e));
     e.expect("a world-ending view entry").body().unwrap()
@@ -740,10 +741,10 @@ fn what_reasoning_records_of_its_own_is_not_reasoned_over_again() {
         "Nothing has more than 1 date.",
     ]);
     r.app.idle();
-    let observed = r.count("view");
+    let observed = r.count(EntryKind::View);
     assert!(r.app.reason_if_moved(), "the items moved the journal");
     assert!(
-        r.count("view") > observed,
+        r.count(EntryKind::View) > observed,
         "reasoning recorded what it showed"
     );
     assert!(!r.app.reason_if_moved());

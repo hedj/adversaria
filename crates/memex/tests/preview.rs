@@ -4,6 +4,7 @@
 
 mod support;
 
+use format::record::EntryKind;
 use support::Room;
 
 /// A room with a constraint of one date per event, and these items, each
@@ -37,7 +38,7 @@ fn a_claim_retracted_while_interrogated_leaves_none_to_adopt() {
     // Catches a preview kept for a claim no longer stated: interrogate
     // (an alias) holds the item, so its preview says why it is empty.
     let mut r = room("none", &["claim date(flight, 1989) from talk"]);
-    let claim = r.last("edit");
+    let claim = r.last(EntryKind::Edit);
     r.command("interrogate");
     preview(&mut r);
     r.command(&format!("retract {claim}"));
@@ -50,7 +51,7 @@ fn the_inspector_shows_no_preview_once_its_item_states_no_claim() {
     // Catches a claim's questions kept beside an item that no longer
     // states one, when nothing holds the item.
     let mut r = room("gone", &["claim date(flight, 1989) from talk"]);
-    let claim = r.last("edit");
+    let claim = r.last(EntryKind::Edit);
     preview(&mut r);
     r.command(&format!("retract {claim}"));
     r.tap(&[memex::app::Key::Enter]);

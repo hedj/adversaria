@@ -33,13 +33,69 @@ pub const VERSION: u64 = 1;
 /// journal of an earlier version when it opens one.
 pub const JOURNAL_VERSION: u64 = 3;
 
-/// The kinds of entry in versions 1 to 3 of the journal.
-/// `view` (a change to what is shown: cursor, folds, panes, a Leap) was added
-/// to version 1 before any journal was kept, for milestone 3.
-pub const KINDS: [&str; 11] = [
-    "edit", "link", "adopt", "retract", "suppose", "name", "import", "purge", "undo", "redo",
-    "view",
-];
+/// The kinds of entry in versions 1 to 3 of the journal, each read from
+/// its name once, as a line is parsed. `View` (a change to what is shown:
+/// cursor, folds, panes, a Leap) was added to version 1 before any journal
+/// was kept, for milestone 3.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum EntryKind {
+    Edit,
+    Link,
+    Adopt,
+    Retract,
+    Suppose,
+    Name,
+    Import,
+    Purge,
+    Undo,
+    Redo,
+    View,
+}
+
+impl EntryKind {
+    /// Every kind, in the order the format lists them.
+    pub const ALL: [EntryKind; 11] = [
+        EntryKind::Edit,
+        EntryKind::Link,
+        EntryKind::Adopt,
+        EntryKind::Retract,
+        EntryKind::Suppose,
+        EntryKind::Name,
+        EntryKind::Import,
+        EntryKind::Purge,
+        EntryKind::Undo,
+        EntryKind::Redo,
+        EntryKind::View,
+    ];
+
+    /// The kind's name, as a line spells it.
+    pub fn name(self) -> &'static str {
+        match self {
+            EntryKind::Edit => "edit",
+            EntryKind::Link => "link",
+            EntryKind::Adopt => "adopt",
+            EntryKind::Retract => "retract",
+            EntryKind::Suppose => "suppose",
+            EntryKind::Name => "name",
+            EntryKind::Import => "import",
+            EntryKind::Purge => "purge",
+            EntryKind::Undo => "undo",
+            EntryKind::Redo => "redo",
+            EntryKind::View => "view",
+        }
+    }
+
+    /// The kind a name spells, if it spells one.
+    pub fn named(name: &str) -> Option<EntryKind> {
+        EntryKind::ALL.into_iter().find(|k| k.name() == name)
+    }
+}
+
+impl std::fmt::Display for EntryKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
 
 /// The header line of each file: `{"format":"memex-journal","version":2}`.
 pub fn header(format: &str) -> String {
@@ -256,12 +312,9 @@ impl Fields {
         Ok(Content { kind, body, hash })
     }
 
-    fn kind(&self) -> Result<String, String> {
-        let kind = self.text("kind")?;
-        if !KINDS.contains(&kind) {
-            return Err(format!("unknown kind {}", self.0["kind"]));
-        }
-        Ok(kind.to_string())
+    fn kind(&self) -> Result<EntryKind, String> {
+        let kind = EntryKind::named(self.text("kind")?);
+        kind.ok_or_else(|| format!("unknown kind {}", self.0["kind"]))
     }
 
     /// The body: an object with the hash given, or none once purged.
@@ -410,7 +463,7 @@ impl EntryId {
 /// entry's hash checkable.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Content {
-    pub kind: String,
+    pub kind: EntryKind,
     /// None once purged.
     pub body: Option<Value>,
     pub hash: String,
@@ -419,9 +472,9 @@ pub struct Content {
 impl Content {
     /// The content of a new entry: of a known kind, with an object for
     /// its body, in Unicode NFC.
-    pub fn new(kind: &str, body: Value) -> Result<Content, String> {
-        check_new(kind, &body)?;
-        let (kind, hash) = (kind.to_string(), body_hash(&body)?);
+    pub fn new(kind: EntryKind, body: Value) -> Result<Content, String> {
+        check_new(&body)?;
+        let hash = body_hash(&body)?;
         let body = Some(body);
         Ok(Content { kind, body, hash })
     }
@@ -434,10 +487,7 @@ impl Content {
     }
 }
 
-fn check_new(kind: &str, body: &Value) -> Result<(), String> {
-    if !KINDS.contains(&kind) {
-        return Err(format!("unknown kind {kind:?}"));
-    }
+fn check_new(body: &Value) -> Result<(), String> {
     if !body.is_object() {
         return Err("a body must be a JSON object".into());
     }
@@ -471,7 +521,7 @@ impl Entry {
     pub fn new(
         seq: u64,
         parent: Option<(u64, &str)>,
-        kind: &str,
+        kind: EntryKind,
         body: Value,
     ) -> Result<Entry, String> {
         let content = Content::new(kind, body)?;
@@ -513,8 +563,8 @@ impl Entry {
         .hashed()
     }
 
-    pub fn kind(&self) -> &str {
-        &self.content.kind
+    pub fn kind(&self) -> EntryKind {
+        self.content.kind
     }
 
     /// The body: none once purged.
@@ -532,7 +582,7 @@ impl Entry {
         let prev = self.parent.as_ref().map(|p| &p.hash);
         let mut fields = json!({
             "seq": self.seq, "parent": self.parent_seq(), "prev": prev,
-            "kind": self.content.kind, "body": self.content.body,
+            "kind": self.content.kind.name(), "body": self.content.body,
             "body_hash": self.content.hash, "hash": self.hash,
         });
         fields.as_object_mut().unwrap().extend(self.later.clone());
@@ -715,16 +765,28 @@ mod tests {
     #[test]
     fn entry_round_trip() {
         // Catches an entry whose line does not parse back to itself.
-        let e = Entry::new(1, None, "edit", json!({"text": "Buran flew in 1988"})).unwrap();
+        let e = Entry::new(
+            1,
+            None,
+            EntryKind::Edit,
+            json!({"text": "Buran flew in 1988"}),
+        )
+        .unwrap();
         assert_eq!(Entry::parse(&e.to_line().unwrap()).unwrap(), e);
-        let f = Entry::new(2, Some((1, &e.hash)), "link", json!({"from": 1, "to": 2})).unwrap();
+        let f = Entry::new(
+            2,
+            Some((1, &e.hash)),
+            EntryKind::Link,
+            json!({"from": 1, "to": 2}),
+        )
+        .unwrap();
         assert_eq!(Entry::parse(&f.to_line().unwrap()).unwrap(), f);
     }
 
     #[test]
     fn purged_entry_keeps_its_hash() {
         // Catches a hash that covers the body itself, so a purge breaks the chain.
-        let e = Entry::new(1, None, "edit", json!({"text": "secret"})).unwrap();
+        let e = Entry::new(1, None, EntryKind::Edit, json!({"text": "secret"})).unwrap();
         let p = Entry::parse(&e.purged().to_line().unwrap()).unwrap();
         assert_eq!(p.hash, e.hash);
         assert_eq!(p.body(), None);
@@ -733,7 +795,13 @@ mod tests {
     #[test]
     fn hash_covers_every_field_but_body() {
         // Catches a field left out of the hash, so it could change unnoticed.
-        let e = Entry::new(3, Some((2, &"ab".repeat(32))), "edit", json!({"x": 1})).unwrap();
+        let e = Entry::new(
+            3,
+            Some((2, &"ab".repeat(32))),
+            EntryKind::Edit,
+            json!({"x": 1}),
+        )
+        .unwrap();
         let line = e.to_line().unwrap();
         for (from, to) in [
             ("\"seq\":3", "\"seq\":4"),
@@ -759,7 +827,7 @@ mod tests {
         // Catches the constructors, which return Result, panicking on a
         // value that has no canonical form (the code review, A4).
         let too_big = 1 << 53;
-        let e = Entry::new(too_big, None, "edit", json!({}));
+        let e = Entry::new(too_big, None, EntryKind::Edit, json!({}));
         assert!(e.unwrap_err().contains("exceeds"));
         let id = EntryId::new(too_big, &"0".repeat(64));
         let stamp = Stamp {
@@ -775,7 +843,7 @@ mod tests {
         // Catches a reader that rejects later fields, ignores them in the
         // hash, or drops them when it writes the entry again, as a purge
         // does: the line written would then fail its own hash.
-        let e = Entry::new(1, None, "edit", json!({})).unwrap();
+        let e = Entry::new(1, None, EntryKind::Edit, json!({})).unwrap();
         let mut m: Map<String, Value> = serde_json::from_str(&e.to_line().unwrap()).unwrap();
         m.insert("zzz".into(), json!("later"));
         let h = record_hash(&m, true).unwrap();
@@ -789,9 +857,31 @@ mod tests {
     }
 
     #[test]
+    fn each_kind_is_read_from_the_name_the_format_gives_it() {
+        // Catches a kind misnamed, which would write lines no reader of the
+        // format reads, or a name read as another kind.
+        let names = EntryKind::ALL.map(EntryKind::name);
+        let format = [
+            "edit", "link", "adopt", "retract", "suppose", "name", "import", "purge", "undo",
+            "redo", "view",
+        ];
+        assert_eq!(names, format);
+        for k in EntryKind::ALL {
+            assert_eq!(EntryKind::named(k.name()), Some(k));
+        }
+        assert_eq!(EntryKind::named("Edit"), None);
+    }
+
+    #[test]
     fn entry_refusals() {
         // Catches malformed entries accepted.
-        let e = Entry::new(2, Some((1, &"ab".repeat(32))), "edit", json!({"x": 1})).unwrap();
+        let e = Entry::new(
+            2,
+            Some((1, &"ab".repeat(32))),
+            EntryKind::Edit,
+            json!({"x": 1}),
+        )
+        .unwrap();
         let line = e.to_line().unwrap();
         let cases = [
             line.replace(":", ": "),                                      // not canonical
@@ -805,10 +895,9 @@ mod tests {
         for c in cases {
             assert!(Entry::parse(&c).is_err(), "accepted {c}");
         }
-        assert!(Entry::new(1, None, "frobnicate", json!({})).is_err());
-        assert!(Entry::new(1, None, "edit", json!([1])).is_err());
-        assert!(Entry::new(1, None, "edit", json!(null)).is_err());
-        assert!(Entry::new(1, Some((1, &"ab".repeat(32))), "edit", json!({})).is_err());
+        assert!(Entry::new(1, None, EntryKind::Edit, json!([1])).is_err());
+        assert!(Entry::new(1, None, EntryKind::Edit, json!(null)).is_err());
+        assert!(Entry::new(1, Some((1, &"ab".repeat(32))), EntryKind::Edit, json!({})).is_err());
     }
 
     #[test]
@@ -878,9 +967,22 @@ mod tests {
     }
 
     #[test]
+    fn a_line_of_an_unknown_kind_is_refused_though_its_hashes_are_right() {
+        // Catches a kind the format does not name read as one: no writer
+        // can make one now, so only a line can bring it.
+        let body = json!({});
+        let fields = json!({
+            "seq": 1, "parent": null, "prev": null, "kind": "frob",
+            "body": body, "body_hash": body_hash(&body).unwrap(),
+        });
+        let line = hashed_line(fields, true);
+        assert_eq!(Entry::parse(&line).unwrap_err(), "unknown kind \"frob\"");
+    }
+
+    #[test]
     fn non_nfc_line_refused() {
         // Catches a line accepted with text not in NFC, though its hashes are right.
-        assert!(Entry::new(1, None, "edit", json!({"t": "e\u{301}"})).is_err());
+        assert!(Entry::new(1, None, EntryKind::Edit, json!({"t": "e\u{301}"})).is_err());
         let body = json!({"t": "e\u{301}"});
         let mut m = Map::new();
         m.insert("seq".into(), json!(1));

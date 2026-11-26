@@ -35,7 +35,7 @@ fn sealed_lines(text: &str) -> [String; 3] {
     let sk = SigningKey::from_bytes(&[9u8; 32]);
     let key = Key::new(&sk.verifying_key().to_bytes()).unwrap();
     let body = json!({ "text": text, "version": JOURNAL_VERSION });
-    let e = Entry::new(1, None, "edit", body).unwrap();
+    let e = Entry::new(1, None, EntryKind::Edit, body).unwrap();
     let seal = seal_of(&sk, &key, &e);
     [key.to_line(), e.to_line(), seal.to_line()].map(Result::unwrap)
 }

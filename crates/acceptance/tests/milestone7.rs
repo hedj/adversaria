@@ -2,6 +2,7 @@
 //! measures report "runs on any valid journal, and its counts match a hand
 //! count on a small journal".
 
+use format::record::EntryKind;
 use memex::app::{App, Event, Key, Quasi};
 use std::path::{Path, PathBuf};
 
@@ -44,7 +45,7 @@ fn holds_text(e: &format::record::Entry, text: &str) -> bool {
 }
 
 /// The last entry of a kind.
-fn last_of_kind(app: &App, kind: &str) -> u64 {
+fn last_of_kind(app: &App, kind: EntryKind) -> u64 {
     let entries = app.journal().entries().iter().rev();
     entries.into_iter().find(|e| e.kind() == kind).unwrap().seq
 }
@@ -75,7 +76,7 @@ pub fn session(dir: &Path) -> App {
     command(&mut app, "pane suggestions");
     command(&mut app, "accept 1");
     command(&mut app, "dismiss 1");
-    let adopted = last_of_kind(&app, "adopt");
+    let adopted = last_of_kind(&app, EntryKind::Adopt);
     command(&mut app, &format!("retract {adopted}"));
     tap(&mut app, Key::Enter);
     app.evaluate().unwrap();
@@ -253,9 +254,18 @@ fn arbitrary_journal(dir: &Path) -> memex::journal::Journal {
 }
 
 /// Entry i's kind and body, from the generator's state x.
-fn arbitrary_entry(x: u64, i: u64) -> (&'static str, serde_json::Value) {
-    const KINDS: [&str; 10] = [
-        "edit", "link", "adopt", "retract", "suppose", "name", "import", "undo", "redo", "view",
+fn arbitrary_entry(x: u64, i: u64) -> (EntryKind, serde_json::Value) {
+    const KINDS: [EntryKind; 10] = [
+        EntryKind::Edit,
+        EntryKind::Link,
+        EntryKind::Adopt,
+        EntryKind::Retract,
+        EntryKind::Suppose,
+        EntryKind::Name,
+        EntryKind::Import,
+        EntryKind::Undo,
+        EntryKind::Redo,
+        EntryKind::View,
     ];
     let body = match (x >> 40) % 4 {
         0 => serde_json::json!({}),
@@ -268,8 +278,9 @@ fn arbitrary_entry(x: u64, i: u64) -> (&'static str, serde_json::Value) {
 
 /// The entries that are neither actions nor observations, counted by hand.
 fn unclassified_by_hand(entries: &[format::record::Entry]) -> usize {
-    let observed =
-        |e: &format::record::Entry| e.kind() == "view" && e.body().unwrap()["op"] == "observed";
+    let observed = |e: &format::record::Entry| {
+        e.kind() == EntryKind::View && e.body().unwrap()["op"] == "observed"
+    };
     let neither = entries
         .iter()
         .filter(|e| tools::measures::kind(e).is_none() && !observed(e));

@@ -4,6 +4,7 @@
 
 mod support;
 
+use format::record::EntryKind;
 use memex::app::{Key, Special};
 use memex::present::Presentation;
 use support::Room;
@@ -75,10 +76,10 @@ fn a_move_records_the_claim_item_the_inspector_shows() {
     r.tap(&[Key::Up]);
     r.app.flush();
     let claim = r.app.cursor();
-    assert_eq!(r.body_of(r.last("view"))["inspects"], claim);
+    assert_eq!(r.body_of(r.last(EntryKind::View))["inspects"], claim);
     r.tap(&[Key::Up]);
     r.app.flush();
-    assert!(r.body_of(r.last("view"))["inspects"].is_null());
+    assert!(r.body_of(r.last(EntryKind::View))["inspects"].is_null());
 }
 
 /// The screen at 100 by 24, drawn and told to the memex, as the window

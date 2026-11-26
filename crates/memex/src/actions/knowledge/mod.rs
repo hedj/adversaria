@@ -16,6 +16,7 @@ use crate::app::App;
 use crate::engine::{told, variables};
 use crate::prolog::Error;
 use crate::reason::{make_list, show};
+use format::record::EntryKind;
 use format::terms::{self, Term};
 use serde_json::{Value, json};
 
@@ -47,7 +48,7 @@ impl App {
         if let Some(src) = source {
             body["source"] = json!(src);
         }
-        self.write_here("edit", body)?;
+        self.write_here(EntryKind::Edit, body)?;
         Ok(())
     }
 
@@ -85,7 +86,7 @@ impl App {
     /// sequence number.
     fn write_node_def(&mut self, mut body: Value, defines: Term) -> Result<(), String> {
         body["facts"] = json!([self.node_def_fact(defines)?]);
-        self.write_here("edit", body)?;
+        self.write_here(EntryKind::Edit, body)?;
         Ok(())
     }
 

@@ -1,5 +1,6 @@
 //! The sealer program, run as a separate process beside the journal writer.
 
+use format::record::EntryKind;
 use memex::journal::Journal;
 use serde_json::json;
 use std::fs;
@@ -60,7 +61,7 @@ fn seals_once_there_are(n: usize, dir: &Path) -> usize {
 /// that it holds 200, pausing after every 20 so the sealer runs between.
 fn write_entries(j: &mut Journal) {
     for i in 0..199 {
-        j.append("edit", json!({"n": i})).unwrap();
+        j.append(EntryKind::Edit, json!({"n": i})).unwrap();
         if i % 20 == 0 {
             std::thread::sleep(Duration::from_millis(7));
         }
@@ -131,7 +132,7 @@ fn a_key_that_others_can_read_is_refused() {
     fs::set_permissions(&key, fs::Permissions::from_mode(0o640)).unwrap();
     Journal::open(&dir)
         .unwrap()
-        .append("edit", json!({}))
+        .append(EntryKind::Edit, json!({}))
         .unwrap();
     let out = sealer("run", &dir, &key, &["--once"]).output().unwrap();
     assert_eq!(out.status.code(), Some(1));

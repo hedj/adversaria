@@ -7,6 +7,7 @@ use crate::app::App;
 use crate::notebook::Notebook;
 use crate::outline::TOP;
 use crate::reason::{Contradicted, direct_conflicts};
+use format::record::EntryKind;
 use format::terms::Term;
 use serde_json::{Value, json};
 
@@ -70,7 +71,7 @@ impl App {
 
     fn keep_rule(&mut self, text: &str, head: Term, body: Term, target: u64) -> Result<(), String> {
         let entry = rule_entry(text, self.next_entry(), head, body, target)?;
-        self.write_here("edit", entry)?;
+        self.write_here(EntryKind::Edit, entry)?;
         Ok(())
     }
 
@@ -173,7 +174,7 @@ impl App {
         if shown.under {
             body["under"] = json!(true);
         }
-        self.write_here("edit", body)?;
+        self.write_here(EntryKind::Edit, body)?;
         Ok(())
     }
 }

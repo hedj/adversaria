@@ -2,6 +2,7 @@
 //! the adoptions back (docs/guide.md § 1.3, § 2.4).
 
 mod support;
+use format::record::EntryKind;
 use memex::app::{Key, Mode};
 use support::Room;
 
@@ -51,10 +52,10 @@ fn retract_alone_takes_back_each_adoption_in_turn() {
     // after the adoptions it offers the item's own last claim.
     let mut r = two_claims("unadopt-each");
     let claims = seqs(&r, |e| {
-        e.kind() == "edit" && e.body().is_some_and(|b| b["source"].is_string())
+        e.kind() == EntryKind::Edit && e.body().is_some_and(|b| b["source"].is_string())
     });
     r.command("adopt");
-    let adoptions = seqs(&r, |e| e.kind() == "adopt");
+    let adoptions = seqs(&r, |e| e.kind() == EntryKind::Adopt);
     assert_eq!(adoptions.len(), 2, "one adoption a claim");
     for a in adoptions.iter().rev() {
         let said = retract_last(&mut r);
@@ -130,7 +131,7 @@ fn retract_takes_an_entry_as_entry_n_and_as_before() {
     // number, or the old forms lost (docs/concepts.md, decision 7).
     let mut r = two_claims("retract-entry");
     r.command("adopt");
-    let adoption = r.last("adopt");
+    let adoption = r.last(EntryKind::Adopt);
     for line in [
         format!("retract entry {adoption}"),
         format!("retract {adoption}"),

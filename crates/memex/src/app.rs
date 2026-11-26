@@ -19,7 +19,7 @@ use crate::notebook::{CONTENT, Notebook};
 use crate::outline::{Outline, TOP, TextChange, span_json};
 use crate::reasoning::Reasoning;
 use crate::session::Session;
-use format::record::Entry;
+use format::record::{Entry, EntryKind};
 use format::terms::Term;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -753,7 +753,7 @@ impl App {
     pub(crate) fn write(
         &mut self,
         parent: Option<u64>,
-        kind: &str,
+        kind: EntryKind,
         body: Value,
     ) -> Result<Entry, String> {
         let parent = self.started_before(parent);
@@ -808,7 +808,7 @@ impl App {
         let tip = self.notebook.tip;
         let start = json!({"build": crate::notebook::BUILD, "by": "memex"});
         let body = self.view_body("start", start);
-        match self.write(Some(tip), "view", body) {
+        match self.write(Some(tip), EntryKind::View, body) {
             Ok(e) => Some(e.seq),
             Err(m) => {
                 self.session.message = m;
@@ -826,7 +826,7 @@ impl App {
         self.notebook.next_seq()
     }
 
-    pub(crate) fn write_here(&mut self, kind: &str, body: Value) -> Result<Entry, String> {
+    pub(crate) fn write_here(&mut self, kind: EntryKind, body: Value) -> Result<Entry, String> {
         self.write(Some(self.notebook.tip), kind, body)
     }
 
@@ -864,7 +864,7 @@ impl App {
         self.flush_text();
         if let Some(change) = self.session.view_change.take() {
             let body = self.view_body(change.op(), json!({}));
-            let written = self.write_here("view", body);
+            let written = self.write_here(EntryKind::View, body);
             self.session.report(written);
         }
     }
@@ -873,7 +873,7 @@ impl App {
         self.flush_text();
         self.session.view_change = None;
         let body = self.view_body(op, extra);
-        let written = self.write_here("view", body);
+        let written = self.write_here(EntryKind::View, body);
         self.session.report(written);
     }
 
@@ -908,7 +908,7 @@ impl App {
         };
         let spans = span_json(&outline.spans_after(item, &change));
         let body = json!({"op": "text", "item": item, "add": change.added, "spans": spans});
-        self.write_here("edit", body)?;
+        self.write_here(EntryKind::Edit, body)?;
         Ok(())
     }
 
@@ -1047,7 +1047,10 @@ mod tests {
         app.on_its_own(|app| app.flush_text());
         let last = app.journal().entries().last().unwrap().clone();
         let body = last.body().unwrap();
-        assert_eq!((last.kind(), body["op"].as_str()), ("edit", Some("text")));
+        assert_eq!(
+            (last.kind(), body["op"].as_str()),
+            (EntryKind::Edit, Some("text"))
+        );
         assert!(body.get("by").is_none(), "{body}");
         std::fs::remove_dir_all(&dir).unwrap();
     }

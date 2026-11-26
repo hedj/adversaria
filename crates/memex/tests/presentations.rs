@@ -4,6 +4,7 @@
 
 mod support;
 
+use format::record::EntryKind;
 use memex::present::Presentation;
 use support::Room;
 
@@ -453,7 +454,7 @@ fn a_right_click_on_a_finding_records_a_verdict_naming_it() {
         "verdict known entry {entry}"
     )));
     assert_eq!(r.app.session.message, "recorded: known already");
-    let v = r.body_of(r.last("view"));
+    let v = r.body_of(r.last(EntryKind::View));
     assert_eq!(
         (v["op"].as_str(), v["verdict"].as_str()),
         (Some("verdict"), Some("known"))
@@ -487,7 +488,7 @@ fn a_verdict_typed_takes_the_one_rule_marked_under_the_target() {
     assert!(said.starts_with("no rule's finding is marked"), "{said}");
     r.put_cursor(first);
     r.command("verdict error");
-    let v = r.body_of(r.last("view"));
+    let v = r.body_of(r.last(EntryKind::View));
     assert_eq!(v["op"], "verdict", "{}", r.app.session.message);
     assert_eq!(v["under"].as_u64(), Some(first));
     assert!(!v["findings"].as_array().unwrap().is_empty(), "{v}");
@@ -513,7 +514,7 @@ fn a_verdict_names_a_finding_once_though_it_is_of_both_kinds() {
     r.command("adopt");
     r.app.evaluate().unwrap();
     r.command("verdict known");
-    let v = r.body_of(r.last("view"));
+    let v = r.body_of(r.last(EntryKind::View));
     assert_eq!(v["op"], "verdict", "{}", r.app.session.message);
     let named = v["findings"].as_array().unwrap();
     assert_eq!(named.len(), 1, "{named:?}");

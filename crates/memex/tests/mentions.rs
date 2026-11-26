@@ -4,6 +4,7 @@
 
 mod support;
 
+use format::record::EntryKind;
 use support::Room;
 
 /// The suggestions shown, in words, once the world is evaluated.
@@ -46,7 +47,7 @@ fn accepting_a_mention_links_the_items_and_records_the_suggestion() {
     let order = r.outline().in_order();
     let (out, _) = r.outline().links_of(order[1]);
     assert_eq!(out.iter().map(|l| l.to).collect::<Vec<_>>(), [order[0]]);
-    let link = r.last("link");
+    let link = r.last(EntryKind::Link);
     assert!(
         r.body_of(link).get("suggestion").is_some(),
         "{}",

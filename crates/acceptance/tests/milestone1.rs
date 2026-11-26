@@ -1,7 +1,7 @@
 //! Milestone 1's acceptance checks (docs/plan.md, Milestone 1).
 
 use format::chain::{self, LineError};
-use format::record::{BLOBS, JOURNAL, KEYS, SEALS, sha256_hex};
+use format::record::{BLOBS, EntryKind, JOURNAL, KEYS, SEALS, sha256_hex};
 use format::terms::{self, Term};
 use memex::journal::Journal;
 use serde_json::{Value, json};
@@ -40,8 +40,16 @@ impl Rng {
     }
 }
 
-const KINDS: [&str; 9] = [
-    "edit", "link", "adopt", "retract", "suppose", "name", "import", "undo", "redo",
+const KINDS: [EntryKind; 9] = [
+    EntryKind::Edit,
+    EntryKind::Link,
+    EntryKind::Adopt,
+    EntryKind::Retract,
+    EntryKind::Suppose,
+    EntryKind::Name,
+    EntryKind::Import,
+    EntryKind::Undo,
+    EntryKind::Redo,
 ];
 
 fn body(rng: &mut Rng, n: u64) -> Value {
@@ -97,7 +105,7 @@ fn append_one(j: &mut Journal, rng: &mut Rng) {
 
 /// An entry to append after the last: its parent, usually the last but
 /// one time in ten any earlier entry, its kind, and its body.
-fn random_entry(rng: &mut Rng, last: u64) -> (u64, &'static str, Value) {
+fn random_entry(rng: &mut Rng, last: u64) -> (u64, EntryKind, Value) {
     let parent = if rng.below(10) == 0 {
         1 + rng.below(last)
     } else {
@@ -291,8 +299,10 @@ fn purged_entry_still_verifies() {
     let k = sealer::load_key(&key).unwrap();
     let clock = ticking_clock();
     let mut j = Journal::open(&dir).unwrap();
-    j.append("edit", json!({"text": "a private note"})).unwrap();
-    j.append("edit", json!({"text": "a public note"})).unwrap();
+    j.append(EntryKind::Edit, json!({"text": "a private note"}))
+        .unwrap();
+    j.append(EntryKind::Edit, json!({"text": "a public note"}))
+        .unwrap();
     assert_eq!(sealer::seal_pending(&dir, &k, &clock).unwrap(), 3);
     j.purge(2, "privacy").unwrap();
     assert_eq!(sealer::seal_pending(&dir, &k, &clock).unwrap(), 1);
@@ -373,13 +383,15 @@ fn a_seal_dated_before_the_seal_before_fails_naming_its_line() {
     sealer::init(&dir, &key).unwrap();
     let k = sealer::load_key(&key).unwrap();
     let mut j = Journal::open(&dir).unwrap();
-    j.append("edit", json!({ "text": "second" })).unwrap();
+    j.append(EntryKind::Edit, json!({ "text": "second" }))
+        .unwrap();
     assert_eq!(
         sealer::seal_pending(&dir, &k, &clock_of(&[10, 10])).unwrap(),
         2,
         "entry 1, which opening the journal wrote, and the second"
     );
-    j.append("edit", json!({ "text": "third" })).unwrap();
+    j.append(EntryKind::Edit, json!({ "text": "third" }))
+        .unwrap();
     let forger = Forger { dir: &dir, key: &k };
     forger.append("2026-11-06T21:20:09Z");
     let e = check::check_dir(&dir).unwrap_err();
@@ -411,7 +423,7 @@ fn the_sealer_stops_rather_than_seal_before_the_last_seal() {
     let k = sealer::load_key(&key).unwrap();
     let mut j = Journal::open(&dir).unwrap();
     for text in ["second", "third"] {
-        j.append("edit", json!({ "text": text })).unwrap();
+        j.append(EntryKind::Edit, json!({ "text": text })).unwrap();
     }
     let refused = sealer::seal_pending(&dir, &k, &clock_of(&[10, 11, 9])).unwrap_err();
     assert!(
@@ -423,7 +435,8 @@ fn the_sealer_stops_rather_than_seal_before_the_last_seal() {
         sealer::seal_pending(&dir, &k, &clock_of(&[10, 10, 10])).unwrap(),
         3
     );
-    j.append("edit", json!({ "text": "fourth" })).unwrap();
+    j.append(EntryKind::Edit, json!({ "text": "fourth" }))
+        .unwrap();
     assert!(sealer::seal_pending(&dir, &k, &clock_of(&[9])).is_err());
     assert_eq!(seal_count(&dir), 3);
     assert!(
@@ -640,7 +653,7 @@ fn unsealed_entry_is_named() {
     // Catches a journal accepted while an entry has no seal (no date, no signature).
     let (dir, key) = generate("unsealed", 4, 0);
     let mut j = Journal::open(&dir).unwrap();
-    j.append("edit", json!({"text": "late"})).unwrap();
+    j.append(EntryKind::Edit, json!({"text": "late"})).unwrap();
     let want = (JOURNAL.into(), 6, "entry 5 is not sealed".into());
     assert_eq!(first_error(&dir), want);
     cleanup(&dir, &key);

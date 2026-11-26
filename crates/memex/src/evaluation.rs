@@ -7,6 +7,7 @@ use crate::engine::{Engine, told};
 use crate::notebook::Notebook;
 use crate::reason::{Suggestion, WorldEval};
 use crate::world::World;
+use format::record::EntryKind;
 use format::terms::Term;
 use serde_json::{Value, json};
 use std::borrow::Cow;
@@ -134,7 +135,7 @@ impl App {
     /// Write a record of what reasoning found: a view entry, of no view.
     fn write_record(&mut self, op: &str, mut body: Value) {
         body["op"] = json!(op);
-        let written = self.write_here("view", body);
+        let written = self.write_here(EntryKind::View, body);
         self.session.report(written);
     }
 

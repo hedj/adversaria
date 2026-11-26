@@ -2,6 +2,7 @@
 //! memex as a user would and check the marks a view computes, then what it
 //! draws.
 
+use format::record::EntryKind;
 use format::terms::Term;
 use memex::app::{App, Event, Key, Quasi};
 use std::path::PathBuf;
@@ -679,14 +680,14 @@ fn chart(name: &str, cells: &[&str]) -> Room {
 #[test]
 fn the_view_panel_counts_a_layers_marks_by_its_entry() {
     let room = chart("panel-marks", &["box(rent, 1200)", "box(food, 400)"]);
-    let layer = room.last("edit");
+    let layer = room.last(EntryKind::Edit);
     assert!(room.shows(&format!("entry {layer} · 2 marks")));
 }
 
 #[test]
 fn the_view_panel_counts_one_mark_as_one() {
     let room = chart("panel-mark", &["box(rent, 1200)"]);
-    let layer = room.last("edit");
+    let layer = room.last(EntryKind::Edit);
     assert!(room.shows(&format!("entry {layer} · 1 mark ")));
 }
 
@@ -807,7 +808,7 @@ fn a_layer_whose_goal_raises_an_error_says_so() {
     let mut r = Room::new("layer-error");
     r.items(&["rent", "chart"]);
     r.command("layer bar(x(C), y(V)) where box(C, R), V is R + foo");
-    let layer = r.last("edit");
+    let layer = r.last(EntryKind::Edit);
     r.leap(Quasi::LeapUp, "rent");
     r.command("fact box(rent, 1200)");
     r.app.flush();

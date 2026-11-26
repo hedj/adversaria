@@ -4,6 +4,7 @@
 
 mod support;
 
+use format::record::EntryKind;
 use memex::app::Key;
 use support::Room;
 
@@ -162,11 +163,11 @@ fn a_character_repeated_at_the_end_is_added() {
 fn text_typed_and_erased_writes_no_edit() {
     let mut r = Room::new("unchanged");
     r.items(&["abc"]);
-    let edits = r.count("edit");
+    let edits = r.count(EntryKind::Edit);
     r.typ("x");
     r.tap(&[Key::Backspace]);
     r.app.flush();
-    assert_eq!(r.count("edit"), edits);
+    assert_eq!(r.count(EntryKind::Edit), edits);
 }
 
 #[test]
@@ -244,10 +245,11 @@ fn an_old_journals_word_scope_is_ignored() {
     let dir = std::env::temp_dir().join(format!("adversaria-old-scope-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let mut j = memex::journal::Journal::open(&dir).unwrap();
-    j.append("edit", serde_json::json!({"op": "init"})).unwrap();
-    let made = j.append("edit", serde_json::json!({"op": "create", "under": 0, "after": null, "add": "one two", "spans": [[0, 0, 7]]})).unwrap();
+    j.append(EntryKind::Edit, serde_json::json!({"op": "init"}))
+        .unwrap();
+    let made = j.append(EntryKind::Edit, serde_json::json!({"op": "create", "under": 0, "after": null, "add": "one two", "spans": [[0, 0, 7]]})).unwrap();
     let panes = serde_json::json!([{"kind": "outline", "cursor": made.seq}, {"kind": "links", "cursor": 0}]);
-    j.append("view", serde_json::json!({"op": "scope", "panes": panes, "focus": 0, "pos": 2, "folded": [], "scope": "word"})).unwrap();
+    j.append(EntryKind::View, serde_json::json!({"op": "scope", "panes": panes, "focus": 0, "pos": 2, "folded": [], "scope": "word"})).unwrap();
     drop(j);
     let mut app = memex::app::App::open(&dir).unwrap();
     assert_eq!(app.cursor(), made.seq);

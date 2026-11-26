@@ -14,6 +14,7 @@ use crate::ace::{Kind, Reading, Said, Unread, Words, words_of};
 use crate::app::App;
 use crate::engine::told;
 use crate::notebook::Notebook;
+use format::record::EntryKind;
 use format::terms::Term;
 use serde_json::json;
 use std::rc::Rc;
@@ -249,7 +250,7 @@ impl App {
             .filter(|s| !branch.retracts(*s))
             .collect();
         for target in live {
-            let written = self.write_here("retract", json!({ "target": target }));
+            let written = self.write_here(EntryKind::Retract, json!({ "target": target }));
             self.session.report(written);
         }
     }
@@ -258,7 +259,7 @@ impl App {
     /// and each statement as the reader wrote it in Prolog, by its kind.
     fn record_reading(&mut self, w: &Written, entries: Vec<u64>, said: &[Said]) {
         let body = w.record(entries, said_json(said));
-        let written = self.write_here("edit", body);
+        let written = self.write_here(EntryKind::Edit, body);
         self.session.report(written);
     }
 }
@@ -355,7 +356,7 @@ impl Notebook {
     fn edits_since(&self, first: u64) -> Vec<u64> {
         let entries = self.journal.entries();
         let written = entries.get(first as usize - 1..).unwrap_or(&[]);
-        let edits = written.iter().filter(|e| e.kind() == "edit");
+        let edits = written.iter().filter(|e| e.kind() == EntryKind::Edit);
         edits.map(|e| e.seq).collect()
     }
 
@@ -373,7 +374,10 @@ impl Notebook {
         let closes = |b: &&serde_json::Value| {
             ["read", "split", "make", "relink"].contains(&b["op"].as_str().unwrap_or(""))
         };
-        let b = e.body().filter(|_| e.kind() == "edit").filter(closes)?;
+        let b = e
+            .body()
+            .filter(|_| e.kind() == EntryKind::Edit)
+            .filter(closes)?;
         b["of"].as_u64()
     }
 }

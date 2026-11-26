@@ -3,6 +3,7 @@
 //! and tried in worlds. Nothing here is special to spreadsheets; the
 //! tutorial's second part follows these steps.
 
+use format::record::EntryKind;
 use memex::app::{App, Event, Key, Mode, Quasi};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -163,7 +164,7 @@ fn over_budget_on_the_food_box(app: &mut Room) {
     ] {
         shows(app, text);
     }
-    let food = app.notebook.outline.fact_item[&app.last("edit")];
+    let food = app.notebook.outline.fact_item[&app.last(EntryKind::Edit)];
     assert_eq!(app.text(food), "food", "the new value is on the Food box");
 }
 

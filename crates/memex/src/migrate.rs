@@ -10,7 +10,7 @@
 //! each suggestion made.
 
 use crate::inferred::Inferred;
-use format::record::Entry;
+use format::record::{Entry, EntryKind};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
@@ -79,7 +79,7 @@ impl Rewrite {
         if let Some(inferred) = &self.inferred {
             to_v2(e, inferred, &mut body);
         }
-        if e.kind() == "view" && body["op"] == "offer" {
+        if e.kind() == EntryKind::View && body["op"] == "offer" {
             body["drawn"] = json!(true);
         }
         (Some(&body) != e.body()).then_some(body)
@@ -91,7 +91,7 @@ impl Rewrite {
 /// on its own is marked so; a view that only records where writing left
 /// the cursor is `written`.
 fn to_v2(e: &Entry, inferred: &Inferred, body: &mut Value) {
-    if e.kind() == "view" && body["op"] == "start" {
+    if e.kind() == EntryKind::View && body["op"] == "start" {
         body.as_object_mut().map(|b| b.remove("schema"));
     }
     inferred.mark(e.seq, body);
@@ -102,16 +102,16 @@ mod tests {
     use super::*;
 
     /// Entries of these kinds and bodies, each after the one before.
-    fn chain(bodies: &[(&str, Value)]) -> Vec<Entry> {
+    fn chain(bodies: &[(EntryKind, Value)]) -> Vec<Entry> {
         let mut out: Vec<Entry> = Vec::new();
         for (kind, body) in bodies {
-            out.push(next(&out, kind, body.clone()));
+            out.push(next(&out, *kind, body.clone()));
         }
         out
     }
 
     /// The entry of a kind and a body after these, numbered after the last.
-    fn next(es: &[Entry], kind: &str, body: Value) -> Entry {
+    fn next(es: &[Entry], kind: EntryKind, body: Value) -> Entry {
         Entry::new(es.len() as u64 + 1, after(es), kind, body).unwrap()
     }
 
@@ -126,13 +126,13 @@ mod tests {
         // declares; a purged entry refused, or given a body; or another
         // entry's body changed.
         let mut old = chain(&[
-            ("edit", json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "init"})),
             (
-                "view",
+                EntryKind::View,
                 json!({"op": "start", "schema": 2, "build": "abc", "by": "memex"}),
             ),
             (
-                "edit",
+                EntryKind::Edit,
                 json!({"op": "create", "under": 0, "after": null, "add": "x", "spans": []}),
             ),
         ]);
@@ -152,7 +152,7 @@ mod tests {
     fn a_journal_whose_entry_1_is_purged_is_not_migrated() {
         // Catches a journal migrated with entry 1 purged: it could not name
         // its version, so version 3 would refuse it, and it would not open.
-        let mut old = chain(&[("edit", json!({"op": "init"}))]);
+        let mut old = chain(&[(EntryKind::Edit, json!({"op": "init"}))]);
         old[0] = old[0].purged();
         let refused = migrated(&old, 2).unwrap_err();
         assert!(refused.contains("entry 1 is purged"), "{refused}");

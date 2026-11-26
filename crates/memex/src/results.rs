@@ -6,6 +6,7 @@ use crate::app::App;
 use crate::docs::Block;
 use crate::notebook::read_input;
 use crate::outline::TOP;
+use format::record::EntryKind;
 use format::terms::Term;
 use serde_json::{Value, json};
 use std::path::Path;
@@ -127,7 +128,7 @@ impl App {
         let base = directory_of(file);
         let (source, prov) = (&results.source, &results.prov);
         let body = json!({"blob": blob, "format": "memex-results", "source": source, "base": base, "prov": prov});
-        Ok(self.write_here("import", body)?.seq)
+        Ok(self.write_here(EntryKind::Import, body)?.seq)
     }
 
     /// The heading the results go under, last in the outline.

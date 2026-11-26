@@ -3,6 +3,7 @@
 
 mod support;
 
+use format::record::EntryKind;
 use memex::app::Key;
 use support::Room;
 
@@ -146,9 +147,9 @@ fn a_dropped_branch_is_deleted_once() {
 fn a_revision_names_the_import_it_revises() {
     let mut r = Room::new("rev-revises");
     import(&mut r, "d.md", "# A\n");
-    let first = r.last("import");
+    let first = r.last(EntryKind::Import);
     import(&mut r, "d.md", "# B\n");
-    assert_eq!(r.body_of(r.last("import"))["revises"], first);
+    assert_eq!(r.body_of(r.last(EntryKind::Import))["revises"], first);
 }
 
 #[test]
@@ -268,7 +269,7 @@ fn a_revision_is_shown_change_by_change() {
     revised(&mut r, "# T\n\nOld text.\n", "# T\n\nNew text.\n");
     let change = format!(
         "change {}  changed 1.1: “Old text.” → “New text.”",
-        r.last("edit")
+        r.last(EntryKind::Edit)
     );
     assert!(
         shows(&r, "WORLD · REVISION OF D.MD") && shows(&r, &change),
@@ -288,7 +289,7 @@ fn a_revision_without_changes_says_so() {
 fn a_retracted_change_is_shown_retracted() {
     let mut r = Room::new("rev-screen-retracted");
     revised(&mut r, "# T\n\nOld text.\n", "# T\n\nNew text.\n");
-    let change = r.last("edit");
+    let change = r.last(EntryKind::Edit);
     r.command(&format!("retract entry {change}"));
     r.tap(&[memex::app::Key::Enter]);
     let line = format!("change {change}  changed 1.1: “Old text.” → “New text.”  (retracted)");

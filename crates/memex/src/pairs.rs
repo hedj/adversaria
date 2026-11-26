@@ -6,7 +6,7 @@
 //! English, word for word but for a name or a number or two, is offered
 //! the earlier ACE with the new words swapped in.
 
-use format::record::Entry;
+use format::record::{Entry, EntryKind};
 
 /// Free English, and the sentence of ACE it was mended into.
 #[derive(Debug, Clone, PartialEq)]
@@ -28,7 +28,7 @@ pub fn pairs_of(entries: &[Entry]) -> Vec<Pair> {
 
 /// The pair a supposition entry holds, if it holds one.
 fn pair_of(e: &Entry) -> Option<Pair> {
-    let body = e.body().filter(|_| e.kind() == "suppose")?;
+    let body = e.body().filter(|_| e.kind() == EntryKind::Suppose)?;
     let english = body.get("english")?.as_str()?.to_string();
     let ace = body["name"].as_str()?.to_string();
     Some(Pair { english, ace })
@@ -211,7 +211,13 @@ mod tests {
     /// A supposition entry of a body after these.
     fn next_entry(es: &[Entry], body: &serde_json::Value) -> Entry {
         let parent = es.last().map(|e| (e.seq, e.hash.as_str()));
-        Entry::new(es.len() as u64 + 1, parent, "suppose", body.clone()).unwrap()
+        Entry::new(
+            es.len() as u64 + 1,
+            parent,
+            EntryKind::Suppose,
+            body.clone(),
+        )
+        .unwrap()
     }
 
     #[test]

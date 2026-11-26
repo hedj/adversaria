@@ -5,14 +5,15 @@
 
 mod support;
 
+use format::record::EntryKind;
 use memex::app::{App, Key};
 use support::{Room, replayed};
 
 /// The start entries of a journal, by their bodies.
 fn starts(app: &App) -> Vec<serde_json::Value> {
     let entries = app.journal().entries().iter();
-    let start =
-        entries.filter(|e| e.kind() == "view" && e.body().is_some_and(|b| b["op"] == "start"));
+    let start = entries
+        .filter(|e| e.kind() == EntryKind::View && e.body().is_some_and(|b| b["op"] == "start"));
     start.filter_map(|e| e.body().cloned()).collect()
 }
 
@@ -33,7 +34,7 @@ fn the_first_entry_a_session_writes_follows_its_start() {
     let first = entries[1].body().unwrap();
     assert_eq!(
         (entries[1].kind(), &first["op"]),
-        ("view", &serde_json::json!("start"))
+        (EntryKind::View, &serde_json::json!("start"))
     );
     assert_eq!(first.get("schema"), None, "the header declares the version");
     let build = first["build"].as_str().unwrap();
@@ -151,7 +152,7 @@ fn a_name_s_relinking_is_the_memex_s_and_the_name_the_user_s() {
 /// The ops of the view entries written since entry `from`, in order.
 fn views_since(r: &Room, from: usize) -> Vec<String> {
     let after = &r.app.journal().entries()[from..];
-    let views = after.iter().filter(|e| e.kind() == "view");
+    let views = after.iter().filter(|e| e.kind() == EntryKind::View);
     views
         .map(|e| e.body().unwrap()["op"].as_str().unwrap_or("").to_string())
         .collect()

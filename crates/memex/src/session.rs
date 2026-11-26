@@ -7,7 +7,7 @@ use crate::found::Found;
 use crate::notebook::strings;
 use crate::plumb::Offer;
 use crate::present::Presentation;
-use format::record::Entry;
+use format::record::{Entry, EntryKind};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -467,7 +467,7 @@ impl Session {
     /// Apply a view entry: what it shows, and what it records of a leap or
     /// of what reasoning showed.
     pub(crate) fn apply(&mut self, e: &Entry) {
-        let Some(b) = e.body().filter(|_| e.kind() == "view") else {
+        let Some(b) = e.body().filter(|_| e.kind() == EntryKind::View) else {
             return;
         };
         if !is_record(b) {

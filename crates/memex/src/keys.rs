@@ -8,6 +8,7 @@ use crate::outline::TOP;
 use crate::reason;
 use crate::session::Answer;
 use crate::session::ViewChange;
+use format::record::EntryKind;
 use format::terms::Term;
 use serde_json::json;
 
@@ -219,7 +220,7 @@ impl App {
             (self.notebook.outline.parent(id).unwrap_or(TOP), Some(id))
         };
         let e = self.write_here(
-            "edit",
+            EntryKind::Edit,
             json!({"op": "create", "under": under, "after": after, "add": "", "spans": []}),
         )?;
         self.set_cursor(e.seq);
@@ -321,7 +322,7 @@ impl App {
 
     fn suppose_named(&mut self, text: &str, english: Option<String>) {
         self.session.message = self.nothing_to_suppose(text);
-        let written = self.write_here("suppose", supposed_body(text, english, None));
+        let written = self.write_here(EntryKind::Suppose, supposed_body(text, english, None));
         self.session.report(written);
     }
 
@@ -453,7 +454,7 @@ impl App {
         let what = self.notebook.said_of(target);
         let said = match (ev.press, ev.key) {
             (Press::Down, Key::Enter) => {
-                match self.write_here("retract", json!({"target": target})) {
+                match self.write_here(EntryKind::Retract, json!({"target": target})) {
                     Ok(e) => asked.done(target, &what, e.seq),
                     Err(m) => m,
                 }

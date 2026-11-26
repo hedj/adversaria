@@ -1,6 +1,7 @@
 //! Milestone 6's acceptance checks (docs/plan.md, Milestone 6): documents
 //! and results in and out.
 
+use format::record::EntryKind;
 use memex::app::{App, Event, Key, Quasi};
 use memex::docs::{self, Block};
 use std::path::{Path, PathBuf};
@@ -115,7 +116,7 @@ fn the_losses_are_listed_and_recorded(app: &App) {
     assert!(said.contains("losses: footnote 1, image 1"), "{said}");
     let mut entries = app.journal().entries().iter();
     let imp = entries
-        .find(|e| e.kind() == "import")
+        .find(|e| e.kind() == EntryKind::Import)
         .unwrap()
         .body()
         .unwrap();
@@ -378,7 +379,7 @@ fn last_blob(app: &App) -> String {
         .journal()
         .entries()
         .iter()
-        .filter(|e| e.kind() == "import");
+        .filter(|e| e.kind() == EntryKind::Import);
     imports.next_back().unwrap().body().unwrap()["blob"]
         .as_str()
         .unwrap()

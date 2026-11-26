@@ -15,7 +15,7 @@
 //!   item just typed into, before the pause, is taken for writing too;
 //!   a view after Backspace erased an empty item stays a move.
 
-use format::record::Entry;
+use format::record::{Entry, EntryKind};
 use serde_json::{Value, json};
 use std::collections::HashSet;
 
@@ -78,8 +78,9 @@ impl Runs {
             return false;
         };
         match (e.kind(), b["op"].as_str().unwrap_or("")) {
-            ("edit", "read" | "relink") | ("view", "observed" | "offer" | "start") => true,
-            ("retract", _) => self.in_run(e) && self.run_ends_in_record(&es[i + 1..]),
+            (EntryKind::Edit, "read" | "relink")
+            | (EntryKind::View, "observed" | "offer" | "start") => true,
+            (EntryKind::Retract, _) => self.in_run(e) && self.run_ends_in_record(&es[i + 1..]),
             _ => self.stated.contains(&e.seq) || self.inline.contains(&e.seq),
         }
     }
@@ -90,7 +91,7 @@ impl Runs {
         let target = e.body().and_then(|b| b["target"].as_u64());
         let of_run = |s: u64| self.stated.contains(&s) || self.inline.contains(&s);
         match e.kind() {
-            "retract" => target.is_some_and(of_run),
+            EntryKind::Retract => target.is_some_and(of_run),
             _ => of_run(e.seq),
         }
     }
@@ -100,21 +101,21 @@ impl Runs {
     fn run_ends_in_record(&self, after: &[Entry]) -> bool {
         let next = after.iter().find(|e| !self.in_run(e));
         let closes = |b: &Value| b["op"] == "read" || b["op"] == "relink";
-        next.is_some_and(|e| e.kind() == "edit" && e.body().is_some_and(closes))
+        next.is_some_and(|e| e.kind() == EntryKind::Edit && e.body().is_some_and(closes))
     }
 }
 
 /// Whether a view only records where an edit just before it left the
 /// cursor: on the item it made, or in the item it typed into.
 fn left(edit: &Entry, view: &Entry) -> bool {
-    let after = edit.kind() == "edit" && view.parent_seq() == Some(edit.seq);
+    let after = edit.kind() == EntryKind::Edit && view.parent_seq() == Some(edit.seq);
     after && is_move(view) && stays(edit, view)
 }
 
 /// Whether an entry is a view of op `move`.
 fn is_move(view: &Entry) -> bool {
     let moved = |v: &Value| v["op"] == "move";
-    view.kind() == "view" && view.body().is_some_and(moved)
+    view.kind() == EntryKind::View && view.body().is_some_and(moved)
 }
 
 /// Whether a view's cursor is where an edit put it: on the item it made,
@@ -141,7 +142,7 @@ fn cursor(v: &Value) -> Option<u64> {
 fn stated(es: &[Entry]) -> HashSet<u64> {
     let reads = es
         .iter()
-        .filter(|e| e.kind() == "edit")
+        .filter(|e| e.kind() == EntryKind::Edit)
         .filter_map(|e| e.body());
     let reads = reads.filter(|b| b["op"] == "read");
     reads.flat_map(|b| numbers(&b["entries"])).collect()
@@ -150,7 +151,10 @@ fn stated(es: &[Entry]) -> HashSet<u64> {
 /// The numbers of the inline links: those a `[[link]]` in a text wrote.
 fn inline_links(es: &[Entry]) -> HashSet<u64> {
     let inline = |e: &&Entry| e.body().is_some_and(|b| b["inline"] == true);
-    let links = es.iter().filter(|e| e.kind() == "link").filter(inline);
+    let links = es
+        .iter()
+        .filter(|e| e.kind() == EntryKind::Link)
+        .filter(inline);
     links.map(|e| e.seq).collect()
 }
 
@@ -158,7 +162,7 @@ fn inline_links(es: &[Entry]) -> HashSet<u64> {
 /// record names to the record itself.
 fn made_by_make(es: &[Entry]) -> HashSet<u64> {
     let made = |e: &Entry| e.body().filter(|b| b["op"] == "make")?["of"].as_u64();
-    let edits = es.iter().filter(|e| e.kind() == "edit");
+    let edits = es.iter().filter(|e| e.kind() == EntryKind::Edit);
     edits
         .filter_map(|e| Some(made(e)?..=e.seq))
         .flatten()
@@ -176,16 +180,16 @@ mod tests {
     use super::*;
 
     /// Entries of these kinds and bodies, each after the one before.
-    fn chain(bodies: &[(&str, Value)]) -> Vec<Entry> {
+    fn chain(bodies: &[(EntryKind, Value)]) -> Vec<Entry> {
         let mut out: Vec<Entry> = Vec::new();
         for (kind, body) in bodies {
-            out.push(next(&out, kind, body.clone()));
+            out.push(next(&out, *kind, body.clone()));
         }
         out
     }
 
     /// The entry of a kind and a body after these, numbered after the last.
-    fn next(es: &[Entry], kind: &str, body: Value) -> Entry {
+    fn next(es: &[Entry], kind: EntryKind, body: Value) -> Entry {
         Entry::new(es.len() as u64 + 1, after(es), kind, body).unwrap()
     }
 
@@ -195,9 +199,12 @@ mod tests {
     }
 
     /// A view of op, its cursor on an item.
-    fn view(op: &str, at: u64) -> (&'static str, Value) {
+    fn view(op: &str, at: u64) -> (EntryKind, Value) {
         let panes = json!([{"kind": "outline", "cursor": at}]);
-        ("view", json!({"op": op, "focus": 0, "panes": panes}))
+        (
+            EntryKind::View,
+            json!({"op": op, "focus": 0, "panes": panes}),
+        )
     }
 
     /// Numbers, sorted.
@@ -213,23 +220,35 @@ mod tests {
         // link left as the user's; or the user's `make`, or a retraction
         // Suppose wrote, taken for the memex's.
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
-            ("edit", json!({"op": "text", "item": 9})),
-            ("link", json!({"from": 9, "to": 7, "inline": true})),
-            ("edit", json!({"op": "facts", "item": 9})),
-            ("edit", json!({"op": "read", "item": 9, "entries": [4]})),
-            ("edit", json!({"op": "text", "item": 9})),
-            ("retract", json!({"target": 4})),
-            ("edit", json!({"op": "facts", "item": 9})),
-            ("edit", json!({"op": "read", "item": 9, "entries": [8]})),
-            ("retract", json!({"target": 8, "constraints": [3]})),
+            (EntryKind::Edit, json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "text", "item": 9})),
+            (EntryKind::Link, json!({"from": 9, "to": 7, "inline": true})),
+            (EntryKind::Edit, json!({"op": "facts", "item": 9})),
+            (
+                EntryKind::Edit,
+                json!({"op": "read", "item": 9, "entries": [4]}),
+            ),
+            (EntryKind::Edit, json!({"op": "text", "item": 9})),
+            (EntryKind::Retract, json!({"target": 4})),
+            (EntryKind::Edit, json!({"op": "facts", "item": 9})),
+            (
+                EntryKind::Edit,
+                json!({"op": "read", "item": 9, "entries": [8]}),
+            ),
+            (EntryKind::Retract, json!({"target": 8, "constraints": [3]})),
             view("observed", 9),
-            ("edit", json!({"op": "create", "under": 0})),
-            ("link", json!({"from": 9, "to": 12, "inline": true})),
-            ("edit", json!({"op": "make", "item": 9, "of": 12})),
-            ("name", json!({"name": "n", "item": 7})),
-            ("link", json!({"from": 9, "to": 7, "inline": true})),
-            ("edit", json!({"op": "relink", "name": "n", "of": 15})),
+            (EntryKind::Edit, json!({"op": "create", "under": 0})),
+            (
+                EntryKind::Link,
+                json!({"from": 9, "to": 12, "inline": true}),
+            ),
+            (EntryKind::Edit, json!({"op": "make", "item": 9, "of": 12})),
+            (EntryKind::Name, json!({"name": "n", "item": 7})),
+            (EntryKind::Link, json!({"from": 9, "to": 7, "inline": true})),
+            (
+                EntryKind::Edit,
+                json!({"op": "relink", "name": "n", "of": 15}),
+            ),
         ]);
         let own = Runs::of(&es).own(&es);
         assert_eq!(sorted(&own), [3, 4, 5, 7, 8, 9, 11, 16, 17]);
@@ -240,14 +259,14 @@ mod tests {
         // Catches every move after an edit taken for writing, though the
         // user moved the cursor elsewhere, or a move after a deletion.
         let es = chain(&[
-            ("edit", json!({"op": "init"})),
-            ("edit", json!({"op": "create", "under": 0})),
+            (EntryKind::Edit, json!({"op": "init"})),
+            (EntryKind::Edit, json!({"op": "create", "under": 0})),
             view("move", 2),
-            ("edit", json!({"op": "text", "item": 2})),
+            (EntryKind::Edit, json!({"op": "text", "item": 2})),
             view("move", 2),
-            ("edit", json!({"op": "text", "item": 2})),
+            (EntryKind::Edit, json!({"op": "text", "item": 2})),
             view("move", 9),
-            ("edit", json!({"op": "delete", "item": 2})),
+            (EntryKind::Edit, json!({"op": "delete", "item": 2})),
             view("move", 9),
         ]);
         assert_eq!(sorted(&Inferred::of(&es).written), [3, 5]);

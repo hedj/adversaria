@@ -3,7 +3,7 @@
 
 use format::chain::{self, LineError};
 use format::layout;
-use format::record::{self, Entry, JOURNAL, JOURNAL_FORMAT, JOURNAL_VERSION};
+use format::record::{self, Entry, EntryKind, JOURNAL, JOURNAL_FORMAT, JOURNAL_VERSION};
 use serde_json::{Value, json};
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
@@ -89,7 +89,10 @@ impl Journal {
         let migrated = old.map(|from| journal.migrate(from));
         let notes = [set_aside.transpose()?, migrated.transpose()?];
         if journal.entries.is_empty() {
-            journal.append("edit", json!({"op": "init", "version": JOURNAL_VERSION}))?;
+            journal.append(
+                EntryKind::Edit,
+                json!({"op": "init", "version": JOURNAL_VERSION}),
+            )?;
         }
         let said: Vec<String> = notes.into_iter().flatten().collect();
         Ok((journal, (!said.is_empty()).then(|| said.join("; "))))
@@ -154,7 +157,7 @@ impl Journal {
     }
 
     /// Append an entry after the last one.
-    pub fn append(&mut self, kind: &str, body: Value) -> Result<Entry, Error> {
+    pub fn append(&mut self, kind: EntryKind, body: Value) -> Result<Entry, Error> {
         let parent = self.last().map(|e| e.seq);
         self.append_after(parent, kind, body)
     }
@@ -164,16 +167,16 @@ impl Journal {
     pub fn append_after(
         &mut self,
         parent: Option<u64>,
-        kind: &str,
+        kind: EntryKind,
         body: Value,
     ) -> Result<Entry, Error> {
-        if kind == "purge" {
+        if kind == EntryKind::Purge {
             return Err(Error::Refused("write a purge with Journal::purge".into()));
         }
         self.write(parent, kind, body)
     }
 
-    fn write(&mut self, parent: Option<u64>, kind: &str, body: Value) -> Result<Entry, Error> {
+    fn write(&mut self, parent: Option<u64>, kind: EntryKind, body: Value) -> Result<Entry, Error> {
         self.whole()?;
         let e = self.next_entry(parent, kind, body)?;
         self.append_line(&e)
@@ -193,7 +196,12 @@ impl Journal {
     }
 
     /// The entry to write next, after `parent`.
-    fn next_entry(&self, parent: Option<u64>, kind: &str, body: Value) -> Result<Entry, Error> {
+    fn next_entry(
+        &self,
+        parent: Option<u64>,
+        kind: EntryKind,
+        body: Value,
+    ) -> Result<Entry, Error> {
         let parent = self.parent(parent)?;
         // The format keeps text in Unicode NFC, so the writer normalises it.
         let body = record::nfc(&body)?;
@@ -248,7 +256,7 @@ impl Journal {
             return Err(Error::Refused(said.into()));
         }
         let t = self.entry(target)?;
-        if t.kind() == "purge" {
+        if t.kind() == EntryKind::Purge {
             return Err(Error::Refused(format!(
                 "entry {target} is a purge, and cannot be purged"
             )));
@@ -257,7 +265,11 @@ impl Journal {
             return Err(Error::Refused(format!("entry {target} is already purged")));
         }
         let parent = self.last().map(|e| e.seq);
-        let p = self.next_entry(parent, "purge", json!({"target": target, "reason": reason}))?;
+        let p = self.next_entry(
+            parent,
+            EntryKind::Purge,
+            json!({"target": target, "reason": reason}),
+        )?;
         let mut entries = self.entries.clone();
         entries[target as usize - 1] = t.purged();
         entries.push(p.clone());
@@ -406,20 +418,23 @@ mod tests {
         // file gone, so nothing was written; a full disk cannot be made.
         let d = temp_dir("write-failed");
         let mut j = Journal::open(&d).unwrap();
-        j.append("edit", json!({"t": "a"})).unwrap();
+        j.append(EntryKind::Edit, json!({"t": "a"})).unwrap();
         let (file, away) = (d.join(JOURNAL), d.join("away"));
         fs::rename(&file, &away).unwrap();
         fs::create_dir(&file).unwrap();
-        assert!(j.append("edit", json!({"t": "b"})).is_err());
+        assert!(j.append(EntryKind::Edit, json!({"t": "b"})).is_err());
         fs::remove_dir(&file).unwrap();
         fs::rename(&away, &file).unwrap();
-        let refused = j.append("edit", json!({"t": "c"})).unwrap_err().to_string();
+        let refused = j
+            .append(EntryKind::Edit, json!({"t": "c"}))
+            .unwrap_err()
+            .to_string();
         assert!(refused.contains("reopen"), "{refused}");
         drop(j);
         assert_eq!(
             Journal::open(&d)
                 .unwrap()
-                .append("edit", json!({}))
+                .append(EntryKind::Edit, json!({}))
                 .unwrap()
                 .seq,
             3
@@ -432,9 +447,9 @@ mod tests {
         // Catches a branch written with the wrong parent.
         let d = temp_dir("branch");
         let mut j = Journal::open(&d).unwrap();
-        j.append("edit", json!({"t": "a"})).unwrap();
-        j.append("edit", json!({"t": "b"})).unwrap();
-        let c = j.append_after(Some(2), "undo", json!({})).unwrap();
+        j.append(EntryKind::Edit, json!({"t": "a"})).unwrap();
+        j.append(EntryKind::Edit, json!({"t": "b"})).unwrap();
+        let c = j.append_after(Some(2), EntryKind::Undo, json!({})).unwrap();
         assert_eq!((c.seq, c.parent_seq()), (4, Some(2)));
         fs::remove_dir_all(&d).unwrap();
     }
@@ -444,9 +459,9 @@ mod tests {
         // Catches entries lost on reopening, a branch among them.
         let d = temp_dir("reopen");
         let mut j = Journal::open(&d).unwrap();
-        j.append("edit", json!({"t": "a"})).unwrap();
-        j.append("edit", json!({"t": "b"})).unwrap();
-        j.append_after(Some(1), "undo", json!({})).unwrap();
+        j.append(EntryKind::Edit, json!({"t": "a"})).unwrap();
+        j.append(EntryKind::Edit, json!({"t": "b"})).unwrap();
+        j.append_after(Some(1), EntryKind::Undo, json!({})).unwrap();
         let written = j.entries().to_vec();
         drop(j);
         let reopened = Journal::open(&d).unwrap();
@@ -461,7 +476,7 @@ mod tests {
         let mut j = Journal::open(&d).unwrap();
         let e = j
             .append(
-                "edit",
+                EntryKind::Edit,
                 json!({"t": "Bure\u{301}", "e\u{301}": ["a\u{30a}"]}),
             )
             .unwrap();
@@ -472,7 +487,7 @@ mod tests {
         let text = fs::read_to_string(d.join(JOURNAL)).unwrap();
         assert!(!text.contains('\u{301}') && !text.contains('\u{30a}'));
         assert!(
-            j.append("edit", json!({"\u{e9}": 1, "e\u{301}": 2}))
+            j.append(EntryKind::Edit, json!({"\u{e9}": 1, "e\u{301}": 2}))
                 .is_err()
         );
         let p = j.purge(2, "Bure\u{301}").unwrap();
@@ -485,16 +500,16 @@ mod tests {
         // Catches a second root, a missing parent or a hand-written purge accepted.
         let d = temp_dir("refuse");
         let mut j = Journal::open(&d).unwrap();
-        assert!(j.append_after(Some(2), "edit", json!({})).is_err());
-        j.append("edit", json!({})).unwrap();
-        assert!(j.append_after(None, "edit", json!({})).is_err());
-        assert!(j.append_after(Some(0), "edit", json!({})).is_err());
-        assert!(j.append_after(Some(3), "edit", json!({})).is_err());
+        assert!(j.append_after(Some(2), EntryKind::Edit, json!({})).is_err());
+        j.append(EntryKind::Edit, json!({})).unwrap();
+        assert!(j.append_after(None, EntryKind::Edit, json!({})).is_err());
+        assert!(j.append_after(Some(0), EntryKind::Edit, json!({})).is_err());
+        assert!(j.append_after(Some(3), EntryKind::Edit, json!({})).is_err());
         assert!(
-            j.append("purge", json!({"target": 1, "reason": "x"}))
+            j.append(EntryKind::Purge, json!({"target": 1, "reason": "x"}))
                 .is_err()
         );
-        assert!(j.append("edit", json!("not an object")).is_err());
+        assert!(j.append(EntryKind::Edit, json!("not an object")).is_err());
         assert_eq!(j.entries().len(), 2);
         fs::remove_dir_all(&d).unwrap();
     }
@@ -504,9 +519,11 @@ mod tests {
         // Catches a refusal that reaches the user without its reason.
         let d = temp_dir("why");
         let mut j = Journal::open(&d).unwrap();
-        let missing = j.append_after(Some(2), "edit", json!({})).unwrap_err();
+        let missing = j
+            .append_after(Some(2), EntryKind::Edit, json!({}))
+            .unwrap_err();
         assert_eq!(missing.to_string(), "entry 2 does not exist");
-        let not_object = j.append("edit", json!("x")).unwrap_err();
+        let not_object = j.append(EntryKind::Edit, json!("x")).unwrap_err();
         assert_eq!(not_object.to_string(), "a body must be a JSON object");
         fs::remove_dir_all(&d).unwrap();
     }
@@ -515,8 +532,8 @@ mod tests {
     /// its file, as a crash would leave them; the file's bytes before.
     fn left_by_a_crash(d: &Path, tail: &[u8]) -> Vec<u8> {
         let mut j = Journal::open(d).unwrap();
-        j.append("edit", json!({"t": "a"})).unwrap();
-        j.append("edit", json!({"t": "b"})).unwrap();
+        j.append(EntryKind::Edit, json!({"t": "a"})).unwrap();
+        j.append(EntryKind::Edit, json!({"t": "b"})).unwrap();
         drop(j);
         let before = fs::read(d.join(JOURNAL)).unwrap();
         fs::write(d.join(JOURNAL), [before.as_slice(), tail].concat()).unwrap();
@@ -594,7 +611,7 @@ mod tests {
         // the same next number, and the journal would never open again.
         let d = temp_dir("two-memexes");
         let mut first = Journal::open(&d).unwrap();
-        first.append("edit", json!({"t": "a"})).unwrap();
+        first.append(EntryKind::Edit, json!({"t": "a"})).unwrap();
         let second = Journal::open(&d).err().map(|e| e.to_string());
         assert!(second.is_some_and(|m| m.ends_with("is open in another memex")));
         drop(first);
@@ -608,7 +625,7 @@ mod tests {
         // nulled: the journal would then fail its check, and never open.
         let d = temp_dir("purge-unfinished");
         let mut j = Journal::open(&d).unwrap();
-        j.append("edit", json!({"t": "a"})).unwrap();
+        j.append(EntryKind::Edit, json!({"t": "a"})).unwrap();
         fs::create_dir(d.join(format!("{JOURNAL}.tmp"))).unwrap();
         assert!(
             j.purge(2, "privacy").is_err(),
@@ -625,8 +642,8 @@ mod tests {
         // Catches a purge that leaves the body, breaks the chain, or can be repeated.
         let d = temp_dir("purge");
         let mut j = Journal::open(&d).unwrap();
-        j.append("edit", json!({"t": "private"})).unwrap();
-        j.append("edit", json!({"t": "public"})).unwrap();
+        j.append(EntryKind::Edit, json!({"t": "private"})).unwrap();
+        j.append(EntryKind::Edit, json!({"t": "public"})).unwrap();
         j.purge(2, "privacy").unwrap();
         let text = fs::read_to_string(d.join(JOURNAL)).unwrap();
         assert!(!text.contains("private"));
@@ -644,7 +661,7 @@ mod tests {
         // Catches the writer appending to a journal that does not check.
         let d = temp_dir("broken");
         let mut j = Journal::open(&d).unwrap();
-        j.append("edit", json!({"t": "a"})).unwrap();
+        j.append(EntryKind::Edit, json!({"t": "a"})).unwrap();
         drop(j);
         let p = d.join(JOURNAL);
         let text = fs::read_to_string(&p).unwrap().replace("\"a\"", "\"b\"");

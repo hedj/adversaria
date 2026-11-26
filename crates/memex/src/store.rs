@@ -7,7 +7,7 @@
 //! (docs/design.md § The journal, § The journal format.)
 
 use crate::prolog::{self, Prolog};
-use format::record::Entry;
+use format::record::{Entry, EntryKind};
 use format::terms::{self, Term};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
@@ -82,7 +82,7 @@ impl Store {
     /// purge; one with fewer entries is taken as purged too.
     fn purged_since(&self, entries: &[Entry]) -> bool {
         let new = entries.get(self.read..);
-        new.is_none_or(|new| new.iter().any(|e| e.kind() == "purge"))
+        new.is_none_or(|new| new.iter().any(|e| e.kind() == EntryKind::Purge))
     }
 
     /// The entries of the world at `head` after the last that it shares
@@ -133,7 +133,7 @@ impl Store {
     /// What an entry's body does to the facts: a retract removes those of
     /// its target, and any entry may add its own.
     fn apply(&mut self, entries: &[Entry], e: &Entry, body: &Value) -> Result<(), String> {
-        if e.kind() == "retract" {
+        if e.kind() == EntryKind::Retract {
             self.retract(entries, e.seq, body)?;
         }
         self.add(e.seq, body)
@@ -155,7 +155,7 @@ impl Store {
                 "retracts entry {t}, which is not earlier in this world"
             ));
         }
-        if entry(entries, t)?.kind() == "retract" {
+        if entry(entries, t)?.kind() == EntryKind::Retract {
             return Err("retracts a retraction; adopt the facts again instead".into());
         }
         if !self.retracted.insert(t) {
@@ -183,7 +183,7 @@ impl Store {
 
 /// The entry a retraction names, if this entry is one that names one.
 fn retract_target(e: &Entry) -> Option<u64> {
-    let retracts = e.kind() == "retract";
+    let retracts = e.kind() == EntryKind::Retract;
     retracts
         .then(|| e.body()?.get("target")?.as_u64())
         .flatten()
@@ -278,7 +278,7 @@ mod tests {
     }
 
     /// Entries from (parent, kind, body), numbered from 1.
-    fn journal(spec: &[(Option<u64>, &str, Value)]) -> Vec<Entry> {
+    fn journal(spec: &[(Option<u64>, EntryKind, Value)]) -> Vec<Entry> {
         let mut es: Vec<Entry> = Vec::new();
         for row in spec {
             let entry = next_entry(&es, row);
@@ -288,14 +288,17 @@ mod tests {
     }
 
     /// The entry a row makes after these, numbered after the last.
-    fn next_entry(es: &[Entry], row: &(Option<u64>, &str, Value)) -> Entry {
+    fn next_entry(es: &[Entry], row: &(Option<u64>, EntryKind, Value)) -> Entry {
         let (_, kind, body) = row;
         let parent = parent_of(es, row);
-        Entry::new(es.len() as u64 + 1, parent, kind, body.clone()).unwrap()
+        Entry::new(es.len() as u64 + 1, parent, *kind, body.clone()).unwrap()
     }
 
     /// The parent a row names, of these entries, as Entry::new names it.
-    fn parent_of<'a>(es: &'a [Entry], row: &(Option<u64>, &str, Value)) -> Option<(u64, &'a str)> {
+    fn parent_of<'a>(
+        es: &'a [Entry],
+        row: &(Option<u64>, EntryKind, Value),
+    ) -> Option<(u64, &'a str)> {
         let e = &es[row.0? as usize - 1];
         Some((e.seq, e.hash.as_str()))
     }
@@ -304,9 +307,21 @@ mod tests {
     fn worlds_follow_the_branch() {
         // Catches facts taken from another branch, or out of order.
         let es = journal(&[
-            (None, "edit", json!({"facts": [date("buran", 1988)]})),
-            (Some(1), "edit", json!({"facts": [date("energia", 1987)]})),
-            (Some(1), "suppose", json!({"facts": [date("talk", 1989)]})),
+            (
+                None,
+                EntryKind::Edit,
+                json!({"facts": [date("buran", 1988)]}),
+            ),
+            (
+                Some(1),
+                EntryKind::Edit,
+                json!({"facts": [date("energia", 1987)]}),
+            ),
+            (
+                Some(1),
+                EntryKind::Suppose,
+                json!({"facts": [date("talk", 1989)]}),
+            ),
         ]);
         let seqs = |h| {
             facts(&es, h)
@@ -324,9 +339,13 @@ mod tests {
     fn retraction_removes_only_its_target() {
         // Catches a retraction that removes the wrong facts, or none.
         let es = journal(&[
-            (None, "edit", json!({"facts": [date("a", 1), date("b", 2)]})),
-            (Some(1), "adopt", json!({"facts": [date("c", 3)]})),
-            (Some(2), "retract", json!({"target": 1})),
+            (
+                None,
+                EntryKind::Edit,
+                json!({"facts": [date("a", 1), date("b", 2)]}),
+            ),
+            (Some(1), EntryKind::Adopt, json!({"facts": [date("c", 3)]})),
+            (Some(2), EntryKind::Retract, json!({"target": 1})),
         ]);
         let f = facts(&es, 3).unwrap();
         assert_eq!(f.len(), 1);
@@ -340,14 +359,14 @@ mod tests {
         // or a second one of the same entry, accepted.
         let base = || {
             vec![
-                (None, "edit", json!({"facts": [date("a", 1)]})),
-                (Some(1), "edit", json!({})),
+                (None, EntryKind::Edit, json!({"facts": [date("a", 1)]})),
+                (Some(1), EntryKind::Edit, json!({})),
             ]
         };
-        let cases: Vec<(Option<u64>, &str, Value)> = vec![
-            (Some(1), "retract", json!({"target": 2})), // 2 is on another branch
-            (Some(2), "retract", json!({"target": 3})), // itself
-            (Some(2), "retract", json!({})),            // no target
+        let cases: Vec<(Option<u64>, EntryKind, Value)> = vec![
+            (Some(1), EntryKind::Retract, json!({"target": 2})), // 2 is on another branch
+            (Some(2), EntryKind::Retract, json!({"target": 3})), // itself
+            (Some(2), EntryKind::Retract, json!({})),            // no target
         ];
         for c in cases {
             let mut spec = base();
@@ -355,12 +374,12 @@ mod tests {
             assert!(facts(&journal(&spec), 3).is_err());
         }
         let mut spec = base();
-        spec.push((Some(2), "retract", json!({"target": 1})));
-        spec.push((Some(3), "retract", json!({"target": 3})));
+        spec.push((Some(2), EntryKind::Retract, json!({"target": 1})));
+        spec.push((Some(3), EntryKind::Retract, json!({"target": 3})));
         assert!(facts(&journal(&spec), 4).is_err());
         let mut spec = base();
-        spec.push((Some(2), "retract", json!({"target": 1})));
-        spec.push((Some(3), "retract", json!({"target": 1})));
+        spec.push((Some(2), EntryKind::Retract, json!({"target": 1})));
+        spec.push((Some(3), EntryKind::Retract, json!({"target": 1})));
         assert!(facts(&journal(&spec), 4).is_err());
     }
 
@@ -374,7 +393,7 @@ mod tests {
             json!({"facts": ["text"]}),
         ] {
             assert!(
-                facts(&journal(&[(None, "edit", bad.clone())]), 1).is_err(),
+                facts(&journal(&[(None, EntryKind::Edit, bad.clone())]), 1).is_err(),
                 "{bad}"
             );
         }
@@ -384,8 +403,8 @@ mod tests {
     fn purged_facts_are_gone() {
         // Catches facts of a purged entry still in the store.
         let mut es = journal(&[
-            (None, "edit", json!({"facts": [date("a", 1)]})),
-            (Some(1), "edit", json!({})),
+            (None, EntryKind::Edit, json!({"facts": [date("a", 1)]})),
+            (Some(1), EntryKind::Edit, json!({})),
         ]);
         es[0] = es[0].purged();
         assert!(facts(&es, 2).unwrap().is_empty());
@@ -401,20 +420,24 @@ mod tests {
         // Catches a move that keeps facts of the world it left, or does not
         // give back the facts that a retraction it unwound had taken.
         let es = journal(&[
-            (None, "edit", json!({"facts": [date("a", 1)]})),
+            (None, EntryKind::Edit, json!({"facts": [date("a", 1)]})),
             (
                 Some(1),
-                "edit",
+                EntryKind::Edit,
                 json!({"facts": [date("b", 2), date("c", 3)]}),
             ),
-            (Some(2), "retract", json!({"target": 1})),
-            (Some(3), "adopt", json!({"facts": [date("d", 4)]})),
-            (Some(2), "suppose", json!({"facts": [date("e", 5)]})),
-            (Some(5), "retract", json!({"target": 2})),
-            (Some(1), "edit", json!({})),
+            (Some(2), EntryKind::Retract, json!({"target": 1})),
+            (Some(3), EntryKind::Adopt, json!({"facts": [date("d", 4)]})),
+            (
+                Some(2),
+                EntryKind::Suppose,
+                json!({"facts": [date("e", 5)]}),
+            ),
+            (Some(5), EntryKind::Retract, json!({"target": 2})),
+            (Some(1), EntryKind::Edit, json!({})),
             (
                 Some(7),
-                "retract",
+                EntryKind::Retract,
                 json!({"target": 1, "facts": [date("f", 6)]}),
             ),
         ]);
@@ -430,9 +453,9 @@ mod tests {
         // Catches a store left half moved by an entry it refused: unwinding
         // the refused second retraction of entry 1 gave entry 1 back.
         let es = journal(&[
-            (None, "edit", json!({"facts": [date("a", 1)]})),
-            (Some(1), "retract", json!({"target": 1})),
-            (Some(2), "retract", json!({"target": 1})),
+            (None, EntryKind::Edit, json!({"facts": [date("a", 1)]})),
+            (Some(1), EntryKind::Retract, json!({"target": 1})),
+            (Some(2), EntryKind::Retract, json!({"target": 1})),
         ]);
         let mut store = Store::default();
         assert!(store.move_to(&es, 3).is_err());
@@ -445,13 +468,17 @@ mod tests {
         // Catches a store that keeps facts it read before their entry was
         // purged.
         let mut es = journal(&[
-            (None, "edit", json!({"facts": [date("a", 1)]})),
-            (Some(1), "edit", json!({"facts": [date("b", 2)]})),
+            (None, EntryKind::Edit, json!({"facts": [date("a", 1)]})),
+            (Some(1), EntryKind::Edit, json!({"facts": [date("b", 2)]})),
         ]);
         let mut store = Store::default();
         store.move_to(&es, 2).unwrap();
         es[0] = es[0].purged();
-        let purge = (Some(2), "purge", json!({"target": 1, "reason": "a test"}));
+        let purge = (
+            Some(2),
+            EntryKind::Purge,
+            json!({"target": 1, "reason": "a test"}),
+        );
         es.push(next_entry(&es, &purge));
         store.move_to(&es, 3).unwrap();
         assert_eq!(held(&store), facts(&es, 3).unwrap());
@@ -461,7 +488,10 @@ mod tests {
     #[test]
     fn an_error_names_its_entry() {
         // Catches a fault in a world reported without the entry it is in.
-        let es = journal(&[(None, "edit", json!({})), (Some(1), "retract", json!({}))]);
+        let es = journal(&[
+            (None, EntryKind::Edit, json!({})),
+            (Some(1), EntryKind::Retract, json!({})),
+        ]);
         assert_eq!(
             facts(&es, 2),
             Err("entry 2: a retract needs a target".into())
@@ -474,8 +504,8 @@ mod tests {
         // entry of that number: a list holding only entry 2, whose parent is
         // 1, found entry 2 again as its own parent and looped for ever.
         let es = journal(&[
-            (None, "edit", json!({"facts": [date("a", 1)]})),
-            (Some(1), "edit", json!({"facts": [date("b", 2)]})),
+            (None, EntryKind::Edit, json!({"facts": [date("a", 1)]})),
+            (Some(1), EntryKind::Edit, json!({"facts": [date("b", 2)]})),
         ]);
         let only_second = &es[1..];
         let m = facts(only_second, 1).unwrap_err();

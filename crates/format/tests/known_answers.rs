@@ -4,11 +4,11 @@
 //! change to the hash rule fails even when writer and reader change
 //! together, as every journal already written would then fail to check.
 
-use format::record::{Entry, EntryId, Seal, Stamp, nfc, sha256_hex};
+use format::record::{Entry, EntryId, EntryKind, Seal, Stamp, nfc, sha256_hex};
 
 /// The first entry of every journal.
 fn init() -> Entry {
-    Entry::new(1, None, "edit", serde_json::json!({"op": "init"})).unwrap()
+    Entry::new(1, None, EntryKind::Edit, serde_json::json!({"op": "init"})).unwrap()
 }
 
 #[test]
@@ -32,7 +32,13 @@ fn an_entry_after_another_names_its_number_and_hash() {
     let first = init();
     let typed =
         serde_json::json!({"op": "text", "item": 2, "add": "Cafe\u{301}", "spans": [[0, 0, 4]]});
-    let e = Entry::new(2, Some((1, &first.hash)), "edit", nfc(&typed).unwrap()).unwrap();
+    let e = Entry::new(
+        2,
+        Some((1, &first.hash)),
+        EntryKind::Edit,
+        nfc(&typed).unwrap(),
+    )
+    .unwrap();
     let bh = sha256_hex(r#"{"add":"Café","item":2,"op":"text","spans":[[0,0,4]]}"#.as_bytes());
     assert_eq!(
         e.content.hash, bh,

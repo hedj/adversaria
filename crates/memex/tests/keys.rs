@@ -3,6 +3,7 @@
 
 mod support;
 
+use format::record::EntryKind;
 use memex::app::{Key, Mode, Quasi};
 use ratatui::style::Modifier;
 use support::Room;
@@ -19,7 +20,7 @@ fn the_palette_key_opens_the_command_quasimode_latched_and_listing() {
 fn a_bound_command_that_asks_keeps_its_question() {
     let mut r = Room::new("asks");
     r.items(&["one"]);
-    let retract = r.last("edit");
+    let retract = r.last(EntryKind::Edit);
     r.bind(&format!("F9 = \"retract {retract}\""));
     r.tap(&[Key::F(9)]);
     assert!(matches!(r.app.session.mode, Mode::ConfirmRetract { .. }));

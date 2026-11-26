@@ -2,6 +2,7 @@
 //! world gives it. These tests need APE: run them in the Nix shell, which
 //! sets APE_HOME.
 
+use format::record::EntryKind;
 use memex::app::{Key, Mode, Quasi};
 
 mod support;
@@ -191,7 +192,7 @@ fn last_pair(r: &Room) -> (Option<String>, String) {
         .entries()
         .iter()
         .rev()
-        .find(|e| e.kind() == "suppose")
+        .find(|e| e.kind() == EntryKind::Suppose)
         .unwrap();
     let body = e.body().unwrap();
     let english = body

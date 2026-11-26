@@ -5,7 +5,7 @@
 
 use crate::notebook::Notebook;
 use crate::outline::Outline;
-use format::record::Entry;
+use format::record::{Entry, EntryKind};
 use serde_json::Value;
 use std::collections::BTreeSet;
 
@@ -46,13 +46,15 @@ impl Met {
 
 /// The entry a retract entry takes back, if it is one.
 fn retract_target(e: &Entry) -> Option<u64> {
-    let b = e.body().filter(|_| e.kind() == "retract")?;
+    let b = e.body().filter(|_| e.kind() == EntryKind::Retract)?;
     b["target"].as_u64()
 }
 
 /// The entries a reading of a text wrote, if an entry is one.
 fn read_entries(e: &Entry) -> Vec<u64> {
-    let b = e.body().filter(|b| e.kind() == "edit" && b["op"] == "read");
+    let b = e
+        .body()
+        .filter(|b| e.kind() == EntryKind::Edit && b["op"] == "read");
     let entries = b
         .and_then(|b| b["entries"].as_array())
         .into_iter()
@@ -65,27 +67,27 @@ fn read_entries(e: &Entry) -> Vec<u64> {
 fn said(e: &Entry, o: &Outline) -> Option<String> {
     let b = e.body()?;
     match e.kind() {
-        "edit" => edit_said(e.seq, b, o),
-        "link" => Some(format!(
+        EntryKind::Edit => edit_said(e.seq, b, o),
+        EntryKind::Link => Some(format!(
             "linked {} to {}",
             at(o, &b["from"]),
             at(o, &b["to"])
         )),
-        "name" => Some(format!(
+        EntryKind::Name => Some(format!(
             "named {} “{}”",
             at(o, &b["item"]),
             b["name"].as_str()?
         )),
-        "suppose" => Some(format!("supposed “{}”", b["name"].as_str()?)),
-        "adopt" => Some(format!("adopted, in {}", at(o, &b["item"]))),
-        "import" => Some(format!(
+        EntryKind::Suppose => Some(format!("supposed “{}”", b["name"].as_str()?)),
+        EntryKind::Adopt => Some(format!("adopted, in {}", at(o, &b["item"]))),
+        EntryKind::Import => Some(format!(
             "imported {}",
             b["file"].as_str().or(b["source"].as_str())?
         )),
-        "retract" => Some(format!("retracted entry {}", b["target"].as_u64()?)),
-        "undo" => Some(format!("undid entry {}", b["undoes"].as_u64()?)),
-        "redo" => Some(format!("redid entry {}", b["redoes"].as_u64()?)),
-        "view" => jump_said(b, o),
+        EntryKind::Retract => Some(format!("retracted entry {}", b["target"].as_u64()?)),
+        EntryKind::Undo => Some(format!("undid entry {}", b["undoes"].as_u64()?)),
+        EntryKind::Redo => Some(format!("redid entry {}", b["redoes"].as_u64()?)),
+        EntryKind::View => jump_said(b, o),
         _ => None,
     }
 }
@@ -170,7 +172,7 @@ impl Notebook {
     /// row is never right-clicked.
     pub(crate) fn jumped_to(&self, seq: u64) -> Option<u64> {
         let e = self.entry(seq)?;
-        let b = e.body().filter(|_| e.kind() == "view")?;
+        let b = e.body().filter(|_| e.kind() == EntryKind::View)?;
         b["from"].as_u64().and(b["to"].as_u64())
     }
 }

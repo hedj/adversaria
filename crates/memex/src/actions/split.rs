@@ -8,6 +8,7 @@
 use crate::app::App;
 use crate::notebook::Notebook;
 use crate::outline::{Span, span_json};
+use format::record::EntryKind;
 use serde_json::json;
 use std::ops::Range;
 
@@ -31,7 +32,7 @@ impl App {
     /// and the new items, so that one undo takes it all back.
     fn close_split(&mut self, split: &Split, made: Vec<u64>) -> Result<(), String> {
         let body = json!({"op": "split", "item": split.item, "of": split.first, "parts": made});
-        self.write_here("edit", body).map(|_| ())
+        self.write_here(EntryKind::Edit, body).map(|_| ())
     }
 
     /// A split of an item that starts at the next entry.

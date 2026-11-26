@@ -23,6 +23,7 @@ use crate::reason::{self, ConstraintEval, Prov, Solution, WorldEval};
 use crate::view;
 use constraint::ConstraintPane;
 use foot::{draw_prompt, foot_lines};
+use format::record::EntryKind;
 use format::terms::Term;
 use interrogation::interrogation;
 use outline::draw_outline;
@@ -1584,7 +1585,7 @@ fn hint(app: &App) -> Option<(String, String)> {
         .journal()
         .entries()
         .iter()
-        .filter(|x| x.kind() == "suppose")
+        .filter(|x| x.kind() == EntryKind::Suppose)
         .count();
     if used >= 4 {
         return None;

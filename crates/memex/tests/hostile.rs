@@ -3,6 +3,7 @@
 //! memex let it (read a local file, run a script, make many requests, crash
 //! the memex) and checks that it does not.
 
+use format::record::EntryKind;
 use format::terms::Term;
 use memex::app::{App, Event, Key, Quasi};
 use std::collections::BTreeMap;
@@ -262,7 +263,7 @@ fn refused(app: &mut App, dir: &Path, (what, text): (&str, &str)) {
 /// Whether an import was written after the first entries.
 fn imported_since(app: &App, before: usize) -> bool {
     let entries = &app.journal().entries()[before..];
-    entries.iter().any(|e| e.kind() == "import")
+    entries.iter().any(|e| e.kind() == EntryKind::Import)
 }
 
 #[test]

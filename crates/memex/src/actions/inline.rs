@@ -8,6 +8,7 @@
 use crate::app::App;
 use crate::notebook::Notebook;
 use crate::outline::TOP;
+use format::record::EntryKind;
 use serde_json::json;
 
 impl App {
@@ -32,7 +33,7 @@ impl App {
         let gone = links.iter().filter(|l| !wanted.contains(&l.to));
         let seqs: Vec<u64> = gone.map(|l| l.seq).collect();
         for target in seqs {
-            let written = self.write_here("retract", json!({ "target": target }));
+            let written = self.write_here(EntryKind::Retract, json!({ "target": target }));
             self.session.report(written);
         }
     }
@@ -75,7 +76,7 @@ impl App {
         }
         if changed {
             let body = json!({"op": "relink", "name": name, "of": first, "items": items});
-            self.write_here("edit", body)?;
+            self.write_here(EntryKind::Edit, body)?;
         }
         Ok(())
     }
@@ -93,7 +94,7 @@ impl App {
         let made = self.make_items(&names, first)?;
         self.link_inline(target);
         let body = json!({"op": "make", "item": target, "of": first, "made": made});
-        self.write_here("edit", body)?;
+        self.write_here(EntryKind::Edit, body)?;
         Ok(format!("made {}: {}", made.len(), names.join(", ")))
     }
 

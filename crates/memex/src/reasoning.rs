@@ -8,7 +8,7 @@ use crate::mentions::Mentions;
 use crate::notebook::strings;
 use crate::reason::{Shown, Suggestion, WorldEval};
 use crate::world::World;
-use format::record::Entry;
+use format::record::{Entry, EntryKind};
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::rc::Rc;
@@ -80,16 +80,16 @@ impl Reasoning {
         };
         match (e.kind(), b["op"].as_str()) {
             // Undoing the suppose leaves its world; redoing it returns.
-            ("undo", _) if opened(&self.supposition, "undoes") => {
+            (EntryKind::Undo, _) if opened(&self.supposition, "undoes") => {
                 self.undone_supposition = self.supposition.take();
             }
-            ("redo", _) if opened(&self.undone_supposition, "redoes") => {
+            (EntryKind::Redo, _) if opened(&self.undone_supposition, "redoes") => {
                 self.supposition = self.undone_supposition.take();
             }
-            ("view", Some("world")) => self.supposition = None,
-            ("view", Some("dismiss")) => self.suggestions.dismiss(b["key"].as_str()),
-            ("view", Some("offer")) => self.suggestions.offer(strings(&b["keys"])),
-            ("suppose", _) => self.supposition = Some(Supposition::of(e, b)),
+            (EntryKind::View, Some("world")) => self.supposition = None,
+            (EntryKind::View, Some("dismiss")) => self.suggestions.dismiss(b["key"].as_str()),
+            (EntryKind::View, Some("offer")) => self.suggestions.offer(strings(&b["keys"])),
+            (EntryKind::Suppose, _) => self.supposition = Some(Supposition::of(e, b)),
             _ => {}
         }
     }

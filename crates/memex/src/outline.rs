@@ -33,6 +33,7 @@
 //! values. An op that names an item not in the outline (after a retraction,
 //! say) is skipped.
 
+use format::record::EntryKind;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
@@ -541,13 +542,13 @@ impl Outline {
     /// Apply an entry to the outline; false if it does not apply, as when
     /// it names an item that is not there. Each kind of entry, and each
     /// kind of edit, is one method below.
-    pub fn apply(&mut self, seq: u64, kind: &str, body: &Value) -> bool {
+    pub fn apply(&mut self, seq: u64, kind: EntryKind, body: &Value) -> bool {
         let b = Body(body);
         let done = match kind {
-            "edit" => self.edit(seq, &b),
-            "adopt" => self.adopt(seq, &b),
-            "link" => self.link(seq, &b),
-            "name" => self.name(&b),
+            EntryKind::Edit => self.edit(seq, &b),
+            EntryKind::Adopt => self.adopt(seq, &b),
+            EntryKind::Link => self.link(seq, &b),
+            EntryKind::Name => self.name(&b),
             _ => None,
         };
         done.is_some()
@@ -1406,7 +1407,7 @@ mod tests {
     fn create(o: &mut Outline, seq: u64, under: u64, after: Option<u64>, text: &str) {
         let n = text.chars().count();
         let b = json!({"op":"create","under":under,"after":after,"add":text,"spans":[[0,0,n]]});
-        assert!(o.apply(seq, "edit", &b), "create {seq}");
+        assert!(o.apply(seq, EntryKind::Edit, &b), "create {seq}");
     }
 
     /// Two top-level items, the first with a child: 1 { 2 }, 3.
@@ -1425,7 +1426,7 @@ mod tests {
         // a release build (the code review, E6).
         let mut o = branch();
         let b = json!({"op":"text","item":2,"add":"","spans":[[2,1,u64::MAX]]});
-        assert!(!o.apply(4, "edit", &b));
+        assert!(!o.apply(4, EntryKind::Edit, &b));
         assert_eq!(o.text(2), "b");
     }
 
@@ -1487,7 +1488,7 @@ mod tests {
             len: 4,
         });
         let b = json!({"op":"text","item":2,"add":"900.","spans":span_json(&spans)});
-        assert!(o.apply(3, "edit", &b));
+        assert!(o.apply(3, EntryKind::Edit, &b));
         let end = o.slice(2, 14, 16);
         assert_eq!(
             end,
@@ -1513,7 +1514,7 @@ mod tests {
         });
         assert!(o.apply(
             3,
-            "edit",
+            EntryKind::Edit,
             &json!({"op":"text","item":2,"add":"1988","spans":span_json(&spans)})
         ));
         assert_eq!(o.text(2), "Buran flew in 1988");
@@ -1540,7 +1541,7 @@ mod tests {
             len: 4,
         });
         let b = json!({"op":"text","item":2,"add":"1988","spans":span_json(&spans)});
-        assert!(o.apply(3, "edit", &b));
+        assert!(o.apply(3, EntryKind::Edit, &b));
         let want = [
             Span {
                 seq: 2,
@@ -1563,7 +1564,7 @@ mod tests {
         create(&mut o, 2, TOP, None, "Buran flew once.");
         let flew = span_json(&o.slice(2, 6, 10));
         let b = json!({"op":"create","under":0,"after":2,"add":"","spans":flew});
-        assert!(o.apply(3, "edit", &b));
+        assert!(o.apply(3, EntryKind::Edit, &b));
         assert_eq!(o.text(3), "flew");
     }
 
@@ -1575,7 +1576,7 @@ mod tests {
         let spans = o.slice(2, 0, 5);
         assert!(o.apply(
             3,
-            "edit",
+            EntryKind::Edit,
             &json!({"op":"create","under":0,"after":2,"add":"Timeline: ","spans":
             span_json(&[Span { seq: 0, start: 0, len: 10 }, spans[0]])})
         ));
@@ -1598,33 +1599,37 @@ mod tests {
         assert!(
             !o.apply(
                 4,
-                "edit",
+                EntryKind::Edit,
                 &json!({"op":"move","item":2,"under":3,"after":null})
             ),
             "into own branch"
         );
         assert!(o.apply(
             5,
-            "edit",
+            EntryKind::Edit,
             &json!({"op":"move","item":3,"under":0,"after":2})
         ));
         assert_eq!(o.in_order(), vec![2, 3]);
-        assert!(o.apply(6, "edit", &json!({"op":"delete","item":2})));
+        assert!(o.apply(6, EntryKind::Edit, &json!({"op":"delete","item":2})));
         assert!(!o.apply(
             7,
-            "edit",
+            EntryKind::Edit,
             &json!({"op":"text","item":2,"add":"x","spans":[[0,0,1]]})
         ));
-        assert!(!o.apply(8, "link", &json!({"from":2,"to":3,"type":"supports"})));
+        assert!(!o.apply(
+            8,
+            EntryKind::Link,
+            &json!({"from":2,"to":3,"type":"supports"})
+        ));
         assert!(!o.apply(
             9,
-            "edit",
+            EntryKind::Edit,
             &json!({"op":"create","under":2,"after":null,"add":"","spans":[]})
         ));
         assert!(
             !o.apply(
                 10,
-                "edit",
+                EntryKind::Edit,
                 &json!({"op":"text","item":3,"add":"","spans":[[2,0,99]]})
             ),
             "span beyond its text"
@@ -1638,13 +1643,13 @@ mod tests {
         let mut o = Outline::default();
         create(&mut o, 2, TOP, None, "claim");
         create(&mut o, 3, TOP, Some(2), "source");
-        assert!(o.apply(4, "link", &json!({"from":2,"to":3,"type":"cites"})));
-        assert!(o.apply(5, "name", &json!({"name":"src","item":3})));
+        assert!(o.apply(4, EntryKind::Link, &json!({"from":2,"to":3,"type":"cites"})));
+        assert!(o.apply(5, EntryKind::Name, &json!({"name":"src","item":3})));
         let (out, into) = o.links_of(3);
         assert!(out.is_empty());
         assert_eq!(into[0].from, 2);
         assert_eq!(o.names["src"], 3);
-        assert!(o.apply(6, "edit", &json!({"op":"delete","item":2})));
+        assert!(o.apply(6, EntryKind::Edit, &json!({"op":"delete","item":2})));
         assert!(o.links_of(3).1.is_empty());
     }
 }

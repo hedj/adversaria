@@ -3,6 +3,7 @@
 
 mod support;
 
+use format::record::EntryKind;
 use memex::app::{Key, Mode, Quasi};
 use ratatui::style::Modifier;
 use support::Room;
@@ -411,7 +412,7 @@ fn a_fact_retracted_by_hand_is_named_on_a_line_of_its_own() {
     let mut r = Room::new("worlds-aside-by-hand");
     r.items(&["food"]);
     r.command("fact box(food, 400)");
-    let fact = r.last("edit");
+    let fact = r.last(EntryKind::Edit);
     r.command("constraint one value: false :- box(C, A), box(C, B), A \\= B.");
     r.app.evaluate().unwrap();
     suppose(&mut r, "plan b");

@@ -2,6 +2,7 @@
 //! rules offer (docs/guide.md § 2.3, The mouse and Plumbing; crate::plumb).
 
 mod support;
+use format::record::EntryKind;
 use memex::app::{Key, Mode};
 use memex::config::Config;
 use memex::present::Presentation;
@@ -63,7 +64,11 @@ fn keys_choose_a_number_runs_and_esc_closes() {
     assert_eq!(r.here(), "Notes", "Esc ran nothing");
     r.app.plumb("2", (4, 3));
     r.tap(&[Key::Char('2')]);
-    assert_eq!(r.count("link"), 1, "the second offer, link to 2, ran");
+    assert_eq!(
+        r.count(EntryKind::Link),
+        1,
+        "the second offer, link to 2, ran"
+    );
 }
 
 #[test]

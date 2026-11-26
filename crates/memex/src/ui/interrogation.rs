@@ -3,6 +3,7 @@
 //! it would do (docs/guide.md § 1.1, Claims).
 
 use super::*;
+use format::record::EntryKind;
 
 /// The right pane at a claim item, or one interrogated: each of the
 /// item's claims, then what adopting them would do. The hint follows,
@@ -187,12 +188,12 @@ fn adoptions_from(entries: &[format::record::Entry], src: &str) -> Vec<u64> {
 
 /// Whether an entry adopts a claim from a source.
 fn adopts_from(e: &format::record::Entry, src: &str) -> bool {
-    e.kind() == "adopt" && e.body().is_some_and(|b| b["source"] == src)
+    e.kind() == EntryKind::Adopt && e.body().is_some_and(|b| b["source"] == src)
 }
 
 /// Whether an entry retracts another, by its number.
 fn retracts(e: &format::record::Entry, target: u64) -> bool {
-    e.kind() == "retract" && e.body().and_then(|b| b["target"].as_u64()) == Some(target)
+    e.kind() == EntryKind::Retract && e.body().and_then(|b| b["target"].as_u64()) == Some(target)
 }
 
 /// What adopting the interrogated claims would do, then the blank line

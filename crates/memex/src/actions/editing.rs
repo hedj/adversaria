@@ -5,6 +5,7 @@ use crate::app::{App, PaneKind, word_at};
 use crate::notebook::Notebook;
 use crate::outline::{Outline, page_key, reads_as_number};
 use crate::session::ViewChange;
+use format::record::EntryKind;
 use format::terms::{self, Term};
 use serde_json::{Value, json};
 
@@ -24,7 +25,7 @@ impl App {
                 "name not kept: “{n}” reads as an item's or an entry's number, so it would address no item"
             ));
         }
-        let named = self.write_here("name", json!({"name": n, "item": target}))?;
+        let named = self.write_here(EntryKind::Name, json!({"name": n, "item": target}))?;
         self.on_its_own(|app| app.relink_name(&n, named.seq))?;
         Ok(String::new())
     }
@@ -42,7 +43,7 @@ impl App {
             ["word"] => return self.delete_word(target).map(|_| String::new()),
             _ => return Err("delete, or delete word".into()),
         }
-        self.write_here("edit", json!({"op": "delete", "item": target}))?;
+        self.write_here(EntryKind::Edit, json!({"op": "delete", "item": target}))?;
         Ok(String::new())
     }
 
@@ -108,7 +109,7 @@ impl App {
 
     fn move_item(&mut self, item: u64, under: u64, after: Option<u64>) -> Result<(), String> {
         let body = json!({"op": "move", "item": item, "under": under, "after": after});
-        self.write_here("edit", body)?;
+        self.write_here(EntryKind::Edit, body)?;
         Ok(())
     }
 
@@ -152,7 +153,7 @@ impl App {
         let under = self.notebook.outline.parent_or_top(after);
         let body =
             json!({"op": "create", "under": under, "after": after, "add": add, "spans": spans});
-        Ok(self.write_here("edit", body)?.seq)
+        Ok(self.write_here(EntryKind::Edit, body)?.seq)
     }
 
     /// Go to the item words address, else to the next item that holds
@@ -291,7 +292,7 @@ impl App {
     pub(crate) fn write_inline_link(&mut self, from: u64, to: u64) -> Result<(), String> {
         let fact = link_fact("link", from, to)?;
         let body = json!({"from": from, "to": to, "type": "link", "facts": [fact], "inline": true});
-        self.write_here("link", body).map(|_| ())
+        self.write_here(EntryKind::Link, body).map(|_| ())
     }
 
     /// A link from a part of a split item back to the item it was split
@@ -310,13 +311,13 @@ impl App {
         let fact = link_fact("link", from, to)?;
         let body =
             json!({"from": from, "to": to, "type": "link", "facts": [fact], "suggestion": mark});
-        self.write_here("link", body).map(|_| ())
+        self.write_here(EntryKind::Link, body).map(|_| ())
     }
 
     fn write_link(&mut self, from: u64, to: u64, kind: &str) -> Result<String, String> {
         let fact = link_fact(kind, from, to)?;
         self.write_here(
-            "link",
+            EntryKind::Link,
             json!({"from": from, "to": to, "type": kind, "facts": [fact]}),
         )?;
         Ok(linked(&self.notebook.outline, from, to, kind))

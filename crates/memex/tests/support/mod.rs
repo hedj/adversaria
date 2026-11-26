@@ -2,6 +2,7 @@
 //! keys as a user drives it. Each test file uses some of it.
 #![allow(dead_code)]
 
+use format::record::EntryKind;
 use memex::app::{App, Event, Key, Quasi, View};
 use memex::ui::Presentations;
 use ratatui::Terminal;
@@ -179,13 +180,13 @@ impl Room {
     }
 
     /// The number of the last entry of a kind.
-    pub fn last(&self, kind: &str) -> u64 {
+    pub fn last(&self, kind: EntryKind) -> u64 {
         let mut entries = self.app.journal().entries().iter().rev();
         entries.find(|e| e.kind() == kind).unwrap().seq
     }
 
     /// How many entries of a kind the journal holds.
-    pub fn count(&self, kind: &str) -> usize {
+    pub fn count(&self, kind: EntryKind) -> usize {
         let entries = self.app.journal().entries().iter();
         entries.filter(|e| e.kind() == kind).count()
     }

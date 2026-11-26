@@ -9,7 +9,7 @@
 //!   earlier entry that is not a purge and is purged only once. An entry's
 //!   body is null exactly when a purge names it.
 
-use crate::record::{self, Entry, JOURNAL, JOURNAL_FORMAT};
+use crate::record::{self, Entry, EntryKind, JOURNAL, JOURNAL_FORMAT};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -143,7 +143,7 @@ impl Journal {
         let n = self.next();
         let e = Entry::parse(line).map_err(|m| fault(n, m))?;
         self.check_place(&e).map_err(|m| fault(n, m))?;
-        if e.kind() == "purge" {
+        if e.kind() == EntryKind::Purge {
             self.purge(&e)?;
         }
         self.entries.push(e);
@@ -183,7 +183,7 @@ impl Journal {
         if t >= e.seq {
             return Err("a purge must name an earlier entry".into());
         }
-        if self.entry(t).kind() == "purge" {
+        if self.entry(t).kind() == EntryKind::Purge {
             return Err(format!("entry {t} is a purge, and cannot be purged"));
         }
         match self.purged_by.get(&t) {
@@ -231,9 +231,9 @@ mod tests {
     }
 
     fn three() -> Vec<Entry> {
-        let a = Entry::new(1, None, "edit", json!({"t": "a", "version": 3})).unwrap();
-        let b = Entry::new(2, Some((1, &a.hash)), "edit", json!({"t": "b"})).unwrap();
-        let c = Entry::new(3, Some((1, &a.hash)), "undo", json!({"t": "c"})).unwrap(); // a branch
+        let a = Entry::new(1, None, EntryKind::Edit, json!({"t": "a", "version": 3})).unwrap();
+        let b = Entry::new(2, Some((1, &a.hash)), EntryKind::Edit, json!({"t": "b"})).unwrap();
+        let c = Entry::new(3, Some((1, &a.hash)), EntryKind::Undo, json!({"t": "c"})).unwrap(); // a branch
         vec![a, b, c]
     }
 
@@ -253,7 +253,7 @@ mod tests {
     fn a_header_of_version_3_over_an_entry_1_that_names_none_is_refused_there() {
         // Catches a journal of version 2, whose entry 1 names no version,
         // given the header of version 3 and read as written by it.
-        let first = Entry::new(1, None, "edit", json!({"op": "init"})).unwrap();
+        let first = Entry::new(1, None, EntryKind::Edit, json!({"op": "init"})).unwrap();
         let three = journal(&[first]);
         let two = three.replacen(r#""version":3}"#, r#""version":2}"#, 1);
         assert!(check_journal(&two).is_ok(), "version 2 names none");
@@ -289,7 +289,7 @@ mod tests {
     fn wrong_prev_is_named() {
         // Catches a chain whose prev points at the wrong entry.
         let mut es = three();
-        es[2] = Entry::new(3, Some((2, &es[0].hash)), "edit", json!({})).unwrap();
+        es[2] = Entry::new(3, Some((2, &es[0].hash)), EntryKind::Edit, json!({})).unwrap();
         let e = check_journal(&journal(&es)).unwrap_err();
         assert_eq!(
             (e.line, e.msg.as_str()),
@@ -319,8 +319,8 @@ mod tests {
     fn second_root_refused() {
         // Catches a second entry without a parent.
         let es = vec![
-            Entry::new(1, None, "edit", json!({})).unwrap(),
-            Entry::new(2, None, "edit", json!({})).unwrap(),
+            Entry::new(1, None, EntryKind::Edit, json!({})).unwrap(),
+            Entry::new(2, None, EntryKind::Edit, json!({})).unwrap(),
         ];
         assert_eq!(check_journal(&journal(&es)).unwrap_err().line, 3);
     }
@@ -329,7 +329,7 @@ mod tests {
         Entry::new(
             seq,
             Some((parent.seq, &parent.hash)),
-            "purge",
+            EntryKind::Purge,
             json!({"target": target, "reason": "privacy"}),
         )
         .unwrap()
@@ -365,7 +365,7 @@ mod tests {
             Entry::new(
                 4,
                 Some((3, &bad_body[2].hash)),
-                "purge",
+                EntryKind::Purge,
                 json!({"target": 2}),
             )
             .unwrap(),
@@ -376,8 +376,8 @@ mod tests {
     /// The error from a journal of one purged entry and a purge of it
     /// with this body.
     fn purge_with(body: serde_json::Value) -> String {
-        let a = Entry::new(1, None, "edit", json!({})).unwrap();
-        let p = Entry::new(2, Some((1, &a.hash)), "purge", body).unwrap();
+        let a = Entry::new(1, None, EntryKind::Edit, json!({})).unwrap();
+        let p = Entry::new(2, Some((1, &a.hash)), EntryKind::Purge, body).unwrap();
         check_journal(&journal(&[a.purged(), p])).unwrap_err().msg
     }
 
