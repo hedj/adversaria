@@ -9,6 +9,7 @@
 //! What is cut or copied is the session's: no entry records it.
 
 use crate::app::App;
+use crate::notebook::Notebook;
 use crate::outline::TOP;
 use crate::session::{Clip, ViewChange};
 use serde_json::json;
@@ -137,7 +138,7 @@ impl App {
         {
             return Err("the cursor is in what was cut: move it out, then Ctrl+V".into());
         }
-        for item in self.left(items) {
+        for item in self.notebook.left(items) {
             self.move_after(item, after)?;
             after = item;
         }
@@ -148,22 +149,12 @@ impl App {
     /// cursor's item, as `copy` makes them.
     fn copy_items(&mut self, items: &[u64]) -> Result<(), String> {
         let mut after = self.paste_place()?;
-        for item in self.left(items) {
+        for item in self.notebook.left(items) {
             let text = self.notebook.outline.text(item);
             let n = text.chars().count();
             after = self.create_after(after, &text, json!([[0, 0, n]]))?;
         }
         Ok(())
-    }
-
-    /// The items of a list still in the outline.
-    fn left(&self, items: &[u64]) -> Vec<u64> {
-        let outline = &self.notebook.outline;
-        items
-            .iter()
-            .copied()
-            .filter(|i| outline.contains(*i))
-            .collect()
     }
 
     /// The item that items are pasted after: the cursor's.
@@ -182,5 +173,17 @@ impl App {
             Some(Clip::Items { items, cut: true }) => items,
             _ => &[],
         }
+    }
+}
+
+impl Notebook {
+    /// The items of a list still in the outline.
+    fn left(&self, items: &[u64]) -> Vec<u64> {
+        let outline = &self.outline;
+        items
+            .iter()
+            .copied()
+            .filter(|i| outline.contains(*i))
+            .collect()
     }
 }

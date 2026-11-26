@@ -4,6 +4,7 @@
 use super::{all_bound, encoded, functor_of, node_def, reserved, var_list};
 use crate::actions::worlds::with_left;
 use crate::app::App;
+use crate::notebook::Notebook;
 use crate::outline::TOP;
 use crate::reason::{Contradicted, direct_conflicts};
 use format::terms::Term;
@@ -228,7 +229,7 @@ impl App {
     pub(crate) fn set_fact(&mut self, fact: &Term, target: u64) -> Result<String, String> {
         let (replaced, left) = self.replaced_by(fact)?;
         let beliefs: Vec<u64> = replaced.iter().map(|(t, _)| *t).collect();
-        let item = self.set_item(&beliefs, target)?;
+        let item = self.notebook.set_item(&beliefs, target)?;
         let said = self.replaced_said(&beliefs, item);
         self.retract_all(&replaced)?;
         self.write_fact(item, fact, None)?;
@@ -246,17 +247,6 @@ impl App {
         let (mut replaced, left) = direct_conflicts(&evals, trial.by);
         replaced.retain(|(t, _)| self.retractable(*t).is_ok());
         Ok((replaced, left))
-    }
-
-    /// The item a fact goes on: that of the first fact it replaces, else
-    /// the target.
-    fn set_item(&self, replaced: &[u64], target: u64) -> Result<u64, String> {
-        let on = |t: &u64| self.notebook.outline.fact_item.get(t).copied();
-        let item = replaced.iter().find_map(on).unwrap_or(target);
-        if item == TOP {
-            return Err("there is no item to put the fact on".into());
-        }
-        Ok(item)
     }
 
     /// What set says it replaced, before it does.
@@ -277,4 +267,17 @@ impl App {
 struct Shown<'a> {
     template: &'a str,
     under: bool,
+}
+
+impl Notebook {
+    /// The item a fact goes on: that of the first fact it replaces, else
+    /// the target.
+    fn set_item(&self, replaced: &[u64], target: u64) -> Result<u64, String> {
+        let on = |t: &u64| self.outline.fact_item.get(t).copied();
+        let item = replaced.iter().find_map(on).unwrap_or(target);
+        if item == TOP {
+            return Err("there is no item to put the fact on".into());
+        }
+        Ok(item)
+    }
 }

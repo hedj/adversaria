@@ -3,6 +3,7 @@
 //! about the claim (docs/structure.md § The code's structure).
 
 use crate::app::App;
+use crate::notebook::Notebook;
 use crate::session::Session;
 use format::terms::Term;
 use serde_json::Value;
@@ -43,12 +44,6 @@ impl App {
         let ruling = quote.ruling()?;
         self.write_ruling(item, "quote", ruling, &quote.blob)?;
         Ok(ruling.into())
-    }
-
-    /// Whether an item's facts state a source the source check can check.
-    pub(crate) fn states_a_source(&self, item: u64) -> bool {
-        let facts = self.notebook.facts_of(item);
-        facts.is_ok_and(|f| Source::of(&f).is_ok())
     }
 
     /// The source check: fetch the item's DOI from Crossref, never trusting a
@@ -165,6 +160,14 @@ pub fn encode_doi(doi: &str) -> String {
             _ => format!("%{b:02X}"),
         })
         .collect()
+}
+
+impl Notebook {
+    /// Whether an item's facts state a source the source check can check.
+    pub(crate) fn states_a_source(&self, item: u64) -> bool {
+        let facts = self.facts_of(item);
+        facts.is_ok_and(|f| Source::of(&f).is_ok())
+    }
 }
 
 #[cfg(test)]

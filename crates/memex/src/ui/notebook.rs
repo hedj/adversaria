@@ -49,7 +49,7 @@ fn foot(open: usize) -> String {
 
 /// The latest steps of the history, newest first, each by its entry.
 fn history_lines(app: &App) -> Vec<Presented> {
-    let steps = app.history(STEPS);
+    let steps = app.notebook.history(STEPS);
     let heading = Line::styled("HISTORY · NEWEST FIRST", dim());
     let mut lines = plain(vec![Line::raw(""), heading, Line::raw("")]);
     lines.extend(steps.iter().map(step_row));

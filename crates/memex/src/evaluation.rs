@@ -18,7 +18,7 @@ impl App {
     /// its own (what it showed and offered) moves no world.
     pub fn evaluate(&mut self) -> Result<(), String> {
         let done = self.reason_over_worlds();
-        self.reason.at = Some(self.journal_at());
+        self.reason.at = Some(self.notebook.journal_at());
         done
     }
 
@@ -27,18 +27,13 @@ impl App {
     /// computed from the journal, never stored in it. A failure becomes
     /// the message. Whether it reasoned.
     pub fn reason_if_moved(&mut self) -> bool {
-        if self.reason.at == Some(self.journal_at()) {
+        if self.reason.at == Some(self.notebook.journal_at()) {
             return false;
         }
         if let Err(e) = self.evaluate() {
             self.session.message = e;
         }
         true
-    }
-
-    /// Where the journal is: its tip and its length.
-    pub(crate) fn journal_at(&self) -> (u64, usize) {
-        (self.notebook.tip, self.notebook.entry_count())
     }
 
     fn reason_over_worlds(&mut self) -> Result<(), String> {
@@ -184,7 +179,12 @@ impl App {
     /// What adopting an item's claims would raise, computed in a spare
     /// engine: a preview of adopting it, as a world.
     pub(crate) fn preview_adoption(&mut self, item: u64) -> Result<String, String> {
-        let claims: Vec<Term> = self.claims_of(item).into_iter().map(|c| c.2).collect();
+        let claims: Vec<Term> = self
+            .notebook
+            .claims_of(item)
+            .into_iter()
+            .map(|c| c.2)
+            .collect();
         if claims.is_empty() {
             return Ok("no claims to adopt".into());
         }
@@ -226,4 +226,11 @@ fn world_of(notebook: &Notebook, k: usize, head: u64) -> Result<World<'_>, Strin
         import,
         at,
     })
+}
+
+impl Notebook {
+    /// Where the journal is: its tip and its length.
+    pub(crate) fn journal_at(&self) -> (u64, usize) {
+        (self.tip, self.entry_count())
+    }
 }

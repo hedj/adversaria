@@ -325,7 +325,7 @@ fn what_a_source_says_is_read_as_its_claim() {
     let mut r = Room::new("read-claim");
     r.items(&["Talk-notes says that the date of Buran-flight is 1989."]);
     r.app.idle();
-    let claims = r.app.claims_of(r.app.cursor());
+    let claims = r.app.notebook.claims_of(r.app.cursor());
     assert_eq!(claims.len(), 1, "{claims:?}");
     assert_eq!(claims[0].1, "Talk-notes");
 }
@@ -507,7 +507,7 @@ fn a_rule_a_constraint_and_a_claim_in_backticks_are_kept_as_their_kinds() {
     assert!(stated(&r.app).iter().any(|(_, f)| rule(f)), "a rule");
     let names: Vec<&String> = r.outline().constraints.values().map(|c| &c.name).collect();
     assert_eq!(names, ["One date per event"], "named by the prose");
-    let claims = r.app.claims_of(r.app.cursor());
+    let claims = r.app.notebook.claims_of(r.app.cursor());
     assert_eq!(claims.len(), 1, "{claims:?}");
     assert_eq!(claims[0].1, "Talk-notes");
 }

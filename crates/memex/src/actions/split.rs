@@ -6,6 +6,7 @@
 //! record names the split's first entry, so one undo takes it all back.
 
 use crate::app::App;
+use crate::notebook::Notebook;
 use crate::outline::{Span, span_json};
 use serde_json::json;
 use std::ops::Range;
@@ -19,7 +20,7 @@ impl App {
             return Err("nothing to split: the target's text is one sentence".into());
         }
         let split = self.split_of(target);
-        let slices = self.later_parts(target, &parts);
+        let slices = self.notebook.later_parts(target, &parts);
         self.keep_first(&split, &text[parts[0].clone()])?;
         let made = self.make_parts(&split, slices)?;
         self.close_split(&split, made)?;
@@ -37,15 +38,6 @@ impl App {
     fn split_of(&mut self, item: u64) -> Split {
         let first = self.next_entry();
         Split { item, first }
-    }
-
-    /// The spans of an item's parts after the first.
-    fn later_parts(&self, item: u64, parts: &[Range<usize>]) -> Vec<Vec<Span>> {
-        let outline = &self.notebook.outline;
-        let later = parts[1..].iter();
-        later
-            .map(|Range { start, end }| outline.slice(item, *start, *end))
-            .collect()
     }
 
     /// The item cut to its first part, which waits to be read.
@@ -196,6 +188,17 @@ fn trimmed(text: &[char], r: Range<usize>) -> Range<usize> {
         .find(|i| !text[*i].is_whitespace())
         .map_or(start, |i| i + 1);
     start..end
+}
+
+impl Notebook {
+    /// The spans of an item's parts after the first.
+    fn later_parts(&self, item: u64, parts: &[Range<usize>]) -> Vec<Vec<Span>> {
+        let outline = &self.outline;
+        let later = parts[1..].iter();
+        later
+            .map(|Range { start, end }| outline.slice(item, *start, *end))
+            .collect()
+    }
 }
 
 #[cfg(test)]

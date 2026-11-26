@@ -909,18 +909,6 @@ impl App {
         }
     }
 
-    /// The items whose facts are about an entity: facts with it first.
-    pub(crate) fn items_about(&self, entity: &Term) -> Vec<u64> {
-        let facts = self.notebook.facts_now().unwrap_or_default();
-        let mut out: Vec<u64> = facts
-            .iter()
-            .filter(|(_, f)| matches!(f, Term::Compound(_, a) if a.first() == Some(entity)))
-            .filter_map(|(s, _)| self.notebook.outline.fact_item.get(s).copied())
-            .collect();
-        out.dedup();
-        out
-    }
-
     /// The changes of a document revision, from the supposition on: (entry
     /// seq, what it does, retracted).
     pub fn revision_changes(&self) -> Vec<(u64, String, bool)> {
@@ -933,27 +921,10 @@ impl App {
     // ------------------------------------------------------------------
     // Commands.
 
-    /// Why an entry cannot be retracted, if it cannot: it is not in this
-    /// world, is its first, is no change, or is retracted already. It
-    /// reads the branch, not a replay, so it is quick enough to ask as the
-    /// pointer moves.
-    pub(crate) fn unretractable(&self, t: u64) -> Option<String> {
-        let branch = self.notebook.branch(self.notebook.tip);
-        let Some(e) = branch.entries.iter().find(|e| e.seq == t) else {
-            return Some(format!("entry {t} is not in this world"));
-        };
-        if t == 1 || !CONTENT.contains(&e.kind()) {
-            return Some(format!("entry {t} ({}) cannot be retracted", e.kind()));
-        }
-        branch
-            .retracts(t)
-            .then(|| format!("entry {t} is already retracted"))
-    }
-
     /// Check that an entry can be retracted; return the entries that depend
     /// on it: those that would no longer apply without it.
     pub fn retractable(&self, t: u64) -> Result<Vec<u64>, String> {
-        if let Some(why) = self.unretractable(t) {
+        if let Some(why) = self.notebook.unretractable(t) {
             return Err(why);
         }
         let with = self.notebook.replay(self.notebook.tip, None).failed;
@@ -980,6 +951,37 @@ pub(crate) fn word_at(text: &[char], pos: usize) -> (usize, usize) {
         b += 1;
     }
     (a, b)
+}
+
+impl Notebook {
+    /// The items whose facts are about an entity: facts with it first.
+    pub(crate) fn items_about(&self, entity: &Term) -> Vec<u64> {
+        let facts = self.facts_now().unwrap_or_default();
+        let mut out: Vec<u64> = facts
+            .iter()
+            .filter(|(_, f)| matches!(f, Term::Compound(_, a) if a.first() == Some(entity)))
+            .filter_map(|(s, _)| self.outline.fact_item.get(s).copied())
+            .collect();
+        out.dedup();
+        out
+    }
+
+    /// Why an entry cannot be retracted, if it cannot: it is not in this
+    /// world, is its first, is no change, or is retracted already. It
+    /// reads the branch, not a replay, so it is quick enough to ask as the
+    /// pointer moves.
+    pub(crate) fn unretractable(&self, t: u64) -> Option<String> {
+        let branch = self.branch(self.tip);
+        let Some(e) = branch.entries.iter().find(|e| e.seq == t) else {
+            return Some(format!("entry {t} is not in this world"));
+        };
+        if t == 1 || !CONTENT.contains(&e.kind()) {
+            return Some(format!("entry {t} ({}) cannot be retracted", e.kind()));
+        }
+        branch
+            .retracts(t)
+            .then(|| format!("entry {t} is already retracted"))
+    }
 }
 
 #[cfg(test)]

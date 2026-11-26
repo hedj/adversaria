@@ -3,6 +3,7 @@
 
 use crate::actions::dispatch::{complete_command, in_quotes};
 use crate::app::{Active, App, Event, Hold, Key, Kind, Mode, Press, Quasi, Special};
+use crate::notebook::Notebook;
 use crate::outline::TOP;
 use crate::reason;
 use crate::session::Answer;
@@ -504,18 +505,8 @@ impl App {
     /// Leap's matches for a pattern: items whose text holds it, ignoring
     /// case, in order from the cursor (forward or back), wrapping.
     pub fn leap_matches(&self, pattern: &str, forward: bool) -> Vec<u64> {
-        self.leap_matches_from(self.cursor(), pattern, forward)
-    }
-
-    /// The items that hold a pattern, in order round the outline from an
-    /// item, after it.
-    pub fn leap_matches_from(&self, start: u64, pattern: &str, forward: bool) -> Vec<u64> {
-        if pattern.is_empty() {
-            return vec![];
-        }
-        let outline = &self.notebook.outline;
-        let round = outline.round_from(start, forward);
-        outline.holding(round, pattern)
+        self.notebook
+            .leap_matches_from(self.cursor(), pattern, forward)
     }
 
     /// A Leap's matches of what is typed, counted from where it began.
@@ -691,5 +682,18 @@ fn pages(key: Key) -> Option<i32> {
         Key::Special(Special::PageDown) => Some(1),
         Key::Special(Special::PageUp) => Some(-1),
         _ => None,
+    }
+}
+
+impl Notebook {
+    /// The items that hold a pattern, in order round the outline from an
+    /// item, after it.
+    pub fn leap_matches_from(&self, start: u64, pattern: &str, forward: bool) -> Vec<u64> {
+        if pattern.is_empty() {
+            return vec![];
+        }
+        let outline = &self.outline;
+        let round = outline.round_from(start, forward);
+        outline.holding(round, pattern)
     }
 }

@@ -13,6 +13,7 @@ use super::inline::unbracketed;
 use crate::ace::{Kind, Reading, Said, Unread, Words, words_of};
 use crate::app::App;
 use crate::engine::told;
+use crate::notebook::Notebook;
 use format::terms::Term;
 use serde_json::json;
 use std::rc::Rc;
@@ -158,7 +159,7 @@ impl App {
             None => words_of(&self.notebook.facts_now()?),
         };
         let words = Rc::new(words);
-        self.reason.words = Some((self.journal_at(), words.clone()));
+        self.reason.words = Some((self.notebook.journal_at(), words.clone()));
         Ok(words)
     }
 
@@ -166,7 +167,7 @@ impl App {
     /// reasoned where the journal is: gathering them again took 6 ms on
     /// 10,000 facts.
     fn reasoned_facts(&self) -> Option<&[(u64, Term)]> {
-        let current = self.reason.at == Some(self.journal_at());
+        let current = self.reason.at == Some(self.notebook.journal_at());
         let eval = self.reason.eval[0].as_ref().filter(|_| current)?;
         Some(&eval.facts)
     }
@@ -175,7 +176,7 @@ impl App {
     /// is.
     fn kept_words(&self) -> Option<Rc<Words>> {
         let (at, words) = self.reason.words.as_ref()?;
-        (*at == self.journal_at()).then(|| words.clone())
+        (*at == self.notebook.journal_at()).then(|| words.clone())
     }
 
     /// State what an item's text was read as, in place of what it was read
@@ -194,7 +195,7 @@ impl App {
     fn state_all(&mut self, item: u64, text: &str, said: &[Said]) -> (Vec<u64>, Vec<String>) {
         let first = self.next_entry();
         let told = self.outcomes(item, named(text, said));
-        (self.edits_since(first), told)
+        (self.notebook.edits_since(first), told)
     }
 
     /// State each named statement on the item: what each command said,
@@ -207,32 +208,18 @@ impl App {
         told.filter(|t| !t.is_empty()).collect()
     }
 
-    /// The edit entries written from entry `first` on.
-    fn edits_since(&self, first: u64) -> Vec<u64> {
-        let entries = self.notebook.journal.entries();
-        let written = entries.get(first as usize - 1..).unwrap_or(&[]);
-        let edits = written.iter().filter(|e| e.kind() == "edit");
-        edits.map(|e| e.seq).collect()
-    }
-
     /// An item's text not read: what it was read as before is taken back.
     /// A reading of nothing is recorded if anything was taken back or its
     /// links changed, so that undo takes the text and all that followed
     /// from it back together.
     fn unread(&mut self, w: &Written) {
-        let had = self.stated_by_reading(w.item);
+        let had = self.notebook.stated_by_reading(w.item);
         if had {
             self.retract_reading(w.item);
         }
         if had || w.linked {
             self.record_reading(w, vec![], &[]);
         }
-    }
-
-    /// Whether an item's last reading stated anything.
-    fn stated_by_reading(&self, item: u64) -> bool {
-        let read = self.notebook.outline.readings.get(&item);
-        read.is_some_and(|r| !r.entries.is_empty())
     }
 
     /// One statement, through the command that states it, on the item.
@@ -273,18 +260,6 @@ impl App {
         let body = w.record(entries, said_json(said));
         let written = self.write_here("edit", body);
         self.session.report(written);
-    }
-
-    /// The first entry of what a record closes, if the entry is one: the
-    /// text edit a reading reads, or the first entry of a split. Undo takes
-    /// all from there back together.
-    pub(crate) fn read_from(&self, seq: u64) -> Option<u64> {
-        let e = self.notebook.entry(seq)?;
-        let closes = |b: &&serde_json::Value| {
-            ["read", "split", "make", "relink"].contains(&b["op"].as_str().unwrap_or(""))
-        };
-        let b = e.body().filter(|_| e.kind() == "edit").filter(closes)?;
-        b["of"].as_u64()
     }
 }
 
@@ -372,6 +347,34 @@ fn hint_of(reading: &Reading) -> String {
             }
         }
         Reading::Read(..) => String::new(),
+    }
+}
+
+impl Notebook {
+    /// The edit entries written from entry `first` on.
+    fn edits_since(&self, first: u64) -> Vec<u64> {
+        let entries = self.journal.entries();
+        let written = entries.get(first as usize - 1..).unwrap_or(&[]);
+        let edits = written.iter().filter(|e| e.kind() == "edit");
+        edits.map(|e| e.seq).collect()
+    }
+
+    /// Whether an item's last reading stated anything.
+    fn stated_by_reading(&self, item: u64) -> bool {
+        let read = self.outline.readings.get(&item);
+        read.is_some_and(|r| !r.entries.is_empty())
+    }
+
+    /// The first entry of what a record closes, if the entry is one: the
+    /// text edit a reading reads, or the first entry of a split. Undo takes
+    /// all from there back together.
+    pub(crate) fn read_from(&self, seq: u64) -> Option<u64> {
+        let e = self.entry(seq)?;
+        let closes = |b: &&serde_json::Value| {
+            ["read", "split", "make", "relink"].contains(&b["op"].as_str().unwrap_or(""))
+        };
+        let b = e.body().filter(|_| e.kind() == "edit").filter(closes)?;
+        b["of"].as_u64()
     }
 }
 

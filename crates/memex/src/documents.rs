@@ -125,22 +125,14 @@ impl App {
     /// Import a file as a revision of the document an item came from,
     /// whatever the file is called: `import document essay-v2.md as 2`.
     pub(crate) fn import_revision_of(&mut self, file: &str, at: &str) -> Result<String, String> {
-        let item = self.resolve(at).ok_or(format!("no item is “{at}”"))?;
-        let name = self.imported_name(item)?;
+        let item = self
+            .notebook
+            .resolve(at)
+            .ok_or(format!("no item is “{at}”"))?;
+        let name = self.notebook.imported_name(item)?;
         let doc = Document::read(file, &self.notebook)?;
         let earlier = self.notebook.document_imports(&name);
         self.revise(&doc, &earlier, &name)
-    }
-
-    /// The name of the document an item came from, as its import recorded
-    /// it.
-    fn imported_name(&self, item: u64) -> Result<String, String> {
-        let place = self.notebook.outline.number(item);
-        let not = || format!("{place} did not come from an imported document");
-        let import = self.notebook.outline.origin(item).ok_or_else(not)?;
-        let body = self.notebook.entry(import).and_then(|e| e.body());
-        let name = body.and_then(|b| b["file"].as_str().map(String::from));
-        name.ok_or_else(not)
     }
 
     /// The import entry of a document, under the name of the document it
@@ -351,4 +343,17 @@ fn file_name_of(file: &str) -> String {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned());
     name.unwrap_or_default()
+}
+
+impl Notebook {
+    /// The name of the document an item came from, as its import recorded
+    /// it.
+    fn imported_name(&self, item: u64) -> Result<String, String> {
+        let place = self.outline.number(item);
+        let not = || format!("{place} did not come from an imported document");
+        let import = self.outline.origin(item).ok_or_else(not)?;
+        let body = self.entry(import).and_then(|e| e.body());
+        let name = body.and_then(|b| b["file"].as_str().map(String::from));
+        name.ok_or_else(not)
+    }
 }

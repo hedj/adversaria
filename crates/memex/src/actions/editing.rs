@@ -2,6 +2,7 @@
 //! (docs/guide.md, § 2.4, Editing the outline).
 
 use crate::app::{App, PaneKind, word_at};
+use crate::notebook::Notebook;
 use crate::outline::{Outline, page_key, reads_as_number};
 use crate::session::ViewChange;
 use format::terms::{self, Term};
@@ -188,7 +189,7 @@ impl App {
     /// else go to the next item that holds the text, as a leap does.
     fn go_to_text(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let text = words.join(" ");
-        if let Some(id) = self.resolve(&text) {
+        if let Some(id) = self.notebook.resolve(&text) {
             self.jump(id, "go", json!({}));
             return Ok(String::new());
         }
@@ -216,7 +217,7 @@ impl App {
     /// The item the last jump came from, if it is left and is not the
     /// target: by its number, the default of `move` and `link`.
     pub(crate) fn jumped_from(&self, target: u64) -> Option<String> {
-        let from = self.last_present(&self.session.trail.back);
+        let from = self.notebook.last_present(&self.session.trail.back);
         let from = from.filter(|f| *f != target)?;
         Some(self.notebook.outline.number(from))
     }
@@ -230,14 +231,17 @@ impl App {
     /// `back`, if a jump came from an item that is left: where `go` goes
     /// by default.
     pub(crate) fn back_to(&self, _: u64) -> Option<String> {
-        let from = self.last_present(&self.session.trail.back);
+        let from = self.notebook.last_present(&self.session.trail.back);
         from.map(|_| "back".into())
     }
 
     /// Go back to where the last jump came from, passing over items gone.
     pub(crate) fn cmd_back(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let trail = &self.session.trail.back;
-        let to = self.last_present(trail).ok_or("nothing to go back to")?;
+        let to = self
+            .notebook
+            .last_present(trail)
+            .ok_or("nothing to go back to")?;
         self.jump(to, "back", json!({}));
         Ok(String::new())
     }
@@ -245,19 +249,12 @@ impl App {
     /// Go forward again to where back came from.
     pub(crate) fn cmd_forward(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let trail = &self.session.trail.forward;
-        let to = self.last_present(trail).ok_or("nothing to go forward to")?;
+        let to = self
+            .notebook
+            .last_present(trail)
+            .ok_or("nothing to go forward to")?;
         self.jump(to, "forward", json!({}));
         Ok(String::new())
-    }
-
-    /// The last item of a list still in the outline.
-    fn last_present(&self, items: &[u64]) -> Option<u64> {
-        let outline = &self.notebook.outline;
-        items
-            .iter()
-            .rev()
-            .copied()
-            .find(|i| outline.items.contains_key(i))
     }
 
     pub(crate) fn go_to(&mut self, id: u64) {
@@ -398,4 +395,16 @@ fn link_fact(kind: &str, from: u64, to: u64) -> Result<Value, String> {
 fn linked(outline: &Outline, from: u64, to: u64, kind: &str) -> String {
     let n = |id| outline.number(id);
     format!("linked {} to {} as {kind}", n(from), n(to))
+}
+
+impl Notebook {
+    /// The last item of a list still in the outline.
+    fn last_present(&self, items: &[u64]) -> Option<u64> {
+        let outline = &self.outline;
+        items
+            .iter()
+            .rev()
+            .copied()
+            .find(|i| outline.items.contains_key(i))
+    }
 }

@@ -2,6 +2,7 @@
 //! (docs/guide.md, § 2.4, Worlds and history).
 
 use crate::app::{App, Mode};
+use crate::notebook::Notebook;
 use crate::reason::{Contradicted, direct_conflicts};
 use format::terms::{self, Term};
 use serde_json::{Value, json};
@@ -9,7 +10,7 @@ use serde_json::{Value, json};
 impl App {
     pub(crate) fn cmd_undo(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let t = self.undoable().ok_or("nothing to undo on this branch")?;
-        self.write(self.parent_of(t), "undo", json!({"undoes": t}))?;
+        self.write(self.notebook.parent_of(t), "undo", json!({"undoes": t}))?;
         self.read_changed();
         Ok(format!("undid entry {t}"))
     }
@@ -22,11 +23,7 @@ impl App {
             .notebook
             .content_tip(self.notebook.tip)
             .filter(|t| *t > 1)?;
-        Some(self.read_from(t).unwrap_or(t))
-    }
-
-    fn parent_of(&self, seq: u64) -> Option<u64> {
-        self.notebook.entry(seq).and_then(|e| e.parent_seq())
+        Some(self.notebook.read_from(t).unwrap_or(t))
     }
 
     pub(crate) fn cmd_redo(&mut self, _: &[&str], _: u64) -> Result<String, String> {
@@ -66,16 +63,8 @@ impl App {
     fn targets_last(&self) -> Option<u64> {
         let item = self.cursor();
         let path = self.notebook.path(self.notebook.tip);
-        let own = path.iter().rev().filter(|e| self.owns(item, e));
+        let own = path.iter().rev().filter(|e| self.notebook.owns(item, e));
         own.map(|e| e.seq).find(|s| self.retractable(*s).is_ok())
-    }
-
-    /// Whether an entry is an item's own: an adoption of its claims, a
-    /// fact stated on it and not read from its text, or a layer of it.
-    fn owns(&self, item: u64, e: &format::record::Entry) -> bool {
-        let outline = &self.notebook.outline;
-        let own = outline.states_own(item, e.seq) || outline.is_layer_of(item, e.seq);
-        own || crate::actions::adopts(e, item)
     }
 
     fn ask_retract(&mut self, target: u64, dependents: Vec<u64>) {
@@ -254,4 +243,18 @@ pub(crate) fn with_left(said: String, left: &[String]) -> String {
         return said;
     }
     format!("{said}; left for you: {}", left.join(", "))
+}
+
+impl Notebook {
+    fn parent_of(&self, seq: u64) -> Option<u64> {
+        self.entry(seq).and_then(|e| e.parent_seq())
+    }
+
+    /// Whether an entry is an item's own: an adoption of its claims, a
+    /// fact stated on it and not read from its text, or a layer of it.
+    fn owns(&self, item: u64, e: &format::record::Entry) -> bool {
+        let outline = &self.outline;
+        let own = outline.states_own(item, e.seq) || outline.is_layer_of(item, e.seq);
+        own || crate::actions::adopts(e, item)
+    }
 }

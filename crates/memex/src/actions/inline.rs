@@ -6,6 +6,7 @@
 //! back and those it gains are written, at the pause, when it is read.
 
 use crate::app::App;
+use crate::notebook::Notebook;
 use crate::outline::TOP;
 use serde_json::json;
 
@@ -17,7 +18,7 @@ impl App {
         let text = self.notebook.outline.text(item);
         let wanted: Vec<u64> = bracketed(&text)
             .iter()
-            .filter_map(|x| self.inline_target(item, x))
+            .filter_map(|x| self.notebook.inline_target(item, x))
             .collect();
         self.retract_inline(item, &wanted);
         self.add_inline(item, &wanted);
@@ -48,13 +49,6 @@ impl App {
         }
     }
 
-    /// The item a [[link]] goes to, if one is named so or holds its text;
-    /// never the linking item itself. A link to no item is left for the
-    /// user: `make` makes it.
-    fn inline_target(&self, from: u64, name: &str) -> Option<u64> {
-        self.notebook.outline.resolve(name).filter(|t| *t != from)
-    }
-
     /// Link the items whose [[links]] name an item and do not link it yet:
     /// it was just made, or its text just came to match. Whether any entry
     /// was written.
@@ -74,7 +68,7 @@ impl App {
     /// record names the name's entry, `first`, so one undo takes the name
     /// and its links back together.
     pub(crate) fn relink_name(&mut self, name: &str, first: u64) -> Result<(), String> {
-        let items = self.using_name(name);
+        let items = self.notebook.using_name(name);
         let mut changed = false;
         for item in &items {
             changed |= self.link_inline(*item);
@@ -84,13 +78,6 @@ impl App {
             self.write_here("edit", body)?;
         }
         Ok(())
-    }
-
-    /// The items whose [[links]] use a name, in order.
-    fn using_name(&self, name: &str) -> Vec<u64> {
-        let outline = &self.notebook.outline;
-        let order = outline.in_order().into_iter();
-        order.filter(|i| outline.links_by_name(*i, name)).collect()
     }
 
     /// Make an item for each of the target's [[links]] that names no item,
@@ -123,18 +110,9 @@ impl App {
     /// read as part of what starts at the entry `first`.
     fn make_item(&mut self, name: &str, first: u64) -> Result<u64, String> {
         let spans = json!([[0, 0, name.chars().count()]]);
-        let item = self.create_after(self.last_top_item(), name, spans)?;
+        let item = self.create_after(self.notebook.last_top_item(), name, spans)?;
         self.will_read(item, first);
         Ok(item)
-    }
-
-    /// The last item at the top level, or none (TOP) in an empty outline.
-    fn last_top_item(&self) -> u64 {
-        let outline = &self.notebook.outline;
-        let mut order = outline.in_order().into_iter().rev();
-        order
-            .find(|i| outline.parent_or_top(*i) == TOP)
-            .unwrap_or(TOP)
     }
 }
 
@@ -160,6 +138,31 @@ pub(crate) fn bracketed(text: &str) -> Vec<String> {
 /// A text without its links' brackets: what the reader reads.
 pub(crate) fn unbracketed(text: &str) -> String {
     text.replace("[[", "").replace("]]", "")
+}
+
+impl Notebook {
+    /// The item a [[link]] goes to, if one is named so or holds its text;
+    /// never the linking item itself. A link to no item is left for the
+    /// user: `make` makes it.
+    fn inline_target(&self, from: u64, name: &str) -> Option<u64> {
+        self.outline.resolve(name).filter(|t| *t != from)
+    }
+
+    /// The items whose [[links]] use a name, in order.
+    fn using_name(&self, name: &str) -> Vec<u64> {
+        let outline = &self.outline;
+        let order = outline.in_order().into_iter();
+        order.filter(|i| outline.links_by_name(*i, name)).collect()
+    }
+
+    /// The last item at the top level, or none (TOP) in an empty outline.
+    fn last_top_item(&self) -> u64 {
+        let outline = &self.outline;
+        let mut order = outline.in_order().into_iter().rev();
+        order
+            .find(|i| outline.parent_or_top(*i) == TOP)
+            .unwrap_or(TOP)
+    }
 }
 
 #[cfg(test)]

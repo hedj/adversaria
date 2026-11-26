@@ -28,7 +28,7 @@ fn a_label_one_item_alone_carries_addresses_it_with_its_hash_or_without() {
     r.items(&["Drafting notes", "The essay #draft", "Other"]);
     let essay = titled(&r, "The essay #draft");
     for address in ["draft", "#draft", "#Draft"] {
-        assert_eq!(r.app.resolve(address), Some(essay), "{address}");
+        assert_eq!(r.app.notebook.resolve(address), Some(essay), "{address}");
     }
     r.command("go draft");
     assert_eq!(r.app.cursor(), essay);
@@ -41,14 +41,14 @@ fn an_address_longer_than_a_label_is_not_the_label() {
     let mut r = Room::new("label-longer");
     r.items(&["Draft essay plan", "The essay #draft"]);
     let plan = titled(&r, "Draft essay plan");
-    assert_eq!(r.app.resolve("draft essay"), Some(plan));
+    assert_eq!(r.app.notebook.resolve("draft essay"), Some(plan));
 }
 
 #[test]
 fn a_label_two_items_carry_addresses_neither() {
     let mut r = Room::new("label-shared");
     r.items(&["One #draft", "Two #draft"]);
-    assert_eq!(r.app.resolve("#draft"), None);
+    assert_eq!(r.app.notebook.resolve("#draft"), None);
 }
 
 #[test]

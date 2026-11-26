@@ -4,6 +4,7 @@
 //! inspector ends with it, so an entry's number is seen, not recalled.
 
 use crate::app::App;
+use crate::notebook::Notebook;
 use crate::outline::Outline;
 use format::record::Entry;
 use serde_json::Value;
@@ -18,29 +19,7 @@ pub struct Step {
     pub retracted: bool,
 }
 
-impl App {
-    /// The latest steps of this branch, newest first, up to a number:
-    /// each change, retraction, undo and redo, and each jump. Walked back
-    /// from the tip, so only as far as the steps asked for.
-    pub fn history(&self, most: usize) -> Vec<Step> {
-        let mut met = Met::default();
-        let outline = &self.notebook.outline;
-        let path = self.notebook.back_from(self.notebook.tip);
-        path.filter_map(|e| met.step(e, outline))
-            .take(most)
-            .collect()
-    }
-
-    /// The item a jump went to, if an entry is one: a view entry that
-    /// moved the cursor from one item to another, as the trail follows
-    /// it. One that stayed where it was is no step of the history, so its
-    /// row is never right-clicked.
-    pub(crate) fn jumped_to(&self, seq: u64) -> Option<u64> {
-        let e = self.notebook.entry(seq)?;
-        let b = e.body().filter(|_| e.kind() == "view")?;
-        b["from"].as_u64().and(b["to"].as_u64())
-    }
-}
+impl App {}
 
 /// What a walk back along a branch has met: the entries retracted, and
 /// those a reading of a text wrote. A retraction and a reading come after
@@ -165,5 +144,29 @@ fn number(o: &Outline, id: u64) -> String {
     match o.contains(id) {
         true => o.number(id),
         false => "an item since deleted".into(),
+    }
+}
+
+impl Notebook {
+    /// The latest steps of this branch, newest first, up to a number:
+    /// each change, retraction, undo and redo, and each jump. Walked back
+    /// from the tip, so only as far as the steps asked for.
+    pub fn history(&self, most: usize) -> Vec<Step> {
+        let mut met = Met::default();
+        let outline = &self.outline;
+        let path = self.back_from(self.tip);
+        path.filter_map(|e| met.step(e, outline))
+            .take(most)
+            .collect()
+    }
+
+    /// The item a jump went to, if an entry is one: a view entry that
+    /// moved the cursor from one item to another, as the trail follows
+    /// it. One that stayed where it was is no step of the history, so its
+    /// row is never right-clicked.
+    pub(crate) fn jumped_to(&self, seq: u64) -> Option<u64> {
+        let e = self.entry(seq)?;
+        let b = e.body().filter(|_| e.kind() == "view")?;
+        b["from"].as_u64().and(b["to"].as_u64())
     }
 }

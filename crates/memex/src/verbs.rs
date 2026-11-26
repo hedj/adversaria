@@ -63,7 +63,7 @@ impl App {
     /// document, a source it states.
     fn check_offers(&self, id: u64) -> Vec<Offer> {
         let quote = self.notebook.quote(id).is_ok();
-        let source = self.states_a_source(id);
+        let source = self.notebook.states_a_source(id);
         let quote = quote.then(|| offer("check its quotation", "check quote"));
         let source = source.then(|| offer("check its source", "check source"));
         quote.into_iter().chain(source).collect()

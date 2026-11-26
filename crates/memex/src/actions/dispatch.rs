@@ -5,6 +5,7 @@ use super::nouns::{Alone, Noun, alone, asking, complete_noun, noun, prompts, tak
 use crate::actions::{NO_RULE, VERDICTS};
 use crate::app::{Active, App, Mode};
 use crate::near::one_edit_apart;
+use crate::notebook::Notebook;
 use crate::outline::TOP;
 
 /// What a command's slot takes: what may be typed in it, and what may be
@@ -597,15 +598,9 @@ impl App {
 
     // Addresses.
 
-    /// An item named by its outline number ("3.2"), its name, "#seq", or the
-    /// start of its text if only one item's text starts so.
-    pub fn resolve(&self, addr: &str) -> Option<u64> {
-        self.notebook.outline.addressed(addr.trim())
-    }
-
     /// The one item that words address, guide words left out.
     pub(crate) fn address(&self, words: &[&str]) -> Option<u64> {
-        self.resolve(&unguided(words).join(" "))
+        self.notebook.resolve(&unguided(words).join(" "))
     }
 
     /// The two items that words address, guide words left out, and where
@@ -613,8 +608,8 @@ impl App {
     pub(crate) fn two_addresses(&self, words: &[&str]) -> Option<(usize, u64, u64)> {
         let words = unguided(words);
         (1..words.len()).find_map(|k| {
-            let a = self.resolve(&words[..k].join(" "))?;
-            Some((k, a, self.resolve(&words[k..].join(" "))?))
+            let a = self.notebook.resolve(&words[..k].join(" "))?;
+            Some((k, a, self.notebook.resolve(&words[k..].join(" "))?))
         })
     }
 
@@ -1016,6 +1011,14 @@ pub fn command_groups(input: &str) -> Vec<Group> {
 fn usage(c: &Command) -> String {
     let slots: Vec<String> = c.slots.iter().map(|n| format!("({}) …", n.guide)).collect();
     format!("{} {} — {}", c.name, slots.join(" "), c.help)
+}
+
+impl Notebook {
+    /// An item named by its outline number ("3.2"), its name, "#seq", or the
+    /// start of its text if only one item's text starts so.
+    pub fn resolve(&self, addr: &str) -> Option<u64> {
+        self.outline.addressed(addr.trim())
+    }
 }
 
 #[cfg(test)]

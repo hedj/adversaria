@@ -7,6 +7,7 @@
 
 use crate::app::App;
 use crate::marks::MarkLine;
+use crate::notebook::Notebook;
 use crate::outline::Outline;
 use crate::present::Presentation;
 use crate::reason::{ConstraintEval, Suggestion, WorldEval};
@@ -72,20 +73,12 @@ impl App {
         let Some(e) = self.reason.eval[0].as_ref() else {
             return vec![];
         };
-        let rules = self.rules(e);
+        let rules = self.notebook.rules(e);
         let marked = crate::marks::marks_by_item(e, &self.notebook.outline).into_iter();
         let marks = marked.flat_map(|(id, marks)| marks.into_iter().map(move |m| (id, m)));
         marks
             .filter_map(|(id, m)| self.finding(id, m, &rules))
             .collect()
-    }
-
-    /// Each rule, by the entry that made it. Each is found once, not once
-    /// for each finding, since finding the item that states a rule reads
-    /// the text of every item.
-    fn rules(&self, e: &WorldEval) -> HashMap<u64, Rule> {
-        let rule = |c| Rule::of(c, &self.notebook.outline);
-        e.constraints.iter().map(|c| (c.seq, rule(c))).collect()
     }
 
     /// A finding marked under an item, from the rule it is a finding of.
@@ -221,5 +214,15 @@ fn suggestion_number(p: &Presentation) -> Option<usize> {
     match p {
         Presentation::Suggestion(n) => Some(*n),
         _ => None,
+    }
+}
+
+impl Notebook {
+    /// Each rule, by the entry that made it. Each is found once, not once
+    /// for each finding, since finding the item that states a rule reads
+    /// the text of every item.
+    fn rules(&self, e: &WorldEval) -> HashMap<u64, Rule> {
+        let rule = |c| Rule::of(c, &self.outline);
+        e.constraints.iter().map(|c| (c.seq, rule(c))).collect()
     }
 }

@@ -93,7 +93,7 @@ fn a_hash_alone_addresses_no_item() {
     // item with no text.
     let mut r = Room::new("page-empty");
     r.items(&["Other", ""]);
-    assert_eq!(r.app.resolve("#"), None);
+    assert_eq!(r.app.notebook.resolve("#"), None);
 }
 
 /// The items an item's [[links]] go to.

@@ -48,7 +48,7 @@ fn claim_lines(app: &App, e: &WorldEval, item: u64, claim: (u64, String, Term)) 
 fn claim_row(app: &App, item: u64, claim: &(u64, String, Term)) -> Vec<Presented> {
     let (_, source, fact) = claim;
     let open = app.claim_open(item, source.clone(), fact);
-    let adopted = app.not_adopted(vec![claim.clone()]).is_empty();
+    let adopted = app.notebook.not_adopted(vec![claim.clone()]).is_empty();
     offers::offer_row(&open, adopted.then_some("adopted"))
 }
 

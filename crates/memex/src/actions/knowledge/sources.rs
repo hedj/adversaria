@@ -89,7 +89,7 @@ impl App {
     /// has both or none, so the memex asks.
     pub(crate) fn check_kind(&self, target: u64) -> Option<String> {
         let quote = self.notebook.quote(target).is_ok();
-        let source = self.states_a_source(target);
+        let source = self.notebook.states_a_source(target);
         match (quote, source) {
             (true, false) => Some("quote".into()),
             (false, true) => Some("source".into()),

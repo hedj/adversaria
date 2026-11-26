@@ -4,6 +4,7 @@
 use super::{encoded, functor_of, node_def, reserved};
 use crate::actions::worlds::with_left;
 use crate::app::App;
+use crate::notebook::Notebook;
 use crate::reason::{Suggestion, show};
 use format::record::Entry;
 use format::terms::Term;
@@ -11,12 +12,6 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 impl App {
-    /// An item's claims at the tip: (entry seq, source, claimed fact).
-    pub fn claims_of(&self, item: u64) -> Vec<(u64, String, Term)> {
-        let facts = self.notebook.facts_now().unwrap_or_default();
-        claims_among(&facts, &self.notebook.outline, item)
-    }
-
     /// The claim item whose questions the inspector shows: one being
     /// interrogated, else the selected item if, as the current world was
     /// last evaluated, it states a claim.
@@ -49,7 +44,7 @@ impl App {
     /// Show who else claims the target's claim, who disputes it, its
     /// source and record.
     pub(crate) fn cmd_interrogate(&mut self, _: &[&str], target: u64) -> Result<String, String> {
-        if self.claims_of(target).is_empty() {
+        if self.notebook.claims_of(target).is_empty() {
             return Err("the target states no claim".into());
         }
         self.session.view.show_claim(target);
@@ -105,9 +100,9 @@ impl App {
     /// retracts what each directly contradicts, as `set` did for a fact
     /// typed, and names a violation that adopting still leaves.
     fn adopt_claims(&mut self, target: u64, instead: bool) -> Result<String, String> {
-        let claims = self.claims_of(target);
+        let claims = self.notebook.claims_of(target);
         check_adoptable(&claims)?;
-        let new = self.not_adopted(claims);
+        let new = self.notebook.not_adopted(claims);
         if new.is_empty() {
             return Err("the target's claims are beliefs already".into());
         }
@@ -145,22 +140,12 @@ impl App {
             return by_item;
         };
         let fact_item = &self.notebook.outline.fact_item;
-        for claim in self.not_adopted(claims_among_all(&e.facts)) {
+        for claim in self.notebook.not_adopted(claims_among_all(&e.facts)) {
             if let Some(id) = fact_item.get(&claim.0) {
                 by_item.entry(*id).or_default().push(claim);
             }
         }
         by_item
-    }
-
-    /// The claims with no adoption in effect on this branch.
-    pub(crate) fn not_adopted(&self, claims: Vec<(u64, String, Term)>) -> Vec<(u64, String, Term)> {
-        let branch = self.notebook.branch(self.notebook.tip);
-        let adopted: Vec<u64> = branch.live().filter_map(adopted_claim).collect();
-        claims
-            .into_iter()
-            .filter(|(seq, ..)| !adopted.contains(seq))
-            .collect()
     }
 
     /// One adopt entry for each claim, keeping its source.
@@ -309,10 +294,12 @@ impl App {
     /// entity cites the item that is the work.
     fn adopt_reference(&mut self, a: &[Term], mark: Value) -> Result<(), String> {
         let from = *self
+            .notebook
             .items_about(&a[0])
             .first()
             .ok_or("no item states facts about that entity")?;
         let to = *self
+            .notebook
             .items_about(&a[1])
             .first()
             .ok_or("no item is that work")?;
@@ -372,6 +359,24 @@ fn name_of(t: &Term) -> String {
     match t {
         Term::Str(x) => x.clone(),
         t => show(t),
+    }
+}
+
+impl Notebook {
+    /// An item's claims at the tip: (entry seq, source, claimed fact).
+    pub fn claims_of(&self, item: u64) -> Vec<(u64, String, Term)> {
+        let facts = self.facts_now().unwrap_or_default();
+        claims_among(&facts, &self.outline, item)
+    }
+
+    /// The claims with no adoption in effect on this branch.
+    pub(crate) fn not_adopted(&self, claims: Vec<(u64, String, Term)>) -> Vec<(u64, String, Term)> {
+        let branch = self.branch(self.tip);
+        let adopted: Vec<u64> = branch.live().filter_map(adopted_claim).collect();
+        claims
+            .into_iter()
+            .filter(|(seq, ..)| !adopted.contains(seq))
+            .collect()
     }
 }
 

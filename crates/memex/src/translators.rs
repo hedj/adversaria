@@ -74,7 +74,7 @@ impl App {
     /// it shows their questions); its adoption taken back, if it has one.
     fn claim_offers(&self, id: u64) -> Vec<Offer> {
         let mut offers = Vec::new();
-        if !self.claims_of(id).is_empty() {
+        if !self.notebook.claims_of(id).is_empty() {
             offers.push(offer("adopt its claims", "adopt"));
             if self.disputed(id) {
                 let instead = "adopt them instead of what they contradict";
@@ -171,7 +171,7 @@ impl App {
     /// What an entry of the history offers: going back to where a jump
     /// went, if that item is left; retracting a change not yet retracted.
     fn entry_offers(&self, seq: u64) -> Vec<Offer> {
-        if let Some(to) = self.jumped_to(seq) {
+        if let Some(to) = self.notebook.jumped_to(seq) {
             let left = self.notebook.outline.contains(to);
             return left
                 .then(|| self.go_offer(to, "where it went"))
@@ -179,7 +179,7 @@ impl App {
                 .collect();
         }
         let retract = offer("retract it", &format!("retract entry {seq}"));
-        let can = self.unretractable(seq).is_none();
+        let can = self.notebook.unretractable(seq).is_none();
         can.then_some(retract).into_iter().collect()
     }
 

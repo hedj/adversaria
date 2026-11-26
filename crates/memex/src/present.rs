@@ -243,7 +243,7 @@ impl App {
     /// item the cursor is on, linking it to itself or showing it in its
     /// own place does nothing.
     fn plumbed(&self, text: &str) -> Vec<Offer> {
-        let names_item = |t: &str| self.resolve(t).is_some_and(|i| i != self.cursor());
+        let names_item = |t: &str| self.notebook.resolve(t).is_some_and(|i| i != self.cursor());
         self.session.plumber.offers(text, &names_item)
     }
 
