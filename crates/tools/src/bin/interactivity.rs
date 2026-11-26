@@ -4,8 +4,8 @@
 //! Exit status 0 always: this reports; it does not judge.
 
 use std::path::Path;
-use tools::held;
 use tools::interactivity::*;
+use tools::{followed, held};
 
 const LIMIT: usize = 4;
 
@@ -51,6 +51,7 @@ fn main() {
     print_summaries(&groups, &blind);
     report_held("Rust functions (src)", &rust.fns);
     report_held("Rust functions (tests)", &rust.tests);
+    report_followed(&rust.fns);
     report_over(&groups[2..]);
     report_sections(&sections);
 }
@@ -97,7 +98,12 @@ fn rust_sources(root: &Path) -> (Sources, Sources) {
 fn rust_units(root: &Path) -> (Rust, Blind) {
     let (src, tests) = rust_sources(root);
     let all: Sources = src.into_iter().chain(tests.iter().cloned()).collect();
-    Rust::split(measure_or_exit(&all, &crates_of(root)), &tests)
+    let (mut rust, blind) = Rust::split(measure_or_exit(&all, &crates_of(root)), &tests);
+    let counts = followed::followed(&rust.fns);
+    for (u, n) in rust.fns.iter_mut().zip(counts) {
+        u.followed = n;
+    }
+    (rust, blind)
 }
 
 /// The functions measured, the files as modules, and what the measure
@@ -200,7 +206,47 @@ fn print_held_summaries(rust: &Rust) {
         "Rust functions (tests): {}",
         held::summary(&rust.tests, LIMIT)
     );
+    println!(
+        "Rust functions (src), by callers: {}",
+        by_callers(&rust.fns)
+    );
+    println!(
+        "Rust functions (src), helpers used once: {}",
+        followed_summary(&rust.fns)
+    );
     println!();
+}
+
+/// How many functions one, two, or three or more call (docs/structure.md,
+/// rule 5), none that the measure sees, and how many share their name.
+fn by_callers(fns: &[Unit]) -> String {
+    let callers = followed::callers(fns);
+    let known: Vec<usize> = callers.iter().flatten().map(Vec::len).collect();
+    let count = |f: fn(usize) -> bool| known.iter().filter(|n| f(**n)).count();
+    format!(
+        "{} by one, {} by two, {} by three or more; {} by none seen; {} share a name, callers not known",
+        count(|n| n == 1),
+        count(|n| n == 2),
+        count(|n| n >= 3),
+        count(|n| n == 0),
+        callers.len() - known.len()
+    )
+}
+
+/// How many functions have a helper used once, how many have more than
+/// the limit, and the most; and the deepest chain of them.
+fn followed_summary(fns: &[Unit]) -> String {
+    let some = fns.iter().filter(|u| u.followed.0 > 0).count();
+    let over = fns.iter().filter(|u| u.followed.0 > LIMIT).count();
+    let most = fns.iter().max_by_key(|u| u.followed.0);
+    let deepest = fns.iter().max_by_key(|u| u.followed.1);
+    let most = most.map_or(String::new(), |u| {
+        format!("; most {} ({})", u.followed.0, where_of(u))
+    });
+    let deepest = deepest.map_or(String::new(), |u| {
+        format!("; deepest {} ({})", u.followed.1, where_of(u))
+    });
+    format!("{some} functions have one; {over} more than {LIMIT}{most}{deepest}")
 }
 
 /// The five groups of units, by title.
@@ -246,6 +292,21 @@ fn report_held(title: &str, units: &[Unit]) {
     }
 }
 
+/// The functions with more helpers used once than the limit, or helpers
+/// deeper than it, the most first: helpers, then depth. A report, not a
+/// limit: the author sets one.
+fn report_followed(fns: &[Unit]) {
+    let over = |u: &&Unit| u.followed.0 > LIMIT || u.followed.1 > LIMIT;
+    let mut over: Vec<&Unit> = fns.iter().filter(over).collect();
+    over.sort_by_key(|u| std::cmp::Reverse(u.followed));
+    println!();
+    println!("== Rust functions (src): more than {LIMIT} helpers used once, or deeper, most first");
+    for u in over {
+        let (n, deep) = u.followed;
+        println!("{n:>5} deep {deep:>2}  {}", where_of(u));
+    }
+}
+
 /// The units that may hold more than the limit at a statement.
 fn held_over(units: &[Unit]) -> Vec<&Unit> {
     units.iter().filter(|u| held::upper(u) > LIMIT).collect()
@@ -255,7 +316,12 @@ fn held_row(u: &Unit) -> String {
     let Some(h) = &u.held else {
         return String::new();
     };
-    let at = format!("(statement {}; {} referents in all)", h.at, u.load());
+    let (helpers, deep) = u.followed;
+    let at = format!(
+        "(statement {}; {} referents in all; {helpers} helpers used once, {deep} deep)",
+        h.at,
+        u.load()
+    );
     let row = format!("{:>5}  {}  {at}", range_of(h), where_of(u));
     if std::env::var_os("INTERACTIVITY_DETAIL").is_none() {
         return row;

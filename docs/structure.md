@@ -196,7 +196,12 @@ outline, reasoning, then the screen.
    operation. A dispatch over many cases is a table.
 4. A function binds few names and uses each soon after binding it.
 5. What has no present use goes; no helper for fewer than three uses,
-   and no function that only passes its work on.
+   and no function that only passes its work on. `make interactivity`
+   reports how many functions call each function, and how many helpers
+   used once each has, and how deep they go
+   (`crates/tools/src/followed.rs`): the held count of rule 7 falls when
+   a function is split into helpers used once, though its reader still
+   reads them all.
 6. A test checks one thing, through helpers named for the question they
    ask, as `quasi(config, "RightAlt")`; the memex's tests share a `Room`
    (`crates/memex/tests/support`).

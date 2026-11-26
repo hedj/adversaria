@@ -245,6 +245,9 @@ pub struct Unit {
     /// For a function: the most its reader holds at one statement
     /// (held.rs).
     pub held: Option<crate::held::Held>,
+    /// For a function: how many helpers used once it has, and how deep
+    /// they go (followed.rs).
+    pub followed: (usize, usize),
 }
 
 impl Unit {
