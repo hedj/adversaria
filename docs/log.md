@@ -1872,6 +1872,45 @@ What stays slow: what the key takes after its step, handled, reasoned
 over and drawn, 47.5-63.6 ms in the last three runs, is now most of
 every key. The parts of the lexicon, 10-17 ms, are the slowest steps.
 
+### Naming, structure and the measure (26 November 2026)
+
+The last step of the order of work the reviews of 25 November set: the
+design review's findings 7 and 8, the code-smell review's 1, 4 and 5,
+and the UX review's 5, 6 and 7.
+
+1. The measure (d45ed2e). The held count falls when a function is split
+   into helpers used once, though its reader reads them all.
+   `make interactivity` now reports how many functions call each (1,291
+   by one, 281 by two, 274 by three or more; 1,013 share a name, callers
+   not known), and each function's helpers used once and how deep they
+   go (831 have one; 17 more than 4; the deepest chain is 12). It sets
+   no limit.
+2. Tests read whether a command was refused, not its words (e3da96b):
+   the session records it; seven helpers that matched 2 to 7 prefixes
+   each now read the record. The stricter helpers found five steps of
+   tests that had been refused and did nothing: three `go parent`, two
+   `switch` (so a replay test never switched panes), and one `redo`
+   after a world was closed.
+3. The marks under items moved out of the screen into marks.rs
+   (674c9af); no model module imports ui.rs now. Five panes of ui.rs
+   became files of their own (a5993be): ui.rs 3,942 lines to 1,794,
+   moving code only, checked line for line.
+4. 24 of App's queries of the notebook are Notebook's (913d952): App 424
+   methods to 400. A trade-off: twelve counts rose by one, as a caller
+   now names the notebook. That commit's message says three bodies lost
+   a borrow in the move; it was ten lines, seven and then three.
+5. Each act by one name (6f6e72e), and what a retraction or an undo
+   takes back said in words, by the verb asked (5e845fe); the reason
+   each unread item was not read kept, and said in its inspector
+   (4067713).
+
+Not done: entry kinds and claims are still strings and tuples (the
+code-smell review's findings 2 and 6); view.rs is one file; the window's
+draw still reasons, and reasoning records what it showed, which the
+stage-1 record reads; the reason a text was not read is the session's,
+not the journal's; unread sentences have no mark but their colour; and
+the measure's count of helpers used once has no limit yet.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
