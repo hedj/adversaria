@@ -267,7 +267,9 @@ Without the sealer, entries are written but not sealed until a sealer runs.
   says why its text was not read (or, for a sentence APE can mend, `not
   read: did you mean “…”? adopt fix mends it`), or, while the text cursor
   is in a `[[link]]` that names no item, which of its links name none yet
-  (§ 2.4, § 3.1).
+  (§ 2.4, § 3.1). Each item written in this session keeps why, until its
+  text is read; the inspector says it too, under `NOT READ`, and the
+  notebook's offers list each mend.
 - **Right pane, the inspector:** what is known about the item the cursor
   is on. By default its links,
   under `LINKS OF` and the item's address, or `no links`, each with the

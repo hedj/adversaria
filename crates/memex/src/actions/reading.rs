@@ -82,7 +82,7 @@ impl App {
             linked,
         };
         if text.trim().is_empty() {
-            self.session.set_prose(None);
+            self.session.set_prose(w.item, None);
             return self.unread(&w);
         }
         let (formal, prose) = super::formal::read(&text);
@@ -115,7 +115,7 @@ impl App {
     fn unread_saying_why(&mut self, w: &Written, reading: &Reading) {
         let mended = self.repair_of(w.text, reading);
         self.session
-            .set_prose(Some((w.item, hint_of(reading), mended)));
+            .set_prose(w.item, Some((hint_of(reading), mended)));
         self.unread(w);
     }
 
@@ -183,7 +183,7 @@ impl App {
     /// as before; say what the commands that state it said, as if typed
     /// (a constraint kept, a statement refused, and why).
     fn state_reading(&mut self, w: &Written, said: &[Said]) {
-        self.session.set_prose(None);
+        self.session.set_prose(w.item, None);
         self.retract_reading(w.item);
         let (edits, told) = self.state_all(w.item, w.text, said);
         self.record_reading(w, edits, said);

@@ -967,7 +967,32 @@ fn right_panel(app: &App, id: u64) -> Vec<Presented> {
         _ => links_lines(&app.notebook.outline, id),
     };
     lines.extend(plain(read_as_lines(&app.notebook.outline, id)));
+    lines.extend(plain(not_read_lines(app, id)));
     lines
+}
+
+/// Whether why a text was not read is worth a row: why ACE was not read,
+/// always; why a text is prose, only if it reads as a sentence (it ends in
+/// a full stop, question or exclamation mark), not under a heading or a
+/// name.
+fn says_why(text: &str, hint: &str) -> bool {
+    let sentence = text.trim_end().ends_with(['.', '?', '!']);
+    !hint.starts_with("prose:") || sentence
+}
+
+/// Why an item's text was not read, if it was written in this session and
+/// was not: under the heading of its number, as what it was read as is.
+fn not_read_lines(app: &App, id: u64) -> Vec<Line<'static>> {
+    let text = app.notebook.outline.text(id);
+    let Some(why) = app.session.prose_hint(id).filter(|h| says_why(&text, h)) else {
+        return vec![];
+    };
+    let named = format!("NOT READ · {}", app.notebook.outline.number(id));
+    vec![
+        Line::raw(""),
+        Line::styled(named, dim()),
+        Line::raw(why.to_string()),
+    ]
 }
 
 /// What an item's text, as it is now, was read as, in Prolog: each

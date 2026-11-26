@@ -356,9 +356,9 @@ struct Outside {
     stale: BTreeMap<u64, Vec<String>>,
     /// The last violations and disagreements recorded in the journal.
     observed: Option<Observed>,
-    /// Why the text of an item was not read, last time it was written,
-    /// and APE's repair of it, if it has one.
-    prose: Option<(u64, String, Option<String>)>,
+    /// Why the text of each item written in this session was not read,
+    /// last time it was written, and APE's repair of it, if it has one.
+    prose: BTreeMap<u64, (String, Option<String>)>,
     /// The items whose text is written and waits to be read, each with the
     /// entry that wrote it.
     to_read: BTreeMap<u64, u64>,
@@ -370,7 +370,7 @@ impl Default for Outside {
             crossref: "https://api.crossref.org/works/".into(),
             stale: BTreeMap::new(),
             observed: None,
-            prose: None,
+            prose: BTreeMap::new(),
             to_read: BTreeMap::new(),
         }
     }
@@ -406,28 +406,31 @@ impl Session {
     /// Why an item's text was not read as statements, if it was written
     /// in this session and was not.
     pub fn prose_hint(&self, item: u64) -> Option<&str> {
-        let hint = self.outside.prose.as_ref().filter(|(i, ..)| *i == item);
-        hint.map(|(_, why, _)| why.as_str())
+        self.outside.prose.get(&item).map(|(why, _)| why.as_str())
     }
 
     /// The text APE would mend an item's text to, if its text was written
     /// in this session, was not read, and has a repair.
     pub fn prose_repair(&self, item: u64) -> Option<&str> {
-        let hint = self.outside.prose.as_ref().filter(|(i, ..)| *i == item);
-        hint.and_then(|(.., mended)| mended.as_deref())
+        let hint = self.outside.prose.get(&item);
+        hint.and_then(|(_, mended)| mended.as_deref())
     }
 
-    /// The item just written whose text did not read, and the text APE
-    /// would mend it to, if it has a repair.
-    pub fn repaired(&self) -> Option<(u64, &str)> {
-        let (item, _, mended) = self.outside.prose.as_ref()?;
-        Some((*item, mended.as_deref()?))
+    /// Each item written in this session whose text did not read and has
+    /// a repair, with the text APE would mend it to, in the order of the
+    /// items' numbers.
+    pub fn repairs(&self) -> impl Iterator<Item = (u64, &str)> {
+        let each = self.outside.prose.iter();
+        each.filter_map(|(item, (_, mended))| Some((*item, mended.as_deref()?)))
     }
 
-    /// Note why an item's text was not read, with its repair, if any; or
-    /// that it was read.
-    pub(crate) fn set_prose(&mut self, hint: Option<(u64, String, Option<String>)>) {
-        self.outside.prose = hint;
+    /// Note why an item's text was not read, with its repair, if any; or,
+    /// with none, that it was read.
+    pub(crate) fn set_prose(&mut self, item: u64, hint: Option<(String, Option<String>)>) {
+        match hint {
+            Some(hint) => self.outside.prose.insert(item, hint),
+            None => self.outside.prose.remove(&item),
+        };
     }
 
     /// Let an item's text, written by the entry `of`, wait to be read.

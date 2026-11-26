@@ -137,6 +137,31 @@ fn unread(name: &str, text: &str) -> Room {
 }
 
 #[test]
+fn each_item_not_read_keeps_why_and_the_notebook_offers_each_mend() {
+    // Catches one reason kept for the session, the last item's: the UX
+    // review found the first of two sentences silent once the second was
+    // typed (finding 7).
+    let mut r = Room::new("reader-each-unread");
+    r.items(&["The flight was in 1989.", "The rent was 1200."]);
+    r.app.idle();
+    r.command("go 1");
+    let first = "not read: did you mean “The flight is in 1989.”? adopt fix mends it";
+    assert!(r.shows(first), "{:#?}", r.lines());
+    assert!(
+        r.shows("NOT READ · 1"),
+        "in the inspector: {:#?}",
+        r.lines_at(160, 40)
+    );
+    let mends = r.app.open_offers();
+    let mended: Vec<&str> = mends
+        .iter()
+        .filter(|o| o.kind == "mend")
+        .map(|o| o.what.as_str())
+        .collect();
+    assert_eq!(mended.len(), 2, "{mended:?}");
+}
+
+#[test]
 fn an_item_not_read_offers_its_repair_and_adopt_fix_takes_it() {
     // Catches "Do you mean …?" kept to the Command line, so an item that
     // does not read said why but not how to mend it.

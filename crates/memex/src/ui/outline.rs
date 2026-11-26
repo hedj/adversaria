@@ -259,23 +259,14 @@ impl<'a> OutlinePane<'a> {
     /// Under the item at the cursor, why its text was not read, if it was
     /// written in this session and was not: a quiet hint, nowhere else.
     fn prose_line(&self, id: u64, depth: usize) -> Option<Line<'static>> {
-        let hint = self.hint_here(id).filter(|h| self.says_why(id, h))?;
+        let text = self.outline().text(id);
+        let hint = self.hint_here(id).filter(|h| says_why(&text, h))?;
         let hint = match self.app.session.prose_repair(id) {
             Some(mended) => format!("not read: did you mean “{mended}”? adopt fix mends it"),
             None => hint.to_string(),
         };
         let indent = "  ".repeat(depth + 1);
         Some(Line::styled(format!("{indent}  {hint}"), dim()))
-    }
-
-    /// Whether a hint says something worth the row: why ACE was not read,
-    /// always; why a text is prose, only if it reads as a sentence (it
-    /// ends in a full stop, question or exclamation mark), not under a
-    /// heading or a name.
-    fn says_why(&self, id: u64, hint: &str) -> bool {
-        let text = self.outline().text(id);
-        let sentence = text.trim_end().ends_with(['.', '?', '!']);
-        !hint.starts_with("prose:") || sentence
     }
 
     /// Under the item at the cursor, its [[links]] that name no item yet,

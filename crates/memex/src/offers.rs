@@ -62,7 +62,7 @@ impl App {
     pub fn open_offers(&self) -> Vec<Open> {
         let mut open = self.findings_open();
         open.extend(self.claims_open());
-        open.extend(self.mend_open());
+        open.extend(self.mends_open());
         open.extend(self.suggestions_open());
         open
     }
@@ -114,18 +114,26 @@ impl App {
         }
     }
 
-    /// The text just written that did not read, if the memex can mend it.
-    fn mend_open(&self) -> Option<Open> {
-        let (id, mended) = self.session.repaired()?;
+    /// The texts written in this session that did not read, each that
+    /// the memex can mend and is still in the outline.
+    fn mends_open(&self) -> Vec<Open> {
+        let present = |(id, _): &(u64, &str)| self.notebook.outline.contains(*id);
+        let each = self.session.repairs().filter(present);
+        each.map(|(id, mended)| self.mend_open(id, mended))
+            .collect()
+    }
+
+    /// The mend of an item's text the memex offers.
+    fn mend_open(&self, id: u64, mended: &str) -> Open {
         let what = self.about(id, &format!("“{mended}”"));
         let presents = Presentation::Item { pane: 0, id };
         let source = "the memex's reading".into();
-        Some(Open {
+        Open {
             kind: "mend".into(),
             what,
             source,
             presents,
-        })
+        }
     }
 
     /// The memex's suggestions shown, by their numbers.
