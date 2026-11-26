@@ -1959,6 +1959,35 @@ to 50 and two higher; it was 48 to 51: three new (`adopt_claims`,
 Not done: typed accessors for bodies, still read by string key, and
 `Point` for view.rs's coordinates (the next steps of findings 2 and 6).
 
+### Bodies read by field, and places named (26 November 2026)
+
+The next steps of the code-smell review's findings 2 and 6.
+
+1. Bodies (dabafc8): `format::body::Body` reads an entry's body by its
+   fields, one method each, so a key is spelt once and its type fixed
+   once. Every read of a body in non-test code goes through it, but
+   for the provenance of an imported result (the results format's own
+   record) and the migration's check of `by` before it writes one.
+   Writes are still `json!` bodies, and tests still read bodies as
+   JSON, which checks the keys apart from the accessors: a key
+   misspelt in body.rs failed three memex tests as well as its own.
+2. Places (397bd03): `view::Point { x, y }` in place of the
+   `(usize, usize)` that meant (x, y) in most of view.rs and
+   (top, left) in `Rect::lines_at`. Sizes, an edge's two nodes and a
+   port's place by its part stay pairs: none is a place.
+
+Both are trade-offs in the measures, as the two before: a read that
+was `b["key"]` or `p.0`, which the measure did not count, is now a
+call or a field it counts. Units of src over 4: 882 to 915 to 920.
+Elements at 7 or more: 51 to 54 to 65, the eleven last all in
+view.rs. Two things the measure does: the accessors share names with
+other functions (`from`, `to`, `item`), so 48 more calls have callers
+not known; and it counts `p.x` and `q.x` apart, though they are one
+field of one type.
+
+Not done: the review's last step of finding 2, a struct for each kind
+of body, which would type the writes too.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
