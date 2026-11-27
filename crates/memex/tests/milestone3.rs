@@ -857,6 +857,60 @@ fn a_purge_leaves_what_can_be_redone() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// A journal of one item, "A", and entries after it whose bodies do not
+/// read: each a text edit of it without spans. The item and the entries.
+fn with_unread(dir: &std::path::Path, count: usize) -> (u64, Vec<u64>) {
+    let mut app = App::open(dir).unwrap();
+    typ(&mut app, "A");
+    app.flush();
+    let item = app.cursor();
+    drop(app);
+    let mut journal = Journal::open(dir).unwrap();
+    let bad = json!({ "op": "text", "item": item, "add": "B" });
+    let mut append = || journal.append(EntryKind::Edit, bad.clone()).unwrap().seq;
+    (item, (0..count).map(|_| append()).collect())
+}
+
+#[test]
+fn opening_names_an_entry_it_leaves_out_as_it_does_not_read() {
+    // Catches an entry whose body does not read left out unsaid.
+    let dir = temp("left-out");
+    let (item, unread) = with_unread(&dir, 1);
+    let app = App::open(&dir).unwrap();
+    let said = format!(
+        "entry {} does not read, so it is left out: missing field `spans`",
+        unread[0]
+    );
+    assert_eq!(app.session.message, said);
+    assert_eq!(app.notebook.outline.text(item), "A");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn opening_names_the_first_entry_it_leaves_out_and_counts_the_rest() {
+    // Catches a note that names only one, or lists every one, however many.
+    let dir = temp("left-out-three");
+    let (_, unread) = with_unread(&dir, 3);
+    let said = format!(
+        "3 entries do not read, so they are left out: entry {} (missing field `spans`) and 2 more; the check program lists each",
+        unread[0]
+    );
+    assert_eq!(App::open(&dir).unwrap().session.message, said);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn opening_says_nothing_of_a_journal_whose_bodies_all_read() {
+    // Catches a purged entry, which has no body, taken for one that does
+    // not read.
+    let dir = temp("left-out-none");
+    with_unread(&dir, 0);
+    assert_eq!(App::open(&dir).unwrap().session.message, "");
+    Journal::open(&dir).unwrap().purge(2, "privacy").unwrap();
+    assert_eq!(App::open(&dir).unwrap().session.message, "");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 fn leaping_again_after_reopening_repeats_the_last_pattern() {
     // Catches a last leap kept only while the memex runs: the journal

@@ -707,25 +707,35 @@ pub struct App {
 
 impl App {
     /// Open a journal directory, writing its first entry if it is new, and
-    /// replay it.
+    /// replay it. It says what opening set aside or migrated, and which
+    /// entries it left out.
     pub fn open(dir: &Path) -> Result<App, JournalError> {
         let (notebook, note) = Notebook::open(dir)?;
-        let session = Session::saying(note.unwrap_or_default());
         let mut app = App {
             notebook,
             reason: Reasoning::default(),
-            session,
+            session: Session::default(),
         };
-        app.apply_all();
+        let unread = app.apply_all();
+        let notes: Vec<String> = [note, left_out(&unread)].into_iter().flatten().collect();
+        app.session.message = notes.join("; ");
         Ok(app)
     }
 
-    /// Apply each entry of the journal, in order.
-    fn apply_all(&mut self) {
+    /// Apply each entry of the journal, in order. An entry whose body does
+    /// not read as its kind is applied as one with no body, as a purged
+    /// one is; each such entry is returned, with the reason.
+    fn apply_all(&mut self) -> Vec<(u64, String)> {
         let entries = self.notebook.journal.entries().to_vec();
+        let mut unread = Vec::new();
         for e in &entries {
-            self.apply(e);
+            let read = e.body().map(|b| Body::read(e.kind(), b));
+            if let Some(Err(why)) = &read {
+                unread.push((e.seq, why.clone()));
+            }
+            self.apply_read(e, read.and_then(Result::ok).as_ref());
         }
+        unread
     }
 
     pub fn journal(&self) -> &Journal {
@@ -740,9 +750,12 @@ impl App {
     // Applying entries: the one way state changes.
 
     pub fn apply(&mut self, e: &Entry) {
-        // Its body is read once, for all that apply it.
-        let body = Body::of(e);
-        let body = body.as_ref();
+        self.apply_read(e, Body::of(e).as_ref());
+    }
+
+    /// Apply an entry whose body is read already: it is read once, for all
+    /// that apply it.
+    fn apply_read(&mut self, e: &Entry, body: Option<&Body>) {
         let before = self.notebook.order_before(e, body);
         self.notebook.apply(e, body);
         self.reason.apply(e, body);
@@ -994,6 +1007,20 @@ impl App {
             .filter(|s| !with.contains(s) && *s != t)
             .collect())
     }
+}
+
+/// What opening says of the entries it left out, by number, as their
+/// bodies did not read: the first with its reason, as the others may be
+/// many; the check program lists each.
+fn left_out(unread: &[(u64, String)]) -> Option<String> {
+    let ((seq, why), rest) = unread.split_first()?;
+    Some(match rest.len() {
+        0 => format!("entry {seq} does not read, so it is left out: {why}"),
+        n => format!(
+            "{} entries do not read, so they are left out: entry {seq} ({why}) and {n} more; the check program lists each",
+            n + 1
+        ),
+    })
 }
 
 /// The word around a text position: [start, end).

@@ -391,12 +391,6 @@ impl Keys {
 }
 
 impl Session {
-    /// A session that starts by saying this.
-    pub(crate) fn saying(message: String) -> Session {
-        let session = Session::default();
-        Session { message, ..session }
-    }
-
     /// Why an item's text was not read as statements, if it was written
     /// in this session and was not.
     pub fn prose_hint(&self, item: u64) -> Option<&str> {

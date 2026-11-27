@@ -1510,6 +1510,11 @@ The hints on screen (such as "F3 adopts") follow your bindings.
   the sealer again; the entries written meanwhile are sealed then.
 - **"memex: configuration: …"**: the file and the reason are named; fix the
   line it names. `memex --print-config` shows a file that works.
+- **"entry N does not read, so it is left out: …"**, on opening a journal:
+  the journal holds an entry whose body this version cannot read, such as
+  one edited by hand. The memex shows the notebook without it, and the
+  journal keeps it as it was. With more than one, the memex names the
+  first; `check DIR` lists each, with its reason.
 - **"no command …"**: `?` in Command lists the commands that match what you
   typed; F1 lists them all. A word one edit from a command is offered
   it (`did you mean “delete”?`).
