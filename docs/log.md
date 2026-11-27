@@ -1988,6 +1988,47 @@ field of one type.
 Not done: the review's last step of finding 2, a struct for each kind
 of body, which would type the writes too.
 
+### A struct for each body, and the replay (27 November 2026)
+
+The code-smell review's finding 2, its last step, and a fault it made.
+
+1. Structs (78971f0): `format::bodies` holds a struct for each shape
+   of body the memex writes, read and written by serde. `Body` is one
+   of them by its entry's kind. Edits and views are enums by op.
+   `Common` holds what any body may (by, facts, suggestion) and any
+   field a struct does not name.
+2. Writes (98d17aa): every writer builds its body from a struct, in
+   place of a `json!` literal. The bodies the test suites write are
+   the same before and after, except for the build and the paths of
+   temporary directories.
+3. Reads (d621379): every reader matches on a struct, and yesterday's
+   accessors (473 lines) are removed. Reading is strict, by the
+   author's choice: a body that does not read as its kind reads as no
+   body.
+4. Replay (db01091): `App::apply` reads each body once and gives it to
+   all that apply the entry. Before, five of them read it again each,
+   so a replay of 20,001 entries read 100,005 bodies; it now reads
+   20,003.
+
+The three struct commits are trade-offs in the measures: a key in a
+string, which the measure did not count, is now a field it counts.
+Units of src over 4: 920 to 925 to 953 to 936 to 935. Elements at 7
+or more: 65 to 65 to 101 to 101 to 101.
+
+Two corrections to the messages:
+
+* 78971f0 says "cargo test -p format: 61 passed". That is the lib
+  tests alone. Counted again at that commit: 61 in the lib, 5 in
+  `tests/known_answers.rs`, 0 doc tests: 66 passed.
+* d621379 says 10,000 items replay in 364 to 408 ms against 275 and
+  285 before. Those runs were of different tests at different times,
+  so they overstate the regression. On one bench, `App::open` of one
+  journal, the rise was about 35 to 45 ms (an estimate from runs made
+  before the fix). After db01091, on that bench, 10 rounds each
+  against a worktree at d51492e: before, mean 275 ms and median 266;
+  now, mean 273 and median 274. That is no difference beyond the
+  noise.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
