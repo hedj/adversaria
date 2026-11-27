@@ -559,11 +559,11 @@ impl Notebook {
 
     /// The order of the items before an entry is applied, if it may remove
     /// one; else nothing.
-    pub(crate) fn order_before(&self, e: &Entry) -> Vec<u64> {
+    pub(crate) fn order_before(&self, e: &Entry, body: Option<&Body>) -> Vec<u64> {
         let may_remove = match e.kind() {
             EntryKind::View => false,
             k if CONTENT.contains(&k) && e.parent_seq() == Some(self.tip) => {
-                matches!(Body::of(e), Some(Body::Edit(Edit::Delete(_))))
+                matches!(body, Some(Body::Edit(Edit::Delete(_))))
             }
             _ => true,
         };
@@ -577,16 +577,16 @@ impl Notebook {
     /// Apply an entry: the tip moves to it, the entries undone follow it,
     /// and the outline changes by it, or is replayed when the entry is not
     /// the next change at the tip.
-    pub(crate) fn apply(&mut self, e: &Entry) {
+    pub(crate) fn apply(&mut self, e: &Entry, body: Option<&Body>) {
         let follows = e.parent_seq() == Some(self.tip);
         let incremental = follows && CONTENT.contains(&e.kind());
         let was = std::mem::replace(&mut self.tip, e.seq);
-        self.follow_undone(e);
+        self.follow_undone(e, body);
         match e.kind() {
             EntryKind::View if follows => {}
             _ if incremental => {
-                if let Some(b) = &e.body() {
-                    self.outline.apply(e.seq, e.kind(), b);
+                if let Some(b) = body {
+                    self.outline.apply_body(e.seq, b);
                 }
             }
             EntryKind::Purge => self.purged(),
@@ -604,8 +604,7 @@ impl Notebook {
     /// The entries undone after an entry: an undo adds the entry it undoes,
     /// a redo takes the last back, and a change clears them. Leaving a
     /// world is a change: what was undone there is not redone in another.
-    fn follow_undone(&mut self, e: &Entry) {
-        let body = Body::of(e);
+    fn follow_undone(&mut self, e: &Entry, body: Option<&Body>) {
         let leaves = matches!(body, Some(Body::View(View::World(_))));
         match e.kind() {
             EntryKind::View if leaves => self.redo.clear(),
@@ -635,14 +634,14 @@ mod tests {
         let (mut n, _) = Notebook::open(&dir).unwrap();
         n.journal.durable = false;
         let first = n.entry(1).unwrap().clone();
-        n.apply(&first);
+        n.apply(&first, Body::of(&first).as_ref());
         n
     }
 
     /// An entry written after another and applied; its number.
     fn written(n: &mut Notebook, after: u64, kind: EntryKind, body: Value) -> u64 {
         let e = n.append(Some(after), kind, body).unwrap();
-        n.apply(&e);
+        n.apply(&e, Body::of(&e).as_ref());
         e.seq
     }
 
@@ -681,7 +680,7 @@ mod tests {
             .append(Some(bark), EntryKind::Undo, json!({"undoes": cedar}))
             .unwrap();
         assert_eq!(n.nearest_kept(undo.seq), Some((0, vec![birch, bark])));
-        n.apply(&undo);
+        n.apply(&undo, Body::of(&undo).as_ref());
         assert_eq!(texts(&n), ["Alder", "Birch bark"]);
         assert_eq!(n.outline, n.outline_at(n.tip));
     }
@@ -691,7 +690,7 @@ mod tests {
         let undo = n
             .append(Some(to), EntryKind::Undo, json!({"undoes": undoes}))
             .unwrap();
-        n.apply(&undo);
+        n.apply(&undo, Body::of(&undo).as_ref());
         texts(n)
     }
 
@@ -723,7 +722,7 @@ mod tests {
             .append(Some(n.tip), EntryKind::Retract, json!({"target": alder}))
             .unwrap();
         assert_eq!(n.nearest_kept(retract.seq), None);
-        n.apply(&retract);
+        n.apply(&retract, Body::of(&retract).as_ref());
         assert_eq!(texts(&n), ["Birch"]);
     }
 
@@ -736,7 +735,7 @@ mod tests {
         let secret = made(&mut n, "secret");
         n.keep_outline();
         let purge = n.journal.purge(secret, "privacy").unwrap();
-        n.apply(&purge);
+        n.apply(&purge, Body::of(&purge).as_ref());
         let after = written(
             &mut n,
             purge.seq,

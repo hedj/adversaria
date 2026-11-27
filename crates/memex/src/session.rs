@@ -7,7 +7,6 @@ use crate::found::Found;
 use crate::plumb::Offer;
 use crate::present::Presentation;
 use format::bodies::{self, Body};
-use format::record::Entry;
 use std::collections::BTreeMap;
 
 /// The violations and the disagreements shown, by key.
@@ -454,8 +453,8 @@ impl Session {
 
     /// Apply a view entry: what it shows, and what it records of a leap or
     /// of what reasoning showed.
-    pub(crate) fn apply(&mut self, e: &Entry) {
-        let Some(Body::View(v)) = Body::of(e) else {
+    pub(crate) fn apply(&mut self, body: Option<&Body>) {
+        let Some(Body::View(v)) = body else {
             return;
         };
         // What reasoning found holds no view: from version 3 none; of
@@ -463,8 +462,8 @@ impl Session {
         if let Some(state) = v.state() {
             self.view.restore(state);
         }
-        self.trail.apply(&v);
-        match &v {
+        self.trail.apply(v);
+        match v {
             bodies::View::Leap(l) => {
                 if let Some((pattern, forward)) = leap_of(l) {
                     self.leapt(pattern, forward);

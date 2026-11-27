@@ -503,11 +503,16 @@ impl Outline {
     /// it names an item that is not there. Each kind of entry, and each
     /// kind of edit, is one method below.
     pub fn apply(&mut self, seq: u64, kind: EntryKind, body: &Value) -> bool {
-        let done = match Body::read(kind, body) {
-            Ok(Body::Edit(e)) => self.edit(seq, &e),
-            Ok(Body::Adopt(a)) => self.adopt(seq, &a),
-            Ok(Body::Link(l)) => self.link(seq, &l),
-            Ok(Body::Name(n)) => self.name(&n),
+        Body::read(kind, body).is_ok_and(|b| self.apply_body(seq, &b))
+    }
+
+    /// Apply an entry's body, read already, as apply does.
+    pub fn apply_body(&mut self, seq: u64, body: &Body) -> bool {
+        let done = match body {
+            Body::Edit(e) => self.edit(seq, e),
+            Body::Adopt(a) => self.adopt(seq, a),
+            Body::Link(l) => self.link(seq, l),
+            Body::Name(n) => self.name(n),
             _ => None,
         };
         done.is_some()

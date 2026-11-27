@@ -71,8 +71,8 @@ pub struct Reasoning {
 impl Reasoning {
     /// Apply an entry: a supposition opens or closes, and a suggestion is
     /// dismissed or offered.
-    pub(crate) fn apply(&mut self, e: &Entry) {
-        let Some(body) = Body::of(e) else {
+    pub(crate) fn apply(&mut self, e: &Entry, body: Option<&Body>) {
+        let Some(body) = body else {
             return;
         };
         let opened =
@@ -87,8 +87,8 @@ impl Reasoning {
             }
             Body::View(View::World(_)) => self.supposition = None,
             Body::View(View::Dismiss(d)) => self.suggestions.dismiss(d.key.as_deref()),
-            Body::View(View::Offer(o)) => self.suggestions.offer(o.keys),
-            Body::Suppose(s) => self.supposition = Some(Supposition::of(e, &s)),
+            Body::View(View::Offer(o)) => self.suggestions.offer(o.keys.clone()),
+            Body::Suppose(s) => self.supposition = Some(Supposition::of(e, s)),
             _ => {}
         }
     }

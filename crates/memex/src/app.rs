@@ -740,10 +740,13 @@ impl App {
     // Applying entries: the one way state changes.
 
     pub fn apply(&mut self, e: &Entry) {
-        let before = self.notebook.order_before(e);
-        self.notebook.apply(e);
-        self.reason.apply(e);
-        self.session.apply(e);
+        // Its body is read once, for all that apply it.
+        let body = Body::of(e);
+        let body = body.as_ref();
+        let before = self.notebook.order_before(e, body);
+        self.notebook.apply(e, body);
+        self.reason.apply(e, body);
+        self.session.apply(body);
         self.session.view.repair(&self.notebook.outline, &before);
     }
 
