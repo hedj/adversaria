@@ -15,7 +15,7 @@
 //!   item just typed into, before the pause, is taken for writing too;
 //!   a view after Backspace erased an empty item stays a move.
 
-use format::body::Body;
+use format::bodies::{Body, Edit, View};
 use format::record::{Entry, EntryKind};
 use serde_json::{Value, json};
 use std::collections::HashSet;
@@ -75,10 +75,10 @@ impl Runs {
     /// Whether the entry at an index is one the memex wrote on its own.
     fn is_own(&self, es: &[Entry], i: usize) -> bool {
         let e = &es[i];
-        let Some(b) = e.body().filter(|_| !self.made.contains(&e.seq)) else {
+        if e.body().is_none() || self.made.contains(&e.seq) {
             return false;
-        };
-        match (e.kind(), Body::of(b).op().unwrap_or("")) {
+        }
+        match (e.kind(), op_of(e).unwrap_or("")) {
             (EntryKind::Edit, "read" | "relink")
             | (EntryKind::View, "observed" | "offer" | "start") => true,
             (EntryKind::Retract, _) => self.in_run(e) && self.run_ends_in_record(&es[i + 1..]),
@@ -89,7 +89,10 @@ impl Runs {
     /// Whether an entry can be part of a reading's or a relinking's run:
     /// a statement, an inline link, or a retraction of either.
     fn in_run(&self, e: &Entry) -> bool {
-        let target = e.body().map(Body::of).and_then(Body::target);
+        let target = match Body::of(e) {
+            Some(Body::Retract(r)) => Some(r.target),
+            _ => None,
+        };
         let of_run = |s: u64| self.stated.contains(&s) || self.inline.contains(&s);
         match e.kind() {
             EntryKind::Retract => target.is_some_and(of_run),
@@ -101,10 +104,13 @@ impl Runs {
     /// `read` or `relink` record that closes it.
     fn run_ends_in_record(&self, after: &[Entry]) -> bool {
         let next = after.iter().find(|e| !self.in_run(e));
-        let closes = |b: Body| matches!(b.op(), Some("read" | "relink"));
-        next.is_some_and(|e| {
-            e.kind() == EntryKind::Edit && e.body().map(Body::of).is_some_and(closes)
-        })
+        let closes = |e: &Entry| {
+            matches!(
+                Body::of(e),
+                Some(Body::Edit(Edit::Read(_) | Edit::Relink(_)))
+            )
+        };
+        next.is_some_and(closes)
     }
 }
 
@@ -117,64 +123,62 @@ fn left(edit: &Entry, view: &Entry) -> bool {
 
 /// Whether an entry is a view of op `move`.
 fn is_move(view: &Entry) -> bool {
-    let moved = |v: Body| v.op() == Some("move");
-    view.kind() == EntryKind::View && view.body().map(Body::of).is_some_and(moved)
+    matches!(Body::of(view), Some(Body::View(View::Move(_))))
 }
 
 /// Whether a view's cursor is where an edit put it: on the item it made,
 /// or in the item it typed into.
 fn stays(edit: &Entry, view: &Entry) -> bool {
-    let (Some(e), Some(v)) = (edit.body().map(Body::of), view.body().map(Body::of)) else {
+    let (Some(Body::Edit(e)), Some(Body::View(v))) = (Body::of(edit), Body::of(view)) else {
         return false;
     };
-    let at = cursor(v);
-    match e.op() {
-        Some("create") => at == Some(edit.seq),
-        Some("text") => at.is_some() && at == e.item(),
+    let at = cursor(&v);
+    match e {
+        Edit::Create(_) => at == Some(edit.seq),
+        Edit::Text(t) => at == Some(t.item),
         _ => false,
     }
 }
 
 /// The cursor a view records: in its pane with the focus.
-fn cursor(v: Body) -> Option<u64> {
-    let focus = v.focus().unwrap_or(0) as usize;
-    v.panes()?.get(focus)?.cursor()
+fn cursor(v: &View) -> Option<u64> {
+    let state = v.state()?;
+    state.panes.get(state.focus as usize)?.cursor
 }
 
 /// The numbers of the statements readings list.
 fn stated(es: &[Entry]) -> HashSet<u64> {
-    let reads = es
-        .iter()
-        .filter(|e| e.kind() == EntryKind::Edit)
-        .filter_map(|e| e.body().map(Body::of));
-    let reads = reads.filter(|b| b.op() == Some("read"));
-    reads
-        .flat_map(|b| b.entries().unwrap_or_default())
-        .collect()
+    let read = |e: &Entry| match Body::of(e) {
+        Some(Body::Edit(Edit::Read(r))) => Some(r.entries),
+        _ => None,
+    };
+    es.iter().filter_map(read).flatten().collect()
 }
 
 /// The numbers of the inline links: those a `[[link]]` in a text wrote.
 fn inline_links(es: &[Entry]) -> HashSet<u64> {
-    let inline = |e: &&Entry| e.body().is_some_and(|b| Body::of(b).inline());
-    let links = es
-        .iter()
-        .filter(|e| e.kind() == EntryKind::Link)
-        .filter(inline);
-    links.map(|e| e.seq).collect()
+    let inline = |e: &&Entry| matches!(Body::of(e), Some(Body::Link(l)) if l.inline == Some(true));
+    es.iter().filter(inline).map(|e| e.seq).collect()
 }
 
 /// The numbers of the entries the user's `make` wrote: from the entry its
 /// record names to the record itself.
 fn made_by_make(es: &[Entry]) -> HashSet<u64> {
-    let made = |e: &Entry| {
-        let b = e.body().map(Body::of)?;
-        (b.op() == Some("make")).then_some(b)?.of_entry()
+    let made = |e: &Entry| match Body::of(e) {
+        Some(Body::Edit(Edit::Make(m))) => m.of,
+        _ => None,
     };
-    let edits = es.iter().filter(|e| e.kind() == EntryKind::Edit);
-    edits
-        .filter_map(|e| Some(made(e)?..=e.seq))
-        .flatten()
-        .collect()
+    let records = es.iter().filter_map(|e| Some(made(e)?..=e.seq));
+    records.flatten().collect()
+}
+
+/// The op of an edit or a view, if its body reads.
+fn op_of(e: &Entry) -> Option<&'static str> {
+    match Body::of(e)? {
+        Body::Edit(edit) => Some(edit.op()),
+        Body::View(view) => Some(view.op()),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -201,6 +205,11 @@ mod tests {
     }
 
     /// A view of op, its cursor on an item.
+    /// A text edit of an item, as the memex writes one.
+    fn typed(item: u64) -> Value {
+        json!({"op": "text", "item": item, "add": "x", "spans": [[0, 0, 1]]})
+    }
+
     fn view(op: &str, at: u64) -> (EntryKind, Value) {
         let panes = json!([{"kind": "outline", "cursor": at}]);
         (
@@ -264,9 +273,9 @@ mod tests {
             (EntryKind::Edit, json!({"op": "init"})),
             (EntryKind::Edit, json!({"op": "create", "under": 0})),
             view("move", 2),
-            (EntryKind::Edit, json!({"op": "text", "item": 2})),
+            (EntryKind::Edit, typed(2)),
             view("move", 2),
-            (EntryKind::Edit, json!({"op": "text", "item": 2})),
+            (EntryKind::Edit, typed(2)),
             view("move", 9),
             (EntryKind::Edit, json!({"op": "delete", "item": 2})),
             view("move", 9),

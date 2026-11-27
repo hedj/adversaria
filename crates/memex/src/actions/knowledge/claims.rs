@@ -7,9 +7,8 @@ use crate::actions::worlds::with_left;
 use crate::app::{App, TakeBack};
 use crate::notebook::Notebook;
 use crate::reason::{Suggestion, show};
-use format::bodies::{Adopt, AdoptOp, Common, Dismiss, Mark, View};
-use format::body::Body;
-use format::record::{Entry, EntryKind};
+use format::bodies::{Adopt, AdoptOp, Body, Common, Dismiss, Mark, View};
+use format::record::Entry;
 use format::terms::Term;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -247,12 +246,14 @@ fn check_adoptable(claims: &[Claim]) -> Result<(), String> {
 /// Whether an entry adopts a claim of an item.
 /// The claim an adopt entry adopted, if it is one.
 fn adopted_claim(e: &Entry) -> Option<u64> {
-    let body = e.body().filter(|_| e.kind() == EntryKind::Adopt)?;
-    Body::of(body).claim()
+    match Body::of(e)? {
+        Body::Adopt(a) => a.claim,
+        _ => None,
+    }
 }
 
 pub(crate) fn adopts(e: &Entry, item: u64) -> bool {
-    e.kind() == EntryKind::Adopt && e.body().map(Body::of).and_then(Body::item) == Some(item)
+    matches!(Body::of(e), Some(Body::Adopt(a)) if a.item == Some(item))
 }
 
 impl App {

@@ -5,8 +5,8 @@
 
 use crate::notebook::Notebook;
 use crate::outline::Outline;
-use format::body::Body;
-use format::record::{Entry, EntryKind};
+use format::bodies::{Body, Edit, View};
+use format::record::Entry;
 use std::collections::BTreeSet;
 
 /// One step of the history: its entry, what it did, and whether a later
@@ -46,64 +46,72 @@ impl Met {
 
 /// The entry a retract entry takes back, if it is one.
 fn retract_target(e: &Entry) -> Option<u64> {
-    let b = e.body().filter(|_| e.kind() == EntryKind::Retract)?;
-    Body::of(b).target()
+    match Body::of(e)? {
+        Body::Retract(r) => Some(r.target),
+        _ => None,
+    }
 }
 
 /// The entries a reading of a text wrote, if an entry is one.
 fn read_entries(e: &Entry) -> Vec<u64> {
-    let b = e.body().map(Body::of);
-    let read = b.filter(|b| e.kind() == EntryKind::Edit && b.op() == Some("read"));
-    read.and_then(Body::entries).unwrap_or_default()
+    match Body::of(e) {
+        Some(Body::Edit(Edit::Read(r))) => r.entries,
+        _ => vec![],
+    }
 }
 
 /// What an entry did, if it is a step of the history; a reading of a
 /// text, which follows its edit, and the rest of the view, are not.
 fn said(e: &Entry, o: &Outline) -> Option<String> {
-    let b = Body::of(e.body()?);
-    match e.kind() {
-        EntryKind::Edit => edit_said(e.seq, b, o),
-        EntryKind::Link => Some(format!("linked {} to {}", at(o, b.from()), at(o, b.to()))),
-        EntryKind::Name => Some(format!("named {} “{}”", at(o, b.item()), b.name()?)),
-        EntryKind::Suppose => Some(format!("supposed “{}”", b.name()?)),
-        EntryKind::Adopt => Some(format!("adopted, in {}", at(o, b.item()))),
-        EntryKind::Import => Some(format!("imported {}", b.file().or(b.source())?)),
-        EntryKind::Retract => Some(format!("retracted entry {}", b.target()?)),
-        EntryKind::Undo => Some(format!("undid entry {}", b.undoes()?)),
-        EntryKind::Redo => Some(format!("redid entry {}", b.redoes()?)),
-        EntryKind::View => jump_said(b, o),
-        _ => None,
+    match Body::of(e)? {
+        Body::Edit(edit) => edit_said(e.seq, &edit, o),
+        Body::Link(l) => Some(format!(
+            "linked {} to {}",
+            at(o, Some(l.from)),
+            at(o, Some(l.to))
+        )),
+        Body::Name(n) => Some(format!("named {} “{}”", at(o, Some(n.item)), n.name)),
+        Body::Suppose(s) => Some(format!("supposed “{}”", s.name?)),
+        Body::Adopt(a) => Some(format!("adopted, in {}", at(o, a.item))),
+        Body::Import(i) => Some(format!("imported {}", i.file.or(i.source)?)),
+        Body::Retract(r) => Some(format!("retracted entry {}", r.target)),
+        Body::Undo(u) => Some(format!("undid entry {}", u.undoes)),
+        Body::Redo(r) => Some(format!("redid entry {}", r.redoes)),
+        Body::View(v) => jump_said(&v, o),
+        Body::Purge(_) => None,
     }
 }
 
 /// What an edit did to the outline: to its item, which an item's
 /// creation is, by its entry's number, if it names none.
-fn edit_said(seq: u64, b: Body, o: &Outline) -> Option<String> {
-    let item = at(o, Some(b.item().unwrap_or(seq)));
-    match b.op()? {
-        "text" => Some(format!("edited {item}")),
-        "create" => Some(format!("added {item}")),
-        "delete" => Some("deleted an item".into()),
-        "move" => Some(format!("moved {item}")),
-        "facts" => Some(format!("stated facts in {item}")),
-        "constraint" => Some(format!("stated a rule in {item}")),
-        "layer" => Some(format!("added a layer to {item}")),
-        "read" | "init" => None,
-        op => Some(format!("{op}: {item}")),
+fn edit_said(seq: u64, edit: &Edit, o: &Outline) -> Option<String> {
+    let item = at(o, Some(edit.item().unwrap_or(seq)));
+    match edit {
+        Edit::Text(_) => Some(format!("edited {item}")),
+        Edit::Create(_) => Some(format!("added {item}")),
+        Edit::Delete(_) => Some("deleted an item".into()),
+        Edit::Move(_) => Some(format!("moved {item}")),
+        Edit::Facts(_) => Some(format!("stated facts in {item}")),
+        Edit::Constraint(_) => Some(format!("stated a rule in {item}")),
+        Edit::Layer(_) => Some(format!("added a layer to {item}")),
+        Edit::Read(_) | Edit::Init(_) => None,
+        other => Some(format!("{}: {item}", other.op())),
     }
 }
 
 /// What a jump did: how it went, to which item, and from which.
-fn jump_said(b: Body, o: &Outline) -> Option<String> {
-    let (from, to) = (b.from()?, b.to()?);
+fn jump_said(v: &View, o: &Outline) -> Option<String> {
+    let (Some(from), Some(to)) = v.jump()? else {
+        return None;
+    };
     if from == to {
         return None;
     }
-    let how = match b.op()? {
-        "back" => "went back to",
-        "forward" => "went forward to",
-        "follow" => "followed a link to",
-        "leap" => "leapt to",
+    let how = match v {
+        View::Back(_) => "went back to",
+        View::Forward(_) => "went forward to",
+        View::Follow(_) => "followed a link to",
+        View::Leap(_) => "leapt to",
         _ => "went to",
     };
     Some(format!(
@@ -155,8 +163,10 @@ impl Notebook {
     /// it. One that stayed where it was is no step of the history, so its
     /// row is never right-clicked.
     pub(crate) fn jumped_to(&self, seq: u64) -> Option<u64> {
-        let e = self.entry(seq)?;
-        let b = Body::of(e.body().filter(|_| e.kind() == EntryKind::View)?);
-        b.from().and(b.to())
+        let Body::View(v) = Body::of(self.entry(seq)?)? else {
+            return None;
+        };
+        let (from, to) = v.jump()?;
+        from.and(to)
     }
 }

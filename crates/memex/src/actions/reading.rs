@@ -14,8 +14,7 @@ use crate::ace::{Kind, Reading, Said, Unread, Words, words_of};
 use crate::app::App;
 use crate::engine::told;
 use crate::notebook::Notebook;
-use format::bodies;
-use format::body::Body;
+use format::bodies::{self, Body};
 use format::record::EntryKind;
 use format::terms::Term;
 use std::rc::Rc;
@@ -378,13 +377,10 @@ impl Notebook {
     /// text edit a reading reads, or the first entry of a split. Undo takes
     /// all from there back together.
     pub(crate) fn read_from(&self, seq: u64) -> Option<u64> {
-        let e = self.entry(seq)?;
-        let closes = |b: &Body| matches!(b.op(), Some("read" | "split" | "make" | "relink"));
-        let b = e
-            .body()
-            .filter(|_| e.kind() == EntryKind::Edit)
-            .map(Body::of);
-        b.filter(closes)?.of_entry()
+        let Body::Edit(edit) = Body::of(self.entry(seq)?)? else {
+            return None;
+        };
+        edit.of_entry()
     }
 }
 

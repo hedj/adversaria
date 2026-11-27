@@ -4,8 +4,7 @@
 
 use super::*;
 use crate::actions::Claim;
-use format::body::Body;
-use format::record::EntryKind;
+use format::bodies::Body;
 
 /// The right pane at a claim item, or one interrogated: each of the
 /// item's claims, then what adopting them would do. The hint follows,
@@ -188,12 +187,12 @@ fn adoptions_from(entries: &[format::record::Entry], src: &str) -> Vec<u64> {
 
 /// Whether an entry adopts a claim from a source.
 fn adopts_from(e: &format::record::Entry, src: &str) -> bool {
-    e.kind() == EntryKind::Adopt && e.body().is_some_and(|b| Body::of(b).source() == Some(src))
+    matches!(Body::of(e), Some(Body::Adopt(a)) if a.source.as_deref() == Some(src))
 }
 
 /// Whether an entry retracts another, by its number.
 fn retracts(e: &format::record::Entry, target: u64) -> bool {
-    e.kind() == EntryKind::Retract && e.body().map(Body::of).and_then(Body::target) == Some(target)
+    matches!(Body::of(e), Some(Body::Retract(r)) if r.target == target)
 }
 
 /// What adopting the interrogated claims would do, then the blank line

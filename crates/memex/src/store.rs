@@ -7,7 +7,7 @@
 //! (docs/design.md § The journal, § The journal format.)
 
 use crate::prolog::{self, Prolog};
-use format::body::Body;
+use format::bodies::{self, Body, Common, Retract};
 use format::record::{Entry, EntryKind};
 use format::terms::{self, Term};
 use serde_json::Value;
@@ -141,7 +141,10 @@ impl Store {
     }
 
     fn retract(&mut self, entries: &[Entry], seq: u64, body: &Value) -> Result<(), String> {
-        let t = Body::of(body).target().ok_or("a retract needs a target")?;
+        let read = bodies::read::<Retract>(body);
+        let t = read
+            .map_err(|why| format!("a retract does not read: {why}"))?
+            .target;
         self.check_target(entries, seq, t)?;
         self.facts.remove(&t);
         Ok(())
@@ -166,7 +169,8 @@ impl Store {
 
     /// Add the facts a body carries, if it carries any.
     fn add(&mut self, seq: u64, body: &Value) -> Result<(), String> {
-        let list = Body::of(body).facts()?;
+        let common = Common::of(body)?;
+        let list = common.facts();
         let fs = list
             .iter()
             .map(fact)
@@ -181,7 +185,10 @@ impl Store {
 /// The entry a retraction names, if this entry is one that names one.
 fn retract_target(e: &Entry) -> Option<u64> {
     let retracts = e.kind() == EntryKind::Retract;
-    retracts.then(|| Body::of(e.body()?).target()).flatten()
+    match Body::of(e).filter(|_| retracts)? {
+        Body::Retract(r) => Some(r.target),
+        _ => None,
+    }
 }
 
 /// A fact as the journal encodes it: an atom or a compound term.
@@ -489,7 +496,7 @@ mod tests {
         ]);
         assert_eq!(
             facts(&es, 2),
-            Err("entry 2: a retract needs a target".into())
+            Err("entry 2: a retract does not read: missing field `target`".into())
         );
     }
 

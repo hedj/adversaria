@@ -6,9 +6,8 @@ use crate::app::{Active, Event, Key, Mode, PendingText, Press, Quasi, View};
 use crate::found::Found;
 use crate::plumb::Offer;
 use crate::present::Presentation;
-use format::bodies;
-use format::body::Body;
-use format::record::{Entry, EntryKind};
+use format::bodies::{self, Body};
+use format::record::Entry;
 use std::collections::BTreeMap;
 
 /// The violations and the disagreements shown, by key.
@@ -262,13 +261,13 @@ pub struct Trail {
 impl Trail {
     /// Follow a view entry: a jump puts where it came from on the back
     /// list and empties the forward one; back and forward move between.
-    fn apply(&mut self, b: Body) {
-        let (Some(from), to) = (b.from(), b.to()) else {
+    fn apply(&mut self, v: &bodies::View) {
+        let Some((Some(from), to)) = v.jump() else {
             return;
         };
-        match b.op() {
-            Some("back") => step(&mut self.back, &mut self.forward, from, to),
-            Some("forward") => step(&mut self.forward, &mut self.back, from, to),
+        match v {
+            bodies::View::Back(_) => step(&mut self.back, &mut self.forward, from, to),
+            bodies::View::Forward(_) => step(&mut self.forward, &mut self.back, from, to),
             _ if to != Some(from) => {
                 self.back.push(from);
                 self.forward.clear();
@@ -290,21 +289,16 @@ fn step(along: &mut Vec<u64>, other: &mut Vec<u64>, from: u64, to: Option<u64>) 
     other.push(from);
 }
 
-/// The pattern and direction of a leap entry.
-fn leap_of(b: Body) -> Option<(String, bool)> {
-    let pattern = b.pattern()?;
-    Some((pattern.to_string(), b.forward()))
+/// The pattern and direction of a leap entry: forward unless it says
+/// not.
+fn leap_of(l: &bodies::Leap) -> Option<(&str, bool)> {
+    Some((l.pattern.as_deref()?, l.forward != Some(false)))
 }
 
 /// What a find entry lists, if it names a list.
-fn found_of(b: Body) -> Option<Found> {
-    let filter = b.filter().filter(|f| !f.is_empty())?;
+fn found_of(f: &bodies::Find) -> Option<Found> {
+    let filter = f.filter.as_deref().filter(|f| !f.is_empty())?;
     Some(Found::of(filter))
-}
-
-/// The violations and the disagreements an observed entry records.
-fn observed_of(b: Body) -> Observed {
-    (b.violations(), b.disagreements())
 }
 
 /// The keys of the configuration, as the screen names them: those bound
@@ -397,13 +391,6 @@ impl Keys {
     }
 }
 
-/// Whether a view entry records what reasoning found, and no view: an
-/// observation or an offer. From version 3 they hold none; of versions 1
-/// and 2, the view as it then was, which restoring changes nothing of.
-fn is_record(b: Body) -> bool {
-    matches!(b.op(), Some("observed" | "offer"))
-}
-
 impl Session {
     /// A session that starts by saying this.
     pub(crate) fn saying(message: String) -> Session {
@@ -468,25 +455,25 @@ impl Session {
     /// Apply a view entry: what it shows, and what it records of a leap or
     /// of what reasoning showed.
     pub(crate) fn apply(&mut self, e: &Entry) {
-        let Some(b) = e
-            .body()
-            .filter(|_| e.kind() == EntryKind::View)
-            .map(Body::of)
-        else {
+        let Some(Body::View(v)) = Body::of(e) else {
             return;
         };
-        if !is_record(b) {
-            self.view.restore(b);
+        // What reasoning found holds no view: from version 3 none; of
+        // versions 1 and 2, the view as it then was, kept unread.
+        if let Some(state) = v.state() {
+            self.view.restore(state);
         }
-        self.trail.apply(b);
-        match b.op() {
-            Some("leap") => {
-                if let Some((pattern, forward)) = leap_of(b) {
-                    self.leapt(&pattern, forward);
+        self.trail.apply(&v);
+        match &v {
+            bodies::View::Leap(l) => {
+                if let Some((pattern, forward)) = leap_of(l) {
+                    self.leapt(pattern, forward);
                 }
             }
-            Some("find") => self.found = found_of(b).or(self.found.take()),
-            Some("observed") => self.set_observed(observed_of(b)),
+            bodies::View::Find(f) => self.found = found_of(f).or(self.found.take()),
+            bodies::View::Observed(o) => {
+                self.set_observed((o.violations.clone(), o.disagreements.clone()))
+            }
             _ => {}
         }
     }

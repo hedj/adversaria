@@ -10,8 +10,8 @@
 //! each suggestion made.
 
 use crate::inferred::Inferred;
-use format::body::Body;
-use format::record::{Entry, EntryKind};
+use format::bodies::{Body, View};
+use format::record::Entry;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
@@ -80,7 +80,7 @@ impl Rewrite {
         if let Some(inferred) = &self.inferred {
             to_v2(e, inferred, &mut body);
         }
-        if e.kind() == EntryKind::View && Body::of(&body).op() == Some("offer") {
+        if matches!(Body::read(e.kind(), &body), Ok(Body::View(View::Offer(_)))) {
             body["drawn"] = json!(true);
         }
         (Some(&body) != e.body()).then_some(body)
@@ -92,7 +92,7 @@ impl Rewrite {
 /// on its own is marked so; a view that only records where writing left
 /// the cursor is `written`.
 fn to_v2(e: &Entry, inferred: &Inferred, body: &mut Value) {
-    if e.kind() == EntryKind::View && Body::of(body).op() == Some("start") {
+    if matches!(Body::read(e.kind(), body), Ok(Body::View(View::Start(_)))) {
         body.as_object_mut().map(|b| b.remove("schema"));
     }
     inferred.mark(e.seq, body);
@@ -101,6 +101,7 @@ fn to_v2(e: &Entry, inferred: &Inferred, body: &mut Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use format::record::EntryKind;
 
     /// Entries of these kinds and bodies, each after the one before.
     fn chain(bodies: &[(EntryKind, Value)]) -> Vec<Entry> {

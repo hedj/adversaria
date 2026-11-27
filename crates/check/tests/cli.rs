@@ -34,7 +34,7 @@ fn write(dir: &Path, (file, format): (&str, &str), record: &str) {
 fn sealed_lines(text: &str) -> [String; 3] {
     let sk = SigningKey::from_bytes(&[9u8; 32]);
     let key = Key::new(&sk.verifying_key().to_bytes()).unwrap();
-    let body = json!({ "text": text, "version": JOURNAL_VERSION });
+    let body = json!({ "op": "init", "text": text, "version": JOURNAL_VERSION });
     let e = Entry::new(1, None, EntryKind::Edit, body).unwrap();
     let seal = seal_of(&sk, &key, &e);
     [key.to_line(), e.to_line(), seal.to_line()].map(Result::unwrap)

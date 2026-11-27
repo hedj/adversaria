@@ -39,7 +39,7 @@
 //! under it deleted, or such an item's text no longer read; without a
 //! record, as in version 1, the reason is unrecorded.
 
-use format::body::{Body, Gone};
+use format::bodies::{Body, Common, Edit, Gone, Observed, View};
 use format::record::{Entry, EntryKind};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -96,42 +96,72 @@ pub struct Report {
 
 /// Whether a facts edit states a ruling: a fact ruling(...), not any
 /// fact that holds the word.
-fn states_a_ruling(body: Body) -> bool {
-    let facts = body.facts().unwrap_or_default();
-    facts.iter().any(|f| f["f"] == "ruling")
+fn states_a_ruling(common: &Common) -> bool {
+    common.facts().iter().any(|f| f["f"] == "ruling")
 }
 
 /// The kind of action an entry is, or None for an observation (or the first
-/// entry, which the memex writes itself).
+/// entry, which the memex writes itself). An edit, a link or a name is
+/// writing by its kind, whether or not its body reads.
 pub fn kind(e: &Entry) -> Option<&'static str> {
-    let body = e.body().map(Body::of);
-    let op = body.and_then(Body::op).unwrap_or("");
-    match (e.kind(), op) {
-        (EntryKind::Edit, "init") => None,
-        (EntryKind::Edit, "facts") if body.is_some_and(states_a_ruling) => Some("checking"),
-        (EntryKind::Edit, _) | (EntryKind::Link, _) | (EntryKind::Name, _)
-            if body.is_some_and(|b| b.suggestion().is_some()) =>
-        {
-            Some("deciding")
+    let common = common(e);
+    let adopts = common.suggestion.is_some();
+    match (e.kind(), Body::of(e)) {
+        (EntryKind::Edit, Some(Body::Edit(Edit::Init(_)))) => None,
+        (EntryKind::Edit, Some(Body::Edit(Edit::Facts(_)))) if states_a_ruling(&common) => {
+            Some("checking")
         }
-        (EntryKind::Edit, _) | (EntryKind::Link, _) | (EntryKind::Name, _) => Some("writing"),
-        (EntryKind::Adopt, _)
-        | (EntryKind::Retract, _)
-        | (EntryKind::Suppose, _)
-        | (EntryKind::Undo, _)
-        | (EntryKind::Redo, _)
-        | (EntryKind::Purge, _) => Some("deciding"),
+        (EntryKind::Edit | EntryKind::Link | EntryKind::Name, _) if adopts => Some("deciding"),
+        (EntryKind::Edit | EntryKind::Link | EntryKind::Name, _) => Some("writing"),
+        (
+            EntryKind::Adopt
+            | EntryKind::Retract
+            | EntryKind::Suppose
+            | EntryKind::Undo
+            | EntryKind::Redo
+            | EntryKind::Purge,
+            _,
+        ) => Some("deciding"),
         (EntryKind::Import, _) => Some("importing"),
-        (EntryKind::View, "leap" | "find") => Some("searching"),
-        (EntryKind::View, "follow") => Some("following links"),
-        (EntryKind::View, "move") if inspects(e) => Some("checking"),
-        (EntryKind::View, "move" | "fold" | "pane" | "scope" | "go" | "back" | "forward") => {
-            Some("navigating")
-        }
-        (EntryKind::View, "dismiss" | "world") => Some("deciding"),
-        (EntryKind::View, "interrogate" | "verdict") => Some("checking"),
-        (EntryKind::View, "export") => Some("exporting"),
+        (EntryKind::View, Some(Body::View(v))) => view_kind(&v),
         (EntryKind::View, _) => None,
+    }
+}
+
+/// The kind of action a view is: a move to a claim item, which shows its
+/// questions in the inspector without a command (docs/concepts.md,
+/// decision 4), is a check.
+fn view_kind(v: &View) -> Option<&'static str> {
+    match v {
+        View::Leap(_) | View::Find(_) => Some("searching"),
+        View::Follow(_) => Some("following links"),
+        View::Move(m) if m.state.inspects.is_some() => Some("checking"),
+        View::Move(_)
+        | View::Fold(_)
+        | View::Pane(_)
+        | View::Scope(_)
+        | View::Go(_)
+        | View::Back(_)
+        | View::Forward(_) => Some("navigating"),
+        View::Dismiss(_) | View::World(_) => Some("deciding"),
+        View::Interrogate(_) | View::Verdict(_) => Some("checking"),
+        View::Export(_) => Some("exporting"),
+        View::Start(_) | View::Written(_) | View::Observed(_) | View::Offer(_) => None,
+    }
+}
+
+/// What an entry's body holds that any body may; nothing, if it holds
+/// none or that does not read.
+fn common(e: &Entry) -> Common {
+    let common = e.body().map(Common::of);
+    common.and_then(Result::ok).unwrap_or_default()
+}
+
+/// An entry's view, if it is one that reads.
+fn view_of(e: &Entry) -> Option<View> {
+    match Body::of(e)? {
+        Body::View(v) => Some(v),
+        _ => None,
     }
 }
 
@@ -164,44 +194,28 @@ impl Report {
     /// the cursor, an action of its kind, or none of these; and a
     /// dismissal counted.
     fn count(&mut self, e: &Entry) {
+        let view = view_of(e);
+        let record = matches!(view, Some(View::Observed(_) | View::Offer(_)));
         match kind(e) {
-            _ if is_view(e, &["observed", "offer"]) => self.observations += 1,
-            _ if by_memex(e) => self.by_memex += 1,
-            _ if is_view(e, &["written"]) => self.left_by_writing += 1,
+            _ if record => self.observations += 1,
+            _ if common(e).by_memex() => self.by_memex += 1,
+            _ if matches!(view, Some(View::Written(_))) => self.left_by_writing += 1,
             Some(k) => *self.actions.get_mut(k).unwrap() += 1,
             None => self.unclassified += 1,
         }
-        if is_view(e, &["dismiss"]) {
+        if matches!(view, Some(View::Dismiss(_))) {
             self.dismissed += 1;
         }
     }
 }
 
-/// Whether a view entry shows a claim's questions in the inspector: since
-/// the inspector shows them at the selected claim item, without a command
-/// (docs/concepts.md, decision 4), a move to one is a check.
-fn inspects(e: &Entry) -> bool {
-    e.body().is_some_and(|b| Body::of(b).inspects().is_some())
-}
-
-/// Whether the memex wrote an entry on its own, not at the user's command
-/// or key.
-fn by_memex(e: &Entry) -> bool {
-    e.body().is_some_and(|b| Body::of(b).by_memex())
-}
-
-/// Whether an entry is a view of one of these ops.
-fn is_view(e: &Entry, ops: &[&str]) -> bool {
-    let op = e.body().map(Body::of).and_then(Body::op);
-    e.kind() == EntryKind::View && op.is_some_and(|o| ops.contains(&o))
-}
-
 /// The entries that retract entries, by the entry each retracts.
 fn retracted(entries: &[Entry]) -> BTreeSet<u64> {
-    let retracts = entries.iter().filter(|e| e.kind() == EntryKind::Retract);
-    retracts
-        .filter_map(|e| e.body().map(Body::of).and_then(Body::target))
-        .collect()
+    let target = |e: &Entry| match Body::of(e)? {
+        Body::Retract(r) => Some(r.target),
+        _ => None,
+    };
+    entries.iter().filter_map(target).collect()
 }
 
 /// How many findings have each verdict last.
@@ -218,13 +232,13 @@ struct Judged(BTreeMap<String, &'static str>);
 impl Judged {
     /// A verdict entry: its word, for each finding it names.
     fn read(&mut self, e: &Entry) {
-        let Some(b) = e.body().filter(|_| is_view(e, &["verdict"])).map(Body::of) else {
+        let Some(View::Verdict(v)) = view_of(e) else {
             return;
         };
-        let Some(word) = VERDICTS.iter().find(|v| b.verdict() == Some(**v)) else {
+        let Some(word) = VERDICTS.iter().find(|w| v.verdict.as_deref() == Some(**w)) else {
             return;
         };
-        let named = b.findings().into_iter();
+        let named = v.findings.into_iter();
         self.0.extend(named.map(|f| (f, *word)));
     }
 
@@ -237,9 +251,9 @@ impl Judged {
 
 /// Why each violation an observation records as gone went, by its name;
 /// a reason the report does not know is unrecorded.
-fn reasons(b: Body) -> BTreeMap<String, &'static str> {
-    let each = |g: Gone| Some((g.finding()?.to_string(), reason(g.why())));
-    b.gone().into_iter().filter_map(each).collect()
+fn reasons(o: &Observed) -> BTreeMap<String, &'static str> {
+    let each = |g: &Gone| (g.finding.clone(), reason(g.why.as_deref()));
+    o.gone.iter().flatten().map(each).collect()
 }
 
 /// A reason, as WHY names it.
@@ -273,21 +287,21 @@ struct Offers {
 
 impl Offers {
     fn read(&mut self, e: &Entry) {
-        let Some(b) = e.body().map(Body::of) else {
-            return;
-        };
         if e.seq == 1 {
-            self.before_3 = b.version().is_none_or(|v| v < 3);
+            let version = match Body::of(e) {
+                Some(Body::Edit(Edit::Init(i))) => i.version,
+                _ => None,
+            };
+            self.before_3 = version.is_none_or(|v| v < 3);
         }
-        if b.suggestion().is_some() {
+        if common(e).suggestion.is_some() {
             self.adopted.push(e.seq);
         }
-        if is_view(e, &["offer"]) {
-            let keys = b.keys();
-            if self.before_3 || b.drawn() {
-                self.drawn.extend(keys.iter().cloned());
+        if let Some(View::Offer(o)) = view_of(e) {
+            if self.before_3 || o.drawn == Some(true) {
+                self.drawn.extend(o.keys.iter().cloned());
             }
-            self.offered.extend(keys);
+            self.offered.extend(o.keys);
         }
     }
 
@@ -316,11 +330,8 @@ struct Watch {
 
 impl Watch {
     fn read(&mut self, e: &Entry) {
-        let Some(b) = e.body().map(Body::of) else {
-            return;
-        };
-        if is_view(e, &["observed"]) {
-            self.observe(b);
+        if let Some(View::Observed(o)) = view_of(e) {
+            self.observe(&o);
         }
     }
 
@@ -328,12 +339,12 @@ impl Watch {
     /// observed and does not show now is gone, for the reason recorded. A
     /// supposition's observations are seen, but compared with nothing:
     /// they are not the actual world's.
-    fn observe(&mut self, b: Body) {
-        let now = b.violations();
+    fn observe(&mut self, o: &Observed) {
+        let now = o.violations.clone();
         self.violations.extend(now.iter().cloned());
-        self.disagreements.extend(b.disagreements());
-        if b.world() == Some("actual") {
-            self.went(&now, &reasons(b));
+        self.disagreements.extend(o.disagreements.iter().cloned());
+        if o.world.as_deref() == Some("actual") {
+            self.went(&now, &reasons(o));
             self.last = now;
         }
     }

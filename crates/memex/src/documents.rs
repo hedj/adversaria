@@ -8,8 +8,7 @@ use crate::docs::{Block, Losses};
 use crate::notebook::Notebook;
 use crate::outline::Revised;
 use crate::outline::TOP;
-use format::bodies::{Common, Create, Edit, Export, Facts, Import, Move, Suppose, View};
-use format::body::Body;
+use format::bodies::{Body, Common, Create, Edit, Export, Facts, Import, Move, Suppose, View};
 use format::terms::{self, Term};
 use serde_json::json;
 use std::collections::HashSet;
@@ -383,8 +382,10 @@ impl Notebook {
         let place = self.outline.number(item);
         let not = || format!("{place} did not come from an imported document");
         let import = self.outline.origin(item).ok_or_else(not)?;
-        let body = self.entry(import).and_then(|e| e.body());
-        let name = body.and_then(|b| Body::of(b).file().map(String::from));
+        let name = match self.entry(import).and_then(Body::of) {
+            Some(Body::Import(i)) => i.file,
+            _ => None,
+        };
         name.ok_or_else(not)
     }
 }

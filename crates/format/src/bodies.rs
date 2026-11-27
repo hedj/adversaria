@@ -45,8 +45,10 @@ pub struct Common {
     pub by: Option<By>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub facts: Option<Vec<Fact>>,
+    /// A Mark, written as one; read as it is, since what reads it asks
+    /// only whether it is there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub suggestion: Option<Mark>,
+    pub suggestion: Option<Value>,
     #[serde(flatten)]
     pub later: Map<String, Value>,
 }
@@ -90,7 +92,8 @@ impl Common {
 
     /// What a body holds that adopts a suggestion, adding these facts.
     pub fn adopting(suggestion: Mark, facts: Vec<Fact>) -> Common {
-        let suggestion = Some(suggestion);
+        let mark = serde_json::to_value(suggestion);
+        let suggestion = Some(mark.expect("a mark's fields have text keys, so it is JSON"));
         Common {
             suggestion,
             ..Common::adding(facts)
@@ -243,12 +246,13 @@ impl Body {
     }
 
     /// The suggestion it adopts, if it adopts one.
-    pub fn suggestion(&self) -> Option<&Mark> {
+    pub fn suggestion(&self) -> Option<&Value> {
         self.common().suggestion.as_ref()
     }
 }
 
-fn read<'a, T: Deserialize<'a>>(json: &'a Value) -> Result<T, String> {
+/// A body read as one struct of a kind; an error if it does not read.
+pub fn read<'a, T: Deserialize<'a>>(json: &'a Value) -> Result<T, String> {
     T::deserialize(json).map_err(|e| e.to_string())
 }
 
@@ -1096,6 +1100,25 @@ mod tests {
                 assert_eq!(body.kind(), e.kind());
             }
         }
+    }
+
+    #[test]
+    fn each_shape_the_memex_writes_reads_by_its_fields_and_writes_back_the_same() {
+        // Catches a field named otherwise than the memex writes it, of
+        // another type, or kept only as an unknown field: tests/bodies.jsonl
+        // holds one body of each shape the memex's writers wrote in the
+        // test suites of memex, acceptance and tools (27 November 2026, by
+        // a hook in App::write, temporary paths made plain), 72 shapes.
+        let text = include_str!("../tests/bodies.jsonl");
+        for line in text.lines() {
+            let written: Value = serde_json::from_str(line).unwrap();
+            let kind = EntryKind::named(written["kind"].as_str().unwrap()).unwrap();
+            let json = &written["body"];
+            let body = Body::read(kind, json).unwrap_or_else(|why| panic!("{why}: {line}"));
+            assert_eq!(&body.to_value(), json, "{line}");
+            assert!(body.common().later.is_empty(), "{line}");
+        }
+        assert_eq!(text.lines().count(), 72);
     }
 
     #[test]

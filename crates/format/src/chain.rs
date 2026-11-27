@@ -9,7 +9,7 @@
 //!   earlier entry that is not a purge and is purged only once. An entry's
 //!   body is null exactly when a purge names it.
 
-use crate::body::Body;
+use crate::bodies::{Body, Edit};
 use crate::record::{self, Entry, EntryKind, JOURNAL, JOURNAL_FORMAT};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -102,7 +102,10 @@ fn versions_agree(text: &str, entries: &[Entry]) -> Result<(), LineError> {
     };
     let header = text.lines().next().unwrap_or_default();
     let declared = record::header_version(header, JOURNAL_FORMAT);
-    let named = first.body().map(Body::of).and_then(Body::version);
+    let named = match Body::of(first) {
+        Some(Body::Edit(Edit::Init(init))) => init.version,
+        _ => None,
+    };
     let said = match (declared, named) {
         (Some(d), Some(n)) if d != n => {
             format!("the header says version {d}, and entry 1 was written in version {n}")
@@ -213,9 +216,10 @@ fn named_target(e: &Entry) -> Result<u64, String> {
 /// The target of a body that is exactly {"reason": text, "target": seq}.
 fn target_of(body: &Value) -> Option<u64> {
     body.as_object().filter(|o| o.len() == 2)?;
-    let b = Body::of(body);
-    b.reason()?;
-    b.target().filter(|t| *t >= 1)
+    match Body::read(EntryKind::Purge, body).ok()? {
+        Body::Purge(p) => Some(p.target).filter(|t| *t >= 1),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -233,7 +237,8 @@ mod tests {
     }
 
     fn three() -> Vec<Entry> {
-        let a = Entry::new(1, None, EntryKind::Edit, json!({"t": "a", "version": 3})).unwrap();
+        let init = json!({"op": "init", "version": 3});
+        let a = Entry::new(1, None, EntryKind::Edit, init).unwrap();
         let b = Entry::new(2, Some((1, &a.hash)), EntryKind::Edit, json!({"t": "b"})).unwrap();
         let c = Entry::new(3, Some((1, &a.hash)), EntryKind::Undo, json!({"t": "c"})).unwrap(); // a branch
         vec![a, b, c]

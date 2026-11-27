@@ -7,8 +7,8 @@ use crate::engine::Engine;
 use crate::mentions::Mentions;
 use crate::reason::{Shown, Suggestion, WorldEval};
 use crate::world::World;
-use format::body::Body;
-use format::record::{Entry, EntryKind};
+use format::bodies::{Body, Suppose, View};
+use format::record::Entry;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
@@ -24,8 +24,8 @@ pub struct Supposition {
 
 impl Supposition {
     /// The supposition a suppose entry opens, from the world at its parent.
-    fn of(e: &Entry, b: Body) -> Supposition {
-        let name = b.name().unwrap_or("supposed").to_string();
+    fn of(e: &Entry, s: &Suppose) -> Supposition {
+        let name = s.name.clone().unwrap_or_else(|| "supposed".into());
         let actual = e.parent_seq().unwrap_or(1);
         Supposition {
             name,
@@ -72,24 +72,23 @@ impl Reasoning {
     /// Apply an entry: a supposition opens or closes, and a suggestion is
     /// dismissed or offered.
     pub(crate) fn apply(&mut self, e: &Entry) {
-        let Some(b) = e.body().map(Body::of) else {
+        let Some(body) = Body::of(e) else {
             return;
         };
-        let opened = |s: &Option<Supposition>, entry: Option<u64>| {
-            s.as_ref().is_some_and(|s| entry == Some(s.opened))
-        };
-        match (e.kind(), b.op()) {
+        let opened =
+            |s: &Option<Supposition>, entry: u64| s.as_ref().is_some_and(|s| entry == s.opened);
+        match body {
             // Undoing the suppose leaves its world; redoing it returns.
-            (EntryKind::Undo, _) if opened(&self.supposition, b.undoes()) => {
+            Body::Undo(u) if opened(&self.supposition, u.undoes) => {
                 self.undone_supposition = self.supposition.take();
             }
-            (EntryKind::Redo, _) if opened(&self.undone_supposition, b.redoes()) => {
+            Body::Redo(r) if opened(&self.undone_supposition, r.redoes) => {
                 self.supposition = self.undone_supposition.take();
             }
-            (EntryKind::View, Some("world")) => self.supposition = None,
-            (EntryKind::View, Some("dismiss")) => self.suggestions.dismiss(b.key()),
-            (EntryKind::View, Some("offer")) => self.suggestions.offer(b.keys()),
-            (EntryKind::Suppose, _) => self.supposition = Some(Supposition::of(e, b)),
+            Body::View(View::World(_)) => self.supposition = None,
+            Body::View(View::Dismiss(d)) => self.suggestions.dismiss(d.key.as_deref()),
+            Body::View(View::Offer(o)) => self.suggestions.offer(o.keys),
+            Body::Suppose(s) => self.supposition = Some(Supposition::of(e, &s)),
             _ => {}
         }
     }

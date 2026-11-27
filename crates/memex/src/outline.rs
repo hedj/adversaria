@@ -33,8 +33,7 @@
 //! values. An op that names an item not in the outline (after a retraction,
 //! say) is skipped.
 
-use format::bodies;
-use format::body::Body;
+use format::bodies::{self, Body, Edit};
 use format::record::EntryKind;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -285,34 +284,24 @@ pub fn written_spans(spans: &[Span]) -> Vec<bodies::Span> {
     spans.iter().map(row).collect()
 }
 
-fn parse_spans(list: &[Value], seq: u64) -> Option<Vec<Span>> {
-    list.iter()
-        .map(|s| {
-            let a = s.as_array()?;
-            let n = |i: usize| a.get(i).and_then(|x| x.as_u64());
-            let sq = n(0)?;
-            Some(Span {
-                seq: if sq == 0 { seq } else { sq },
-                start: n(1)? as usize,
-                len: n(2)? as usize,
-            })
-        })
-        .collect()
+/// Spans as an entry holds them, by the entry it is: seq 0 is that entry.
+fn parse_spans(list: &[bodies::Span], seq: u64) -> Vec<Span> {
+    let span = |&[sq, start, len]: &bodies::Span| Span {
+        seq: if sq == 0 { seq } else { sq },
+        start: start as usize,
+        len: len as usize,
+    };
+    list.iter().map(span).collect()
 }
 
 /// The block an item's entry makes: its style, and the import it came
 /// from.
-fn block_of(b: &Body) -> Block {
-    let style = b.style().unwrap_or("").to_string();
+fn block_of(c: &bodies::Create) -> Block {
+    let style = c.style.clone().unwrap_or_default();
     Block {
         style,
-        origin: b.import(),
+        origin: c.import,
     }
-}
-
-/// The spans a body gives for an item's text, by the entry it is.
-fn spans_of(b: &Body, seq: u64) -> Option<Vec<Span>> {
-    parse_spans(b.spans()?, seq)
 }
 
 impl Item {
@@ -514,46 +503,37 @@ impl Outline {
     /// it names an item that is not there. Each kind of entry, and each
     /// kind of edit, is one method below.
     pub fn apply(&mut self, seq: u64, kind: EntryKind, body: &Value) -> bool {
-        let b = Body::of(body);
-        let done = match kind {
-            EntryKind::Edit => self.edit(seq, &b),
-            EntryKind::Adopt => self.adopt(seq, &b),
-            EntryKind::Link => self.link(seq, &b),
-            EntryKind::Name => self.name(&b),
+        let done = match Body::read(kind, body) {
+            Ok(Body::Edit(e)) => self.edit(seq, &e),
+            Ok(Body::Adopt(a)) => self.adopt(seq, &a),
+            Ok(Body::Link(l)) => self.link(seq, &l),
+            Ok(Body::Name(n)) => self.name(&n),
             _ => None,
         };
         done.is_some()
     }
 
-    /// An edit of the items: their text and their places.
-    fn edit(&mut self, seq: u64, b: &Body) -> Option<()> {
-        match b.op().unwrap_or("") {
-            "init" => Some(()),
-            "create" => self.create(seq, b),
-            "text" => self.retext(seq, b),
-            "move" => self.move_item(b),
-            "delete" => self.delete(b),
-            _ => self.annotate(seq, b),
-        }
-    }
-
-    /// An edit of what an item states or shows.
-    fn annotate(&mut self, seq: u64, b: &Body) -> Option<()> {
-        match b.op().unwrap_or("") {
-            "facts" => self.state_facts(seq, b),
-            "constraint" => self.keep_constraint(seq, b),
-            "layer" => self.add_layer(seq, b),
-            "derive" => self.set_derived(b),
-            "read" => self.record_reading(b),
-            "split" | "make" | "relink" => Some(()),
-            _ => None,
+    /// An edit of the items, their text and their places, or of what an
+    /// item states or shows.
+    fn edit(&mut self, seq: u64, e: &Edit) -> Option<()> {
+        match e {
+            Edit::Create(c) => self.create(seq, c),
+            Edit::Text(t) => self.retext(seq, t),
+            Edit::Move(m) => self.move_item(m),
+            Edit::Delete(d) => self.delete(d.item),
+            Edit::Facts(f) => self.state_facts(seq, f),
+            Edit::Constraint(c) => self.keep_constraint(seq, &c.name, &c.rule),
+            Edit::Layer(l) => self.add_layer(seq, l),
+            Edit::Derive(d) => self.set_derived(d),
+            Edit::Read(r) => self.record_reading(r),
+            Edit::Init(_) | Edit::Split(_) | Edit::Make(_) | Edit::Relink(_) => Some(()),
         }
     }
 
     /// Record what an item's text was read as.
-    fn record_reading(&mut self, b: &Body) -> Option<()> {
-        let item = self.item_in(b)?;
-        let reading = reading_of(b)?;
+    fn record_reading(&mut self, r: &bodies::Read) -> Option<()> {
+        let item = self.item_in(r.item)?;
+        let reading = reading_of(r);
         self.read_by
             .extend(reading.entries.iter().map(|e| (*e, item)));
         self.readings.insert(item, reading);
@@ -576,30 +556,30 @@ impl Outline {
         read.is_some_and(|r| !r.entries.is_empty() && r.text == self.text(item))
     }
 
-    /// The item a body names, if it is in the outline.
-    fn item_in(&self, b: &Body) -> Option<u64> {
-        b.item().filter(|i| self.items.contains_key(i))
+    /// An item, if it is in the outline.
+    fn item_in(&self, item: u64) -> Option<u64> {
+        self.items.contains_key(&item).then_some(item)
     }
 
     // Items: their text and their places.
 
-    fn create(&mut self, seq: u64, b: &Body) -> Option<()> {
-        let under = b.under().filter(|u| self.contains(*u))?;
-        self.record_text(seq, seq, b);
-        let spans = spans_of(b, seq).unwrap_or_default();
+    fn create(&mut self, seq: u64, c: &bodies::Create) -> Option<()> {
+        let under = Some(c.under).filter(|u| self.contains(*u))?;
+        self.record_text(seq, seq, &c.add);
+        let spans = parse_spans(&c.spans, seq);
         if !self.spans_valid(&spans) {
             return None;
         }
-        self.items.insert(seq, Item::new(seq, under, block_of(b)));
+        self.items.insert(seq, Item::new(seq, under, block_of(c)));
         self.set_spans(seq, spans)?;
-        self.place(seq, under, b.after());
+        self.place(seq, under, c.after);
         Some(())
     }
 
-    fn retext(&mut self, seq: u64, b: &Body) -> Option<()> {
-        let id = self.item_in(b)?;
-        self.record_text(seq, id, b);
-        let spans = spans_of(b, seq).filter(|s| self.spans_valid(s))?;
+    fn retext(&mut self, seq: u64, t: &bodies::Text) -> Option<()> {
+        let id = self.item_in(t.item)?;
+        self.record_text(seq, id, &t.add);
+        let spans = Some(parse_spans(&t.spans, seq)).filter(|s| self.spans_valid(s))?;
         self.set_spans(id, spans)
     }
 
@@ -613,14 +593,13 @@ impl Outline {
     }
 
     /// Keep the characters an entry adds, written for an item.
-    fn record_text(&mut self, seq: u64, item: u64, b: &Body) {
-        self.added
-            .insert(seq, b.add().unwrap_or("").chars().collect());
+    fn record_text(&mut self, seq: u64, item: u64, add: &str) {
+        self.added.insert(seq, add.chars().collect());
         self.owner.insert(seq, item);
     }
 
-    fn move_item(&mut self, b: &Body) -> Option<()> {
-        let (id, under, after) = (self.item_in(b)?, b.under()?, b.after());
+    fn move_item(&mut self, m: &bodies::Move) -> Option<()> {
+        let (id, under, after) = (self.item_in(m.item)?, m.under, m.after);
         if !self.can_move(id, under, after) {
             return None;
         }
@@ -637,8 +616,8 @@ impl Outline {
         self.contains(under) && !into_itself && after != Some(id)
     }
 
-    fn delete(&mut self, b: &Body) -> Option<()> {
-        let id = self.item_in(b)?;
+    fn delete(&mut self, item: u64) -> Option<()> {
+        let id = self.item_in(item)?;
         self.unplace(id);
         self.remove_branch(id);
         Some(())
@@ -646,24 +625,24 @@ impl Outline {
 
     // What an item states or shows.
 
-    fn state_facts(&mut self, seq: u64, b: &Body) -> Option<()> {
-        let id = self.item_in(b)?;
+    fn state_facts(&mut self, seq: u64, f: &bodies::Facts) -> Option<()> {
+        let id = self.item_in(f.item?)?;
         self.fact_item.insert(seq, id);
-        if let Some(src) = b.source() {
-            self.source.insert(id, src.to_string());
+        if let Some(src) = &f.source {
+            self.source.insert(id, src.clone());
         }
         Some(())
     }
 
-    fn keep_constraint(&mut self, seq: u64, b: &Body) -> Option<()> {
-        let (name, rule) = (b.name().unwrap_or("").into(), b.rule().unwrap_or("").into());
+    fn keep_constraint(&mut self, seq: u64, name: &str, rule: &str) -> Option<()> {
+        let (name, rule) = (name.to_string(), rule.to_string());
         self.constraints.insert(seq, Constraint { name, rule });
         Some(())
     }
 
-    fn add_layer(&mut self, seq: u64, b: &Body) -> Option<()> {
-        let id = self.item_in(b)?;
-        let (mark, goal) = (b.mark().unwrap_or("").into(), b.goal().unwrap_or("").into());
+    fn add_layer(&mut self, seq: u64, l: &bodies::Layer) -> Option<()> {
+        let id = self.item_in(l.item)?;
+        let (mark, goal) = (l.mark.clone(), l.goal.clone());
         self.views
             .entry(id)
             .or_default()
@@ -671,10 +650,10 @@ impl Outline {
         Some(())
     }
 
-    fn set_derived(&mut self, b: &Body) -> Option<()> {
-        let id = self.item_in(b)?;
-        let (template, names) = (b.template().unwrap_or("").into(), b.names());
-        let under = b.shown_under();
+    fn set_derived(&mut self, d: &bodies::Derive) -> Option<()> {
+        let id = self.item_in(d.item)?;
+        let (template, names) = (d.template.clone(), d.names.clone());
+        let under = d.under == Some(true);
         self.derived.insert(
             id,
             Derive {
@@ -690,33 +669,33 @@ impl Outline {
 
     /// An adoption: of a suggested constraint, or of facts, which belong to
     /// an item if the entry names one.
-    fn adopt(&mut self, seq: u64, b: &Body) -> Option<()> {
-        if b.op() == Some("constraint") {
-            return self.keep_constraint(seq, b);
+    fn adopt(&mut self, seq: u64, a: &bodies::Adopt) -> Option<()> {
+        if a.op == Some(bodies::AdoptOp::Constraint) {
+            let (name, rule) = (a.name.as_deref(), a.rule.as_deref());
+            return self.keep_constraint(seq, name.unwrap_or(""), rule.unwrap_or(""));
         }
-        if b.item().is_some() {
-            let id = self.item_in(b)?;
+        if let Some(item) = a.item {
+            let id = self.item_in(item)?;
             self.fact_item.insert(seq, id);
         }
         Some(())
     }
 
-    fn link(&mut self, seq: u64, b: &Body) -> Option<()> {
-        let link = link_of(seq, b)?;
+    fn link(&mut self, seq: u64, l: &bodies::Link) -> Option<()> {
+        let link = link_of(seq, l);
         if !self.items.contains_key(&link.from) || !self.items.contains_key(&link.to) {
             return None;
         }
-        if b.inline() {
+        if l.inline == Some(true) {
             self.inline_links.insert(link.seq);
         }
         self.links.push(link);
         Some(())
     }
 
-    fn name(&mut self, b: &Body) -> Option<()> {
-        let name = b.name()?;
-        let id = self.item_in(b)?;
-        self.names.insert(name.to_string(), id);
+    fn name(&mut self, n: &bodies::Name) -> Option<()> {
+        let id = self.item_in(n.item)?;
+        self.names.insert(n.name.clone(), id);
         Some(())
     }
 
@@ -1302,40 +1281,24 @@ fn tag_of(rest: &str) -> Option<String> {
 }
 
 /// A read record's reading: the text, its entries and its statements.
-fn reading_of(b: &Body) -> Option<Reading> {
-    let entries = b.entries()?;
-    let text = b.read_text().unwrap_or("").to_string();
-    let said = said_of(b.said());
-    Some(Reading {
-        text,
-        entries,
-        said,
-    })
-}
-
-/// A reading's statements, each [kind, text]; none for a record written
-/// before readings kept them.
-fn said_of(list: Option<&[Value]>) -> Vec<(String, String)> {
-    let pairs = list.into_iter().flatten();
-    let pair = |p: &Value| {
-        Some((
-            p.get(0)?.as_str()?.to_string(),
-            p.get(1)?.as_str()?.to_string(),
-        ))
-    };
-    pairs.filter_map(pair).collect()
+fn reading_of(r: &bodies::Read) -> Reading {
+    let said = r.said.iter().map(|[k, p]| (k.clone(), p.clone()));
+    Reading {
+        text: r.text.clone(),
+        entries: r.entries.clone(),
+        said: said.collect(),
+    }
 }
 
 /// A link entry's link: its ends, and its type (link, if none).
-fn link_of(seq: u64, b: &Body) -> Option<Link> {
-    let (from, to) = (b.from()?, b.to()?);
-    let kind = b.link_type().unwrap_or("link").to_string();
-    Some(Link {
+fn link_of(seq: u64, l: &bodies::Link) -> Link {
+    let kind = l.link_type.clone().unwrap_or_else(|| "link".into());
+    Link {
         seq,
-        from,
-        to,
+        from: l.from,
+        to: l.to,
         kind,
-    })
+    }
 }
 
 /// Whether a text reads as a name: 3 to 60 characters, six words at
