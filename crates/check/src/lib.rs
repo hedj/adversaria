@@ -4,12 +4,15 @@
 //!
 //! It checks the files in this order, each line before the next, so the
 //! first error names the first line that is wrong: `keys.jsonl`,
-//! `journal.jsonl`, `seals.jsonl`, then `blobs/`.
+//! `journal.jsonl`, `seals.jsonl`, then `blobs/`. It lists each entry
+//! whose body does not read as its kind, which the memex leaves out; a
+//! journal that holds one still checks, as its record is whole.
 
 use ed25519_dalek::{Signature, VerifyingKey};
+use format::bodies::Body;
 use format::chain::{self, LineError, line_error};
 use format::record::{
-    self, BLOBS, Entry, JOURNAL, KEYS, KEYS_FORMAT, Key, SEALS, SEALS_FORMAT, Seal,
+    self, BLOBS, Entry, EntryKind, JOURNAL, KEYS, KEYS_FORMAT, Key, SEALS, SEALS_FORMAT, Seal,
 };
 use std::fs;
 use std::io;
@@ -23,6 +26,15 @@ pub struct Report {
     pub entries: Vec<Entry>,
     pub seals: Vec<Seal>,
     pub blobs: usize,
+    pub unread: Vec<Unread>,
+}
+
+/// An entry whose body does not read as its kind, and the reason.
+#[derive(Debug, PartialEq)]
+pub struct Unread {
+    pub seq: u64,
+    pub kind: EntryKind,
+    pub why: String,
 }
 
 /// A file of the directory as text.
@@ -213,6 +225,23 @@ fn check_blob(dir: &Path, name: &str) -> Result<(), LineError> {
     Ok(())
 }
 
+/// Each entry whose body does not read as its kind, in order. A purged
+/// entry has no body to read.
+pub fn unread(entries: &[Entry]) -> Vec<Unread> {
+    let mut unread = Vec::new();
+    for e in entries {
+        let Some(body) = e.body() else { continue };
+        if let Err(why) = Body::read(e.kind(), body) {
+            unread.push(Unread {
+                seq: e.seq,
+                kind: e.kind(),
+                why,
+            });
+        }
+    }
+    unread
+}
+
 /// Check a whole journal directory. Every entry must be sealed.
 pub fn check_dir(dir: &Path) -> Result<Report, LineError> {
     let keys = check_keys(&read(dir, KEYS)?)?;
@@ -221,11 +250,13 @@ pub fn check_dir(dir: &Path) -> Result<Report, LineError> {
     let seals = check_seals(&text, &entries, &keys)?;
     all_sealed(&seals, &entries)?;
     let blobs = check_blobs(dir)?;
+    let unread = unread(&entries);
     Ok(Report {
         keys,
         entries,
         seals,
         blobs,
+        unread,
     })
 }
 
@@ -247,5 +278,31 @@ mod tests {
             hash: String::new(),
         };
         assert!(!signed(&key, &"0".repeat(64), &"0".repeat(128)));
+    }
+
+    #[test]
+    fn each_body_that_does_not_read_is_listed_and_a_purged_one_is_not() {
+        // Catches a body that does not read passed over, or a purged entry,
+        // which has no body, listed.
+        let edit = |seq, body| Entry::new(seq, None, EntryKind::Edit, body).unwrap();
+        let entries = [
+            edit(1, serde_json::json!({ "op": "init", "version": 3 })),
+            edit(
+                2,
+                serde_json::json!({ "op": "text", "item": 1, "add": "B" }),
+            ),
+            edit(3, serde_json::json!({ "op": "delete", "item": 2 })).purged(),
+            edit(4, serde_json::json!({ "op": "frob" })),
+        ];
+        let unread = unread(&entries);
+        let listed: Vec<(u64, EntryKind)> = unread.iter().map(|u| (u.seq, u.kind)).collect();
+        assert_eq!(listed, [(2, EntryKind::Edit), (4, EntryKind::Edit)]);
+        assert_eq!(unread[0].why, "missing field `spans`");
+        assert!(
+            unread[1].why.starts_with("unknown variant `frob`"),
+            "{}",
+            unread[1].why
+        );
+        assert!(super::unread(&[]).is_empty());
     }
 }

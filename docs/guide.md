@@ -1376,7 +1376,7 @@ Or run them from `target/release/` after `cargo build --release`.
 | --- | --- | --- |
 | `sealer` | `sealer init DIR KEYFILE` | makes a signing key and records its public half in DIR |
 | | `sealer run DIR KEYFILE [--once] [--interval-ms N]` | seals new entries, every 200 ms by default, and waits for a journal not yet made; `--once` seals and exits |
-| `check` | `check DIR` | checks a journal: the chain, every seal's signature, that every entry is sealed, and the blobs. Prints `ok:` and counts, or the first fault; exits 1 on a fault, so a journal written while no sealer ran fails until one has |
+| `check` | `check DIR` | checks a journal: the chain, every seal's signature, that every entry is sealed, and the blobs. Prints `ok:` and counts, then each entry whose body does not read, which the memex leaves out (the journal still checks); or the first fault. Exits 1 on a fault, so a journal written while no sealer ran fails until one has |
 | `wikidata` | `wikidata --items Q2548,Q15180 --out FILE` | writes those items of Wikidata as Prolog facts |
 | | `wikidata --min-sitelinks K [--limit N] --out FILE` | the same for up to N items (100 000 if not given) with at least K site links |
 | `measures` | `measures DIR` | the measures report for the prototype's trial, from the journal alone: the violations shown and later corrected, the suggestions adopted and those later retracted, and your actions by kind, with the share that was clerical (searching, following links, navigating) |
