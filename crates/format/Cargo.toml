@@ -10,7 +10,6 @@ license.workspace = true
 serde_json = { version = "1", features = ["float_roundtrip"] }
 sha2 = "0.11.1"
 unicode-normalization = "0.1.26"
-
-[dev-dependencies]
-# Reading object keys in written order, in one test.
-serde = "1"
+# A struct for each kind of entry body (bodies.rs), read and written by
+# derive. serde_derive is in the lock already, built for other crates.
+serde = { version = "1", features = ["derive"] }
