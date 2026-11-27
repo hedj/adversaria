@@ -2029,6 +2029,32 @@ Two corrections to the messages:
   now, mean 273 and median 274. That is no difference beyond the
   noise.
 
+### Entries left out, now named (27 November 2026)
+
+Asked whether the code was ready for use, I named one fault first:
+since reads became strict (d621379), the memex left out an entry whose
+body does not read as its kind, and nothing said so. `check` passed
+such a journal without a word. No body the memex writes today is one,
+but a journal edited by hand, or written by an earlier build, may hold
+one. The author asked for it to be fixed.
+
+1. `check` (cc8aed0) lists each such entry after its `ok:` line, with
+   its number, kind and reason. It still exits 0, as the record is
+   whole.
+2. Opening (a0e5569) names the first entry it left out, with its
+   reason, and counts the rest. Each body is still read once.
+   design.md now records the strict reading, which it had not stated.
+3. The guide (d577bb3) said the format was version 1; it is version 3.
+
+Measures: units of src over 4, 935 to 939 to 940; elements at 7 or
+more, 101 to 104 to 106. The five new ones are App::open (7) and four
+test helpers (seal_of, chained, sealed_lines, with_unread). Tests:
+1176 passed, 0 failed, 4 ignored.
+
+Not done: the memex says this only when it opens the journal, in the
+line at the foot. The next key that edits or opens a quasimode clears
+it (keys.rs:63, 72). Nothing in a pane lists the entries left out.
+
 ## 4. Where it stands
 
 Milestones 0 to 6 are built and pass their acceptance checks. Milestone 7's report is built and checked; the month of use waits for the author. The questions stage A asks get their answers from that month's journal, and nothing here answers them yet:
