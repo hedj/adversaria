@@ -1347,8 +1347,12 @@ A journal directory holds:
 | `keys.jsonl` | the public keys that signed seals |
 | `blobs/` | imported files, each named by its SHA-256 hash |
 
-The format is version 1, described in docs/design.md, § The journal
-format. Text is stored in Unicode NFC.
+The format is version 3, described in docs/design.md, § The journal
+format. Text is stored in Unicode NFC. When the memex opens a journal of
+version 1 or 2, it migrates it to version 3 and keeps the old journal
+and its seals in `v1/` or `v2/`, where they still check; the sealer
+seals the new journal when it next runs. The memex refuses a journal of
+version 1 or 2 whose entry 1 is purged, as it cannot be migrated.
 
 The signing key is a separate file, readable only by you (mode 600; the
 sealer refuses a key that gives the group or others any permission). Keep
