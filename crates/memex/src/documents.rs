@@ -2,13 +2,14 @@
 //! second import of the same file is a revision, written in a supposed
 //! world, one change an entry (docs/structure.md § The code's structure).
 
+use crate::actions::delete;
 use crate::app::{App, Spot};
 use crate::docs::{Block, Losses};
 use crate::notebook::Notebook;
 use crate::outline::Revised;
 use crate::outline::TOP;
+use format::bodies::{Common, Create, Edit, Export, Facts, Import, Move, Suppose, View};
 use format::body::Body;
-use format::record::EntryKind;
 use format::terms::{self, Term};
 use serde_json::json;
 use std::collections::HashSet;
@@ -81,10 +82,15 @@ impl App {
     ) -> Result<u64, String> {
         let n = b.text.chars().count();
         let (under, after) = (spot.under, spot.after);
-        let e = self.write_here(
-            EntryKind::Edit,
-            json!({"op": "create", "under": under, "after": after, "add": b.text, "spans": [[0, 0, n]], "style": b.style, "import": import}),
-        )?;
+        let e = self.write_here(Edit::Create(Create {
+            under,
+            after,
+            add: b.text.clone(),
+            spans: vec![[0, 0, n as u64]],
+            style: Some(b.style.clone()),
+            import: Some(import),
+            common: Common::default(),
+        }))?;
         if !b.cites.is_empty() {
             let facts: Vec<serde_json::Value> = b
                 .cites
@@ -97,10 +103,12 @@ impl App {
                     .map_err(|x| x.0)
                 })
                 .collect::<Result<_, _>>()?;
-            self.write_here(
-                EntryKind::Edit,
-                json!({"op": "facts", "item": e.seq, "facts": facts}),
-            )?;
+            self.write_here(Edit::Facts(Facts {
+                item: Some(e.seq),
+                rule: None,
+                source: None,
+                common: Common::adding(facts),
+            }))?;
         }
         Ok(e.seq)
     }
@@ -146,11 +154,18 @@ impl App {
         name: &str,
     ) -> Result<u64, String> {
         let prov = json!({"prov:wasDerivedFrom": doc.name, "prov:wasGeneratedBy": "pandoc"});
-        let mut body = json!({"blob": doc.blob, "format": "document", "file": name, "source": doc.name, "losses": doc.losses, "prov": prov});
-        if let Some(earlier) = revises {
-            body["revises"] = json!(earlier);
-        }
-        Ok(self.write_here(EntryKind::Import, body)?.seq)
+        let losses = doc.losses.iter().map(|(k, n)| (k.clone(), *n as u64));
+        let body = Import {
+            format: Some("document".into()),
+            blob: Some(doc.blob.clone()),
+            file: Some(name.to_string()),
+            source: Some(doc.name.clone()),
+            losses: Some(losses.collect()),
+            prov: Some(prov),
+            revises,
+            ..Import::of(Common::default())
+        };
+        Ok(self.write_here(body)?.seq)
     }
 
     /// The blocks of a document, each last under the nearest block before
@@ -180,10 +195,15 @@ impl App {
     /// entries it holds, and say so.
     fn say_exported(&mut self, file: &str, (items, sources): (usize, usize)) -> String {
         let name = file_name_of(file);
-        self.write_view(
-            "export",
-            json!({"file": name, "items": items, "sources": sources}),
-        );
+        self.write_view(|state| {
+            View::Export(Export {
+                file: Some(name.clone()),
+                items: Some(items as u64),
+                sources: Some(sources as u64),
+                state,
+                common: Common::default(),
+            })
+        });
         format!("exported {items} items to {name}, citing {sources} source entries")
     }
 
@@ -209,10 +229,11 @@ impl App {
         earlier: &[u64],
         name: &str,
     ) -> Result<u64, String> {
-        self.write_here(
-            EntryKind::Suppose,
-            json!({"name": format!("revision of {name}")}),
-        )?;
+        self.write_here(Suppose {
+            name: Some(format!("revision of {name}")),
+            english: None,
+            common: Common::default(),
+        })?;
         self.write_document_import(doc, earlier.last().copied(), name)
     }
 
@@ -264,8 +285,13 @@ impl App {
     fn write_kept(&mut self, id: u64, b: &Block, stack: &mut Stack) -> Result<u64, String> {
         let spot = stack.spot(b.depth);
         if self.notebook.outline.parent_or_top(id) != spot.under {
-            let body = json!({"op": "move", "item": id, "under": spot.under, "after": spot.after});
-            self.write_here(EntryKind::Edit, body)?;
+            let body = Move {
+                item: id,
+                under: spot.under,
+                after: spot.after,
+                common: Common::default(),
+            };
+            self.write_here(Edit::Move(body))?;
         }
         Ok(id)
     }
@@ -284,7 +310,7 @@ impl App {
         for &o in dropped {
             let outline = &self.notebook.outline;
             if outline.items.contains_key(&o) && outline.branch_within(o, &all) {
-                self.write_here(EntryKind::Edit, json!({"op": "delete", "item": o}))?;
+                self.write_here(delete(o))?;
             }
         }
         Ok(())

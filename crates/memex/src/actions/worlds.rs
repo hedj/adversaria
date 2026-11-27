@@ -4,19 +4,15 @@
 use crate::app::{App, Mode, TakeBack};
 use crate::notebook::Notebook;
 use crate::reason::{Contradicted, direct_conflicts};
-use format::record::EntryKind;
+use format::bodies::{Common, Redo, Retract, State, Undo, View, World};
 use format::terms::{self, Term};
-use serde_json::{Value, json};
 
 impl App {
     pub(crate) fn cmd_undo(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let t = self.undoable().ok_or("nothing to undo on this branch")?;
         let what = self.notebook.said_of(t);
-        self.write(
-            self.notebook.parent_of(t),
-            EntryKind::Undo,
-            json!({"undoes": t}),
-        )?;
+        let common = Common::default();
+        self.write(self.notebook.parent_of(t), Undo { undoes: t, common })?;
         self.read_changed();
         Ok(format!("undid entry {t}: {what}"))
     }
@@ -36,7 +32,8 @@ impl App {
         let Some(&t) = self.notebook.redo.last() else {
             return Err("nothing to redo".into());
         };
-        self.write(Some(t), EntryKind::Redo, json!({"redoes": t}))?;
+        let common = Common::default();
+        self.write(Some(t), Redo { redoes: t, common })?;
         self.read_changed();
         Ok(format!("redid entry {t}: {}", self.notebook.said_of(t)))
     }
@@ -113,7 +110,7 @@ impl App {
     /// journal.
     pub(crate) fn cmd_close(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let (name, actual) = self.supposed()?;
-        self.leave_world(actual, "close")?;
+        self.leave_world(actual, World::closed)?;
         Ok(format!(
             "dismissed the world “{name}”; it stays in the journal"
         ))
@@ -122,7 +119,7 @@ impl App {
     /// Make the supposed world the actual one.
     pub(crate) fn cmd_commit(&mut self, _: &[&str], _: u64) -> Result<String, String> {
         let (name, _) = self.supposed()?;
-        self.leave_world(self.notebook.tip, "commit")?;
+        self.leave_world(self.notebook.tip, World::committed)?;
         Ok(format!(
             "adopted the world “{name}”: it is now the actual world"
         ))
@@ -138,20 +135,16 @@ impl App {
     }
 
     /// Write the view entry that ends a supposition, after an entry.
-    fn leave_world(&mut self, parent: u64, op: &str) -> Result<(), String> {
+    fn leave_world(&mut self, parent: u64, how: fn(State) -> World) -> Result<(), String> {
         self.stop_interrogating();
         self.flush_text();
-        let body = self.world_body(op);
-        self.write(Some(parent), EntryKind::View, body)?;
+        let world = how(self.view_state());
+        self.write(Some(parent), View::World(world))?;
         Ok(())
     }
 
     fn stop_interrogating(&mut self) {
         self.session.view.interrogate = None;
-    }
-
-    fn world_body(&self, op: &str) -> Value {
-        self.view_body("world", json!({op: true}))
     }
 }
 
@@ -178,7 +171,7 @@ impl App {
     ) -> Result<String, String> {
         let f = terms::encode(fact).map_err(|e| e.0)?;
         let body = crate::keys::supposed_body(name, english, Some(f));
-        let s = self.write_here(EntryKind::Suppose, body)?;
+        let s = self.write_here(body)?;
         let (set_aside, left) = self.set_aside_conflicts(s.seq)?;
         self.evaluate()?;
         let places: Vec<String> = set_aside.iter().map(|t| self.fact_place(*t)).collect();
@@ -246,8 +239,11 @@ impl App {
     /// under, so that a world can say which constraint each answered.
     pub(crate) fn retract_all(&mut self, targets: &[Contradicted]) -> Result<(), String> {
         for (t, constraints) in targets {
-            let body = json!({"target": t, "constraints": constraints});
-            self.write_here(EntryKind::Retract, body)?;
+            let body = Retract {
+                constraints: Some(constraints.clone()),
+                ..Retract::of(*t)
+            };
+            self.write_here(body)?;
         }
         Ok(())
     }

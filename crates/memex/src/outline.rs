@@ -33,9 +33,10 @@
 //! values. An op that names an item not in the outline (after a retraction,
 //! say) is skipped.
 
+use format::bodies;
 use format::body::Body;
 use format::record::EntryKind;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// The top of the outline: the parent of the top-level items.
@@ -278,13 +279,10 @@ fn shared_len<'a>(a: impl Iterator<Item = &'a char>, b: impl Iterator<Item = &'a
     a.zip(b).take_while(|(x, y)| x == y).count()
 }
 
-pub fn span_json(spans: &[Span]) -> Value {
-    json!(
-        spans
-            .iter()
-            .map(|s| [s.seq, s.start as u64, s.len as u64])
-            .collect::<Vec<_>>()
-    )
+/// Spans as an entry writes them: [seq, start, len] each.
+pub fn written_spans(spans: &[Span]) -> Vec<bodies::Span> {
+    let row = |s: &Span| [s.seq, s.start as u64, s.len as u64];
+    spans.iter().map(row).collect()
 }
 
 fn parse_spans(list: &[Value], seq: u64) -> Option<Vec<Span>> {
@@ -937,8 +935,8 @@ impl Outline {
 
     /// An item's spans, as an edit entry gives them, to show its text in
     /// place elsewhere.
-    pub fn spans_json(&self, id: u64) -> Value {
-        span_json(&self.items[&id].spans)
+    pub fn spans_written(&self, id: u64) -> Vec<bodies::Span> {
+        written_spans(&self.items[&id].spans)
     }
 
     /// The item an address names: "#seq", an outline number ("3.2"), a
@@ -1362,6 +1360,7 @@ pub(crate) fn names_in(text: &str, name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn tags_are_words_after_a_hash() {
@@ -1456,7 +1455,7 @@ mod tests {
             start: 0,
             len: 4,
         });
-        let b = json!({"op":"text","item":2,"add":"900.","spans":span_json(&spans)});
+        let b = json!({"op":"text","item":2,"add":"900.","spans":written_spans(&spans)});
         assert!(o.apply(3, EntryKind::Edit, &b));
         let end = o.slice(2, 14, 16);
         assert_eq!(
@@ -1484,7 +1483,7 @@ mod tests {
         assert!(o.apply(
             3,
             EntryKind::Edit,
-            &json!({"op":"text","item":2,"add":"1988","spans":span_json(&spans)})
+            &json!({"op":"text","item":2,"add":"1988","spans":written_spans(&spans)})
         ));
         assert_eq!(o.text(2), "Buran flew in 1988");
         assert_eq!(
@@ -1509,7 +1508,7 @@ mod tests {
             start: 0,
             len: 4,
         });
-        let b = json!({"op":"text","item":2,"add":"1988","spans":span_json(&spans)});
+        let b = json!({"op":"text","item":2,"add":"1988","spans":written_spans(&spans)});
         assert!(o.apply(3, EntryKind::Edit, &b));
         let want = [
             Span {
@@ -1531,7 +1530,7 @@ mod tests {
         // Catches a quoted span read from the start of its entry's text.
         let mut o = Outline::default();
         create(&mut o, 2, TOP, None, "Buran flew once.");
-        let flew = span_json(&o.slice(2, 6, 10));
+        let flew = written_spans(&o.slice(2, 6, 10));
         let b = json!({"op":"create","under":0,"after":2,"add":"","spans":flew});
         assert!(o.apply(3, EntryKind::Edit, &b));
         assert_eq!(o.text(3), "flew");
@@ -1547,7 +1546,7 @@ mod tests {
             3,
             EntryKind::Edit,
             &json!({"op":"create","under":0,"after":2,"add":"Timeline: ","spans":
-            span_json(&[Span { seq: 0, start: 0, len: 10 }, spans[0]])})
+            written_spans(&[Span { seq: 0, start: 0, len: 10 }, spans[0]])})
         ));
         let runs = o.runs(3);
         assert_eq!(

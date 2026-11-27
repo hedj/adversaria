@@ -16,13 +16,13 @@
 
 use crate::journal::{Error as JournalError, Journal};
 use crate::notebook::{CONTENT, Notebook};
-use crate::outline::{Outline, TOP, TextChange, span_json};
+use crate::outline::{Outline, TOP, TextChange, written_spans};
 use crate::reasoning::Reasoning;
 use crate::session::Session;
-use format::body::Body;
-use format::record::{Entry, EntryKind};
+use format::bodies::{self, Body};
+use format::body::Body as Fields;
+use format::record::Entry;
 use format::terms::Term;
-use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::path::Path;
 
@@ -286,19 +286,24 @@ impl View {
         self.panes[1].kind = PaneKind::Links;
     }
 
-    pub(crate) fn to_json(&self, op: &str, extra: Value) -> Value {
-        let mut v = json!({
-            "op": op,
-            "panes": self.panes.iter().map(|p| json!({"kind": p.kind.name(), "cursor": p.cursor})).collect::<Vec<_>>(),
-            "focus": self.focus, "pos": self.pos, "folded": self.folded.iter().collect::<Vec<_>>(), "interrogate": self.interrogate,
-        });
-        if let (Value::Object(m), Value::Object(x)) = (&mut v, extra) {
-            m.extend(x);
+    /// The view as a view entry records it, with the claim item the
+    /// inspector shows.
+    pub(crate) fn state(&self, inspects: Option<u64>) -> bodies::State {
+        let pane = |p: &Pane| bodies::Pane {
+            kind: p.kind.name().to_string(),
+            cursor: Some(p.cursor),
+        };
+        bodies::State {
+            panes: self.panes.iter().map(pane).collect(),
+            focus: self.focus as u64,
+            pos: self.pos as u64,
+            folded: self.folded.iter().copied().collect(),
+            interrogate: self.interrogate,
+            inspects,
         }
-        v
     }
 
-    pub(crate) fn restore(&mut self, b: Body) {
+    pub(crate) fn restore(&mut self, b: Fields) {
         if let Some(ps) = b.panes() {
             for (i, p) in ps.iter().take(2).enumerate() {
                 self.panes[i].kind = match p.kind() {
@@ -751,12 +756,11 @@ impl App {
     pub(crate) fn write(
         &mut self,
         parent: Option<u64>,
-        kind: EntryKind,
-        body: Value,
+        body: impl Into<Body>,
     ) -> Result<Entry, String> {
         let parent = self.started_before(parent);
-        let body = self.marked(body);
-        let e = self.notebook.append(parent, kind, body)?;
+        let body = self.marked(body.into());
+        let e = self.notebook.append(parent, body.kind(), body.to_value())?;
         self.apply(&e);
         Ok(e)
     }
@@ -774,9 +778,9 @@ impl App {
     }
 
     /// A body, marked as the memex's own if it writes on its own.
-    fn marked(&self, mut body: Value) -> Value {
+    fn marked(&self, mut body: Body) -> Body {
         if self.session.on_its_own {
-            body["by"] = json!("memex");
+            body.mark_by_memex();
         }
         body
     }
@@ -804,9 +808,12 @@ impl App {
         }
         self.session.started = true;
         let tip = self.notebook.tip;
-        let start = json!({"build": crate::notebook::BUILD, "by": "memex"});
-        let body = self.view_body("start", start);
-        match self.write(Some(tip), EntryKind::View, body) {
+        let start = bodies::Start {
+            build: crate::notebook::BUILD.to_string(),
+            state: self.view_state(),
+            common: bodies::Common::by_the_memex(),
+        };
+        match self.write(Some(tip), bodies::View::Start(start)) {
             Ok(e) => Some(e.seq),
             Err(m) => {
                 self.session.message = m;
@@ -824,8 +831,8 @@ impl App {
         self.notebook.next_seq()
     }
 
-    pub(crate) fn write_here(&mut self, kind: EntryKind, body: Value) -> Result<Entry, String> {
-        self.write(Some(self.notebook.tip), kind, body)
+    pub(crate) fn write_here(&mut self, body: impl Into<Body>) -> Result<Entry, String> {
+        self.write(Some(self.notebook.tip), body)
     }
 
     /// What the memex does when the user pauses, all of it: write whatever
@@ -861,25 +868,28 @@ impl App {
     pub fn flush(&mut self) {
         self.flush_text();
         if let Some(change) = self.session.view_change.take() {
-            let body = self.view_body(change.op(), json!({}));
-            let written = self.write_here(EntryKind::View, body);
+            let written = self.write_here(change.view(self.view_state()));
             self.session.report(written);
         }
     }
 
-    pub(crate) fn write_view(&mut self, op: &str, extra: Value) {
+    /// Write a view entry: what an op adds, to the view as it stands.
+    pub(crate) fn write_view(&mut self, view: impl FnOnce(bodies::State) -> bodies::View) {
         self.flush_text();
         self.session.view_change = None;
-        let body = self.view_body(op, extra);
-        let written = self.write_here(EntryKind::View, body);
+        let written = self.write_here(view(self.view_state()));
         self.session.report(written);
     }
 
-    /// A view entry's body: what is shown, the claim item the inspector
-    /// shows the questions of among it, and what the action adds.
-    pub(crate) fn view_body(&self, op: &str, mut extra: Value) -> Value {
-        extra["inspects"] = json!(self.inspected_claim());
-        self.session.view.to_json(op, extra)
+    /// Write a view entry of an op that adds nothing to the view.
+    pub(crate) fn write_shown(&mut self, op: fn(bodies::Shown) -> bodies::View) {
+        self.write_view(|state| op(bodies::Shown::of(state)));
+    }
+
+    /// The view as a view entry records it: what is shown, and the claim
+    /// item the inspector shows the questions of among it.
+    pub(crate) fn view_state(&self) -> bodies::State {
+        self.session.view.state(self.inspected_claim())
     }
 
     pub(crate) fn flush_text(&mut self) {
@@ -904,9 +914,16 @@ impl App {
         let Some(change) = TextChange::between(&old, new) else {
             return Ok(());
         };
-        let spans = span_json(&outline.spans_after(item, &change));
-        let body = json!({"op": "text", "item": item, "add": change.added, "spans": spans});
-        self.write_here(EntryKind::Edit, body)?;
+        let spans = written_spans(&outline.spans_after(item, &change));
+        let add = change.added;
+        let common = bodies::Common::default();
+        let text = bodies::Text {
+            item,
+            add,
+            spans,
+            common,
+        };
+        self.write_here(bodies::Edit::Text(text))?;
         Ok(())
     }
 
@@ -1030,6 +1047,8 @@ impl Notebook {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use format::record::EntryKind;
+    use serde_json::{Value, json};
 
     #[test]
     fn text_typed_is_the_user_s_though_the_memex_writes_it_on_its_own() {
@@ -1079,7 +1098,9 @@ mod tests {
                 .map(|k| json!({"kind": k, "cursor": 2}))
                 .collect();
             let mut view = View::default();
-            view.restore(Body::of(&json!({"op": "pane", "panes": panes, "focus": 1})));
+            view.restore(Fields::of(
+                &json!({"op": "pane", "panes": panes, "focus": 1}),
+            ));
             let focused = view.focused().kind;
             assert_eq!(focused, PaneKind::Outline, "{kinds:?}");
         }

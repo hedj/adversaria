@@ -8,9 +8,8 @@ use crate::outline::TOP;
 use crate::reason;
 use crate::session::Answer;
 use crate::session::ViewChange;
-use format::record::EntryKind;
+use format::bodies::{Common, Create, Edit, Leap, Retract, Suppose, View};
 use format::terms::Term;
-use serde_json::json;
 
 /// What a key that edits or moves the outline says while a revision is
 /// open: its changes fill the screen, so the outline, unseen, takes none.
@@ -219,12 +218,17 @@ impl App {
         } else {
             (self.notebook.outline.parent(id).unwrap_or(TOP), Some(id))
         };
-        let e = self.write_here(
-            EntryKind::Edit,
-            json!({"op": "create", "under": under, "after": after, "add": "", "spans": []}),
-        )?;
+        let e = self.write_here(Edit::Create(Create {
+            under,
+            after,
+            add: String::new(),
+            spans: vec![],
+            style: None,
+            import: None,
+            common: Common::default(),
+        }))?;
         self.set_cursor(e.seq);
-        self.write_view(ViewChange::Written.op(), json!({}));
+        self.write_shown(View::Written);
         Ok(())
     }
 
@@ -322,7 +326,7 @@ impl App {
 
     fn suppose_named(&mut self, text: &str, english: Option<String>) {
         self.session.message = self.nothing_to_suppose(text);
-        let written = self.write_here(EntryKind::Suppose, supposed_body(text, english, None));
+        let written = self.write_here(supposed_body(text, english, None));
         self.session.report(written);
     }
 
@@ -359,7 +363,7 @@ impl App {
         }
         self.leap_return(&a);
         self.flush_text();
-        let spans = json!([[0, 0, pattern.chars().count()]]);
+        let spans = vec![[0, 0, pattern.chars().count() as u64]];
         match self.create_after(self.cursor(), &pattern, spans) {
             Ok(item) => {
                 self.go_to(item);
@@ -387,15 +391,24 @@ impl App {
                 };
                 let found = self.leap_matches(&pattern, forward).first().copied();
                 self.session.leapt(&pattern, forward);
-                let leap = json!({"pattern": pattern, "forward": forward, "found": found});
                 match found {
                     Some(id) => {
                         self.session.message.clear();
-                        self.jump(id, "leap", leap);
+                        self.leap_to(id, &pattern, forward);
                     }
                     None => {
                         self.session.message = format!("no item holds “{pattern}”");
-                        self.write_view("leap", leap);
+                        self.write_view(|state| {
+                            View::Leap(Leap {
+                                pattern: Some(pattern.clone()),
+                                forward: Some(forward),
+                                found: None,
+                                from: None,
+                                to: None,
+                                state,
+                                common: Common::default(),
+                            })
+                        });
                     }
                 }
             }
@@ -453,12 +466,10 @@ impl App {
         };
         let what = self.notebook.said_of(target);
         let said = match (ev.press, ev.key) {
-            (Press::Down, Key::Enter) => {
-                match self.write_here(EntryKind::Retract, json!({"target": target})) {
-                    Ok(e) => asked.done(target, &what, e.seq),
-                    Err(m) => m,
-                }
-            }
+            (Press::Down, Key::Enter) => match self.write_here(Retract::of(target)) {
+                Ok(e) => asked.done(target, &what, e.seq),
+                Err(m) => m,
+            },
             (Press::Down, Key::Escape) => asked.kept(target, &what),
             _ => return waiting,
         };
@@ -663,15 +674,16 @@ pub(crate) fn supposed_body(
     name: &str,
     english: Option<String>,
     fact: Option<serde_json::Value>,
-) -> serde_json::Value {
-    let mut body = json!({"name": name});
-    if let Some(e) = english {
-        body["english"] = json!(e);
+) -> Suppose {
+    let common = match fact {
+        Some(f) => Common::adding(vec![f]),
+        None => Common::default(),
+    };
+    Suppose {
+        name: Some(name.to_string()),
+        english,
+        common,
     }
-    if let Some(f) = fact {
-        body["facts"] = json!([f]);
-    }
-    body
 }
 
 /// The pages PageDown (one) and PageUp (one back) scroll the inspector by,

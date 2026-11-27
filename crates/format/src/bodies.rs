@@ -19,6 +19,7 @@
 use crate::record::{Entry, EntryKind};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 
 /// An encoded term (format::terms), as a fact of an entry.
 pub type Fact = Value;
@@ -45,7 +46,18 @@ pub struct Common {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub facts: Option<Vec<Fact>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub suggestion: Option<Value>,
+    pub suggestion: Option<Mark>,
+    #[serde(flatten)]
+    pub later: Map<String, Value>,
+}
+
+/// How an adoption records the suggestion it adopts: its kind, as Prolog
+/// shows it, its evidence and its score.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Mark {
+    pub kind: String,
+    pub evidence: String,
+    pub score: i64,
     #[serde(flatten)]
     pub later: Map<String, Value>,
 }
@@ -66,7 +78,48 @@ impl Common {
     pub fn by_memex(&self) -> bool {
         self.by == Some(By::Memex)
     }
+
+    /// What a body holds that adds these facts.
+    pub fn adding(facts: Vec<Fact>) -> Common {
+        let facts = Some(facts);
+        Common {
+            facts,
+            ..Common::default()
+        }
+    }
+
+    /// What a body holds that adopts a suggestion, adding these facts.
+    pub fn adopting(suggestion: Mark, facts: Vec<Fact>) -> Common {
+        let suggestion = Some(suggestion);
+        Common {
+            suggestion,
+            ..Common::adding(facts)
+        }
+    }
+
+    /// What a body holds that the memex writes on its own.
+    pub fn by_the_memex() -> Common {
+        let by = Some(By::Memex);
+        Common {
+            by,
+            ..Common::default()
+        }
+    }
 }
+
+/// A body of each kind is a body.
+macro_rules! bodies {
+    ($($kind:ident),*) => {
+        $(impl From<$kind> for Body {
+            fn from(b: $kind) -> Body {
+                Body::$kind(b)
+            }
+        })*
+    };
+}
+bodies!(
+    Edit, Link, Adopt, Retract, Suppose, Name, Import, Purge, Undo, Redo, View
+);
 
 /// An entry's body, by its kind.
 #[derive(Debug, Clone, PartialEq)]
@@ -190,7 +243,7 @@ impl Body {
     }
 
     /// The suggestion it adopts, if it adopts one.
-    pub fn suggestion(&self) -> Option<&Value> {
+    pub fn suggestion(&self) -> Option<&Mark> {
         self.common().suggestion.as_ref()
     }
 }
@@ -305,13 +358,24 @@ impl Edit {
     }
 }
 
-/// Entry 1: the journal's version, from version 3.
+/// Entry 1: the journal's version, from version 3, and, if it was
+/// migrated, the journal it came from.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Init {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub migrated_from: Option<Migrated>,
     #[serde(flatten)]
     pub common: Common,
+}
+
+/// The journal a migration came from: its version, and the hash of its
+/// last entry, which its seals, kept beside it, still seal.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Migrated {
+    pub version: u64,
+    pub last: Option<String>,
 }
 
 /// An item made under another (0 is the top), after a sibling or first,
@@ -514,6 +578,21 @@ pub struct Adopt {
     pub common: Common,
 }
 
+impl Adopt {
+    /// An adoption that names nothing but what it holds in common.
+    pub fn of(common: Common) -> Adopt {
+        Adopt {
+            op: None,
+            claim: None,
+            item: None,
+            source: None,
+            name: None,
+            rule: None,
+            common,
+        }
+    }
+}
+
 /// A retraction of an entry, with the constraints under which it was
 /// directly contradicted, if it records any.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -523,6 +602,18 @@ pub struct Retract {
     pub constraints: Option<Vec<u64>>,
     #[serde(flatten)]
     pub common: Common,
+}
+
+impl Retract {
+    /// A retraction of an entry that records no constraint.
+    pub fn of(target: u64) -> Retract {
+        let common = Common::default();
+        Retract {
+            target,
+            constraints: None,
+            common,
+        }
+    }
 }
 
 /// A world supposed: its name, the English it was mended from, and the
@@ -561,9 +652,9 @@ pub struct Import {
     /// The directory a results import's paths are under.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<String>,
-    /// What a document's conversion lost, by kind.
+    /// What a document's conversion lost: how many of each kind.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub losses: Option<Map<String, Value>>,
+    pub losses: Option<BTreeMap<String, u64>>,
     /// The import's provenance, a record of the results format or of PROV.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prov: Option<Value>,
@@ -572,6 +663,23 @@ pub struct Import {
     pub revises: Option<u64>,
     #[serde(flatten)]
     pub common: Common,
+}
+
+impl Import {
+    /// An import that names nothing but what it holds in common.
+    pub fn of(common: Common) -> Import {
+        Import {
+            format: None,
+            blob: None,
+            file: None,
+            source: None,
+            base: None,
+            losses: None,
+            prov: None,
+            revises: None,
+            common,
+        }
+    }
 }
 
 /// A purge: the entry whose body it took, and why.
@@ -775,6 +883,13 @@ pub struct Shown {
     pub common: Common,
 }
 
+impl Shown {
+    pub fn of(state: State) -> Shown {
+        let common = Common::default();
+        Shown { state, common }
+    }
+}
+
 /// A jump of the cursor, from an item to another.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Jump {
@@ -786,6 +901,19 @@ pub struct Jump {
     pub state: State,
     #[serde(flatten)]
     pub common: Common,
+}
+
+impl Jump {
+    /// A jump from an item to another, the view as it left it.
+    pub fn of(from: u64, to: u64, state: State) -> Jump {
+        let (from, to, common) = (Some(from), Some(to), Common::default());
+        Jump {
+            from,
+            to,
+            state,
+            common,
+        }
+    }
 }
 
 /// A Leap: its pattern, whether it went forward, the item it found, and
@@ -841,6 +969,28 @@ pub struct World {
     pub state: State,
     #[serde(flatten)]
     pub common: Common,
+}
+
+impl World {
+    /// A supposition closed: back to the actual world.
+    pub fn closed(state: State) -> World {
+        World {
+            close: Some(true),
+            commit: None,
+            state,
+            common: Common::default(),
+        }
+    }
+
+    /// A supposition committed as the actual world.
+    pub fn committed(state: State) -> World {
+        World {
+            close: None,
+            commit: Some(true),
+            state,
+            common: Common::default(),
+        }
+    }
 }
 
 /// The user's verdict on the findings of a rule, by its entry, marked

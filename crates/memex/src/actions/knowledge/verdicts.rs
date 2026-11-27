@@ -5,7 +5,7 @@
 
 use crate::app::App;
 use crate::marks::marked_under;
-use serde_json::json;
+use format::bodies::{Common, Verdict, View};
 
 /// How a verdict is given.
 const USAGE: &str = "verdict error, rule, misread or known, then the rule's entry";
@@ -30,8 +30,16 @@ impl App {
         let (word, says) = verdict_named(which)?;
         let rule = self.rule_of(rest, target)?;
         let findings = self.findings_marked(rule, target)?;
-        let body = json!({"verdict": word, "rule": rule, "under": target, "findings": findings});
-        self.write_view("verdict", body);
+        self.write_view(|state| {
+            View::Verdict(Verdict {
+                verdict: Some(word.to_string()),
+                rule: Some(rule),
+                under: Some(target),
+                findings,
+                state,
+                common: Common::default(),
+            })
+        });
         Ok(format!("recorded: {says}"))
     }
 

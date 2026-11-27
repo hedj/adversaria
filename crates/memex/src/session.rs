@@ -6,6 +6,7 @@ use crate::app::{Active, Event, Key, Mode, PendingText, Press, Quasi, View};
 use crate::found::Found;
 use crate::plumb::Offer;
 use crate::present::Presentation;
+use format::bodies;
 use format::body::Body;
 use format::record::{Entry, EntryKind};
 use std::collections::BTreeMap;
@@ -27,11 +28,12 @@ pub(crate) enum ViewChange {
 }
 
 impl ViewChange {
-    /// The op of the view entry that records it.
-    pub(crate) fn op(self) -> &'static str {
+    /// The view entry that records it.
+    pub(crate) fn view(self, state: bodies::State) -> bodies::View {
+        let shown = bodies::Shown::of(state);
         match self {
-            ViewChange::Written => "written",
-            ViewChange::Moved => "move",
+            ViewChange::Written => bodies::View::Written(shown),
+            ViewChange::Moved => bodies::View::Move(shown),
         }
     }
 }

@@ -14,10 +14,10 @@ use crate::ace::{Kind, Reading, Said, Unread, Words, words_of};
 use crate::app::App;
 use crate::engine::told;
 use crate::notebook::Notebook;
+use format::bodies;
 use format::body::Body;
 use format::record::EntryKind;
 use format::terms::Term;
-use serde_json::json;
 use std::rc::Rc;
 
 impl App {
@@ -251,7 +251,7 @@ impl App {
             .filter(|s| !branch.retracts(*s))
             .collect();
         for target in live {
-            let written = self.write_here(EntryKind::Retract, json!({ "target": target }));
+            let written = self.write_here(bodies::Retract::of(target));
             self.session.report(written);
         }
     }
@@ -260,15 +260,22 @@ impl App {
     /// and each statement as the reader wrote it in Prolog, by its kind.
     fn record_reading(&mut self, w: &Written, entries: Vec<u64>, said: &[Said]) {
         let body = w.record(entries, said_json(said));
-        let written = self.write_here(EntryKind::Edit, body);
+        let written = self.write_here(bodies::Edit::Read(body));
         self.session.report(written);
     }
 }
 
 impl Written<'_> {
     /// The body of the record of this text's reading.
-    fn record(&self, entries: Vec<u64>, said: Vec<[String; 2]>) -> serde_json::Value {
-        json!({"op": "read", "item": self.item, "of": self.of, "text": self.text, "entries": entries, "said": said})
+    fn record(&self, entries: Vec<u64>, said: Vec<[String; 2]>) -> bodies::Read {
+        bodies::Read {
+            item: self.item,
+            of: Some(self.of),
+            text: self.text.to_string(),
+            entries,
+            said,
+            common: bodies::Common::default(),
+        }
     }
 }
 

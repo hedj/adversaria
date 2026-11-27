@@ -5,9 +5,11 @@ use crate::app::{App, PaneKind, word_at};
 use crate::notebook::Notebook;
 use crate::outline::{Outline, page_key, reads_as_number};
 use crate::session::ViewChange;
-use format::record::EntryKind;
+use format::bodies::{
+    self, Common, Create, Delete, Edit, Jump, Leap, Link, Mark, Move, Name, View,
+};
 use format::terms::{self, Term};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 impl App {
     pub(crate) fn cmd_new(&mut self, _: &[&str], target: u64) -> Result<String, String> {
@@ -25,7 +27,12 @@ impl App {
                 "name not kept: “{n}” reads as an item's or an entry's number, so it would address no item"
             ));
         }
-        let named = self.write_here(EntryKind::Name, json!({"name": n, "item": target}))?;
+        let name = Name {
+            name: n.clone(),
+            item: target,
+            common: Common::default(),
+        };
+        let named = self.write_here(name)?;
         self.on_its_own(|app| app.relink_name(&n, named.seq))?;
         Ok(String::new())
     }
@@ -43,7 +50,7 @@ impl App {
             ["word"] => return self.delete_word(target).map(|_| String::new()),
             _ => return Err("delete, or delete word".into()),
         }
-        self.write_here(EntryKind::Edit, json!({"op": "delete", "item": target}))?;
+        self.write_here(delete(target))?;
         Ok(String::new())
     }
 
@@ -108,8 +115,14 @@ impl App {
     }
 
     fn move_item(&mut self, item: u64, under: u64, after: Option<u64>) -> Result<(), String> {
-        let body = json!({"op": "move", "item": item, "under": under, "after": after});
-        self.write_here(EntryKind::Edit, body)?;
+        let common = Common::default();
+        let body = Move {
+            item,
+            under,
+            after,
+            common,
+        };
+        self.write_here(Edit::Move(body))?;
         Ok(())
     }
 
@@ -126,7 +139,7 @@ impl App {
         let to = self.address(words).ok_or("copy (after) an item")?;
         let text = self.notebook.outline.text(target);
         let n = text.chars().count();
-        self.create_after(to, &text, json!([[0, 0, n]]))?;
+        self.create_after(to, &text, vec![[0, 0, n as u64]])?;
         Ok(String::new())
     }
 
@@ -139,7 +152,7 @@ impl App {
 
     /// A new item after one, showing another's text in place.
     fn transclusion_after(&mut self, from: u64, after: u64) -> Result<u64, String> {
-        let spans = self.notebook.outline.spans_json(from);
+        let spans = self.notebook.outline.spans_written(from);
         self.create_after(after, "", spans)
     }
 
@@ -148,12 +161,19 @@ impl App {
         &mut self,
         after: u64,
         add: &str,
-        spans: Value,
+        spans: Vec<bodies::Span>,
     ) -> Result<u64, String> {
         let under = self.notebook.outline.parent_or_top(after);
-        let body =
-            json!({"op": "create", "under": under, "after": after, "add": add, "spans": spans});
-        Ok(self.write_here(EntryKind::Edit, body)?.seq)
+        let body = Create {
+            under,
+            after: Some(after),
+            add: add.to_string(),
+            spans,
+            style: None,
+            import: None,
+            common: Common::default(),
+        };
+        Ok(self.write_here(Edit::Create(body))?.seq)
     }
 
     /// Go to the item words address, else to the next item that holds
@@ -191,7 +211,7 @@ impl App {
     fn go_to_text(&mut self, words: &[&str], target: u64) -> Result<String, String> {
         let text = words.join(" ");
         if let Some(id) = self.notebook.resolve(&text) {
-            self.jump(id, "go", json!({}));
+            self.jump(id, View::Go);
             return Ok(String::new());
         }
         let key = page_key(text.strip_prefix('#').unwrap_or(&text));
@@ -200,19 +220,39 @@ impl App {
         }
         let found = self.leap_matches(&text, true).first().copied();
         let id = found.ok_or(format!("no item is or holds “{text}”"))?;
-        let leap = json!({"pattern": text, "forward": true, "found": found});
-        self.jump(id, "leap", leap);
+        self.leap_to(id, &text, true);
         Ok(String::new())
     }
 
     /// Jump the cursor to an item, unfolding what hides it, and write the
     /// view with where it came from and where it went, so back returns.
-    pub(crate) fn jump(&mut self, to: u64, op: &str, mut body: Value) {
-        body["from"] = json!(self.cursor());
-        body["to"] = json!(to);
+    pub(crate) fn jump(&mut self, to: u64, op: fn(Jump) -> View) {
+        let from = self.moved_to(to);
+        self.write_view(|state| op(Jump::of(from, to, state)));
+    }
+
+    /// Leap to an item a pattern found, as a jump.
+    pub(crate) fn leap_to(&mut self, to: u64, pattern: &str, forward: bool) {
+        let from = self.moved_to(to);
+        self.write_view(|state| {
+            View::Leap(Leap {
+                pattern: Some(pattern.to_string()),
+                forward: Some(forward),
+                found: Some(to),
+                from: Some(from),
+                to: Some(to),
+                state,
+                common: Common::default(),
+            })
+        });
+    }
+
+    /// Move the cursor to an item, unfolding what hides it; where it was.
+    fn moved_to(&mut self, to: u64) -> u64 {
+        let from = self.cursor();
         self.unfold_to(to);
         self.set_cursor(to);
-        self.write_view(op, body);
+        from
     }
 
     /// The item the last jump came from, if it is left and is not the
@@ -243,7 +283,7 @@ impl App {
             .notebook
             .last_present(trail)
             .ok_or("nothing to go back to")?;
-        self.jump(to, "back", json!({}));
+        self.jump(to, View::Back);
         Ok(String::new())
     }
 
@@ -254,13 +294,13 @@ impl App {
             .notebook
             .last_present(trail)
             .ok_or("nothing to go forward to")?;
-        self.jump(to, "forward", json!({}));
+        self.jump(to, View::Forward);
         Ok(String::new())
     }
 
     pub(crate) fn go_to(&mut self, id: u64) {
         self.set_cursor(id);
-        self.write_view("move", json!({}));
+        self.write_shown(View::Move);
     }
 
     // Links.
@@ -290,9 +330,14 @@ impl App {
     /// A link for a [[link]] in an item's text: kept by the text, so taken
     /// back when the text no longer has it.
     pub(crate) fn write_inline_link(&mut self, from: u64, to: u64) -> Result<(), String> {
-        let fact = link_fact("link", from, to)?;
-        let body = json!({"from": from, "to": to, "type": "link", "facts": [fact], "inline": true});
-        self.write_here(EntryKind::Link, body).map(|_| ())
+        let mut link = link(
+            from,
+            to,
+            "link",
+            Common::adding(vec![link_fact("link", from, to)?]),
+        );
+        link.inline = Some(true);
+        self.write_here(link).map(|_| ())
     }
 
     /// A link from a part of a split item back to the item it was split
@@ -306,20 +351,15 @@ impl App {
         &mut self,
         from: u64,
         to: u64,
-        mark: Value,
+        mark: Mark,
     ) -> Result<(), String> {
-        let fact = link_fact("link", from, to)?;
-        let body =
-            json!({"from": from, "to": to, "type": "link", "facts": [fact], "suggestion": mark});
-        self.write_here(EntryKind::Link, body).map(|_| ())
+        let common = Common::adopting(mark, vec![link_fact("link", from, to)?]);
+        self.write_here(link(from, to, "link", common)).map(|_| ())
     }
 
     fn write_link(&mut self, from: u64, to: u64, kind: &str) -> Result<String, String> {
-        let fact = link_fact(kind, from, to)?;
-        self.write_here(
-            EntryKind::Link,
-            json!({"from": from, "to": to, "type": kind, "facts": [fact]}),
-        )?;
+        let common = Common::adding(vec![link_fact(kind, from, to)?]);
+        self.write_here(link(from, to, kind, common))?;
         Ok(linked(&self.notebook.outline, from, to, kind))
     }
 
@@ -340,7 +380,7 @@ impl App {
     }
 
     fn follow_to(&mut self, to: u64) {
-        self.jump(to, "follow", json!({}));
+        self.jump(to, View::Follow);
     }
 
     // Folds and panes.
@@ -352,7 +392,7 @@ impl App {
         if !folded.remove(&target) {
             folded.insert(target);
         }
-        self.write_view("fold", json!({}));
+        self.write_shown(View::Fold);
         Ok(String::new())
     }
 
@@ -360,7 +400,7 @@ impl App {
         let kind = PaneKind::named(words.first().copied())
             .ok_or("pane (shows) outline, links, suggestions, or matches")?;
         self.session.view.show_other(kind, target);
-        self.write_view("pane", json!({}));
+        self.write_shown(View::Pane);
         Ok(String::new())
     }
 
@@ -371,8 +411,25 @@ impl App {
                 kind.name()
             ));
         }
-        self.write_view("pane", json!({}));
+        self.write_shown(View::Pane);
         Ok(String::new())
+    }
+}
+
+/// The edit that deletes an item, with its branch.
+pub(crate) fn delete(item: u64) -> Edit {
+    let common = Common::default();
+    Edit::Delete(Delete { item, common })
+}
+
+/// A link of a type from one item to another.
+pub(crate) fn link(from: u64, to: u64, kind: &str, common: Common) -> Link {
+    Link {
+        from,
+        to,
+        link_type: Some(kind.to_string()),
+        inline: None,
+        common,
     }
 }
 

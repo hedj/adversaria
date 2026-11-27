@@ -1,10 +1,11 @@
 //! The journal writer. Only the memex writes `journal.jsonl`; it never writes
 //! `seals.jsonl` and never holds a key (docs/design.md § The journal).
 
+use format::bodies::{Body, Common, Edit, Init, Purge};
 use format::chain::{self, LineError};
 use format::layout;
 use format::record::{self, Entry, EntryKind, JOURNAL, JOURNAL_FORMAT, JOURNAL_VERSION};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
@@ -89,10 +90,13 @@ impl Journal {
         let migrated = old.map(|from| journal.migrate(from));
         let notes = [set_aside.transpose()?, migrated.transpose()?];
         if journal.entries.is_empty() {
-            journal.append(
-                EntryKind::Edit,
-                json!({"op": "init", "version": JOURNAL_VERSION}),
-            )?;
+            let version = Some(JOURNAL_VERSION);
+            let init = Edit::Init(Init {
+                version,
+                migrated_from: None,
+                common: Common::default(),
+            });
+            journal.append(EntryKind::Edit, Body::from(init).to_value())?;
         }
         let said: Vec<String> = notes.into_iter().flatten().collect();
         Ok((journal, (!said.is_empty()).then(|| said.join("; "))))
@@ -265,11 +269,12 @@ impl Journal {
             return Err(Error::Refused(format!("entry {target} is already purged")));
         }
         let parent = self.last().map(|e| e.seq);
-        let p = self.next_entry(
-            parent,
-            EntryKind::Purge,
-            json!({"target": target, "reason": reason}),
-        )?;
+        let purge = Purge {
+            target,
+            reason: reason.to_string(),
+            common: Common::default(),
+        };
+        let p = self.next_entry(parent, EntryKind::Purge, Body::from(purge).to_value())?;
         let mut entries = self.entries.clone();
         entries[target as usize - 1] = t.purged();
         entries.push(p.clone());
@@ -403,6 +408,7 @@ fn sync_dir(dir: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     pub(crate) fn temp_dir(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("adversaria-{name}-{}", std::process::id()));

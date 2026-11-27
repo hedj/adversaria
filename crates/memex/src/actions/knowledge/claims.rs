@@ -2,14 +2,16 @@
 //! as a belief, and taking up or dismissing suggestions.
 
 use super::{encoded, functor_of, node_def, reserved};
+use crate::actions::link;
 use crate::actions::worlds::with_left;
 use crate::app::{App, TakeBack};
 use crate::notebook::Notebook;
 use crate::reason::{Suggestion, show};
+use format::bodies::{Adopt, AdoptOp, Common, Dismiss, Mark, View};
 use format::body::Body;
 use format::record::{Entry, EntryKind};
 use format::terms::Term;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::collections::HashMap;
 
 /// A claim: a fact as a source states it, by the entry that states it.
@@ -60,7 +62,7 @@ impl App {
             return Err("the target states no claim".into());
         }
         self.session.view.show_claim(target);
-        self.write_view("interrogate", json!({}));
+        self.write_shown(View::Interrogate);
         Ok(String::new())
     }
 
@@ -163,11 +165,13 @@ impl App {
     /// One adopt entry for each claim, keeping its source.
     fn write_adoptions(&mut self, item: u64, claims: Vec<Claim>) -> Result<(), String> {
         for Claim { seq, source, fact } in claims {
-            let f = encoded(&fact)?;
-            self.write_here(
-                EntryKind::Adopt,
-                json!({"claim": seq, "item": item, "source": source, "facts": [f]}),
-            )?;
+            let adopt = Adopt {
+                claim: Some(seq),
+                item: Some(item),
+                source: Some(source),
+                ..Adopt::of(Common::adding(vec![encoded(&fact)?]))
+            };
+            self.write_here(adopt)?;
         }
         Ok(())
     }
@@ -191,7 +195,11 @@ impl App {
     }
 
     fn dismiss_suggestion(&mut self, s: &Suggestion) {
-        self.write_view("dismiss", json!({"key": s.key()}));
+        self.write_view(|state| {
+            let key = Some(s.key());
+            let common = Common::default();
+            View::Dismiss(Dismiss { key, state, common })
+        });
     }
 
     /// The suggestion shown with the number a command's words give, after
@@ -264,7 +272,7 @@ impl App {
 
     /// A suggested link between an item whose text names another and that
     /// item: a link, which records the suggestion it adopts.
-    fn adopt_mention(&mut self, a: &[Term], mark: Value) -> Result<(), String> {
+    fn adopt_mention(&mut self, a: &[Term], mark: Mark) -> Result<(), String> {
         let (Term::Int(from), Term::Int(to)) = (&a[0], &a[1]) else {
             return Err("not adopted: the suggestion names no items".into());
         };
@@ -273,7 +281,7 @@ impl App {
 
     /// A suggested constraint, its name, variables and body, once it fires
     /// on a planted violation.
-    fn adopt_constraint(&mut self, a: &[Term], mark: Value) -> Result<(), String> {
+    fn adopt_constraint(&mut self, a: &[Term], mark: Mark) -> Result<(), String> {
         if let Some(found) = self.misfire(&a[1], &a[2])? {
             return Err(format!(
                 "not adopted: tried against a planted violation, it did not fire ({found})"
@@ -286,13 +294,18 @@ impl App {
         );
         let rule = format!("false :- {}", show(&a[2]));
         let fact = encoded(&node_def(self.next_entry(), defines))?;
-        let body = json!({"suggestion": mark, "op": "constraint", "name": name, "rule": rule, "facts": [fact]});
-        self.write_here(EntryKind::Adopt, body)?;
+        let adopt = Adopt {
+            op: Some(AdoptOp::Constraint),
+            name: Some(name),
+            rule: Some(rule),
+            ..Adopt::of(Common::adopting(mark, vec![fact]))
+        };
+        self.write_here(adopt)?;
         Ok(())
     }
 
     /// A suggested rule, its head and body, numbered by its own entry.
-    fn adopt_rule(&mut self, a: &[Term], mark: Value) -> Result<(), String> {
+    fn adopt_rule(&mut self, a: &[Term], mark: Mark) -> Result<(), String> {
         let seq = Term::Int(self.next_entry() as i64);
         let def = Term::Compound("rule_def".into(), vec![seq, a[0].clone(), a[1].clone()]);
         self.write_adopted(mark, vec![encoded(&def)?])
@@ -300,7 +313,7 @@ impl App {
 
     /// A suggested reference, an entity and a work: the item about the
     /// entity cites the item that is the work.
-    fn adopt_reference(&mut self, a: &[Term], mark: Value) -> Result<(), String> {
+    fn adopt_reference(&mut self, a: &[Term], mark: Mark) -> Result<(), String> {
         let from = *self
             .notebook
             .items_about(&a[0])
@@ -315,22 +328,19 @@ impl App {
             "cites".into(),
             vec![Term::Int(from as i64), Term::Int(to as i64)],
         );
-        let body = json!({"from": from, "to": to, "type": "cites", "facts": [encoded(&cites)?], "suggestion": mark});
-        self.write_here(EntryKind::Link, body)?;
+        let common = Common::adopting(mark, vec![encoded(&cites)?]);
+        self.write_here(link(from, to, "cites", common))?;
         Ok(())
     }
 
     /// A suggestion's own facts.
-    fn adopt_facts(&mut self, facts: &[Term], mark: Value) -> Result<(), String> {
+    fn adopt_facts(&mut self, facts: &[Term], mark: Mark) -> Result<(), String> {
         let facts = facts.iter().map(encoded).collect::<Result<_, _>>()?;
         self.write_adopted(mark, facts)
     }
 
-    fn write_adopted(&mut self, mark: Value, facts: Vec<Value>) -> Result<(), String> {
-        self.write_here(
-            EntryKind::Adopt,
-            json!({"suggestion": mark, "facts": facts}),
-        )?;
+    fn write_adopted(&mut self, mark: Mark, facts: Vec<Value>) -> Result<(), String> {
+        self.write_here(Adopt::of(Common::adopting(mark, facts)))?;
         Ok(())
     }
 }

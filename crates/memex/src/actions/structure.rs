@@ -5,7 +5,7 @@
 
 use crate::app::App;
 use crate::outline::TOP;
-use serde_json::json;
+use format::bodies::View;
 
 /// Where a structural move goes from an item, of the items at its level.
 #[derive(Clone, Copy)]
@@ -85,7 +85,7 @@ impl App {
         let to = to.ok_or(none)?;
         self.unfold_to(to);
         self.set_cursor(to);
-        self.write_view("move", json!({}));
+        self.write_shown(View::Move);
         Ok(String::new())
     }
 }

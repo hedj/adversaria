@@ -298,8 +298,13 @@ pub struct Suggestion {
 
 impl Suggestion {
     /// How an adoption records the suggestion it accepted.
-    pub fn mark(&self) -> serde_json::Value {
-        serde_json::json!({"kind": show(&self.kind), "evidence": self.evidence, "score": self.score})
+    pub fn mark(&self) -> format::bodies::Mark {
+        format::bodies::Mark {
+            kind: show(&self.kind),
+            evidence: self.evidence.clone(),
+            score: self.score,
+            later: serde_json::Map::new(),
+        }
     }
 
     pub fn from_term(t: &Term) -> Option<Suggestion> {

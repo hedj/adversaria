@@ -8,12 +8,11 @@
 //!
 //! What is cut or copied is the session's: no entry records it.
 
+use crate::actions::delete;
 use crate::app::App;
 use crate::notebook::Notebook;
 use crate::outline::TOP;
 use crate::session::{Clip, ViewChange};
-use format::record::EntryKind;
-use serde_json::json;
 
 impl App {
     /// Backspace in an empty item with nothing under it: delete it, the
@@ -28,7 +27,7 @@ impl App {
         }
         let next = self.neighbour(item);
         self.flush_text();
-        let deleted = self.write_here(EntryKind::Edit, json!({"op": "delete", "item": item}));
+        let deleted = self.write_here(delete(item));
         self.session.report(deleted);
         self.set_cursor(next);
         self.session.view_changed(ViewChange::Written);
@@ -153,7 +152,7 @@ impl App {
         for item in self.notebook.left(items) {
             let text = self.notebook.outline.text(item);
             let n = text.chars().count();
-            after = self.create_after(after, &text, json!([[0, 0, n]]))?;
+            after = self.create_after(after, &text, vec![[0, 0, n as u64]])?;
         }
         Ok(())
     }

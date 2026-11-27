@@ -18,6 +18,7 @@ mod worlds;
 pub use dispatch::{
     ALIASES, COMMANDS, Command, GROUPS, Group, Slot, awaited, command_groups, command_usage,
 };
+pub(crate) use editing::{delete, link};
 pub(crate) use inline::bracketed;
 pub use knowledge::Claim;
 pub(crate) use knowledge::{NO_RULE, VERDICTS, adopts};

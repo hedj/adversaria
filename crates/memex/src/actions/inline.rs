@@ -8,8 +8,7 @@
 use crate::app::App;
 use crate::notebook::Notebook;
 use crate::outline::TOP;
-use format::record::EntryKind;
-use serde_json::json;
+use format::bodies;
 
 impl App {
     /// Make an item's links what its text's [[links]] say; whether any
@@ -33,7 +32,7 @@ impl App {
         let gone = links.iter().filter(|l| !wanted.contains(&l.to));
         let seqs: Vec<u64> = gone.map(|l| l.seq).collect();
         for target in seqs {
-            let written = self.write_here(EntryKind::Retract, json!({ "target": target }));
+            let written = self.write_here(bodies::Retract::of(target));
             self.session.report(written);
         }
     }
@@ -75,8 +74,13 @@ impl App {
             changed |= self.link_inline(*item);
         }
         if changed {
-            let body = json!({"op": "relink", "name": name, "of": first, "items": items});
-            self.write_here(EntryKind::Edit, body)?;
+            let body = bodies::Relink {
+                name: name.to_string(),
+                of: Some(first),
+                items,
+                common: bodies::Common::default(),
+            };
+            self.write_here(bodies::Edit::Relink(body))?;
         }
         Ok(())
     }
@@ -93,9 +97,15 @@ impl App {
         let first = self.next_entry();
         let made = self.make_items(&names, first)?;
         self.link_inline(target);
-        let body = json!({"op": "make", "item": target, "of": first, "made": made});
-        self.write_here(EntryKind::Edit, body)?;
-        Ok(format!("made {}: {}", made.len(), names.join(", ")))
+        let n = made.len();
+        let body = bodies::Make {
+            item: Some(target),
+            of: Some(first),
+            made,
+            common: bodies::Common::default(),
+        };
+        self.write_here(bodies::Edit::Make(body))?;
+        Ok(format!("made {n}: {}", names.join(", ")))
     }
 
     /// An item for each name, at the foot of the top level, each waiting
@@ -110,7 +120,7 @@ impl App {
     /// An item holding a name, at the foot of the top level, waiting to be
     /// read as part of what starts at the entry `first`.
     fn make_item(&mut self, name: &str, first: u64) -> Result<u64, String> {
-        let spans = json!([[0, 0, name.chars().count()]]);
+        let spans = vec![[0, 0, name.chars().count() as u64]];
         let item = self.create_after(self.notebook.last_top_item(), name, spans)?;
         self.will_read(item, first);
         Ok(item)

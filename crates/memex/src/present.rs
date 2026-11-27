@@ -10,7 +10,7 @@ use crate::plumb::Offer;
 use crate::session::Menu;
 use crate::session::ViewChange;
 use crate::ui::Presentations;
-use serde_json::json;
+use format::bodies::View;
 
 /// What a drawn place stands for: an object of the model, of its type.
 /// A pane is the outline pane it is drawn in, where a click on it puts
@@ -147,7 +147,7 @@ impl App {
         self.flush_text();
         self.session.message.clear();
         self.session.selection = None;
-        self.jump(to, "follow", json!({}));
+        self.jump(to, View::Follow);
     }
 
     /// Put the cursor on an item of an outline pane, as a click on it
@@ -162,7 +162,7 @@ impl App {
         self.session.selection = None;
         if self.session.view.focus != pane {
             self.session.view.focus = pane;
-            self.write_view("pane", json!({}));
+            self.write_shown(View::Pane);
         }
         self.set_cursor(id);
         self.session.view_changed(ViewChange::Moved);

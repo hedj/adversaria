@@ -7,9 +7,8 @@ use crate::app::App;
 use crate::notebook::Notebook;
 use crate::outline::TOP;
 use crate::reason::{Contradicted, direct_conflicts};
-use format::record::EntryKind;
+use format::bodies::{Common, Constraint, Derive, Edit, Facts};
 use format::terms::Term;
-use serde_json::{Value, json};
 
 impl App {
     pub(crate) fn cmd_fact(&mut self, words: &[&str], target: u64) -> Result<String, String> {
@@ -71,7 +70,7 @@ impl App {
 
     fn keep_rule(&mut self, text: &str, head: Term, body: Term, target: u64) -> Result<(), String> {
         let entry = rule_entry(text, self.next_entry(), head, body, target)?;
-        self.write_here(EntryKind::Edit, entry)?;
+        self.write_here(Edit::Facts(entry))?;
         Ok(())
     }
 
@@ -117,10 +116,9 @@ impl App {
             "constraint".into(),
             vec![Term::Str(name.into()), vars, body],
         );
-        self.write_node_def(
-            json!({"op": "constraint", "name": name, "rule": rule}),
-            defines,
-        )
+        let (name, rule) = (name.to_string(), rule.to_string());
+        let constraint = |common| Edit::Constraint(Constraint { name, rule, common });
+        self.write_node_def(constraint, defines)
     }
 
     // Derived text.
@@ -169,12 +167,14 @@ impl App {
         names: &[String],
         goal: Term,
     ) -> Result<(), String> {
-        let fact = encoded(&query_def(item, goal))?;
-        let mut body = json!({"op": "derive", "item": item, "template": shown.template, "names": names, "facts": [fact]});
-        if shown.under {
-            body["under"] = json!(true);
-        }
-        self.write_here(EntryKind::Edit, body)?;
+        let body = Derive {
+            item,
+            template: shown.template.to_string(),
+            names: names.to_vec(),
+            under: shown.under.then_some(true),
+            common: Common::adding(vec![encoded(&query_def(item, goal))?]),
+        };
+        self.write_here(Edit::Derive(body))?;
         Ok(())
     }
 }
@@ -196,13 +196,14 @@ fn rule_parts(t: &Term) -> Result<(Term, Term), String> {
 
 /// The edit entry keeping a rule: rule_def(Seq, Head, Body), and the item
 /// it was typed in, if any.
-fn rule_entry(text: &str, seq: u64, head: Term, body: Term, target: u64) -> Result<Value, String> {
+fn rule_entry(text: &str, seq: u64, head: Term, body: Term, target: u64) -> Result<Facts, String> {
     let def = Term::Compound("rule_def".into(), vec![Term::Int(seq as i64), head, body]);
-    let mut b = json!({"op": "facts", "rule": text, "facts": [encoded(&def)?]});
-    if target != TOP {
-        b["item"] = json!(target);
-    }
-    Ok(b)
+    Ok(Facts {
+        item: (target != TOP).then_some(target),
+        rule: Some(text.to_string()),
+        source: None,
+        common: Common::adding(vec![encoded(&def)?]),
+    })
 }
 
 fn denial_body(t: &Term) -> Option<Term> {

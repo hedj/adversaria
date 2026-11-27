@@ -17,9 +17,9 @@ use crate::app::App;
 use crate::engine::{told, variables};
 use crate::prolog::Error;
 use crate::reason::{make_list, show};
-use format::record::EntryKind;
+use format::bodies::{self, Common, Edit};
 use format::terms::{self, Term};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 impl App {
     /// Parse Prolog text; an error starts with `what`.
@@ -45,11 +45,13 @@ impl App {
         fact: &Term,
         source: Option<&str>,
     ) -> Result<(), String> {
-        let mut body = json!({"op": "facts", "item": item, "facts": [encoded(fact)?]});
-        if let Some(src) = source {
-            body["source"] = json!(src);
-        }
-        self.write_here(EntryKind::Edit, body)?;
+        let body = bodies::Facts {
+            item: Some(item),
+            rule: None,
+            source: source.map(String::from),
+            common: Common::adding(vec![encoded(fact)?]),
+        };
+        self.write_here(Edit::Facts(body))?;
         Ok(())
     }
 
@@ -85,9 +87,13 @@ impl App {
 
     /// Write an edit entry that defines a node, numbered by the entry's own
     /// sequence number.
-    fn write_node_def(&mut self, mut body: Value, defines: Term) -> Result<(), String> {
-        body["facts"] = json!([self.node_def_fact(defines)?]);
-        self.write_here(EntryKind::Edit, body)?;
+    fn write_node_def(
+        &mut self,
+        edit: impl FnOnce(Common) -> Edit,
+        defines: Term,
+    ) -> Result<(), String> {
+        let common = Common::adding(vec![self.node_def_fact(defines)?]);
+        self.write_here(edit(common))?;
         Ok(())
     }
 

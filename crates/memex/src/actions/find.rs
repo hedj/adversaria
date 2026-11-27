@@ -8,7 +8,7 @@
 use crate::ace::{Kind, Reading};
 use crate::app::{App, PaneKind};
 use crate::found::Found;
-use serde_json::json;
+use format::bodies;
 
 impl App {
     pub(crate) fn cmd_find(&mut self, words: &[&str], target: u64) -> Result<String, String> {
@@ -33,7 +33,15 @@ impl App {
         let filter = found.as_ref().map_or(String::new(), Found::words);
         self.session.found = found.or(self.session.found.take());
         self.session.view.show_other(kind, target);
-        self.write_view("find", json!({"filter": filter}));
+        self.write_view(|state| {
+            let common = bodies::Common::default();
+            let filter = Some(filter);
+            bodies::View::Find(bodies::Find {
+                filter,
+                state,
+                common,
+            })
+        });
         Ok(String::new())
     }
 

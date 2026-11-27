@@ -6,9 +6,9 @@ use crate::app::App;
 use crate::docs::Block;
 use crate::notebook::read_input;
 use crate::outline::TOP;
-use format::record::EntryKind;
+use format::bodies::{Common, Import};
 use format::terms::Term;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::path::Path;
 
 /// A results file: its source, the analysis script at its commit; its
@@ -127,8 +127,15 @@ impl App {
         let blob = self.notebook.store_blob(bytes)?;
         let base = directory_of(file);
         let (source, prov) = (&results.source, &results.prov);
-        let body = json!({"blob": blob, "format": "memex-results", "source": source, "base": base, "prov": prov});
-        Ok(self.write_here(EntryKind::Import, body)?.seq)
+        let body = Import {
+            format: Some("memex-results".into()),
+            blob: Some(blob),
+            source: Some(source.clone()),
+            base: Some(base),
+            prov: Some(prov.clone()),
+            ..Import::of(Common::default())
+        };
+        Ok(self.write_here(body)?.seq)
     }
 
     /// The heading the results go under, last in the outline.

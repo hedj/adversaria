@@ -7,9 +7,8 @@ use crate::engine::{Engine, told};
 use crate::notebook::Notebook;
 use crate::reason::{Suggestion, WorldEval};
 use crate::world::World;
-use format::record::EntryKind;
+use format::bodies::{Common, Observed, Offer, View};
 use format::terms::Term;
-use serde_json::{Value, json};
 use std::borrow::Cow;
 
 impl App {
@@ -133,9 +132,8 @@ impl App {
     }
 
     /// Write a record of what reasoning found: a view entry, of no view.
-    fn write_record(&mut self, op: &str, mut body: Value) {
-        body["op"] = json!(op);
-        let written = self.write_here(EntryKind::View, body);
+    fn write_record(&mut self, record: View) {
+        let written = self.write_here(record);
         self.session.report(written);
     }
 
@@ -151,12 +149,14 @@ impl App {
         if gone.is_empty() && !self.session.observed_changed(&now) {
             return;
         }
-        let world = self.reason.world().to_string();
-        let mut body = json!({"violations": now.0, "disagreements": now.1, "world": world});
-        if !gone.is_empty() {
-            body["gone"] = json!(gone);
-        }
-        self.write_record("observed", body);
+        let observed = Observed {
+            violations: now.0,
+            disagreements: now.1,
+            world: Some(self.reason.world().to_string()),
+            gone: (!gone.is_empty()).then_some(gone),
+            common: Common::default(),
+        };
+        self.write_record(View::Observed(observed));
     }
 
     /// Record each suggestion reasoning made for the first time: its
@@ -172,7 +172,13 @@ impl App {
             .iter()
             .filter_map(|k| self.said_of_suggestion(k))
             .collect();
-        self.write_record("offer", json!({"keys": new, "said": said}));
+        let offer = Offer {
+            keys: new,
+            said: Some(said),
+            drawn: None,
+            common: Common::default(),
+        };
+        self.write_record(View::Offer(offer));
     }
 
     /// A suggestion's words, by its identity.

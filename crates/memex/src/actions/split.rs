@@ -7,9 +7,8 @@
 
 use crate::app::App;
 use crate::notebook::Notebook;
-use crate::outline::{Span, span_json};
-use format::record::EntryKind;
-use serde_json::json;
+use crate::outline::{Span, written_spans};
+use format::bodies;
 use std::ops::Range;
 
 impl App {
@@ -31,8 +30,13 @@ impl App {
     /// The record that closes a split: the item, the split's first entry
     /// and the new items, so that one undo takes it all back.
     fn close_split(&mut self, split: &Split, made: Vec<u64>) -> Result<(), String> {
-        let body = json!({"op": "split", "item": split.item, "of": split.first, "parts": made});
-        self.write_here(EntryKind::Edit, body).map(|_| ())
+        let body = bodies::Split {
+            item: Some(split.item),
+            of: Some(split.first),
+            parts: made,
+            common: bodies::Common::default(),
+        };
+        self.write_here(bodies::Edit::Split(body)).map(|_| ())
     }
 
     /// A split of an item that starts at the next entry.
@@ -63,7 +67,7 @@ impl App {
     /// A part after an item, linked back to the item split, waiting to be
     /// read as part of the split.
     fn make_part(&mut self, split: &Split, after: u64, spans: &[Span]) -> Result<u64, String> {
-        let part = self.create_after(after, "", span_json(spans))?;
+        let part = self.create_after(after, "", written_spans(spans))?;
         self.write_split_link(part, split.item)?;
         self.will_read(part, split.first);
         Ok(part)

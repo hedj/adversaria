@@ -6,8 +6,8 @@
 use super::all_bound;
 use crate::app::App;
 use crate::view::channels;
+use format::bodies::{Edit, Layer};
 use format::terms::Term;
-use serde_json::json;
 
 /// The layers each kind of view `show` makes, as `layer` takes them: the
 /// guide's recipes for a bar chart of the boxes, a table of them, and the
@@ -80,10 +80,16 @@ impl App {
         goal: Term,
     ) -> Result<(), String> {
         let defines = Term::Compound("layer".into(), vec![mark, goal]);
-        self.write_node_def(
-            json!({"op": "layer", "item": item, "mark": m, "goal": g}),
-            defines,
-        )
+        let (mark, goal) = (m.to_string(), g.to_string());
+        let layer = |common| {
+            Edit::Layer(Layer {
+                item,
+                mark,
+                goal,
+                common,
+            })
+        };
+        self.write_node_def(layer, defines)
     }
 }
 

@@ -7,10 +7,9 @@
 //!
 //! It is the session's, not the view's: no entry records it.
 
+use crate::actions::delete;
 use crate::app::{Active, App, Key, Mode, Special};
 use crate::session::Selection;
-use format::record::EntryKind;
-use serde_json::json;
 use std::ops::Range;
 
 /// The arrow, Home or End that a key with Shift held is.
@@ -166,7 +165,7 @@ impl App {
             .filter(|i| !items.contains(&outline.parent_or_top(**i)));
         let heads: Vec<u64> = heads.copied().collect();
         for item in &heads {
-            self.write_here(EntryKind::Edit, json!({"op": "delete", "item": item}))?;
+            self.write_here(delete(*item))?;
         }
         let n = heads.len();
         Ok(format!(
